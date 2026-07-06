@@ -10,103 +10,99 @@ export default {
     login: 'Login',
     getStarted: 'Get Started',
     goToDashboard: 'Go to Dashboard',
-    // User-focused value proposition
-    heroSubtitle: 'One Key, All AI Models',
-    heroDescription: 'No need to manage multiple subscriptions. Access Claude, GPT, Gemini and more with a single API key',
-    tags: {
-      subscriptionToApi: 'Subscription to API',
-      stickySession: 'Session Persistence',
-      realtimeBilling: 'Pay As You Go'
+    nav: {
+      features: 'Features',
+      workflow: 'Workflow',
+      models: 'Models',
+      pricing: 'Pricing'
     },
-    // Pain points section
-    painPoints: {
-      title: 'Sound Familiar?',
+    hero: {
+      badge: 'Enterprise AI API Gateway',
+      titleLine1: 'One API Key',
+      titleLine2: 'for Global AI Models',
+      description:
+        'Poke API aggregates Claude, OpenAI, Gemini, Grok and more, fully compatible with official protocols. Migrate with almost zero code changes.',
+      ctaPrimary: 'Get Your Free API Key',
+      ctaDocs: 'View Docs',
+      baseUrlOpenai: 'OpenAI Compatible',
+      baseUrlAnthropic: 'Anthropic Compatible',
+      copy: 'Copy',
+      copied: 'Copied',
+      cards: {
+        routing: { title: 'Smart Routing', desc: 'Multi-channel load balancing with automatic failover' },
+        observability: { title: 'Real-time Observability', desc: 'Track usage and cost of every single call' },
+        billing: { title: 'Pay As You Go', desc: 'Only pay for what you use, no monthly fees' }
+      }
+    },
+    value: {
+      kicker: 'VALUE',
+      title: 'Why Poke API',
+      subtitle: 'Professional, reliable, developer-friendly',
       items: {
-        expensive: {
-          title: 'High Subscription Costs',
-          desc: 'Paying for multiple AI subscriptions that add up every month'
+        unified: {
+          title: 'Unified Access',
+          desc: 'One key for all models. Fully compatible with OpenAI Responses / Chat and Anthropic Messages protocols. Zero code changes.'
         },
-        complex: {
-          title: 'Account Chaos',
-          desc: 'Managing scattered accounts and API keys across different platforms'
+        observability: {
+          title: 'Full Observability',
+          desc: 'Real-time stats on requests, tokens and spend, with per-model and per-key breakdowns. Know exactly where every cent goes.'
         },
-        unstable: {
-          title: 'Service Interruptions',
-          desc: 'Single accounts hitting rate limits and disrupting your workflow'
+        elastic: {
+          title: 'Elastic & Cost-efficient',
+          desc: 'Smart multi-upstream routing with automatic failover. Full SSE streaming support. Fast, stable, usage-based billing.'
         },
-        noControl: {
-          title: 'No Usage Control',
-          desc: "Can't track where your money goes or limit team member usage"
+        developer: {
+          title: 'Built for Developers',
+          desc: 'One-line setup scripts for Claude Code, Codex, Gemini CLI and more. Official SDKs work out of the box.'
         }
       }
     },
-    // Solutions section
-    solutions: {
-      title: 'We Solve These Problems',
-      subtitle: 'Three simple steps to stress-free AI access'
-    },
-    features: {
-      unifiedGateway: 'One-Click Access',
-      unifiedGatewayDesc: 'Get a single API key to call all connected AI models. No separate applications needed.',
-      multiAccount: 'Always Reliable',
-      multiAccountDesc: 'Smart routing across multiple upstream accounts with automatic failover. Say goodbye to errors.',
-      balanceQuota: 'Pay What You Use',
-      balanceQuotaDesc: 'Usage-based billing with quota limits. Full visibility into team consumption.'
-    },
-    // Comparison section
-    comparison: {
-      title: 'Why Choose Us?',
-      headers: {
-        feature: 'Comparison',
-        official: 'Official Subscriptions',
-        us: 'Our Platform'
-      },
-      items: {
-        pricing: {
-          feature: 'Pricing',
-          official: 'Fixed monthly fee, pay even if unused',
-          us: 'Pay only for what you use'
+    workflow: {
+      kicker: 'WORKFLOW',
+      title: 'Start in Three Steps',
+      subtitle: 'From sign-up to your first request in minutes',
+      steps: {
+        register: {
+          title: 'Register & Get a Key',
+          desc: 'Sign up for free and create your API Key in the console.'
         },
-        models: {
-          feature: 'Model Selection',
-          official: 'Single provider only',
-          us: 'Switch between models freely'
+        configure: {
+          title: 'Point the Base URL',
+          desc: 'Set the Base URL to Poke API: /v1 for OpenAI, root path for Claude. Everything else stays the same.'
         },
-        management: {
-          feature: 'Account Management',
-          official: 'Manage each service separately',
-          us: 'Unified key, one dashboard'
-        },
-        stability: {
-          feature: 'Stability',
-          official: 'Single account rate limits',
-          us: 'Multi-account pool, auto-failover'
-        },
-        control: {
-          feature: 'Usage Control',
-          official: 'Not available',
-          us: 'Quotas & detailed analytics'
+        observe: {
+          title: 'Call & Observe',
+          desc: 'Use official SDKs or CLI tools directly, and watch usage and spend in real time.'
         }
       }
     },
-    providers: {
-      title: 'Supported AI Models',
-      description: 'One API, Multiple Choices',
-      supported: 'Supported',
-      soon: 'Soon',
-      claude: 'Claude',
-      gemini: 'Gemini',
-      antigravity: 'Antigravity',
-      more: 'More'
+    ecosystem: {
+      kicker: 'ECOSYSTEM',
+      title: 'Supported Model Ecosystem',
+      subtitle: 'Major models onboard, one endpoint for everything',
+      more: 'More coming soon'
     },
-    // CTA section
+    pricing: {
+      kicker: 'PRICING',
+      title: 'Limited-time Top-up Offer',
+      subtitle: 'Transparent usage-based billing, credits never expire',
+      rateLabel: 'Top-up Rate',
+      rateValue: '¥1 = $1 Credit',
+      officialLabel: 'Market Reference',
+      officialValue: '$1 ≈ ¥7.2',
+      badge: 'Limited Time',
+      note: 'Billed at official model prices. Top up now to lock in the rate.',
+      cta: 'Top Up Now'
+    },
     cta: {
-      title: 'Ready to Get Started?',
-      description: 'Sign up now and get free trial credits to experience seamless AI access',
-      button: 'Sign Up Free'
+      title: 'Ready to Start?',
+      description: 'Sign up for free and send your first AI request within minutes.',
+      button: 'Sign Up for Poke API'
     },
     footer: {
-      allRightsReserved: 'All rights reserved.'
+      allRightsReserved: 'All rights reserved.',
+      console: 'Console',
+      apiExamples: 'API Examples'
     }
   },
 

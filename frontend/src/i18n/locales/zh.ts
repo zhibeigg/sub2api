@@ -10,103 +10,99 @@ export default {
     login: '登录',
     getStarted: '立即开始',
     goToDashboard: '进入控制台',
-    // 新增：面向用户的价值主张
-    heroSubtitle: '一个密钥，畅用多个 AI 模型',
-    heroDescription: '无需管理多个订阅账号，一站式接入 Claude、GPT、Gemini 等主流 AI 服务',
-    tags: {
-      subscriptionToApi: '订阅转 API',
-      stickySession: '会话保持',
-      realtimeBilling: '按量计费'
+    nav: {
+      features: '特性',
+      workflow: '接入',
+      models: '模型',
+      pricing: '定价'
     },
-    // 用户痛点区块
-    painPoints: {
-      title: '你是否也遇到这些问题？',
+    hero: {
+      badge: '企业级 AI API 网关',
+      titleLine1: '一个 API Key',
+      titleLine2: '接入全球 AI 能力',
+      description:
+        'Poke API 聚合 Claude、OpenAI、Gemini、Grok 等主流大模型，完整兼容官方接口协议。现有代码几乎零改动，即刻迁移。',
+      ctaPrimary: '免费获取 API Key',
+      ctaDocs: '查看文档',
+      baseUrlOpenai: 'OpenAI 兼容',
+      baseUrlAnthropic: 'Anthropic 兼容',
+      copy: '复制',
+      copied: '已复制',
+      cards: {
+        routing: { title: '智能调度', desc: '多通道负载均衡，故障自动切换' },
+        observability: { title: '实时可观测', desc: '每次调用的用量与费用尽在掌握' },
+        billing: { title: '按量计费', desc: '用多少付多少，无固定月费' }
+      }
+    },
+    value: {
+      kicker: 'VALUE',
+      title: '为什么选择 Poke API',
+      subtitle: '专业、稳定、开发者友好',
       items: {
-        expensive: {
-          title: '订阅费用高',
-          desc: '每个 AI 服务都要单独订阅，每月支出越来越多'
+        unified: {
+          title: '统一接入',
+          desc: '一个密钥调用全部模型，完整兼容 OpenAI Responses / Chat 与 Anthropic Messages 协议，代码零改动迁移。'
         },
-        complex: {
-          title: '多账号难管理',
-          desc: '不同平台的账号、密钥分散各处，管理起来很麻烦'
+        observability: {
+          title: '全链路可观测',
+          desc: '请求数、Token、费用实时统计，按模型与密钥多维分析，每一分钱花在哪里一目了然。'
         },
-        unstable: {
-          title: '服务不稳定',
-          desc: '单一账号容易触发限制，影响正常使用'
+        elastic: {
+          title: '弹性调度与成本',
+          desc: '多上游智能调度、自动故障切换，SSE 流式全接口支持，稳定快速且按量计费。'
         },
-        noControl: {
-          title: '用量无法控制',
-          desc: '不知道钱花在哪了，也无法限制团队成员的使用'
+        developer: {
+          title: '为开发者而建',
+          desc: 'Claude Code、Codex、Gemini CLI 等工具一键脚本接入，官方 SDK 直接可用。'
         }
       }
     },
-    // 解决方案区块
-    solutions: {
-      title: '我们帮你解决',
-      subtitle: '简单三步，开始省心使用 AI'
-    },
-    features: {
-      unifiedGateway: '一键接入',
-      unifiedGatewayDesc: '获取一个 API 密钥，即可调用所有已接入的 AI 模型，无需分别申请。',
-      multiAccount: '稳定可靠',
-      multiAccountDesc: '智能调度多个上游账号，自动切换和负载均衡，告别频繁报错。',
-      balanceQuota: '用多少付多少',
-      balanceQuotaDesc: '按实际使用量计费，支持设置配额上限，团队用量一目了然。'
-    },
-    // 优势对比
-    comparison: {
-      title: '为什么选择我们？',
-      headers: {
-        feature: '对比项',
-        official: '官方订阅',
-        us: '本平台'
-      },
-      items: {
-        pricing: {
-          feature: '付费方式',
-          official: '固定月费，用不完也付',
-          us: '按量付费，用多少付多少'
+    workflow: {
+      kicker: 'WORKFLOW',
+      title: '三步开始使用',
+      subtitle: '从注册到发出第一个请求，只需几分钟',
+      steps: {
+        register: {
+          title: '注册获取 Key',
+          desc: '免费注册账号，在控制台密钥管理中创建你的 API Key。'
         },
-        models: {
-          feature: '模型选择',
-          official: '单一服务商',
-          us: '多模型随意切换'
+        configure: {
+          title: '替换 Base URL',
+          desc: '把 Base URL 指向 Poke API：OpenAI 用 /v1，Claude 用根地址，其余保持不变。'
         },
-        management: {
-          feature: '账号管理',
-          official: '每个服务单独管理',
-          us: '统一密钥，一站管理'
-        },
-        stability: {
-          feature: '服务稳定性',
-          official: '单账号易触发限制',
-          us: '多账号池，自动切换'
-        },
-        control: {
-          feature: '用量控制',
-          official: '无法限制',
-          us: '可设配额、查明细'
+        observe: {
+          title: '调用与观测',
+          desc: '用官方 SDK 或 CLI 工具直接调用，在控制台实时查看用量与费用。'
         }
       }
     },
-    providers: {
-      title: '已支持的 AI 模型',
-      description: '一个 API，多种选择',
-      supported: '已支持',
-      soon: '即将推出',
-      claude: 'Claude',
-      gemini: 'Gemini',
-      antigravity: 'Antigravity',
-      more: '更多'
+    ecosystem: {
+      kicker: 'ECOSYSTEM',
+      title: '已支持的模型生态',
+      subtitle: '主流大模型持续接入，一个入口全部搞定',
+      more: '更多持续接入'
     },
-    // CTA 区块
+    pricing: {
+      kicker: 'PRICING',
+      title: '限时充值优惠',
+      subtitle: '透明按量计费，余额永不过期',
+      rateLabel: '充值汇率',
+      rateValue: '¥1 = $1 额度',
+      officialLabel: '官方汇率参考',
+      officialValue: '$1 ≈ ¥7.2',
+      badge: '限时优惠',
+      note: '按官方模型定价扣费，充值即享超低汇率。',
+      cta: '立即充值'
+    },
     cta: {
-      title: '准备好开始了吗？',
-      description: '注册即可获得免费试用额度，体验一站式 AI 服务',
-      button: '免费注册'
+      title: '准备好了吗？',
+      description: '免费注册，几分钟内发出你的第一个 AI 请求。',
+      button: '免费注册 Poke API'
     },
     footer: {
-      allRightsReserved: '保留所有权利。'
+      allRightsReserved: '保留所有权利。',
+      console: '控制台',
+      apiExamples: 'API 示例'
     }
   },
 
