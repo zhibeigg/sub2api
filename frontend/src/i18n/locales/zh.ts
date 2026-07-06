@@ -404,6 +404,7 @@ export default {
     groups: '分组管理',
     channels: '渠道管理',
     availableChannels: '可用渠道',
+    modelSquare: '模型广场',
     subscriptions: '订阅管理',
     accounts: '账号管理',
     proxies: 'IP管理',
@@ -1112,6 +1113,24 @@ export default {
   },
 
   // Available Channels (user-facing)
+  modelSquare: {
+    title: '模型广场',
+    description: '浏览所有可用模型、供应商与实时定价',
+    count: '共 {count} 个模型',
+    filtered: '筛选出 {count} 个',
+    searchPlaceholder: '搜索模型或供应商...',
+    empty: '暂无可用模型',
+    noMatch: '没有匹配的模型',
+    noPricing: '未配置定价',
+    clickToCopy: '点击复制模型名',
+    copied: '已复制',
+    filters: {
+      all: '全部',
+      platform: '供应商',
+      billing: '计费类型'
+    }
+  },
+
   availableChannels: {
     title: '可用渠道',
     description: '查看您可访问的渠道与其支持的模型、定价',

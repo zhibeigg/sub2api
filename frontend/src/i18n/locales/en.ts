@@ -404,6 +404,7 @@ export default {
     groups: 'Groups',
     channels: 'Channels',
     availableChannels: 'Available Channels',
+    modelSquare: 'Model Square',
     subscriptions: 'Subscriptions',
     accounts: 'Accounts',
     proxies: 'Proxies',
@@ -1108,6 +1109,24 @@ export default {
   },
 
   // Available Channels (user-facing)
+  modelSquare: {
+    title: 'Model Square',
+    description: 'Browse all available models, providers and live pricing',
+    count: '{count} models',
+    filtered: '{count} matched',
+    searchPlaceholder: 'Search models or providers...',
+    empty: 'No models available',
+    noMatch: 'No matching models',
+    noPricing: 'No pricing configured',
+    clickToCopy: 'Click to copy model name',
+    copied: 'Copied',
+    filters: {
+      all: 'All',
+      platform: 'Provider',
+      billing: 'Billing'
+    }
+  },
+
   availableChannels: {
     title: 'Available Channels',
     description: 'Channels you can access, along with their supported models and pricing',
