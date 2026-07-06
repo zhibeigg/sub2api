@@ -201,6 +201,7 @@ export interface PublicSettings {
   login_agreement_documents?: LoginAgreementDocument[]
   turnstile_enabled: boolean
   turnstile_site_key: string
+  turnstile_endpoint?: string
   site_name: string
   site_logo: string
   site_subtitle: string

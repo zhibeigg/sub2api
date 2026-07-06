@@ -1043,12 +1043,13 @@ billing:
   user_platform_quota_cache_ttl_seconds: 86400
 
 # =============================================================================
-# Turnstile Configuration
-# Turnstile 人机验证配置
+# CAPTCHA Configuration (Cap, trycap.dev — self-hosted, replaces Turnstile)
+# 人机验证配置（Cap 自托管方案，已替换 Cloudflare Turnstile）
+# Endpoint / Site Key / Secret Key 在后台「安全设置」中配置，键名沿用 turnstile_*。
 # =============================================================================
 turnstile:
-  # Require Turnstile in release mode (when enabled, login/register will fail if not configured)
-  # 在 release 模式下要求 Turnstile 验证（启用后，若未配置则登录/注册会失败）
+  # Require CAPTCHA in release mode (when enabled, login/register will fail if not configured)
+  # 在 release 模式下要求人机验证（启用后，若未配置则登录/注册会失败）
   required: false
 
 # =============================================================================

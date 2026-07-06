@@ -3,29 +3,31 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 )
 
 var (
-	ErrTurnstileVerificationFailed = infraerrors.BadRequest("TURNSTILE_VERIFICATION_FAILED", "turnstile verification failed")
-	ErrTurnstileNotConfigured      = infraerrors.ServiceUnavailable("TURNSTILE_NOT_CONFIGURED", "turnstile not configured")
-	ErrTurnstileInvalidSecretKey   = infraerrors.BadRequest("TURNSTILE_INVALID_SECRET_KEY", "invalid turnstile secret key")
+	ErrTurnstileVerificationFailed = infraerrors.BadRequest("TURNSTILE_VERIFICATION_FAILED", "captcha verification failed")
+	ErrTurnstileNotConfigured      = infraerrors.ServiceUnavailable("TURNSTILE_NOT_CONFIGURED", "captcha not configured")
+	ErrTurnstileInvalidSecretKey   = infraerrors.BadRequest("TURNSTILE_INVALID_SECRET_KEY", "invalid captcha secret key")
 )
 
-// TurnstileVerifier 验证 Turnstile token 的接口
+// TurnstileVerifier 验证 Cap token 的接口。
+// verifyURL 为完整的 Cap siteverify 地址（如 https://cap.example.com/<siteKey>/siteverify）。
 type TurnstileVerifier interface {
-	VerifyToken(ctx context.Context, secretKey, token, remoteIP string) (*TurnstileVerifyResponse, error)
+	VerifyToken(ctx context.Context, verifyURL, secretKey, token, remoteIP string) (*TurnstileVerifyResponse, error)
 }
 
-// TurnstileService Turnstile 验证服务
+// TurnstileService Cap 人机验证服务
 type TurnstileService struct {
 	settingService *SettingService
 	verifier       TurnstileVerifier
 }
 
-// TurnstileVerifyResponse Cloudflare Turnstile 验证响应
+// TurnstileVerifyResponse Cap siteverify 验证响应（兼容 reCAPTCHA 风格字段）
 type TurnstileVerifyResponse struct {
 	Success     bool     `json:"success"`
 	ChallengeTS string   `json:"challenge_ts"`
@@ -43,63 +45,78 @@ func NewTurnstileService(settingService *SettingService, verifier TurnstileVerif
 	}
 }
 
-// VerifyToken 验证 Turnstile token
+// buildVerifyURL 拼接 Cap siteverify 地址：{endpoint}/{siteKey}/siteverify
+func buildVerifyURL(endpoint, siteKey string) (string, error) {
+	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
+	siteKey = strings.Trim(strings.TrimSpace(siteKey), "/")
+	if endpoint == "" || siteKey == "" {
+		return "", ErrTurnstileNotConfigured
+	}
+	return fmt.Sprintf("%s/%s/siteverify", endpoint, siteKey), nil
+}
+
+// VerifyToken 验证 Cap token
 func (s *TurnstileService) VerifyToken(ctx context.Context, token string, remoteIP string) error {
-	// 检查是否启用 Turnstile
+	// 检查是否启用人机验证
 	if !s.settingService.IsTurnstileEnabled(ctx) {
-		logger.LegacyPrintf("service.turnstile", "%s", "[Turnstile] Disabled, skipping verification")
+		logger.LegacyPrintf("service.turnstile", "%s", "[Cap] Disabled, skipping verification")
 		return nil
 	}
 
 	// 获取 Secret Key
 	secretKey := s.settingService.GetTurnstileSecretKey(ctx)
 	if secretKey == "" {
-		logger.LegacyPrintf("service.turnstile", "%s", "[Turnstile] Secret key not configured")
+		logger.LegacyPrintf("service.turnstile", "%s", "[Cap] Secret key not configured")
 		return ErrTurnstileNotConfigured
+	}
+
+	// 拼接 Cap 校验地址
+	verifyURL, err := buildVerifyURL(s.settingService.GetTurnstileEndpoint(ctx), s.settingService.GetTurnstileSiteKey(ctx))
+	if err != nil {
+		logger.LegacyPrintf("service.turnstile", "%s", "[Cap] Endpoint or site key not configured")
+		return err
 	}
 
 	// 如果 token 为空，返回错误
 	if token == "" {
-		logger.LegacyPrintf("service.turnstile", "%s", "[Turnstile] Token is empty")
+		logger.LegacyPrintf("service.turnstile", "%s", "[Cap] Token is empty")
 		return ErrTurnstileVerificationFailed
 	}
 
-	logger.LegacyPrintf("service.turnstile", "[Turnstile] Verifying token for IP: %s", remoteIP)
-	result, err := s.verifier.VerifyToken(ctx, secretKey, token, remoteIP)
+	logger.LegacyPrintf("service.turnstile", "[Cap] Verifying token for IP: %s", remoteIP)
+	result, err := s.verifier.VerifyToken(ctx, verifyURL, secretKey, token, remoteIP)
 	if err != nil {
-		logger.LegacyPrintf("service.turnstile", "[Turnstile] Request failed: %v", err)
+		logger.LegacyPrintf("service.turnstile", "[Cap] Request failed: %v", err)
 		return fmt.Errorf("send request: %w", err)
 	}
 
 	if !result.Success {
-		logger.LegacyPrintf("service.turnstile", "[Turnstile] Verification failed, error codes: %v", result.ErrorCodes)
+		logger.LegacyPrintf("service.turnstile", "[Cap] Verification failed, error codes: %v", result.ErrorCodes)
 		return ErrTurnstileVerificationFailed
 	}
 
-	logger.LegacyPrintf("service.turnstile", "%s", "[Turnstile] Verification successful")
+	logger.LegacyPrintf("service.turnstile", "%s", "[Cap] Verification successful")
 	return nil
 }
 
-// IsEnabled 检查 Turnstile 是否启用
+// IsEnabled 检查人机验证是否启用
 func (s *TurnstileService) IsEnabled(ctx context.Context) bool {
 	return s.settingService.IsTurnstileEnabled(ctx)
 }
 
-// ValidateSecretKey 验证 Turnstile Secret Key 是否有效
-func (s *TurnstileService) ValidateSecretKey(ctx context.Context, secretKey string) error {
-	// 发送一个测试token的验证请求来检查secret_key是否有效
-	result, err := s.verifier.VerifyToken(ctx, secretKey, "test-validation", "")
+// ValidateConfig 校验 Cap 配置是否可用（实例可达即视为有效）。
+// Cap 没有 invalid-input-secret 语义，因此这里只确认能成功请求到 siteverify 端点。
+// endpoint/siteKey 由调用方显式传入（保存前校验，避免读到旧值）。
+func (s *TurnstileService) ValidateConfig(ctx context.Context, endpoint, siteKey, secretKey string) error {
+	verifyURL, err := buildVerifyURL(endpoint, siteKey)
 	if err != nil {
-		return fmt.Errorf("validate secret key: %w", err)
+		return err
 	}
 
-	// 检查是否有 invalid-input-secret 错误
-	for _, code := range result.ErrorCodes {
-		if code == "invalid-input-secret" {
-			return ErrTurnstileInvalidSecretKey
-		}
+	// 发送一个测试 token 的验证请求，确认端点可达且 secret 被接受（返回 success=false 属正常）
+	if _, err := s.verifier.VerifyToken(ctx, verifyURL, secretKey, "test-validation", ""); err != nil {
+		return fmt.Errorf("validate cap config: %w", err)
 	}
 
-	// 其他错误（如 invalid-input-response）说明 secret key 是有效的
 	return nil
 }

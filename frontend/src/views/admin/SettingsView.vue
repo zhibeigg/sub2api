@@ -1622,24 +1622,32 @@
                     <label
                       class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
                     >
+                      {{ t("admin.settings.turnstile.endpoint") }}
+                    </label>
+                    <input
+                      v-model="form.turnstile_endpoint"
+                      type="text"
+                      class="input font-mono text-sm"
+                      placeholder="https://cap.example.com"
+                    />
+                    <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.turnstile.endpointHint") }}
+                    </p>
+                  </div>
+                  <div>
+                    <label
+                      class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
                       {{ t("admin.settings.turnstile.siteKey") }}
                     </label>
                     <input
                       v-model="form.turnstile_site_key"
                       type="text"
                       class="input font-mono text-sm"
-                      placeholder="0x4AAAAAAA..."
+                      placeholder="xxxxxxxxxx"
                     />
                     <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
                       {{ t("admin.settings.turnstile.siteKeyHint") }}
-                      <a
-                        href="https://dash.cloudflare.com/"
-                        target="_blank"
-                        class="text-primary-600 hover:text-primary-500"
-                        >{{
-                          t("admin.settings.turnstile.cloudflareDashboard")
-                        }}</a
-                      >
                     </p>
                   </div>
                   <div>
@@ -1652,7 +1660,7 @@
                       v-model="form.turnstile_secret_key"
                       type="password"
                       class="input font-mono text-sm"
-                      placeholder="0x4AAAAAAA..."
+                      placeholder="xxxxxxxxxx"
                     />
                     <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
                       {{
@@ -8103,11 +8111,12 @@ const form = reactive<SettingsForm>({
   smtp_from_email: "",
   smtp_from_name: "",
   smtp_use_tls: true,
-  // Cloudflare Turnstile
+  // Cap CAPTCHA (keeps turnstile_* keys for backward compatibility)
   turnstile_enabled: false,
   turnstile_site_key: "",
   turnstile_secret_key: "",
   turnstile_secret_key_configured: false,
+  turnstile_endpoint: "",
   api_key_acl_trust_forwarded_ip: false,
   // LinuxDo Connect OAuth 登录
   linuxdo_connect_enabled: false,
@@ -9423,6 +9432,7 @@ async function saveSettings() {
       turnstile_enabled: form.turnstile_enabled,
       turnstile_site_key: form.turnstile_site_key,
       turnstile_secret_key: form.turnstile_secret_key || undefined,
+      turnstile_endpoint: form.turnstile_endpoint,
       api_key_acl_trust_forwarded_ip: form.api_key_acl_trust_forwarded_ip,
       linuxdo_connect_enabled: form.linuxdo_connect_enabled,
       linuxdo_connect_client_id: form.linuxdo_connect_client_id,

@@ -16,9 +16,10 @@
       :placeholder="t('auth.passwordPlaceholder')"
       :disabled="isSubmitting"
     />
-    <div v-if="emailVerifyEnabled && turnstileEnabled && turnstileSiteKey" class="space-y-2">
-      <TurnstileWidget
+    <div v-if="emailVerifyEnabled && captchaActive" class="space-y-2">
+      <CapWidget
         ref="turnstileRef"
+        :endpoint="turnstileEndpoint"
         :site-key="turnstileSiteKey"
         @verify="onTurnstileVerify"
         @expire="onTurnstileExpire"
@@ -40,7 +41,7 @@
         :data-testid="`${testIdPrefix}-create-account-send-code`"
         type="button"
         class="btn btn-secondary shrink-0"
-        :disabled="isSubmitting || isSendingCode || countdown > 0 || !email.trim() || (turnstileEnabled && !turnstileToken)"
+        :disabled="isSubmitting || isSendingCode || countdown > 0 || !email.trim() || (captchaActive && !turnstileToken)"
         @click="handleSendCode"
       >
         {{
@@ -88,9 +89,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import TurnstileWidget from '@/components/TurnstileWidget.vue'
+import CapWidget from '@/components/CapWidget.vue'
 import { getPublicSettings, sendPendingOAuthVerifyCode } from '@/api/auth'
 import { useAppStore } from '@/stores'
 
@@ -128,8 +129,12 @@ const invitationCodeEnabled = ref(false)
 const emailVerifyEnabled = ref(true)
 const turnstileEnabled = ref(false)
 const turnstileSiteKey = ref('')
+const turnstileEndpoint = ref('')
 const turnstileToken = ref('')
-const turnstileRef = ref<InstanceType<typeof TurnstileWidget> | null>(null)
+const turnstileRef = ref<InstanceType<typeof CapWidget> | null>(null)
+const captchaActive = computed(
+  () => turnstileEnabled.value && !!turnstileSiteKey.value && !!turnstileEndpoint.value
+)
 
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
@@ -213,7 +218,7 @@ async function handleSendCode() {
     return
   }
 
-  if (turnstileEnabled.value && !turnstileToken.value) {
+  if (captchaActive.value && !turnstileToken.value) {
     sendCodeError.value = t('auth.completeVerification')
     return
   }
@@ -225,11 +230,11 @@ async function handleSendCode() {
   try {
     const response = await sendPendingOAuthVerifyCode({
       email: trimmedEmail,
-      turnstile_token: turnstileEnabled.value ? turnstileToken.value : undefined
+      turnstile_token: captchaActive.value ? turnstileToken.value : undefined
     })
     sendCodeSuccess.value = true
     startCountdown(response.countdown)
-    if (turnstileEnabled.value) {
+    if (captchaActive.value) {
       resetTurnstile()
     }
   } catch (error: unknown) {
@@ -264,11 +269,13 @@ onMounted(async () => {
     emailVerifyEnabled.value = settings.email_verify_enabled !== false
     turnstileEnabled.value = settings.turnstile_enabled === true
     turnstileSiteKey.value = settings.turnstile_site_key || ''
+    turnstileEndpoint.value = settings.turnstile_endpoint || ''
   } catch {
     invitationCodeEnabled.value = false
     emailVerifyEnabled.value = true
     turnstileEnabled.value = false
     turnstileSiteKey.value = ''
+    turnstileEndpoint.value = ''
   }
 })
 

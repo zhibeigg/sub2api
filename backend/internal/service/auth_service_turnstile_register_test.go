@@ -17,7 +17,7 @@ type turnstileVerifierSpy struct {
 	err       error
 }
 
-func (s *turnstileVerifierSpy) VerifyToken(_ context.Context, _ string, token, _ string) (*TurnstileVerifyResponse, error) {
+func (s *turnstileVerifierSpy) VerifyToken(_ context.Context, _ string, _ string, token, _ string) (*TurnstileVerifyResponse, error) {
 	s.called++
 	s.lastToken = token
 	if s.err != nil {
@@ -79,6 +79,8 @@ func TestAuthService_VerifyTurnstileForRegister_RequireWhenVerifyCodeMissing(t *
 		SettingKeyEmailVerifyEnabled: "true",
 		SettingKeyTurnstileEnabled:   "true",
 		SettingKeyTurnstileSecretKey: "secret",
+		SettingKeyTurnstileSiteKey:   "site",
+		SettingKeyTurnstileEndpoint:  "https://cap.example.com",
 	}, verifier)
 
 	err := service.VerifyTurnstileForRegister(context.Background(), "", "127.0.0.1", "")
@@ -91,6 +93,8 @@ func TestAuthService_VerifyTurnstileForRegister_NoSkipWhenEmailVerifyDisabled(t 
 		SettingKeyEmailVerifyEnabled: "false",
 		SettingKeyTurnstileEnabled:   "true",
 		SettingKeyTurnstileSecretKey: "secret",
+		SettingKeyTurnstileSiteKey:   "site",
+		SettingKeyTurnstileEndpoint:  "https://cap.example.com",
 	}, verifier)
 
 	err := service.VerifyTurnstileForRegister(context.Background(), "turnstile-token", "127.0.0.1", "123456")

@@ -327,6 +327,7 @@ export const useAppStore = defineStore('app', () => {
         invitation_code_enabled: false,
         turnstile_enabled: false,
         turnstile_site_key: '',
+        turnstile_endpoint: '',
         site_name: siteName.value,
         site_logo: siteLogo.value,
         site_subtitle: '',

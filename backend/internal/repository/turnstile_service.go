@@ -1,25 +1,22 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/httpclient"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
-const turnstileVerifyURL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
-
 type turnstileVerifier struct {
 	httpClient *http.Client
-	verifyURL  string
 }
 
+// NewTurnstileVerifier 创建 Cap siteverify 验证器。
 func NewTurnstileVerifier() service.TurnstileVerifier {
 	sharedClient, err := httpclient.GetClient(httpclient.Options{
 		Timeout:            10 * time.Second,
@@ -30,23 +27,33 @@ func NewTurnstileVerifier() service.TurnstileVerifier {
 	}
 	return &turnstileVerifier{
 		httpClient: sharedClient,
-		verifyURL:  turnstileVerifyURL,
 	}
 }
 
-func (v *turnstileVerifier) VerifyToken(ctx context.Context, secretKey, token, remoteIP string) (*service.TurnstileVerifyResponse, error) {
-	formData := url.Values{}
-	formData.Set("secret", secretKey)
-	formData.Set("response", token)
-	if remoteIP != "" {
-		formData.Set("remoteip", remoteIP)
+// capVerifyRequest Cap /siteverify 请求体（JSON）。
+type capVerifyRequest struct {
+	Secret   string `json:"secret"`
+	Response string `json:"response"`
+	RemoteIP string `json:"remoteip,omitempty"`
+}
+
+// VerifyToken 向 Cap 实例发送 siteverify 请求。
+// verifyURL 形如 https://cap.example.com/<siteKey>/siteverify。
+func (v *turnstileVerifier) VerifyToken(ctx context.Context, verifyURL, secretKey, token, remoteIP string) (*service.TurnstileVerifyResponse, error) {
+	payload, err := json.Marshal(capVerifyRequest{
+		Secret:   secretKey,
+		Response: token,
+		RemoteIP: remoteIP,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, v.verifyURL, strings.NewReader(formData.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, verifyURL, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := v.httpClient.Do(req)
 	if err != nil {

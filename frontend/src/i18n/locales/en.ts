@@ -5792,14 +5792,16 @@ export default {
           'Please configure TOTP_ENCRYPTION_KEY in environment variables first. Generate a key with: openssl rand -hex 32'
       },
       turnstile: {
-        title: 'Cloudflare Turnstile',
-        description: 'Bot protection for login and registration',
-        enableTurnstile: 'Enable Turnstile',
-        enableTurnstileHint: 'Require Cloudflare Turnstile verification',
+        title: 'Cap CAPTCHA',
+        description: 'Bot protection for login and registration (self-hosted Cap, trycap.dev)',
+        enableTurnstile: 'Enable CAPTCHA',
+        enableTurnstileHint: 'Require Cap CAPTCHA verification',
+        endpoint: 'Instance URL',
+        endpointHint: 'Cap server URL, e.g. https://cap.example.com (no trailing slash)',
         siteKey: 'Site Key',
         secretKey: 'Secret Key',
-        siteKeyHint: 'Get this from your Cloudflare Dashboard',
-        cloudflareDashboard: 'Cloudflare Dashboard',
+        siteKeyHint: 'Create a site key in your Cap dashboard to get this',
+        cloudflareDashboard: 'Cap Dashboard',
         secretKeyHint: 'Server-side verification key (keep this secret)',
         secretKeyConfiguredHint: 'Secret key configured. Leave empty to keep the current value.'
       },

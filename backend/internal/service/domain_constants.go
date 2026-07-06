@@ -156,10 +156,11 @@ const (
 	SettingKeySMTPFromName = "smtp_from_name" // 发件人名称
 	SettingKeySMTPUseTLS   = "smtp_use_tls"   // 是否使用TLS
 
-	// Cloudflare Turnstile 设置
-	SettingKeyTurnstileEnabled   = "turnstile_enabled"    // 是否启用 Turnstile 验证
-	SettingKeyTurnstileSiteKey   = "turnstile_site_key"   // Turnstile Site Key
-	SettingKeyTurnstileSecretKey = "turnstile_secret_key" // Turnstile Secret Key
+	// Cap（trycap.dev）人机验证设置（沿用 turnstile_* 键名以兼容历史数据）
+	SettingKeyTurnstileEnabled   = "turnstile_enabled"    // 是否启用 Cap 人机验证
+	SettingKeyTurnstileSiteKey   = "turnstile_site_key"   // Cap Site Key
+	SettingKeyTurnstileSecretKey = "turnstile_secret_key" // Cap Secret Key
+	SettingKeyTurnstileEndpoint  = "turnstile_endpoint"   // Cap 实例地址，如 https://cap.example.com
 
 	// API Key IP 访问控制设置
 	SettingKeyAPIKeyACLTrustForwardedIP = "api_key_acl_trust_forwarded_ip" // API Key IP 白/黑名单是否信任转发 IP

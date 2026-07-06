@@ -66,10 +66,11 @@
           </div>
         </div>
 
-        <!-- Turnstile Widget for Resend -->
-        <div v-if="turnstileEnabled && turnstileSiteKey && showResendTurnstile">
-          <TurnstileWidget
+        <!-- Cap CAPTCHA Widget for Resend -->
+        <div v-if="captchaActive && showResendTurnstile">
+          <CapWidget
             ref="turnstileRef"
+            :endpoint="turnstileEndpoint"
             :site-key="turnstileSiteKey"
             @verify="onTurnstileVerify"
             @expire="onTurnstileExpire"
@@ -118,12 +119,12 @@
             type="button"
             @click="handleResendCode"
             :disabled="
-              isSendingCode || (turnstileEnabled && showResendTurnstile && !resendTurnstileToken)
+              isSendingCode || (captchaActive && showResendTurnstile && !resendTurnstileToken)
             "
             class="text-sm text-primary-600 transition-colors hover:text-primary-500 disabled:cursor-not-allowed disabled:opacity-50 dark:text-primary-400 dark:hover:text-primary-300"
           >
             <span v-if="isSendingCode">{{ t('auth.sendingCode') }}</span>
-            <span v-else-if="turnstileEnabled && !showResendTurnstile">
+            <span v-else-if="captchaActive && !showResendTurnstile">
               {{ t('auth.clickToResend') }}
             </span>
             <span v-else>{{ t('auth.resendCode') }}</span>
@@ -151,7 +152,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { AuthLayout } from '@/components/layout'
 import Icon from '@/components/icons/Icon.vue'
-import TurnstileWidget from '@/components/TurnstileWidget.vue'
+import CapWidget from '@/components/CapWidget.vue'
 import { useAuthStore, useAppStore } from '@/stores'
 import {
   persistOAuthTokenContext,
@@ -229,11 +230,12 @@ const hasRegisterData = ref<boolean>(false)
 // Public settings
 const turnstileEnabled = ref<boolean>(false)
 const turnstileSiteKey = ref<string>('')
+const turnstileEndpoint = ref<string>('')
 const siteName = ref<string>('Sub2API')
 const registrationEmailSuffixWhitelist = ref<string[]>([])
 
-// Turnstile for resend
-const turnstileRef = ref<InstanceType<typeof TurnstileWidget> | null>(null)
+// Cap CAPTCHA for resend
+const turnstileRef = ref<InstanceType<typeof CapWidget> | null>(null)
 const resendTurnstileToken = ref<string>('')
 const showResendTurnstile = ref<boolean>(false)
 
@@ -244,6 +246,11 @@ const errors = ref({
 
 const validationToastMessage = computed(
   () => errors.value.code || errors.value.turnstile || ''
+)
+
+// Cap CAPTCHA is active only when enabled and fully configured
+const captchaActive = computed(
+  () => turnstileEnabled.value && !!turnstileSiteKey.value && !!turnstileEndpoint.value
 )
 
 watch(validationToastMessage, (value, previousValue) => {
@@ -294,6 +301,7 @@ onMounted(async () => {
     const settings = await getPublicSettings()
     turnstileEnabled.value = settings.turnstile_enabled
     turnstileSiteKey.value = settings.turnstile_site_key || ''
+    turnstileEndpoint.value = settings.turnstile_endpoint || ''
     siteName.value = settings.site_name || 'Sub2API'
     registrationEmailSuffixWhitelist.value = normalizeRegistrationEmailSuffixWhitelist(
       settings.registration_email_suffix_whitelist || []
@@ -452,14 +460,14 @@ async function sendCode(): Promise<void> {
 // ==================== Handlers ====================
 
 async function handleResendCode(): Promise<void> {
-  // If turnstile is enabled and we haven't shown it yet, show it
-  if (turnstileEnabled.value && !showResendTurnstile.value) {
+  // If CAPTCHA is active and we haven't shown it yet, show it
+  if (captchaActive.value && !showResendTurnstile.value) {
     showResendTurnstile.value = true
     return
   }
 
-  // If turnstile is enabled but no token yet, wait
-  if (turnstileEnabled.value && !resendTurnstileToken.value) {
+  // If CAPTCHA is active but no token yet, wait
+  if (captchaActive.value && !resendTurnstileToken.value) {
     errors.value.turnstile = t('auth.completeVerification')
     return
   }

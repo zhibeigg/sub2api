@@ -42,7 +42,14 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
-      vue(),
+      vue({
+        template: {
+          compilerOptions: {
+            // Cap renders a <cap-widget> custom element (Web Component)
+            isCustomElement: (tag) => tag === 'cap-widget'
+          }
+        }
+      }),
       checker({
         vueTsc: true
       }),

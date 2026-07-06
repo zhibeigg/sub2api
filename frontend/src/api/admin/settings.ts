@@ -446,10 +446,11 @@ export interface SystemSettings {
   smtp_from_email: string;
   smtp_from_name: string;
   smtp_use_tls: boolean;
-  // Cloudflare Turnstile settings
+  // Cap CAPTCHA settings (keeps turnstile_* keys for backward compatibility)
   turnstile_enabled: boolean;
   turnstile_site_key: string;
   turnstile_secret_key_configured: boolean;
+  turnstile_endpoint: string;
   api_key_acl_trust_forwarded_ip: boolean;
 
   // LinuxDo Connect OAuth settings
@@ -744,6 +745,7 @@ export interface UpdateSettingsRequest {
   turnstile_enabled?: boolean;
   turnstile_site_key?: string;
   turnstile_secret_key?: string;
+  turnstile_endpoint?: string;
   api_key_acl_trust_forwarded_ip?: boolean;
   linuxdo_connect_enabled?: boolean;
   linuxdo_connect_client_id?: string;

@@ -145,7 +145,7 @@ describe('EmailVerifyView', () => {
         stubs: {
           AuthLayout: { template: '<div><slot /><slot name="footer" /></div>' },
           Icon: true,
-          TurnstileWidget: true,
+          CapWidget: true,
           transition: false,
         },
       },
@@ -186,7 +186,7 @@ describe('EmailVerifyView', () => {
         stubs: {
           AuthLayout: { template: '<div><slot /><slot name="footer" /></div>' },
           Icon: true,
-          TurnstileWidget: true,
+          CapWidget: true,
           transition: false,
         },
       },
@@ -227,7 +227,7 @@ describe('EmailVerifyView', () => {
         stubs: {
           AuthLayout: { template: '<div><slot /><slot name="footer" /></div>' },
           Icon: true,
-          TurnstileWidget: true,
+          CapWidget: true,
           transition: false,
         },
       },
@@ -274,7 +274,7 @@ describe('EmailVerifyView', () => {
         stubs: {
           AuthLayout: { template: '<div><slot /><slot name="footer" /></div>' },
           Icon: true,
-          TurnstileWidget: true,
+          CapWidget: true,
           transition: false,
         },
       },
@@ -321,7 +321,7 @@ describe('EmailVerifyView', () => {
         stubs: {
           AuthLayout: { template: '<div><slot /><slot name="footer" /></div>' },
           Icon: true,
-          TurnstileWidget: true,
+          CapWidget: true,
           transition: false,
         },
       },
@@ -385,7 +385,7 @@ describe('EmailVerifyView', () => {
         stubs: {
           AuthLayout: { template: '<div><slot /><slot name="footer" /></div>' },
           Icon: true,
-          TurnstileWidget: true,
+          CapWidget: true,
           transition: false,
         },
       },
@@ -431,7 +431,7 @@ describe('EmailVerifyView', () => {
         stubs: {
           AuthLayout: { template: '<div><slot /><slot name="footer" /></div>' },
           Icon: true,
-          TurnstileWidget: true,
+          CapWidget: true,
           transition: false,
         },
       },

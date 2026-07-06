@@ -5951,14 +5951,16 @@ export default {
           '请先在环境变量中配置 TOTP_ENCRYPTION_KEY。使用命令 openssl rand -hex 32 生成密钥。'
       },
       turnstile: {
-        title: 'Cloudflare Turnstile',
-        description: '登录和注册的机器人防护',
-        enableTurnstile: '启用 Turnstile',
-        enableTurnstileHint: '需要 Cloudflare Turnstile 验证',
+        title: 'Cap 人机验证',
+        description: '登录和注册的机器人防护（自托管 Cap，trycap.dev）',
+        enableTurnstile: '启用人机验证',
+        enableTurnstileHint: '需要通过 Cap 人机验证',
+        endpoint: '实例地址',
+        endpointHint: 'Cap 服务器地址，如 https://cap.example.com（末尾不加斜杠）',
         siteKey: '站点密钥',
         secretKey: '私密密钥',
-        siteKeyHint: '从 Cloudflare Dashboard 获取',
-        cloudflareDashboard: 'Cloudflare Dashboard',
+        siteKeyHint: '从 Cap 控制台创建站点密钥后获取',
+        cloudflareDashboard: 'Cap 控制台',
         secretKeyHint: '服务端验证密钥（请保密）',
         secretKeyConfiguredHint: '密钥已配置，留空以保留当前值。'
       },

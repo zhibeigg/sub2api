@@ -66,10 +66,11 @@
           </div>
         </div>
 
-        <!-- Turnstile Widget -->
-        <div v-if="turnstileEnabled && turnstileSiteKey">
-          <TurnstileWidget
+        <!-- Cap CAPTCHA Widget -->
+        <div v-if="captchaActive">
+          <CapWidget
             ref="turnstileRef"
+            :endpoint="turnstileEndpoint"
             :site-key="turnstileSiteKey"
             @verify="onTurnstileVerify"
             @expire="onTurnstileExpire"
@@ -80,7 +81,7 @@
         <!-- Submit Button -->
         <button
           type="submit"
-          :disabled="isLoading || (turnstileEnabled && !turnstileToken)"
+          :disabled="isLoading || (captchaActive && !turnstileToken)"
           class="btn btn-primary w-full"
         >
           <svg
@@ -129,7 +130,7 @@ import { computed, ref, reactive, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { AuthLayout } from '@/components/layout'
 import Icon from '@/components/icons/Icon.vue'
-import TurnstileWidget from '@/components/TurnstileWidget.vue'
+import CapWidget from '@/components/CapWidget.vue'
 import { useAppStore } from '@/stores'
 import { getPublicSettings, forgotPassword } from '@/api/auth'
 
@@ -148,9 +149,10 @@ const errorMessage = ref<string>('')
 // Public settings
 const turnstileEnabled = ref<boolean>(false)
 const turnstileSiteKey = ref<string>('')
+const turnstileEndpoint = ref<string>('')
 
-// Turnstile
-const turnstileRef = ref<InstanceType<typeof TurnstileWidget> | null>(null)
+// Cap CAPTCHA
+const turnstileRef = ref<InstanceType<typeof CapWidget> | null>(null)
 const turnstileToken = ref<string>('')
 
 const formData = reactive({
@@ -163,6 +165,11 @@ const errors = reactive({
 })
 
 const validationToastMessage = computed(() => errors.email || errors.turnstile || '')
+
+// Cap CAPTCHA is active only when enabled and fully configured
+const captchaActive = computed(
+  () => turnstileEnabled.value && !!turnstileSiteKey.value && !!turnstileEndpoint.value
+)
 
 watch(validationToastMessage, (value, previousValue) => {
   if (value && value !== previousValue) {
@@ -177,6 +184,7 @@ onMounted(async () => {
     const settings = await getPublicSettings()
     turnstileEnabled.value = settings.turnstile_enabled
     turnstileSiteKey.value = settings.turnstile_site_key || ''
+    turnstileEndpoint.value = settings.turnstile_endpoint || ''
   } catch (error) {
     console.error('Failed to load public settings:', error)
   }
@@ -216,8 +224,8 @@ function validateForm(): boolean {
     isValid = false
   }
 
-  // Turnstile validation
-  if (turnstileEnabled.value && !turnstileToken.value) {
+  // Cap CAPTCHA validation
+  if (captchaActive.value && !turnstileToken.value) {
     errors.turnstile = t('auth.completeVerification')
     isValid = false
   }
@@ -239,7 +247,7 @@ async function handleSubmit(): Promise<void> {
   try {
     await forgotPassword({
       email: formData.email,
-      turnstile_token: turnstileEnabled.value ? turnstileToken.value : undefined
+      turnstile_token: captchaActive.value ? turnstileToken.value : undefined
     })
 
     isSubmitted.value = true

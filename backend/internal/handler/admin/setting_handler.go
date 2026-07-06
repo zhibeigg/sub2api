@@ -142,6 +142,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		TurnstileEnabled:                                       settings.TurnstileEnabled,
 		TurnstileSiteKey:                                       settings.TurnstileSiteKey,
 		TurnstileSecretKeyConfigured:                           settings.TurnstileSecretKeyConfigured,
+		TurnstileEndpoint:                                      settings.TurnstileEndpoint,
 		APIKeyACLTrustForwardedIP:                              settings.APIKeyACLTrustForwardedIP,
 		LinuxDoConnectEnabled:                                  settings.LinuxDoConnectEnabled,
 		LinuxDoConnectClientID:                                 settings.LinuxDoConnectClientID,
@@ -440,10 +441,11 @@ type UpdateSettingsRequest struct {
 	SMTPFromName string `json:"smtp_from_name"`
 	SMTPUseTLS   bool   `json:"smtp_use_tls"`
 
-	// Cloudflare Turnstile 设置
+	// Cap 人机验证设置（沿用 turnstile_* 字段名以兼容前端与历史数据）
 	TurnstileEnabled   bool   `json:"turnstile_enabled"`
 	TurnstileSiteKey   string `json:"turnstile_site_key"`
 	TurnstileSecretKey string `json:"turnstile_secret_key"`
+	TurnstileEndpoint  string `json:"turnstile_endpoint"`
 
 	// API Key IP 访问控制设置
 	APIKeyACLTrustForwardedIP *bool `json:"api_key_acl_trust_forwarded_ip"`
@@ -823,27 +825,32 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		req.SMTPUseTLS = previousSettings.SMTPUseTLS
 	}
 
-	// Turnstile 参数验证
+	// Cap 人机验证参数验证
 	if req.TurnstileEnabled {
 		// 检查必填字段
+		if req.TurnstileEndpoint == "" {
+			response.BadRequest(c, "Cap endpoint is required when enabled")
+			return
+		}
 		if req.TurnstileSiteKey == "" {
-			response.BadRequest(c, "Turnstile Site Key is required when enabled")
+			response.BadRequest(c, "Cap Site Key is required when enabled")
 			return
 		}
 		// 如果未提供 secret key，使用已保存的值（留空保留当前值）
 		if req.TurnstileSecretKey == "" {
 			if previousSettings.TurnstileSecretKey == "" {
-				response.BadRequest(c, "Turnstile Secret Key is required when enabled")
+				response.BadRequest(c, "Cap Secret Key is required when enabled")
 				return
 			}
 			req.TurnstileSecretKey = previousSettings.TurnstileSecretKey
 		}
 
-		// 当 site_key 或 secret_key 任一变化时验证（避免配置错误导致无法登录）
+		// 当 endpoint / site_key / secret_key 任一变化时验证（避免配置错误导致无法登录）
+		endpointChanged := previousSettings.TurnstileEndpoint != req.TurnstileEndpoint
 		siteKeyChanged := previousSettings.TurnstileSiteKey != req.TurnstileSiteKey
 		secretKeyChanged := previousSettings.TurnstileSecretKey != req.TurnstileSecretKey
-		if siteKeyChanged || secretKeyChanged {
-			if err := h.turnstileService.ValidateSecretKey(c.Request.Context(), req.TurnstileSecretKey); err != nil {
+		if endpointChanged || siteKeyChanged || secretKeyChanged {
+			if err := h.turnstileService.ValidateConfig(c.Request.Context(), req.TurnstileEndpoint, req.TurnstileSiteKey, req.TurnstileSecretKey); err != nil {
 				response.ErrorFrom(c, err)
 				return
 			}
@@ -1584,6 +1591,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		TurnstileEnabled:                 req.TurnstileEnabled,
 		TurnstileSiteKey:                 req.TurnstileSiteKey,
 		TurnstileSecretKey:               req.TurnstileSecretKey,
+		TurnstileEndpoint:                req.TurnstileEndpoint,
 		APIKeyACLTrustForwardedIP: func() bool {
 			if req.APIKeyACLTrustForwardedIP != nil {
 				return *req.APIKeyACLTrustForwardedIP
@@ -2096,6 +2104,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		TurnstileEnabled:                                       updatedSettings.TurnstileEnabled,
 		TurnstileSiteKey:                                       updatedSettings.TurnstileSiteKey,
 		TurnstileSecretKeyConfigured:                           updatedSettings.TurnstileSecretKeyConfigured,
+		TurnstileEndpoint:                                      updatedSettings.TurnstileEndpoint,
 		APIKeyACLTrustForwardedIP:                              updatedSettings.APIKeyACLTrustForwardedIP,
 		LinuxDoConnectEnabled:                                  updatedSettings.LinuxDoConnectEnabled,
 		LinuxDoConnectClientID:                                 updatedSettings.LinuxDoConnectClientID,
@@ -2414,6 +2423,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.TurnstileSiteKey != after.TurnstileSiteKey {
 		changed = append(changed, "turnstile_site_key")
+	}
+	if before.TurnstileEndpoint != after.TurnstileEndpoint {
+		changed = append(changed, "turnstile_endpoint")
 	}
 	if req.TurnstileSecretKey != "" {
 		changed = append(changed, "turnstile_secret_key")

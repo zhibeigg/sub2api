@@ -214,7 +214,7 @@ describe('PendingOAuthCreateAccountForm', () => {
       },
       global: {
         stubs: {
-          TurnstileWidget: {
+          CapWidget: {
             template: '<button data-testid="turnstile-verify" @click="$emit(\'verify\', \'turnstile-token\')">verify</button>'
           }
         }

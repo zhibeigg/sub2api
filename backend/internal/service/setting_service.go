@@ -785,6 +785,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyLoginAgreementDocuments,
 		SettingKeyTurnstileEnabled,
 		SettingKeyTurnstileSiteKey,
+		SettingKeyTurnstileEndpoint,
 		SettingKeyAPIKeyACLTrustForwardedIP,
 		SettingKeySiteName,
 		SettingKeySiteLogo,
@@ -911,6 +912,7 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		LoginAgreementDocuments:          loginAgreementDocuments,
 		TurnstileEnabled:                 settings[SettingKeyTurnstileEnabled] == "true",
 		TurnstileSiteKey:                 settings[SettingKeyTurnstileSiteKey],
+		TurnstileEndpoint:                settings[SettingKeyTurnstileEndpoint],
 		SiteName:                         s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
 		SiteLogo:                         settings[SettingKeySiteLogo],
 		SiteSubtitle:                     s.getStringOrDefault(settings, SettingKeySiteSubtitle, "Subscription to API Conversion Platform"),
@@ -1435,6 +1437,7 @@ type PublicSettingsInjectionPayload struct {
 	LoginAgreementDocuments          []LoginAgreementDocument `json:"login_agreement_documents"`
 	TurnstileEnabled                 bool                     `json:"turnstile_enabled"`
 	TurnstileSiteKey                 string                   `json:"turnstile_site_key"`
+	TurnstileEndpoint                string                   `json:"turnstile_endpoint"`
 	SiteName                         string                   `json:"site_name"`
 	SiteLogo                         string                   `json:"site_logo"`
 	SiteSubtitle                     string                   `json:"site_subtitle"`
@@ -1504,6 +1507,7 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		LoginAgreementDocuments:          settings.LoginAgreementDocuments,
 		TurnstileEnabled:                 settings.TurnstileEnabled,
 		TurnstileSiteKey:                 settings.TurnstileSiteKey,
+		TurnstileEndpoint:                settings.TurnstileEndpoint,
 		SiteName:                         settings.SiteName,
 		SiteLogo:                         settings.SiteLogo,
 		SiteSubtitle:                     settings.SiteSubtitle,
@@ -1997,9 +2001,10 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeySMTPFromName] = settings.SMTPFromName
 	updates[SettingKeySMTPUseTLS] = strconv.FormatBool(settings.SMTPUseTLS)
 
-	// Cloudflare Turnstile 设置（只有非空才更新密钥）
+	// Cap 人机验证设置（只有非空才更新密钥）
 	updates[SettingKeyTurnstileEnabled] = strconv.FormatBool(settings.TurnstileEnabled)
 	updates[SettingKeyTurnstileSiteKey] = settings.TurnstileSiteKey
+	updates[SettingKeyTurnstileEndpoint] = strings.TrimRight(strings.TrimSpace(settings.TurnstileEndpoint), "/")
 	if settings.TurnstileSecretKey != "" {
 		updates[SettingKeyTurnstileSecretKey] = settings.TurnstileSecretKey
 	}
@@ -3291,6 +3296,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		TurnstileEnabled:                 settings[SettingKeyTurnstileEnabled] == "true",
 		TurnstileSiteKey:                 settings[SettingKeyTurnstileSiteKey],
 		TurnstileSecretKeyConfigured:     settings[SettingKeyTurnstileSecretKey] != "",
+		TurnstileEndpoint:                settings[SettingKeyTurnstileEndpoint],
 		APIKeyACLTrustForwardedIP:        apiKeyACLTrustForwardedIP,
 		SiteName:                         s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
 		SiteLogo:                         settings[SettingKeySiteLogo],
@@ -4195,13 +4201,31 @@ func (s *SettingService) IsTurnstileEnabled(ctx context.Context) bool {
 	return value == "true"
 }
 
-// GetTurnstileSecretKey 获取 Turnstile Secret Key
+// GetTurnstileSecretKey 获取 Cap Secret Key
 func (s *SettingService) GetTurnstileSecretKey(ctx context.Context) string {
 	value, err := s.settingRepo.GetValue(ctx, SettingKeyTurnstileSecretKey)
 	if err != nil {
 		return ""
 	}
 	return value
+}
+
+// GetTurnstileSiteKey 获取 Cap Site Key
+func (s *SettingService) GetTurnstileSiteKey(ctx context.Context) string {
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyTurnstileSiteKey)
+	if err != nil {
+		return ""
+	}
+	return value
+}
+
+// GetTurnstileEndpoint 获取 Cap 实例地址（末尾不含斜杠）
+func (s *SettingService) GetTurnstileEndpoint(ctx context.Context) string {
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyTurnstileEndpoint)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimRight(strings.TrimSpace(value), "/")
 }
 
 // IsIdentityPatchEnabled 检查是否启用身份补丁（Claude -> Gemini systemInstruction 注入）

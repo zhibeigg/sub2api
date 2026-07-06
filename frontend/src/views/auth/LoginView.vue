@@ -78,10 +78,11 @@
           </div>
         </div>
 
-        <!-- Turnstile Widget -->
-        <div v-if="turnstileEnabled && turnstileSiteKey">
-          <TurnstileWidget
+        <!-- Cap CAPTCHA Widget -->
+        <div v-if="captchaActive">
+          <CapWidget
             ref="turnstileRef"
+            :endpoint="turnstileEndpoint"
             :site-key="turnstileSiteKey"
             @verify="onTurnstileVerify"
             @expire="onTurnstileExpire"
@@ -92,7 +93,7 @@
         <!-- Submit Button -->
         <button
           type="submit"
-          :disabled="authActionDisabled || (turnstileEnabled && !turnstileToken)"
+          :disabled="authActionDisabled || (captchaActive && !turnstileToken)"
           class="btn btn-primary w-full"
         >
           <svg
@@ -210,7 +211,7 @@ import EmailOAuthButtons from '@/components/auth/EmailOAuthButtons.vue'
 import LoginAgreementPrompt from '@/components/auth/LoginAgreementPrompt.vue'
 import TotpLoginModal from '@/components/auth/TotpLoginModal.vue'
 import Icon from '@/components/icons/Icon.vue'
-import TurnstileWidget from '@/components/TurnstileWidget.vue'
+import CapWidget from '@/components/CapWidget.vue'
 import { useAuthStore, useAppStore } from '@/stores'
 import { getPublicSettings, isTotp2FARequired, isWeChatWebOAuthEnabled } from '@/api/auth'
 import type { LoginAgreementDocument, TotpLoginResponse } from '@/types'
@@ -236,6 +237,7 @@ const publicSettingsLoaded = ref<boolean>(false)
 // Public settings
 const turnstileEnabled = ref<boolean>(false)
 const turnstileSiteKey = ref<string>('')
+const turnstileEndpoint = ref<string>('')
 const linuxdoOAuthEnabled = ref<boolean>(false)
 const dingtalkOAuthEnabled = ref<boolean>(false)
 const wechatOAuthEnabled = ref<boolean>(false)
@@ -253,8 +255,8 @@ const loginAgreementDocuments = ref<LoginAgreementDocument[]>([])
 const agreementAccepted = ref<boolean>(false)
 const showAgreementModal = ref<boolean>(false)
 
-// Turnstile
-const turnstileRef = ref<InstanceType<typeof TurnstileWidget> | null>(null)
+// Cap CAPTCHA
+const turnstileRef = ref<InstanceType<typeof CapWidget> | null>(null)
 const turnstileToken = ref<string>('')
 
 // 2FA state
@@ -276,6 +278,11 @@ const errors = reactive({
 
 const validationToastMessage = computed(
   () => errors.email || errors.password || errors.turnstile || ''
+)
+
+// Cap CAPTCHA is active only when enabled and fully configured
+const captchaActive = computed(
+  () => turnstileEnabled.value && !!turnstileSiteKey.value && !!turnstileEndpoint.value
 )
 
 const agreementGateActive = computed(
@@ -318,6 +325,7 @@ onMounted(async () => {
     const settings = await getPublicSettings()
     turnstileEnabled.value = settings.turnstile_enabled
     turnstileSiteKey.value = settings.turnstile_site_key || ''
+    turnstileEndpoint.value = settings.turnstile_endpoint || ''
     linuxdoOAuthEnabled.value = settings.linuxdo_oauth_enabled
     dingtalkOAuthEnabled.value = settings.dingtalk_oauth_enabled ?? false
     wechatOAuthEnabled.value = isWeChatWebOAuthEnabled(settings)
@@ -453,8 +461,8 @@ function validateForm(): boolean {
     isValid = false
   }
 
-  // Turnstile validation
-  if (turnstileEnabled.value && !turnstileToken.value) {
+  // Cap CAPTCHA validation
+  if (captchaActive.value && !turnstileToken.value) {
     errors.turnstile = t('auth.completeVerification')
     isValid = false
   }
@@ -480,7 +488,7 @@ async function handleLogin(): Promise<void> {
     const response = await authStore.login({
       email: formData.email,
       password: formData.password,
-      turnstile_token: turnstileEnabled.value ? turnstileToken.value : undefined
+      turnstile_token: captchaActive.value ? turnstileToken.value : undefined
     })
 
     // Check if 2FA is required
