@@ -12,9 +12,11 @@
     <div v-else v-html="homeContent"></div>
   </div>
 
-  <!-- Default Home Page (dark-only, self-contained palette) -->
+  <!-- Default Home Page: monochrome editorial, ink & paper -->
   <div v-else class="pk-page">
-    <!-- Header -->
+    <div class="pk-noise" aria-hidden="true"></div>
+
+    <!-- ============ NAV ============ -->
     <header class="pk-nav" :class="{ 'pk-nav--scrolled': isScrolled }">
       <nav class="pk-nav-inner">
         <a class="pk-brand" href="#top" @click.prevent="scrollToTop">
@@ -32,12 +34,21 @@
 
         <div class="pk-nav-actions">
           <LocaleSwitcher />
-          <router-link v-if="isAuthenticated" :to="dashboardPath" class="pk-btn pk-btn--primary pk-btn--sm">
+          <button
+            type="button"
+            class="pk-theme-toggle"
+            :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
+            @click="toggleTheme"
+          >
+            <Icon v-if="isDark" name="sun" size="sm" :stroke-width="1.6" />
+            <Icon v-else name="moon" size="sm" :stroke-width="1.6" />
+          </button>
+          <router-link v-if="isAuthenticated" :to="dashboardPath" class="pk-btn pk-btn--sm">
             {{ t('home.dashboard') }}
           </router-link>
           <template v-else>
             <router-link to="/login" class="pk-nav-login">{{ t('home.login') }}</router-link>
-            <router-link to="/register" class="pk-btn pk-btn--primary pk-btn--sm">
+            <router-link to="/register" class="pk-btn pk-btn--sm">
               {{ t('home.getStarted') }}
             </router-link>
           </template>
@@ -48,71 +59,56 @@
     <main id="top">
       <!-- ============ HERO ============ -->
       <section class="pk-hero">
-        <div class="pk-hero-glow" aria-hidden="true"></div>
-        <div class="pk-hero-grid" aria-hidden="true"></div>
+        <div class="pk-container">
+          <p class="pk-hero-kicker pk-enter" style="--d: 0ms">
+            <span class="pk-dot" aria-hidden="true"></span>
+            {{ t('home.hero.badge') }}
+          </p>
 
-        <div class="pk-container pk-hero-layout">
-          <div class="pk-hero-copy">
-            <div class="pk-badge pk-enter" style="--d: 0ms">
-              <span class="pk-badge-dot"></span>
-              {{ t('home.hero.badge') }}
-            </div>
+          <h1 class="pk-hero-title">
+            <span class="pk-hero-line pk-enter" style="--d: 80ms">{{ t('home.hero.titleLine1') }}</span>
+            <span class="pk-hero-line pk-hero-line--em pk-enter" style="--d: 170ms">{{
+              t('home.hero.titleLine2')
+            }}</span>
+          </h1>
 
-            <h1 class="pk-hero-title pk-enter" style="--d: 90ms">
-              {{ t('home.hero.titleLine1') }}<br />
-              <span class="pk-hero-title-em">{{ t('home.hero.titleLine2') }}</span>
-            </h1>
-
-            <p class="pk-hero-desc pk-enter" style="--d: 180ms">
+          <div class="pk-hero-below">
+            <p class="pk-hero-desc pk-enter" style="--d: 280ms">
               {{ t('home.hero.description') }}
             </p>
 
-            <div class="pk-hero-ctas pk-enter" style="--d: 270ms">
-              <router-link
-                :to="isAuthenticated ? dashboardPath : '/register'"
-                class="pk-btn pk-btn--primary pk-btn--lg"
-              >
-                {{ isAuthenticated ? t('home.goToDashboard') : t('home.hero.ctaPrimary') }}
-                <Icon name="arrowRight" size="sm" :stroke-width="2" />
-              </router-link>
-              <a v-if="docUrl" :href="docUrl" target="_blank" rel="noopener noreferrer" class="pk-btn pk-btn--ghost pk-btn--lg">
-                {{ t('home.hero.ctaDocs') }}
-              </a>
-            </div>
-
-            <!-- Base URL boxes -->
-            <div class="pk-endpoints pk-enter" style="--d: 360ms">
-              <div v-for="ep in endpoints" :key="ep.key" class="pk-endpoint">
-                <span class="pk-endpoint-label">{{ t(ep.labelKey) }}</span>
-                <code class="pk-endpoint-url">{{ ep.url }}</code>
-                <button
-                  type="button"
-                  class="pk-copy"
-                  :class="{ 'pk-copy--done': copiedKey === ep.key }"
-                  :aria-label="t('home.hero.copy')"
-                  @click="copyEndpoint(ep)"
+            <div class="pk-hero-side pk-enter" style="--d: 340ms">
+              <div class="pk-hero-ctas">
+                <router-link :to="isAuthenticated ? dashboardPath : '/register'" class="pk-btn pk-btn--lg">
+                  {{ isAuthenticated ? t('home.goToDashboard') : t('home.hero.ctaPrimary') }}
+                  <Icon name="arrowRight" size="sm" :stroke-width="1.8" />
+                </router-link>
+                <a
+                  v-if="docUrl"
+                  :href="docUrl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="pk-linkline"
                 >
-                  <Icon :name="copiedKey === ep.key ? 'check' : 'copy'" size="xs" :stroke-width="2" />
-                  <span>{{ copiedKey === ep.key ? t('home.hero.copied') : t('home.hero.copy') }}</span>
-                </button>
+                  {{ t('home.hero.ctaDocs') }}
+                </a>
               </div>
-            </div>
-          </div>
 
-          <!-- Right: stacked feature cards -->
-          <div class="pk-hero-side">
-            <div
-              v-for="(card, i) in heroCards"
-              :key="card.key"
-              class="pk-side-card pk-enter"
-              :style="{ '--d': 240 + i * 110 + 'ms' }"
-            >
-              <div class="pk-side-icon">
-                <Icon :name="card.icon" size="md" :stroke-width="1.6" />
-              </div>
-              <div>
-                <div class="pk-side-title">{{ t(`home.hero.cards.${card.key}.title`) }}</div>
-                <div class="pk-side-desc">{{ t(`home.hero.cards.${card.key}.desc`) }}</div>
+              <div class="pk-endpoints">
+                <div v-for="ep in endpoints" :key="ep.key" class="pk-endpoint">
+                  <span class="pk-endpoint-label">{{ t(ep.labelKey) }}</span>
+                  <code class="pk-endpoint-url">{{ ep.url }}</code>
+                  <button
+                    type="button"
+                    class="pk-copy"
+                    :class="{ 'pk-copy--done': copiedKey === ep.key }"
+                    :aria-label="t('home.hero.copy')"
+                    @click="copyEndpoint(ep)"
+                  >
+                    <Icon :name="copiedKey === ep.key ? 'check' : 'copy'" size="xs" :stroke-width="1.8" />
+                    <span>{{ copiedKey === ep.key ? t('home.hero.copied') : t('home.hero.copy') }}</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -123,22 +119,20 @@
       <section id="value" class="pk-section">
         <div class="pk-container">
           <div class="pk-section-head" data-reveal>
+            <span class="pk-index">01</span>
             <span class="pk-kicker">{{ t('home.value.kicker') }}</span>
             <h2 class="pk-section-title">{{ t('home.value.title') }}</h2>
-            <p class="pk-section-sub">{{ t('home.value.subtitle') }}</p>
           </div>
 
-          <div class="pk-value-grid">
+          <div class="pk-value-list">
             <article
               v-for="(item, i) in valueItems"
               :key="item.key"
-              class="pk-value-card"
+              class="pk-value-row"
               data-reveal
-              :style="{ '--rd': (i % 2) * 90 + 'ms' }"
+              :style="{ '--rd': i * 70 + 'ms' }"
             >
-              <div class="pk-value-icon">
-                <Icon :name="item.icon" size="lg" :stroke-width="1.5" />
-              </div>
+              <span class="pk-value-num">{{ String(i + 1).padStart(2, '0') }}</span>
               <h3>{{ t(`home.value.items.${item.key}.title`) }}</h3>
               <p>{{ t(`home.value.items.${item.key}.desc`) }}</p>
             </article>
@@ -147,9 +141,10 @@
       </section>
 
       <!-- ============ WORKFLOW ============ -->
-      <section id="workflow" class="pk-section pk-section--alt">
+      <section id="workflow" class="pk-section">
         <div class="pk-container">
           <div class="pk-section-head" data-reveal>
+            <span class="pk-index">02</span>
             <span class="pk-kicker">{{ t('home.workflow.kicker') }}</span>
             <h2 class="pk-section-title">{{ t('home.workflow.title') }}</h2>
             <p class="pk-section-sub">{{ t('home.workflow.subtitle') }}</p>
@@ -160,11 +155,10 @@
               v-for="(step, i) in workflowSteps"
               :key="step.key"
               class="pk-step"
-              :class="{ 'pk-step--focus': i === 1 }"
               data-reveal
-              :style="{ '--rd': i * 110 + 'ms' }"
+              :style="{ '--rd': i * 90 + 'ms' }"
             >
-              <div class="pk-step-num">{{ i + 1 }}</div>
+              <span class="pk-step-num">{{ String(i + 1).padStart(2, '0') }}</span>
               <h3>{{ t(`home.workflow.steps.${step.key}.title`) }}</h3>
               <p>{{ t(`home.workflow.steps.${step.key}.desc`) }}</p>
               <code v-if="step.code" class="pk-step-code">{{ step.code }}</code>
@@ -177,18 +171,17 @@
       <section id="ecosystem" class="pk-section">
         <div class="pk-container">
           <div class="pk-section-head" data-reveal>
+            <span class="pk-index">03</span>
             <span class="pk-kicker">{{ t('home.ecosystem.kicker') }}</span>
             <h2 class="pk-section-title">{{ t('home.ecosystem.title') }}</h2>
-            <p class="pk-section-sub">{{ t('home.ecosystem.subtitle') }}</p>
           </div>
 
           <div class="pk-models" data-reveal>
             <div v-for="m in models" :key="m.label" class="pk-model">
-              <ModelIcon :model="m.icon" size="20px" />
+              <ModelIcon :model="m.icon" size="18px" class="pk-model-icon" />
               <span>{{ m.label }}</span>
             </div>
             <div class="pk-model pk-model--more">
-              <Icon name="plus" size="sm" :stroke-width="2" />
               <span>{{ t('home.ecosystem.more') }}</span>
             </div>
           </div>
@@ -196,26 +189,28 @@
       </section>
 
       <!-- ============ PRICING ============ -->
-      <section id="pricing" class="pk-section pk-section--alt">
+      <section id="pricing" class="pk-section">
         <div class="pk-container">
           <div class="pk-section-head" data-reveal>
+            <span class="pk-index">04</span>
             <span class="pk-kicker">{{ t('home.pricing.kicker') }}</span>
             <h2 class="pk-section-title">{{ t('home.pricing.title') }}</h2>
             <p class="pk-section-sub">{{ t('home.pricing.subtitle') }}</p>
           </div>
 
-          <div class="pk-pricing" data-reveal>
-            <div class="pk-rate-card">
-              <span class="pk-rate-badge">{{ t('home.pricing.badge') }}</span>
-              <div class="pk-rate-label">{{ t('home.pricing.rateLabel') }}</div>
+          <div class="pk-rate" data-reveal>
+            <div class="pk-rate-main">
+              <span class="pk-rate-label">{{ t('home.pricing.rateLabel') }} · {{ t('home.pricing.badge') }}</span>
               <div class="pk-rate-value">{{ t('home.pricing.rateValue') }}</div>
               <div class="pk-rate-ref">
-                {{ t('home.pricing.officialLabel') }}：<s>{{ t('home.pricing.officialValue') }}</s>
+                {{ t('home.pricing.officialLabel') }} <s>{{ t('home.pricing.officialValue') }}</s>
               </div>
+            </div>
+            <div class="pk-rate-aside">
               <p class="pk-rate-note">{{ t('home.pricing.note') }}</p>
-              <router-link :to="isAuthenticated ? dashboardPath : '/register'" class="pk-btn pk-btn--primary pk-btn--lg pk-rate-cta">
+              <router-link :to="isAuthenticated ? dashboardPath : '/register'" class="pk-btn pk-btn--lg">
                 {{ t('home.pricing.cta') }}
-                <Icon name="arrowRight" size="sm" :stroke-width="2" />
+                <Icon name="arrowRight" size="sm" :stroke-width="1.8" />
               </router-link>
             </div>
           </div>
@@ -223,22 +218,19 @@
       </section>
 
       <!-- ============ CTA ============ -->
-      <section class="pk-section">
-        <div class="pk-container">
-          <div class="pk-cta" data-reveal>
-            <div class="pk-cta-glow" aria-hidden="true"></div>
-            <h2>{{ t('home.cta.title') }}</h2>
-            <p>{{ t('home.cta.description') }}</p>
-            <router-link :to="isAuthenticated ? dashboardPath : '/register'" class="pk-btn pk-btn--primary pk-btn--lg">
-              {{ t('home.cta.button') }}
-              <Icon name="arrowRight" size="sm" :stroke-width="2" />
-            </router-link>
-          </div>
+      <section class="pk-section pk-section--cta">
+        <div class="pk-container" data-reveal>
+          <h2 class="pk-cta-title">{{ t('home.cta.title') }}</h2>
+          <p class="pk-cta-desc">{{ t('home.cta.description') }}</p>
+          <router-link :to="isAuthenticated ? dashboardPath : '/register'" class="pk-btn pk-btn--lg">
+            {{ t('home.cta.button') }}
+            <Icon name="arrowRight" size="sm" :stroke-width="1.8" />
+          </router-link>
         </div>
       </section>
     </main>
 
-    <!-- Footer -->
+    <!-- ============ FOOTER ============ -->
     <footer class="pk-footer">
       <div class="pk-container pk-footer-inner">
         <p>&copy; {{ currentYear }} {{ siteName }} · {{ t('home.footer.allRightsReserved') }}</p>
@@ -282,23 +274,37 @@ const dashboardPath = computed(() => (isAdmin.value ? '/admin/dashboard' : '/das
 
 const currentYear = computed(() => new Date().getFullYear())
 
+// ---- Theme (follows sub2api html.dark convention) ----
+const isDark = ref(document.documentElement.classList.contains('dark'))
+
+function toggleTheme() {
+  isDark.value = !isDark.value
+  document.documentElement.classList.toggle('dark', isDark.value)
+  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
+}
+
+function initTheme() {
+  const savedTheme = localStorage.getItem('theme')
+  if (
+    savedTheme === 'dark' ||
+    (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  ) {
+    isDark.value = true
+    document.documentElement.classList.add('dark')
+  }
+}
+
 // ---- Data ----
 const endpoints = [
   { key: 'openai', labelKey: 'home.hero.baseUrlOpenai', url: `${window.location.origin}/v1` },
   { key: 'anthropic', labelKey: 'home.hero.baseUrlAnthropic', url: window.location.origin }
 ]
 
-const heroCards = [
-  { key: 'routing', icon: 'bolt' as const },
-  { key: 'observability', icon: 'chartBar' as const },
-  { key: 'billing', icon: 'creditCard' as const }
-]
-
 const valueItems = [
-  { key: 'unified', icon: 'key' as const },
-  { key: 'observability', icon: 'chartBar' as const },
-  { key: 'elastic', icon: 'bolt' as const },
-  { key: 'developer', icon: 'terminal' as const }
+  { key: 'unified' },
+  { key: 'observability' },
+  { key: 'elastic' },
+  { key: 'developer' }
 ]
 
 const workflowSteps = [
@@ -324,7 +330,6 @@ async function copyEndpoint(ep: { key: string; url: string }) {
   try {
     await navigator.clipboard.writeText(ep.url)
   } catch {
-    // Fallback for non-secure contexts
     const ta = document.createElement('textarea')
     ta.value = ep.url
     document.body.appendChild(ta)
@@ -371,19 +376,19 @@ function setupReveal() {
         }
       }
     },
-    { threshold: 0.15, rootMargin: '0px 0px -40px 0px' }
+    { threshold: 0.12, rootMargin: '0px 0px -40px 0px' }
   )
   targets.forEach((el) => observer?.observe(el))
 }
 
 onMounted(() => {
+  initTheme()
   authStore.checkAuth()
   if (!appStore.publicSettingsLoaded) {
     appStore.fetchPublicSettings()
   }
   window.addEventListener('scroll', onScroll, { passive: true })
   onScroll()
-  // Wait one frame so v-if branches settle before observing
   requestAnimationFrame(() => setupReveal())
 })
 
@@ -396,48 +401,65 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* =====================================================
-   Poke API home — dark-only, self-contained palette.
-   Neutrals tilted toward the brand red hue (OKLCH h≈25).
+   Poke API home — monochrome editorial (ink & paper).
+   Light: warm paper + near-black ink.
+   Dark:  near-black ink + off-white paper. (html.dark)
+   Restraint: hairlines, mono labels, one red dot.
    ===================================================== */
 .pk-page {
-  /* surfaces */
-  --pk-bg: oklch(0.16 0.008 25);
-  --pk-bg-raise: oklch(0.19 0.01 25);
-  --pk-bg-card: oklch(0.21 0.012 25);
-  --pk-border: oklch(0.3 0.012 25);
-  --pk-border-strong: oklch(0.38 0.015 25);
-  /* text */
-  --pk-fg: oklch(0.95 0.005 25);
-  --pk-fg-mute: oklch(0.72 0.01 25);
-  --pk-fg-faint: oklch(0.56 0.012 25);
-  /* brand */
-  --pk-red: oklch(0.6 0.21 27);
-  --pk-red-soft: oklch(0.6 0.21 27 / 0.14);
-  --pk-red-line: oklch(0.6 0.21 27 / 0.35);
-  --pk-green: oklch(0.75 0.15 160);
-  /* motion */
-  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --pk-mono: ui-monospace, 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
+  /* light (paper) */
+  --ink: oklch(0.2 0.006 80);
+  --ink-mute: oklch(0.44 0.008 80);
+  --ink-faint: oklch(0.6 0.008 80);
+  --paper: oklch(0.955 0.006 90);
+  --paper-raise: oklch(0.93 0.007 90);
+  --line: oklch(0.2 0.006 80 / 0.16);
+  --line-strong: oklch(0.2 0.006 80 / 0.4);
+  --red: oklch(0.58 0.2 27);
+
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --mono: ui-monospace, 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
 
   min-height: 100vh;
-  background: var(--pk-bg);
-  color: var(--pk-fg);
-  font-feature-settings: 'ss01';
+  background: var(--paper);
+  color: var(--ink);
   overflow-x: clip;
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
+}
+html.dark .pk-page {
+  --ink: oklch(0.93 0.004 90);
+  --ink-mute: oklch(0.68 0.005 90);
+  --ink-faint: oklch(0.52 0.006 90);
+  --paper: oklch(0.165 0.004 80);
+  --paper-raise: oklch(0.2 0.005 80);
+  --line: oklch(0.93 0.004 90 / 0.14);
+  --line-strong: oklch(0.93 0.004 90 / 0.38);
+  --red: oklch(0.62 0.2 27);
+}
+
+/* film grain, both themes */
+.pk-noise {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 .pk-container {
-  max-width: 1120px;
+  max-width: 1180px;
   margin-inline: auto;
-  padding-inline: 24px;
+  padding-inline: 28px;
 }
 
-/* ---------- entrance animation (hero) ---------- */
+/* ---------- motion ---------- */
 .pk-enter {
   opacity: 0;
-  transform: translateY(18px);
-  animation: pk-rise 0.7s var(--ease-out-quint) forwards;
+  transform: translateY(16px);
+  animation: pk-rise 0.8s var(--ease) forwards;
   animation-delay: var(--d, 0ms);
 }
 @keyframes pk-rise {
@@ -446,21 +468,18 @@ onBeforeUnmount(() => {
     transform: translateY(0);
   }
 }
-
-/* ---------- scroll reveal ---------- */
 [data-reveal] {
   opacity: 0;
-  transform: translateY(24px);
+  transform: translateY(22px);
   transition:
-    opacity 0.65s var(--ease-out-quint),
-    transform 0.65s var(--ease-out-quint);
+    opacity 0.7s var(--ease),
+    transform 0.7s var(--ease);
   transition-delay: var(--rd, 0ms);
 }
 [data-reveal].pk-revealed {
   opacity: 1;
   transform: translateY(0);
 }
-
 @media (prefers-reduced-motion: reduce) {
   .pk-enter,
   [data-reveal] {
@@ -479,21 +498,20 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid transparent;
   transition:
     background-color 0.25s ease,
-    border-color 0.25s ease,
-    backdrop-filter 0.25s ease;
+    border-color 0.25s ease;
 }
 .pk-nav--scrolled {
-  background: oklch(0.16 0.008 25 / 0.82);
-  backdrop-filter: blur(14px);
-  border-bottom-color: var(--pk-border);
+  background: color-mix(in oklab, var(--paper) 88%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom-color: var(--line);
 }
 .pk-nav-inner {
-  max-width: 1120px;
+  max-width: 1180px;
   margin-inline: auto;
-  padding: 14px 24px;
+  padding: 16px 28px;
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: 26px;
 }
 .pk-brand {
   display: inline-flex;
@@ -503,64 +521,102 @@ onBeforeUnmount(() => {
   color: inherit;
 }
 .pk-brand-logo {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
+  width: 26px;
+  height: 26px;
   object-fit: contain;
+  filter: grayscale(1) contrast(1.1);
 }
 .pk-brand-name {
   font-weight: 700;
-  font-size: 16px;
-  letter-spacing: 0.01em;
+  font-size: 15px;
+  letter-spacing: 0.02em;
 }
 .pk-nav-links {
   display: none;
-  gap: 4px;
+  gap: 26px;
   margin-inline: auto;
 }
-@media (min-width: 860px) {
+@media (min-width: 880px) {
   .pk-nav-links {
     display: flex;
   }
 }
 .pk-nav-links a {
-  padding: 7px 13px;
-  border-radius: 8px;
-  font-size: 14px;
-  color: var(--pk-fg-mute);
+  position: relative;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
   text-decoration: none;
-  transition:
-    color 0.18s ease,
-    background-color 0.18s ease;
+  padding: 4px 0;
+  transition: color 0.2s ease;
+}
+.pk-nav-links a::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 1px;
+  background: var(--ink);
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.3s var(--ease);
 }
 .pk-nav-links a:hover {
-  color: var(--pk-fg);
-  background: oklch(1 0 0 / 0.06);
+  color: var(--ink);
+}
+.pk-nav-links a:hover::after {
+  transform: scaleX(1);
+  transform-origin: left;
 }
 .pk-nav-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin-left: auto;
 }
 .pk-nav-login {
-  font-size: 14px;
-  color: var(--pk-fg-mute);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
   text-decoration: none;
-  padding: 7px 10px;
-  border-radius: 8px;
-  transition: color 0.18s ease;
+  transition: color 0.2s ease;
 }
 .pk-nav-login:hover {
-  color: var(--pk-fg);
+  color: var(--ink);
 }
-/* LocaleSwitcher was designed for light backgrounds; nudge it */
+.pk-theme-toggle {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.15s var(--ease);
+}
+.pk-theme-toggle:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.pk-theme-toggle:active {
+  transform: scale(0.92);
+}
 .pk-nav-actions :deep(button) {
-  color: var(--pk-fg-mute);
+  color: var(--ink-mute);
 }
 .pk-nav-actions :deep(button:hover) {
-  background: oklch(1 0 0 / 0.07);
-  color: var(--pk-fg);
+  color: var(--ink);
+  background: color-mix(in oklab, var(--ink) 7%, transparent);
 }
 
 /* ---------- buttons ---------- */
@@ -568,181 +624,155 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   font-weight: 600;
-  border-radius: 10px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--paper);
   text-decoration: none;
-  border: 1px solid transparent;
+  border-radius: 999px;
   cursor: pointer;
   transition:
-    transform 0.15s var(--ease-out-quint),
-    background-color 0.2s ease,
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
-  will-change: transform;
+    background-color 0.22s ease,
+    color 0.22s ease,
+    transform 0.15s var(--ease);
 }
 .pk-btn:hover {
-  transform: translateY(-1px);
+  background: transparent;
+  color: var(--ink);
 }
 .pk-btn:active {
-  transform: translateY(0) scale(0.97);
+  transform: scale(0.97);
 }
 .pk-btn--sm {
-  font-size: 13px;
-  padding: 7px 14px;
+  font-size: 12.5px;
+  padding: 7px 16px;
 }
 .pk-btn--lg {
-  font-size: 15px;
-  padding: 12px 24px;
-  border-radius: 12px;
+  font-size: 14.5px;
+  padding: 13px 28px;
 }
-.pk-btn--primary {
-  background: var(--pk-red);
-  color: oklch(0.98 0.005 25);
-  box-shadow: 0 8px 24px -10px var(--pk-red-line);
+.pk-linkline {
+  position: relative;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  padding-bottom: 3px;
+  align-self: center;
 }
-.pk-btn--primary:hover {
-  box-shadow: 0 12px 28px -10px var(--pk-red-line);
-  filter: brightness(1.07);
+.pk-linkline::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 1px;
+  background: var(--ink);
+  transform-origin: right;
+  transition: transform 0.3s var(--ease);
 }
-.pk-btn--ghost {
-  background: transparent;
-  border-color: var(--pk-border-strong);
-  color: var(--pk-fg);
-}
-.pk-btn--ghost:hover {
-  border-color: var(--pk-fg-faint);
-  background: oklch(1 0 0 / 0.04);
+.pk-linkline:hover::after {
+  transform: scaleX(0.35);
+  transform-origin: left;
 }
 
 /* ---------- hero ---------- */
 .pk-hero {
   position: relative;
-  padding: 84px 0 72px;
+  z-index: 2;
+  padding: 104px 0 96px;
+  border-bottom: 1px solid var(--line);
 }
-.pk-hero-glow {
-  position: absolute;
-  top: -180px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 780px;
-  height: 480px;
-  background: radial-gradient(ellipse at center, var(--pk-red-soft), transparent 65%);
-  pointer-events: none;
-}
-.pk-hero-grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(oklch(1 0 0 / 0.028) 1px, transparent 1px),
-    linear-gradient(90deg, oklch(1 0 0 / 0.028) 1px, transparent 1px);
-  background-size: 56px 56px;
-  -webkit-mask-image: radial-gradient(ellipse 75% 60% at 50% 0%, #000 35%, transparent 100%);
-  mask-image: radial-gradient(ellipse 75% 60% at 50% 0%, #000 35%, transparent 100%);
-  pointer-events: none;
-}
-.pk-hero-layout {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 56px;
-  align-items: center;
-}
-@media (min-width: 960px) {
-  .pk-hero-layout {
-    grid-template-columns: 1.15fr 0.85fr;
-  }
-}
-.pk-badge {
+.pk-hero-kicker {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: oklch(0.78 0.12 27);
-  border: 1px solid var(--pk-red-line);
-  background: var(--pk-red-soft);
-  padding: 6px 14px;
-  border-radius: 999px;
-  margin-bottom: 26px;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin: 0 0 34px;
 }
-.pk-badge-dot {
+.pk-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--pk-red);
-  animation: pk-pulse 2.4s ease-in-out infinite;
-}
-@keyframes pk-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 var(--pk-red-line);
-  }
-  50% {
-    box-shadow: 0 0 0 5px transparent;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .pk-badge-dot {
-    animation: none;
-  }
+  background: var(--red);
 }
 .pk-hero-title {
-  font-size: clamp(2.4rem, 5.4vw, 3.9rem);
+  font-size: clamp(2.9rem, 8vw, 6rem);
   font-weight: 800;
-  line-height: 1.12;
-  letter-spacing: -0.02em;
-  margin: 0 0 22px;
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+  margin: 0 0 56px;
 }
-.pk-hero-title-em {
-  color: var(--pk-red);
+.pk-hero-line {
+  display: block;
+}
+.pk-hero-line--em {
+  color: var(--ink-faint);
+}
+.pk-hero-below {
+  display: grid;
+  gap: 44px;
+  align-items: start;
+}
+@media (min-width: 960px) {
+  .pk-hero-below {
+    grid-template-columns: 0.9fr 1.1fr;
+    gap: 72px;
+  }
 }
 .pk-hero-desc {
-  font-size: 17px;
-  line-height: 1.85;
-  color: var(--pk-fg-mute);
-  max-width: 34em;
-  margin: 0 0 34px;
+  font-size: 16.5px;
+  line-height: 2;
+  color: var(--ink-mute);
+  max-width: 30em;
+  margin: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 26px;
+}
+.pk-hero-side {
+  display: grid;
+  gap: 30px;
+  border-top: 1px solid var(--line);
+  padding-top: 26px;
 }
 .pk-hero-ctas {
   display: flex;
   flex-wrap: wrap;
-  gap: 14px;
-  margin-bottom: 40px;
+  gap: 26px;
 }
 
 /* endpoints */
 .pk-endpoints {
   display: grid;
-  gap: 10px;
-  max-width: 560px;
 }
 .pk-endpoint {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border: 1px solid var(--pk-border);
-  border-radius: 12px;
-  background: var(--pk-bg-raise);
-  transition: border-color 0.2s ease;
+  gap: 14px;
+  padding: 13px 2px;
+  border-bottom: 1px solid var(--line);
 }
-.pk-endpoint:hover {
-  border-color: var(--pk-border-strong);
+.pk-endpoint:first-child {
+  border-top: 1px solid var(--line);
 }
 .pk-endpoint-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--pk-fg-faint);
+  color: var(--ink-faint);
   white-space: nowrap;
+  min-width: 128px;
 }
 .pk-endpoint-url {
-  font-family: var(--pk-mono);
-  font-size: 13.5px;
-  color: var(--pk-fg);
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -751,230 +781,173 @@ onBeforeUnmount(() => {
 .pk-copy {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--pk-fg-mute);
-  background: oklch(1 0 0 / 0.05);
-  border: 1px solid var(--pk-border);
-  border-radius: 8px;
-  padding: 5px 10px;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 12px;
   cursor: pointer;
   white-space: nowrap;
   transition:
     color 0.18s ease,
     border-color 0.18s ease,
-    background-color 0.18s ease,
-    transform 0.12s var(--ease-out-quint);
+    transform 0.12s var(--ease);
 }
 .pk-copy:hover {
-  color: var(--pk-fg);
-  border-color: var(--pk-border-strong);
+  color: var(--ink);
+  border-color: var(--line-strong);
 }
 .pk-copy:active {
   transform: scale(0.94);
 }
 .pk-copy--done {
-  color: var(--pk-green);
-  border-color: oklch(0.75 0.15 160 / 0.4);
-  background: oklch(0.75 0.15 160 / 0.1);
-}
-
-/* hero side cards */
-.pk-hero-side {
-  display: grid;
-  gap: 14px;
-}
-.pk-side-card {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
-  padding: 20px 22px;
-  border: 1px solid var(--pk-border);
-  border-radius: 14px;
-  background: var(--pk-bg-card);
-  transition:
-    transform 0.25s var(--ease-out-quint),
-    border-color 0.25s ease,
-    box-shadow 0.25s ease;
-}
-.pk-side-card:hover {
-  transform: translateY(-3px);
-  border-color: var(--pk-border-strong);
-  box-shadow: 0 16px 36px -20px oklch(0 0 0 / 0.7);
-}
-.pk-side-card:nth-child(2) {
-  margin-left: 26px;
-}
-@media (max-width: 959px) {
-  .pk-side-card:nth-child(2) {
-    margin-left: 0;
-  }
-}
-.pk-side-icon {
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  color: var(--pk-red);
-  background: var(--pk-red-soft);
-  border: 1px solid var(--pk-red-line);
-}
-.pk-side-title {
-  font-weight: 700;
-  font-size: 15px;
-  margin-bottom: 4px;
-}
-.pk-side-desc {
-  font-size: 13.5px;
-  line-height: 1.7;
-  color: var(--pk-fg-mute);
+  color: var(--ink);
+  border-color: var(--ink);
 }
 
 /* ---------- sections ---------- */
 .pk-section {
-  padding: 88px 0;
-}
-.pk-section--alt {
-  background: var(--pk-bg-raise);
-  border-block: 1px solid var(--pk-border);
+  position: relative;
+  z-index: 2;
+  padding: 96px 0;
+  border-bottom: 1px solid var(--line);
 }
 .pk-section-head {
-  max-width: 560px;
-  margin-bottom: 52px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 18px;
+  row-gap: 10px;
+  align-items: baseline;
+  margin-bottom: 60px;
+}
+.pk-index {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
 }
 .pk-kicker {
-  display: inline-block;
+  font-family: var(--mono);
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-  color: var(--pk-red);
-  margin-bottom: 14px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
 }
 .pk-section-title {
-  font-size: clamp(1.7rem, 3.2vw, 2.3rem);
+  grid-column: 2;
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
   font-weight: 800;
-  letter-spacing: -0.015em;
-  line-height: 1.25;
-  margin: 0 0 12px;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  margin: 0;
 }
 .pk-section-sub {
-  font-size: 15.5px;
-  color: var(--pk-fg-mute);
-  line-height: 1.8;
-  margin: 0;
+  grid-column: 2;
+  font-size: 15px;
+  color: var(--ink-mute);
+  line-height: 1.9;
+  margin: 6px 0 0;
+  max-width: 40em;
 }
 
-/* ---------- value grid ---------- */
-.pk-value-grid {
+/* ---------- value (hairline ledger) ---------- */
+.pk-value-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 18px;
 }
-.pk-value-card {
-  padding: 30px 28px;
-  border: 1px solid var(--pk-border);
-  border-radius: 16px;
-  background: var(--pk-bg-card);
-  transition:
-    transform 0.25s var(--ease-out-quint),
-    border-color 0.25s ease,
-    box-shadow 0.25s ease;
-}
-.pk-value-card:hover {
-  transform: translateY(-4px);
-  border-color: var(--pk-border-strong);
-  box-shadow: 0 20px 44px -24px oklch(0 0 0 / 0.8);
-}
-.pk-value-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 11px;
+.pk-value-row {
   display: grid;
-  place-items: center;
-  color: var(--pk-red);
-  background: var(--pk-red-soft);
-  border: 1px solid var(--pk-red-line);
-  margin-bottom: 20px;
-  transition: transform 0.25s var(--ease-out-quint);
+  grid-template-columns: 64px 260px 1fr;
+  gap: 20px;
+  align-items: baseline;
+  padding: 30px 2px;
+  border-top: 1px solid var(--line);
+  transition: background-color 0.25s ease;
 }
-.pk-value-card:hover .pk-value-icon {
-  transform: scale(1.08);
+.pk-value-row:last-child {
+  border-bottom: 1px solid var(--line);
 }
-.pk-value-card h3 {
-  font-size: 17px;
+.pk-value-row:hover {
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+}
+@media (max-width: 820px) {
+  .pk-value-row {
+    grid-template-columns: 52px 1fr;
+  }
+  .pk-value-row p {
+    grid-column: 2;
+  }
+}
+.pk-value-num {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+.pk-value-row h3 {
+  font-size: 18px;
   font-weight: 700;
-  margin: 0 0 10px;
-}
-.pk-value-card p {
-  font-size: 14px;
-  line-height: 1.85;
-  color: var(--pk-fg-mute);
+  letter-spacing: -0.01em;
   margin: 0;
+}
+.pk-value-row p {
+  font-size: 14px;
+  line-height: 1.95;
+  color: var(--ink-mute);
+  margin: 0;
+  max-width: 42em;
 }
 
 /* ---------- workflow ---------- */
 .pk-steps {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 18px;
-  align-items: stretch;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
 }
 .pk-step {
-  position: relative;
-  padding: 30px 28px;
-  border: 1px solid var(--pk-border);
-  border-radius: 16px;
-  background: var(--pk-bg-card);
-  transition:
-    transform 0.25s var(--ease-out-quint),
-    border-color 0.25s ease;
+  padding: 8px 28px 8px 0;
 }
-.pk-step:hover {
-  transform: translateY(-4px);
-  border-color: var(--pk-border-strong);
+.pk-step + .pk-step {
+  border-left: 1px solid var(--line);
+  padding-left: 28px;
 }
-.pk-step--focus {
-  border-color: var(--pk-red-line);
-  box-shadow: 0 0 44px -18px var(--pk-red-line);
+@media (max-width: 820px) {
+  .pk-step + .pk-step {
+    border-left: none;
+    padding-left: 0;
+    border-top: 1px solid var(--line);
+    margin-top: 26px;
+    padding-top: 26px;
+  }
 }
 .pk-step-num {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  display: grid;
-  place-items: center;
-  font-family: var(--pk-mono);
-  font-weight: 700;
-  font-size: 15px;
-  color: var(--pk-red);
-  background: var(--pk-red-soft);
-  border: 1px solid var(--pk-red-line);
-  margin-bottom: 18px;
+  display: block;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-faint);
+  margin-bottom: 20px;
 }
 .pk-step h3 {
-  font-size: 16.5px;
+  font-size: 17px;
   font-weight: 700;
-  margin: 0 0 10px;
+  margin: 0 0 12px;
 }
 .pk-step p {
   font-size: 14px;
-  line-height: 1.85;
-  color: var(--pk-fg-mute);
+  line-height: 1.95;
+  color: var(--ink-mute);
   margin: 0;
 }
 .pk-step-code {
   display: block;
-  margin-top: 16px;
-  padding: 10px 12px;
-  border-radius: 9px;
-  background: var(--pk-bg);
-  border: 1px solid var(--pk-border);
-  font-family: var(--pk-mono);
+  margin-top: 18px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
   font-size: 12px;
-  color: var(--pk-fg-mute);
+  color: var(--ink-mute);
   overflow-x: auto;
   white-space: nowrap;
 }
@@ -983,131 +956,102 @@ onBeforeUnmount(() => {
 .pk-models {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
 }
 .pk-model {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 20px;
-  border: 1px solid var(--pk-border);
-  border-radius: 12px;
-  background: var(--pk-bg-card);
-  font-size: 14.5px;
-  font-weight: 600;
-  transition:
-    transform 0.2s var(--ease-out-quint),
-    border-color 0.2s ease;
+  padding: 14px 26px 14px 0;
+  margin-right: 26px;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+  transition: border-color 0.25s ease;
 }
 .pk-model:hover {
-  transform: translateY(-2px);
-  border-color: var(--pk-border-strong);
+  border-bottom-color: var(--ink);
+}
+.pk-model-icon {
+  filter: grayscale(1) contrast(1.05);
+  opacity: 0.85;
 }
 .pk-model--more {
-  color: var(--pk-fg-faint);
-  border-style: dashed;
-  background: transparent;
+  color: var(--ink-faint);
 }
 
 /* ---------- pricing ---------- */
-.pk-pricing {
-  display: flex;
-  justify-content: center;
+.pk-rate {
+  display: grid;
+  gap: 40px;
+  align-items: end;
 }
-.pk-rate-card {
-  position: relative;
-  width: min(460px, 100%);
-  text-align: center;
-  padding: 44px 36px 40px;
-  border: 1px solid var(--pk-red-line);
-  border-radius: 20px;
-  background: var(--pk-bg-card);
-  box-shadow: 0 0 70px -30px var(--pk-red-line);
-}
-.pk-rate-badge {
-  position: absolute;
-  top: -13px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: oklch(0.98 0.005 25);
-  background: var(--pk-red);
-  padding: 5px 16px;
-  border-radius: 999px;
-  white-space: nowrap;
+@media (min-width: 880px) {
+  .pk-rate {
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: 72px;
+  }
 }
 .pk-rate-label {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  display: block;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--pk-fg-faint);
-  margin-bottom: 10px;
-}
-.pk-rate-value {
-  font-size: clamp(2rem, 4.6vw, 2.9rem);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--pk-fg);
-  margin-bottom: 10px;
-}
-.pk-rate-ref {
-  font-size: 14px;
-  color: var(--pk-fg-faint);
+  color: var(--ink-mute);
   margin-bottom: 18px;
 }
+.pk-rate-value {
+  font-size: clamp(3rem, 9vw, 6.4rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  margin-bottom: 16px;
+}
+.pk-rate-ref {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink-faint);
+}
 .pk-rate-ref s {
-  color: var(--pk-fg-faint);
+  color: var(--ink-faint);
+}
+.pk-rate-aside {
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
 }
 .pk-rate-note {
-  font-size: 13.5px;
-  line-height: 1.8;
-  color: var(--pk-fg-mute);
-  margin: 0 0 28px;
-}
-.pk-rate-cta {
-  width: 100%;
+  font-size: 14px;
+  line-height: 2;
+  color: var(--ink-mute);
+  margin: 0 0 26px;
 }
 
 /* ---------- CTA ---------- */
-.pk-cta {
-  position: relative;
+.pk-section--cta {
   text-align: center;
-  padding: 72px 32px;
-  border: 1px solid var(--pk-border);
-  border-radius: 24px;
-  background: var(--pk-bg-raise);
-  overflow: hidden;
+  padding: 130px 0;
 }
-.pk-cta-glow {
-  position: absolute;
-  inset: auto -20% -70% -20%;
-  height: 250px;
-  background: radial-gradient(ellipse at center, var(--pk-red-soft), transparent 70%);
-  pointer-events: none;
-}
-.pk-cta h2 {
-  position: relative;
-  font-size: clamp(1.6rem, 3vw, 2.2rem);
+.pk-cta-title {
+  font-size: clamp(2.2rem, 6vw, 4.2rem);
   font-weight: 800;
-  letter-spacing: -0.015em;
-  margin: 0 0 14px;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+  margin: 0 0 18px;
 }
-.pk-cta p {
-  position: relative;
+.pk-cta-desc {
   font-size: 15.5px;
-  color: var(--pk-fg-mute);
-  margin: 0 0 30px;
-}
-.pk-cta .pk-btn {
-  position: relative;
+  color: var(--ink-mute);
+  line-height: 1.9;
+  margin: 0 0 40px;
 }
 
 /* ---------- footer ---------- */
 .pk-footer {
-  border-top: 1px solid var(--pk-border);
+  position: relative;
+  z-index: 2;
   padding: 30px 0;
 }
 .pk-footer-inner {
@@ -1115,8 +1059,11 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  font-size: 13.5px;
-  color: var(--pk-fg-faint);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
 }
 @media (min-width: 640px) {
   .pk-footer-inner {
@@ -1129,14 +1076,14 @@ onBeforeUnmount(() => {
 }
 .pk-footer-links {
   display: flex;
-  gap: 20px;
+  gap: 24px;
 }
 .pk-footer-links a {
-  color: var(--pk-fg-faint);
+  color: var(--ink-faint);
   text-decoration: none;
-  transition: color 0.18s ease;
+  transition: color 0.2s ease;
 }
 .pk-footer-links a:hover {
-  color: var(--pk-fg);
+  color: var(--ink);
 }
 </style>
