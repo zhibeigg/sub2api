@@ -12,10 +12,8 @@
     <div v-else v-html="homeContent"></div>
   </div>
 
-  <!-- Default Home Page: monochrome editorial, ink & paper -->
+  <!-- Default Home Page: monochrome editorial (bymonolog-inspired) -->
   <div v-else class="pk-page">
-    <div class="pk-noise" aria-hidden="true"></div>
-
     <!-- ============ NAV ============ -->
     <header class="pk-nav" :class="{ 'pk-nav--scrolled': isScrolled }">
       <nav class="pk-nav-inner">
@@ -40,8 +38,8 @@
             :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
             @click="toggleTheme"
           >
-            <Icon v-if="isDark" name="sun" size="sm" :stroke-width="1.6" />
-            <Icon v-else name="moon" size="sm" :stroke-width="1.6" />
+            <Icon v-if="isDark" name="sun" size="sm" :stroke-width="1.5" />
+            <Icon v-else name="moon" size="sm" :stroke-width="1.5" />
           </button>
           <router-link v-if="isAuthenticated" :to="dashboardPath" class="pk-btn pk-btn--sm">
             {{ t('home.dashboard') }}
@@ -60,35 +58,35 @@
       <!-- ============ HERO ============ -->
       <section class="pk-hero">
         <div class="pk-container">
-          <p class="pk-hero-kicker pk-enter" style="--d: 0ms">
+          <p class="pk-eyebrow pk-enter" style="--d: 0ms">
             <span class="pk-dot" aria-hidden="true"></span>
-            {{ t('home.hero.badge') }}
+            <span>{{ t('home.hero.badge') }}</span>
           </p>
 
-          <h1 class="pk-hero-title">
-            <span class="pk-hero-line pk-enter" style="--d: 80ms">{{ t('home.hero.titleLine1') }}</span>
-            <span class="pk-hero-line pk-hero-line--em pk-enter" style="--d: 170ms">{{
+          <h1 class="pk-display">
+            <span class="pk-display-line pk-enter" style="--d: 90ms">{{ t('home.hero.titleLine1') }}</span>
+            <span class="pk-display-line pk-display-line--muted pk-enter" style="--d: 180ms">{{
               t('home.hero.titleLine2')
             }}</span>
           </h1>
 
-          <div class="pk-hero-below">
-            <p class="pk-hero-desc pk-enter" style="--d: 280ms">
+          <div class="pk-hero-body">
+            <p class="pk-hero-lead pk-enter" style="--d: 280ms">
               {{ t('home.hero.description') }}
             </p>
 
-            <div class="pk-hero-side pk-enter" style="--d: 340ms">
-              <div class="pk-hero-ctas">
+            <div class="pk-hero-actions pk-enter" style="--d: 360ms">
+              <div class="pk-cta-row">
                 <router-link :to="isAuthenticated ? dashboardPath : '/register'" class="pk-btn pk-btn--lg">
                   {{ isAuthenticated ? t('home.goToDashboard') : t('home.hero.ctaPrimary') }}
-                  <Icon name="arrowRight" size="sm" :stroke-width="1.8" />
+                  <Icon name="arrowRight" size="sm" :stroke-width="1.5" />
                 </router-link>
                 <a
                   v-if="docUrl"
                   :href="docUrl"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="pk-linkline"
+                  class="pk-textlink"
                 >
                   {{ t('home.hero.ctaDocs') }}
                 </a>
@@ -105,7 +103,7 @@
                     :aria-label="t('home.hero.copy')"
                     @click="copyEndpoint(ep)"
                   >
-                    <Icon :name="copiedKey === ep.key ? 'check' : 'copy'" size="xs" :stroke-width="1.8" />
+                    <Icon :name="copiedKey === ep.key ? 'check' : 'copy'" size="xs" :stroke-width="1.5" />
                     <span>{{ copiedKey === ep.key ? t('home.hero.copied') : t('home.hero.copy') }}</span>
                   </button>
                 </div>
@@ -118,23 +116,22 @@
       <!-- ============ VALUE ============ -->
       <section id="value" class="pk-section">
         <div class="pk-container">
-          <div class="pk-section-head" data-reveal>
-            <span class="pk-index">01</span>
-            <span class="pk-kicker">{{ t('home.value.kicker') }}</span>
-            <h2 class="pk-section-title">{{ t('home.value.title') }}</h2>
-          </div>
+          <header class="pk-section-head" data-reveal>
+            <span class="pk-eyebrow pk-eyebrow--plain">({{ t('home.value.kicker') }})</span>
+            <h2 class="pk-heading">{{ t('home.value.title') }}</h2>
+          </header>
 
-          <div class="pk-value-list">
+          <div class="pk-ledger">
             <article
               v-for="(item, i) in valueItems"
               :key="item.key"
-              class="pk-value-row"
+              class="pk-ledger-row"
               data-reveal
               :style="{ '--rd': i * 70 + 'ms' }"
             >
-              <span class="pk-value-num">{{ String(i + 1).padStart(2, '0') }}</span>
-              <h3>{{ t(`home.value.items.${item.key}.title`) }}</h3>
-              <p>{{ t(`home.value.items.${item.key}.desc`) }}</p>
+              <span class="pk-ledger-num">{{ String(i + 1).padStart(2, '0') }}</span>
+              <h3 class="pk-ledger-title">{{ t(`home.value.items.${item.key}.title`) }}</h3>
+              <p class="pk-ledger-desc">{{ t(`home.value.items.${item.key}.desc`) }}</p>
             </article>
           </div>
         </div>
@@ -143,12 +140,11 @@
       <!-- ============ WORKFLOW ============ -->
       <section id="workflow" class="pk-section">
         <div class="pk-container">
-          <div class="pk-section-head" data-reveal>
-            <span class="pk-index">02</span>
-            <span class="pk-kicker">{{ t('home.workflow.kicker') }}</span>
-            <h2 class="pk-section-title">{{ t('home.workflow.title') }}</h2>
-            <p class="pk-section-sub">{{ t('home.workflow.subtitle') }}</p>
-          </div>
+          <header class="pk-section-head" data-reveal>
+            <span class="pk-eyebrow pk-eyebrow--plain">({{ t('home.workflow.kicker') }})</span>
+            <h2 class="pk-heading">{{ t('home.workflow.title') }}</h2>
+            <p class="pk-section-lead">{{ t('home.workflow.subtitle') }}</p>
+          </header>
 
           <div class="pk-steps">
             <article
@@ -159,8 +155,8 @@
               :style="{ '--rd': i * 90 + 'ms' }"
             >
               <span class="pk-step-num">{{ String(i + 1).padStart(2, '0') }}</span>
-              <h3>{{ t(`home.workflow.steps.${step.key}.title`) }}</h3>
-              <p>{{ t(`home.workflow.steps.${step.key}.desc`) }}</p>
+              <h3 class="pk-step-title">{{ t(`home.workflow.steps.${step.key}.title`) }}</h3>
+              <p class="pk-step-desc">{{ t(`home.workflow.steps.${step.key}.desc`) }}</p>
               <code v-if="step.code" class="pk-step-code">{{ step.code }}</code>
             </article>
           </div>
@@ -170,11 +166,10 @@
       <!-- ============ ECOSYSTEM ============ -->
       <section id="ecosystem" class="pk-section">
         <div class="pk-container">
-          <div class="pk-section-head" data-reveal>
-            <span class="pk-index">03</span>
-            <span class="pk-kicker">{{ t('home.ecosystem.kicker') }}</span>
-            <h2 class="pk-section-title">{{ t('home.ecosystem.title') }}</h2>
-          </div>
+          <header class="pk-section-head" data-reveal>
+            <span class="pk-eyebrow pk-eyebrow--plain">({{ t('home.ecosystem.kicker') }})</span>
+            <h2 class="pk-heading">{{ t('home.ecosystem.title') }}</h2>
+          </header>
 
           <div class="pk-models" data-reveal>
             <div v-for="m in models" :key="m.label" class="pk-model">
@@ -191,16 +186,15 @@
       <!-- ============ PRICING ============ -->
       <section id="pricing" class="pk-section">
         <div class="pk-container">
-          <div class="pk-section-head" data-reveal>
-            <span class="pk-index">04</span>
-            <span class="pk-kicker">{{ t('home.pricing.kicker') }}</span>
-            <h2 class="pk-section-title">{{ t('home.pricing.title') }}</h2>
-            <p class="pk-section-sub">{{ t('home.pricing.subtitle') }}</p>
-          </div>
+          <header class="pk-section-head" data-reveal>
+            <span class="pk-eyebrow pk-eyebrow--plain">({{ t('home.pricing.kicker') }})</span>
+            <h2 class="pk-heading">{{ t('home.pricing.title') }}</h2>
+            <p class="pk-section-lead">{{ t('home.pricing.subtitle') }}</p>
+          </header>
 
           <div class="pk-rate" data-reveal>
             <div class="pk-rate-main">
-              <span class="pk-rate-label">{{ t('home.pricing.rateLabel') }} · {{ t('home.pricing.badge') }}</span>
+              <span class="pk-eyebrow pk-eyebrow--plain">{{ t('home.pricing.rateLabel') }} · {{ t('home.pricing.badge') }}</span>
               <div class="pk-rate-value">{{ t('home.pricing.rateValue') }}</div>
               <div class="pk-rate-ref">
                 {{ t('home.pricing.officialLabel') }} <s>{{ t('home.pricing.officialValue') }}</s>
@@ -210,7 +204,7 @@
               <p class="pk-rate-note">{{ t('home.pricing.note') }}</p>
               <router-link :to="isAuthenticated ? dashboardPath : '/register'" class="pk-btn pk-btn--lg">
                 {{ t('home.pricing.cta') }}
-                <Icon name="arrowRight" size="sm" :stroke-width="1.8" />
+                <Icon name="arrowRight" size="sm" :stroke-width="1.5" />
               </router-link>
             </div>
           </div>
@@ -220,11 +214,11 @@
       <!-- ============ CTA ============ -->
       <section class="pk-section pk-section--cta">
         <div class="pk-container" data-reveal>
-          <h2 class="pk-cta-title">{{ t('home.cta.title') }}</h2>
-          <p class="pk-cta-desc">{{ t('home.cta.description') }}</p>
+          <h2 class="pk-cta-display">{{ t('home.cta.title') }}</h2>
+          <p class="pk-cta-lead">{{ t('home.cta.description') }}</p>
           <router-link :to="isAuthenticated ? dashboardPath : '/register'" class="pk-btn pk-btn--lg">
             {{ t('home.cta.button') }}
-            <Icon name="arrowRight" size="sm" :stroke-width="1.8" />
+            <Icon name="arrowRight" size="sm" :stroke-width="1.5" />
           </router-link>
         </div>
       </section>
@@ -292,6 +286,27 @@ function initTheme() {
     isDark.value = true
     document.documentElement.classList.add('dark')
   }
+}
+
+// ---- Display fonts (loaded only on the home page) ----
+function loadDisplayFonts() {
+  const id = 'pk-home-fonts'
+  if (document.getElementById(id)) return
+  const pre1 = document.createElement('link')
+  pre1.rel = 'preconnect'
+  pre1.href = 'https://fonts.googleapis.com'
+  const pre2 = document.createElement('link')
+  pre2.rel = 'preconnect'
+  pre2.href = 'https://fonts.gstatic.com'
+  pre2.crossOrigin = 'anonymous'
+  const link = document.createElement('link')
+  link.id = id
+  link.rel = 'stylesheet'
+  link.href =
+    'https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Geist+Mono:wght@400;500&display=swap'
+  document.head.appendChild(pre1)
+  document.head.appendChild(pre2)
+  document.head.appendChild(link)
 }
 
 // ---- Data ----
@@ -383,6 +398,7 @@ function setupReveal() {
 
 onMounted(() => {
   initTheme()
+  loadDisplayFonts()
   authStore.checkAuth()
   if (!appStore.publicSettingsLoaded) {
     appStore.fetchPublicSettings()
@@ -401,65 +417,64 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* =====================================================
-   Poke API home — monochrome editorial (ink & paper).
-   Light: warm paper + near-black ink.
-   Dark:  near-black ink + off-white paper. (html.dark)
-   Restraint: hairlines, mono labels, one red dot.
+   Poke API home — cold monochrome editorial.
+   Inspired by bymonolog: near-black ink, off-white,
+   oversized display type, mono eyebrows, hairlines.
+   Light/dark via html.dark. One tiny red accent.
    ===================================================== */
 .pk-page {
-  /* light (paper) */
-  --ink: oklch(0.2 0.006 80);
-  --ink-mute: oklch(0.44 0.008 80);
-  --ink-faint: oklch(0.6 0.008 80);
-  --paper: oklch(0.955 0.006 90);
-  --paper-raise: oklch(0.93 0.007 90);
-  --line: oklch(0.2 0.006 80 / 0.16);
-  --line-strong: oklch(0.2 0.006 80 / 0.4);
+  /* light */
+  --ink: oklch(0.2 0.004 250);
+  --ink-mute: oklch(0.46 0.005 250);
+  --ink-faint: oklch(0.62 0.005 250);
+  --paper: oklch(0.96 0.002 250);
+  --line: oklch(0.2 0.004 250 / 0.14);
+  --line-strong: oklch(0.2 0.004 250 / 0.36);
+  --hover: oklch(0.2 0.004 250 / 0.04);
   --red: oklch(0.58 0.2 27);
 
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --mono: ui-monospace, 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --display: 'Archivo', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --mono: 'Geist Mono', ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
+  --body: 'PingFang SC', 'Microsoft YaHei', 'Archivo', system-ui, -apple-system, sans-serif;
 
   min-height: 100vh;
   background: var(--paper);
   color: var(--ink);
+  font-family: var(--body);
   overflow-x: clip;
   transition:
-    background-color 0.3s ease,
-    color 0.3s ease;
+    background-color 0.35s ease,
+    color 0.35s ease;
 }
 html.dark .pk-page {
-  --ink: oklch(0.93 0.004 90);
-  --ink-mute: oklch(0.68 0.005 90);
-  --ink-faint: oklch(0.52 0.006 90);
-  --paper: oklch(0.165 0.004 80);
-  --paper-raise: oklch(0.2 0.005 80);
-  --line: oklch(0.93 0.004 90 / 0.14);
-  --line-strong: oklch(0.93 0.004 90 / 0.38);
+  /* dark — cold near-black à la bymonolog rgb(8,8,7) */
+  --ink: oklch(0.93 0.004 250);
+  --ink-mute: oklch(0.66 0.006 250);
+  --ink-faint: oklch(0.5 0.006 250);
+  --paper: oklch(0.155 0.003 250);
+  --line: oklch(0.93 0.004 250 / 0.12);
+  --line-strong: oklch(0.93 0.004 250 / 0.32);
+  --hover: oklch(0.93 0.004 250 / 0.045);
   --red: oklch(0.62 0.2 27);
 }
 
-/* film grain, both themes */
-.pk-noise {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0.05;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
 .pk-container {
-  max-width: 1180px;
+  max-width: 1240px;
   margin-inline: auto;
-  padding-inline: 28px;
+  padding-inline: 32px;
+}
+@media (max-width: 640px) {
+  .pk-container {
+    padding-inline: 22px;
+  }
 }
 
 /* ---------- motion ---------- */
 .pk-enter {
   opacity: 0;
-  transform: translateY(16px);
-  animation: pk-rise 0.8s var(--ease) forwards;
+  transform: translateY(18px);
+  animation: pk-rise 0.85s var(--ease) forwards;
   animation-delay: var(--d, 0ms);
 }
 @keyframes pk-rise {
@@ -470,10 +485,10 @@ html.dark .pk-page {
 }
 [data-reveal] {
   opacity: 0;
-  transform: translateY(22px);
+  transform: translateY(26px);
   transition:
-    opacity 0.7s var(--ease),
-    transform 0.7s var(--ease);
+    opacity 0.75s var(--ease),
+    transform 0.75s var(--ease);
   transition-delay: var(--rd, 0ms);
 }
 [data-reveal].pk-revealed {
@@ -490,6 +505,43 @@ html.dark .pk-page {
   }
 }
 
+/* ---------- eyebrow (mono kicker) ---------- */
+.pk-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.pk-eyebrow--plain {
+  color: var(--ink-faint);
+}
+.pk-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--red);
+  animation: pk-pulse 2.6s ease-in-out infinite;
+}
+@keyframes pk-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pk-dot {
+    animation: none;
+  }
+}
+
 /* ---------- nav ---------- */
 .pk-nav {
   position: sticky;
@@ -501,42 +553,48 @@ html.dark .pk-page {
     border-color 0.25s ease;
 }
 .pk-nav--scrolled {
-  background: color-mix(in oklab, var(--paper) 88%, transparent);
-  backdrop-filter: blur(12px);
+  background: color-mix(in oklab, var(--paper) 82%, transparent);
+  backdrop-filter: blur(14px);
   border-bottom-color: var(--line);
 }
 .pk-nav-inner {
-  max-width: 1180px;
+  max-width: 1240px;
   margin-inline: auto;
-  padding: 16px 28px;
+  padding: 18px 32px;
   display: flex;
   align-items: center;
-  gap: 26px;
+  gap: 28px;
+}
+@media (max-width: 640px) {
+  .pk-nav-inner {
+    padding: 16px 22px;
+  }
 }
 .pk-brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   text-decoration: none;
   color: inherit;
 }
 .pk-brand-logo {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   object-fit: contain;
   filter: grayscale(1) contrast(1.1);
 }
 .pk-brand-name {
+  font-family: var(--display);
   font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 0.02em;
+  font-size: 16px;
+  letter-spacing: -0.01em;
 }
 .pk-nav-links {
   display: none;
-  gap: 26px;
+  gap: 28px;
   margin-inline: auto;
 }
-@media (min-width: 880px) {
+@media (min-width: 900px) {
   .pk-nav-links {
     display: flex;
   }
@@ -545,11 +603,11 @@ html.dark .pk-page {
   position: relative;
   font-family: var(--mono);
   font-size: 12px;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-mute);
   text-decoration: none;
-  padding: 4px 0;
+  padding: 3px 0;
   transition: color 0.2s ease;
 }
 .pk-nav-links a::after {
@@ -559,10 +617,10 @@ html.dark .pk-page {
   bottom: 0;
   width: 100%;
   height: 1px;
-  background: var(--ink);
+  background: currentColor;
   transform: scaleX(0);
   transform-origin: right;
-  transition: transform 0.3s var(--ease);
+  transition: transform 0.32s var(--ease);
 }
 .pk-nav-links a:hover {
   color: var(--ink);
@@ -580,7 +638,7 @@ html.dark .pk-page {
 .pk-nav-login {
   font-family: var(--mono);
   font-size: 12px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-mute);
   text-decoration: none;
@@ -592,8 +650,8 @@ html.dark .pk-page {
 .pk-theme-toggle {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: transparent;
@@ -609,14 +667,14 @@ html.dark .pk-page {
   border-color: var(--line-strong);
 }
 .pk-theme-toggle:active {
-  transform: scale(0.92);
+  transform: scale(0.9);
 }
 .pk-nav-actions :deep(button) {
   color: var(--ink-mute);
 }
 .pk-nav-actions :deep(button:hover) {
   color: var(--ink);
-  background: color-mix(in oklab, var(--ink) 7%, transparent);
+  background: var(--hover);
 }
 
 /* ---------- buttons ---------- */
@@ -625,125 +683,117 @@ html.dark .pk-page {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  font-weight: 600;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   border: 1px solid var(--ink);
-  background: var(--ink);
-  color: var(--paper);
+  background: transparent;
+  color: var(--ink);
   text-decoration: none;
   border-radius: 999px;
   cursor: pointer;
   transition:
-    background-color 0.22s ease,
-    color 0.22s ease,
+    background-color 0.24s ease,
+    color 0.24s ease,
     transform 0.15s var(--ease);
 }
 .pk-btn:hover {
-  background: transparent;
-  color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
 }
 .pk-btn:active {
   transform: scale(0.97);
 }
 .pk-btn--sm {
-  font-size: 12.5px;
-  padding: 7px 16px;
+  padding: 8px 18px;
 }
 .pk-btn--lg {
-  font-size: 14.5px;
-  padding: 13px 28px;
+  font-size: 13px;
+  padding: 15px 30px;
 }
-.pk-linkline {
+.pk-textlink {
   position: relative;
-  font-size: 14.5px;
-  font-weight: 600;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--ink);
   text-decoration: none;
   padding-bottom: 3px;
   align-self: center;
 }
-.pk-linkline::after {
+.pk-textlink::after {
   content: '';
   position: absolute;
   left: 0;
   bottom: 0;
   width: 100%;
   height: 1px;
-  background: var(--ink);
+  background: currentColor;
   transform-origin: right;
-  transition: transform 0.3s var(--ease);
+  transition: transform 0.32s var(--ease);
 }
-.pk-linkline:hover::after {
-  transform: scaleX(0.35);
+.pk-textlink:hover::after {
+  transform: scaleX(0.4);
   transform-origin: left;
 }
 
 /* ---------- hero ---------- */
 .pk-hero {
   position: relative;
-  z-index: 2;
-  padding: 104px 0 96px;
+  padding: clamp(72px, 12vh, 132px) 0 clamp(64px, 10vh, 104px);
   border-bottom: 1px solid var(--line);
 }
-.pk-hero-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-  margin: 0 0 34px;
+.pk-eyebrow.pk-enter {
+  margin-bottom: clamp(28px, 5vh, 48px);
 }
-.pk-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--red);
+.pk-display {
+  font-family: var(--display);
+  font-size: clamp(3rem, 9vw, 8rem);
+  font-weight: 700;
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+  margin: 0 0 clamp(40px, 6vh, 60px);
 }
-.pk-hero-title {
-  font-size: clamp(2.9rem, 8vw, 6rem);
-  font-weight: 800;
-  line-height: 1.04;
-  letter-spacing: -0.035em;
-  margin: 0 0 56px;
-}
-.pk-hero-line {
+.pk-display-line {
   display: block;
 }
-.pk-hero-line--em {
+.pk-display-line--muted {
   color: var(--ink-faint);
 }
-.pk-hero-below {
+.pk-hero-body {
   display: grid;
   gap: 44px;
   align-items: start;
 }
 @media (min-width: 960px) {
-  .pk-hero-below {
-    grid-template-columns: 0.9fr 1.1fr;
-    gap: 72px;
+  .pk-hero-body {
+    grid-template-columns: 0.95fr 1.05fr;
+    gap: 80px;
   }
 }
-.pk-hero-desc {
-  font-size: 16.5px;
-  line-height: 2;
+.pk-hero-lead {
+  font-size: clamp(1rem, 1.4vw, 1.15rem);
+  line-height: 1.9;
   color: var(--ink-mute);
   max-width: 30em;
   margin: 0;
+  padding-top: 28px;
   border-top: 1px solid var(--line);
-  padding-top: 26px;
 }
-.pk-hero-side {
+.pk-hero-actions {
   display: grid;
-  gap: 30px;
+  gap: 34px;
+  padding-top: 28px;
   border-top: 1px solid var(--line);
-  padding-top: 26px;
 }
-.pk-hero-ctas {
+.pk-cta-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 26px;
+  gap: 28px;
+  align-items: center;
 }
 
 /* endpoints */
@@ -753,8 +803,8 @@ html.dark .pk-page {
 .pk-endpoint {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 13px 2px;
+  gap: 16px;
+  padding: 14px 2px;
   border-bottom: 1px solid var(--line);
 }
 .pk-endpoint:first-child {
@@ -763,11 +813,11 @@ html.dark .pk-page {
 .pk-endpoint-label {
   font-family: var(--mono);
   font-size: 10.5px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-faint);
   white-space: nowrap;
-  min-width: 128px;
+  min-width: 132px;
 }
 .pk-endpoint-url {
   font-family: var(--mono);
@@ -783,14 +833,14 @@ html.dark .pk-page {
   align-items: center;
   gap: 6px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-mute);
   background: transparent;
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 5px 12px;
+  padding: 6px 13px;
   cursor: pointer;
   white-space: nowrap;
   transition:
@@ -813,89 +863,73 @@ html.dark .pk-page {
 /* ---------- sections ---------- */
 .pk-section {
   position: relative;
-  z-index: 2;
-  padding: 96px 0;
+  padding: clamp(72px, 11vh, 120px) 0;
   border-bottom: 1px solid var(--line);
 }
 .pk-section-head {
   display: grid;
-  grid-template-columns: auto 1fr;
-  column-gap: 18px;
-  row-gap: 10px;
-  align-items: baseline;
-  margin-bottom: 60px;
+  gap: 16px;
+  margin-bottom: clamp(44px, 7vh, 72px);
+  max-width: 44em;
 }
-.pk-index {
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.1em;
-  color: var(--ink-faint);
-}
-.pk-kicker {
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-.pk-section-title {
-  grid-column: 2;
-  font-size: clamp(1.8rem, 4vw, 2.8rem);
-  font-weight: 800;
-  letter-spacing: -0.025em;
-  line-height: 1.15;
+.pk-heading {
+  font-family: var(--display);
+  font-size: clamp(1.9rem, 4.4vw, 3.4rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.06;
   margin: 0;
 }
-.pk-section-sub {
-  grid-column: 2;
+.pk-section-lead {
   font-size: 15px;
   color: var(--ink-mute);
-  line-height: 1.9;
-  margin: 6px 0 0;
+  line-height: 1.85;
+  margin: 4px 0 0;
   max-width: 40em;
 }
 
-/* ---------- value (hairline ledger) ---------- */
-.pk-value-list {
+/* ---------- value ledger ---------- */
+.pk-ledger {
   display: grid;
 }
-.pk-value-row {
+.pk-ledger-row {
   display: grid;
-  grid-template-columns: 64px 260px 1fr;
-  gap: 20px;
+  grid-template-columns: 68px 300px 1fr;
+  gap: 24px;
   align-items: baseline;
-  padding: 30px 2px;
+  padding: clamp(24px, 3vw, 34px) 2px;
   border-top: 1px solid var(--line);
-  transition: background-color 0.25s ease;
+  transition: background-color 0.28s ease;
 }
-.pk-value-row:last-child {
+.pk-ledger-row:last-child {
   border-bottom: 1px solid var(--line);
 }
-.pk-value-row:hover {
-  background: color-mix(in oklab, var(--ink) 4%, transparent);
+.pk-ledger-row:hover {
+  background: var(--hover);
 }
-@media (max-width: 820px) {
-  .pk-value-row {
-    grid-template-columns: 52px 1fr;
+@media (max-width: 860px) {
+  .pk-ledger-row {
+    grid-template-columns: 54px 1fr;
   }
-  .pk-value-row p {
+  .pk-ledger-desc {
     grid-column: 2;
   }
 }
-.pk-value-num {
+.pk-ledger-num {
   font-family: var(--mono);
   font-size: 12px;
   color: var(--ink-faint);
 }
-.pk-value-row h3 {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+.pk-ledger-title {
+  font-family: var(--display);
+  font-size: clamp(1.15rem, 1.8vw, 1.5rem);
+  font-weight: 600;
+  letter-spacing: -0.015em;
   margin: 0;
 }
-.pk-value-row p {
+.pk-ledger-desc {
   font-size: 14px;
-  line-height: 1.95;
+  line-height: 1.9;
   color: var(--ink-mute);
   margin: 0;
   max-width: 42em;
@@ -907,19 +941,19 @@ html.dark .pk-page {
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
 }
 .pk-step {
-  padding: 8px 28px 8px 0;
+  padding: 4px 30px 4px 0;
 }
 .pk-step + .pk-step {
   border-left: 1px solid var(--line);
-  padding-left: 28px;
+  padding-left: 32px;
 }
-@media (max-width: 820px) {
+@media (max-width: 860px) {
   .pk-step + .pk-step {
     border-left: none;
     padding-left: 0;
     border-top: 1px solid var(--line);
-    margin-top: 26px;
-    padding-top: 26px;
+    margin-top: 28px;
+    padding-top: 28px;
   }
 }
 .pk-step-num {
@@ -927,26 +961,28 @@ html.dark .pk-page {
   font-family: var(--mono);
   font-size: 12px;
   color: var(--ink-faint);
-  margin-bottom: 20px;
+  margin-bottom: 22px;
 }
-.pk-step h3 {
-  font-size: 17px;
-  font-weight: 700;
+.pk-step-title {
+  font-family: var(--display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
   margin: 0 0 12px;
 }
-.pk-step p {
+.pk-step-desc {
   font-size: 14px;
-  line-height: 1.95;
+  line-height: 1.9;
   color: var(--ink-mute);
   margin: 0;
 }
 .pk-step-code {
   display: block;
   margin-top: 18px;
-  padding: 10px 0;
+  padding: 12px 0;
   border-top: 1px solid var(--line);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--ink-mute);
   overflow-x: auto;
   white-space: nowrap;
@@ -960,23 +996,23 @@ html.dark .pk-page {
 .pk-model {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 14px 26px 14px 0;
-  margin-right: 26px;
+  gap: 11px;
+  padding: 16px 30px 16px 0;
+  margin-right: 30px;
   font-family: var(--mono);
   font-size: 13px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink);
   border-bottom: 1px solid var(--line);
-  transition: border-color 0.25s ease;
+  transition: border-color 0.28s ease;
 }
 .pk-model:hover {
   border-bottom-color: var(--ink);
 }
 .pk-model-icon {
   filter: grayscale(1) contrast(1.05);
-  opacity: 0.85;
+  opacity: 0.82;
 }
 .pk-model--more {
   color: var(--ink-faint);
@@ -985,30 +1021,22 @@ html.dark .pk-page {
 /* ---------- pricing ---------- */
 .pk-rate {
   display: grid;
-  gap: 40px;
+  gap: 44px;
   align-items: end;
 }
-@media (min-width: 880px) {
+@media (min-width: 900px) {
   .pk-rate {
-    grid-template-columns: 1.2fr 0.8fr;
-    gap: 72px;
+    grid-template-columns: 1.25fr 0.75fr;
+    gap: 80px;
   }
 }
-.pk-rate-label {
-  display: block;
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-  margin-bottom: 18px;
-}
 .pk-rate-value {
-  font-size: clamp(3rem, 9vw, 6.4rem);
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  line-height: 1;
-  margin-bottom: 16px;
+  font-family: var(--display);
+  font-size: clamp(3.2rem, 10vw, 7rem);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 0.94;
+  margin: 18px 0 16px;
 }
 .pk-rate-ref {
   font-family: var(--mono);
@@ -1020,39 +1048,39 @@ html.dark .pk-page {
 }
 .pk-rate-aside {
   border-top: 1px solid var(--line);
-  padding-top: 24px;
+  padding-top: 26px;
 }
 .pk-rate-note {
   font-size: 14px;
   line-height: 2;
   color: var(--ink-mute);
-  margin: 0 0 26px;
+  margin: 0 0 28px;
 }
 
 /* ---------- CTA ---------- */
 .pk-section--cta {
   text-align: center;
-  padding: 130px 0;
+  padding: clamp(96px, 16vh, 180px) 0;
 }
-.pk-cta-title {
-  font-size: clamp(2.2rem, 6vw, 4.2rem);
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1.08;
-  margin: 0 0 18px;
+.pk-cta-display {
+  font-family: var(--display);
+  font-size: clamp(2.6rem, 8vw, 6.5rem);
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  margin: 0 0 24px;
 }
-.pk-cta-desc {
+.pk-cta-lead {
   font-size: 15.5px;
   color: var(--ink-mute);
   line-height: 1.9;
-  margin: 0 0 40px;
+  margin: 0 auto 40px;
+  max-width: 32em;
 }
 
 /* ---------- footer ---------- */
 .pk-footer {
-  position: relative;
-  z-index: 2;
-  padding: 30px 0;
+  padding: 34px 0;
 }
 .pk-footer-inner {
   display: flex;
@@ -1060,8 +1088,8 @@ html.dark .pk-page {
   align-items: center;
   gap: 12px;
   font-family: var(--mono);
-  font-size: 11.5px;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-faint);
 }
