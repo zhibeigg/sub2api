@@ -160,6 +160,19 @@
             <PlatformIcon platform="grok" size="sm" />
             Grok
           </button>
+          <button
+            type="button"
+            @click="form.platform = 'kiro'"
+            :class="[
+              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
+              form.platform === 'kiro'
+                ? 'bg-white text-amber-600 shadow-sm dark:bg-dark-600 dark:text-amber-400'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <PlatformIcon platform="kiro" size="sm" />
+            Kiro
+          </button>
         </div>
       </div>
 
@@ -385,6 +398,25 @@
         <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
           {{ t('admin.accounts.oauth.grok.oauthOnlyHint') }}
         </p>
+      </div>
+
+      <!-- Kiro: credentials JSON import -->
+      <div v-if="form.platform === 'kiro'" class="space-y-3">
+        <div>
+          <label class="input-label">{{ t('admin.accounts.kiro.credentialsLabel') }}</label>
+          <textarea
+            v-model="kiroCredentialsJson"
+            rows="8"
+            spellcheck="false"
+            class="input font-mono text-xs"
+            :placeholder="t('admin.accounts.kiro.credentialsPlaceholder')"
+            data-testid="kiro-credentials-input"
+          ></textarea>
+          <p class="input-hint">{{ t('admin.accounts.kiro.credentialsHint') }}</p>
+        </div>
+        <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
+          {{ t('admin.accounts.kiro.importNote') }}
+        </div>
       </div>
 
       <!-- Account Type Selection (Gemini) -->
@@ -3692,6 +3724,9 @@ const bedrockSecretAccessKey = ref('')
 const bedrockSessionToken = ref('')
 const bedrockRegion = ref('us-east-1')
 const bedrockForceGlobal = ref(false)
+
+// Kiro: pasted credentials JSON (AWS Builder ID / IAM Identity Center / social export)
+const kiroCredentialsJson = ref('')
 const bedrockApiKeyValue = ref('')
 const vertexServiceAccountFileInput = ref<HTMLInputElement | null>(null)
 const vertexServiceAccountJson = ref('')
@@ -3943,6 +3978,10 @@ const isOAuthFlow = computed(() => {
   }
   // Bedrock 类型不需要 OAuth 流程
   if (form.platform === 'anthropic' && accountCategory.value === 'bedrock') {
+    return false
+  }
+  // Kiro 通过粘贴凭证 JSON 直接导入，不走浏览器 OAuth 授权流程
+  if (form.platform === 'kiro') {
     return false
   }
   return accountCategory.value === 'oauth-based'
@@ -4735,6 +4774,73 @@ const handleVertexServiceAccountDrop = async (event: DragEvent) => {
   applyVertexServiceAccountJson(await file.text())
 }
 
+// buildKiroCredentials parses a pasted Kiro credentials JSON string (as exported
+// by Kiro-Go, camelCase; snake_case also accepted) into the credentials map
+// stored on the account. Returns null and shows an error when invalid.
+const buildKiroCredentials = (raw: string): Record<string, unknown> | null => {
+  const text = raw.trim()
+  if (!text) {
+    appStore.showError(t('admin.accounts.kiro.errEmpty'))
+    return null
+  }
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(text) as Record<string, unknown>
+  } catch {
+    appStore.showError(t('admin.accounts.kiro.errInvalidJson'))
+    return null
+  }
+  const pick = (...keys: string[]): string => {
+    for (const k of keys) {
+      const v = parsed[k]
+      if (typeof v === 'string' && v.trim() !== '') return v.trim()
+    }
+    return ''
+  }
+  const accessToken = pick('accessToken', 'access_token')
+  const refreshToken = pick('refreshToken', 'refresh_token')
+  const clientId = pick('clientId', 'client_id')
+  const clientSecret = pick('clientSecret', 'client_secret')
+  let authMethod = pick('authMethod', 'auth_method') || 'idc'
+  const region = pick('region', 'region_name')
+  const profileArn = pick('profileArn', 'profile_arn')
+  const machineId = pick('machineId', 'machine_id')
+  const provider = pick('provider')
+  const email = pick('email')
+
+  if (!accessToken && !refreshToken) {
+    appStore.showError(t('admin.accounts.kiro.errNoToken'))
+    return null
+  }
+  if (authMethod !== 'social' && refreshToken && (!clientId || !clientSecret)) {
+    appStore.showError(t('admin.accounts.kiro.errMissingClient'))
+    return null
+  }
+
+  const creds: Record<string, unknown> = {}
+  const setIf = (k: string, v: string) => {
+    if (v) creds[k] = v
+  }
+  setIf('access_token', accessToken)
+  setIf('refresh_token', refreshToken)
+  setIf('client_id', clientId)
+  setIf('client_secret', clientSecret)
+  setIf('auth_method', authMethod)
+  setIf('region', region)
+  setIf('profile_arn', profileArn)
+  setIf('machine_id', machineId)
+  setIf('provider', provider)
+  setIf('email', email)
+
+  const expiresRaw = parsed['expiresAt'] ?? parsed['expires_at']
+  if (typeof expiresRaw === 'number' && expiresRaw > 0) {
+    creds.expires_at = new Date(expiresRaw * 1000).toISOString()
+  } else if (typeof expiresRaw === 'string' && expiresRaw.trim() !== '') {
+    creds.expires_at = expiresRaw.trim()
+  }
+  return creds
+}
+
 const handleSubmit = async () => {
   // For OAuth-based type, handle OAuth flow (goes to step 2)
   if (isOAuthFlow.value) {
@@ -4811,6 +4917,29 @@ const handleSubmit = async () => {
     applyInterceptWarmup(credentials, interceptWarmupRequests.value, 'create')
 
     await createAccountAndFinish('anthropic', 'bedrock' as AccountType, credentials)
+    return
+  }
+
+  // For Kiro, parse the pasted credentials JSON and create directly (OAuth type).
+  if (form.platform === 'kiro') {
+    if (!form.name.trim()) {
+      appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
+      return
+    }
+    const credentials = buildKiroCredentials(kiroCredentialsJson.value)
+    if (!credentials) {
+      return
+    }
+
+    // Optional model mapping / whitelist
+    const modelMapping = buildModelMappingObject(
+      modelRestrictionMode.value, allowedModels.value, modelMappings.value
+    )
+    if (modelMapping) {
+      credentials.model_mapping = modelMapping
+    }
+
+    await createAccountAndFinish('kiro', 'oauth' as AccountType, credentials)
     return
   }
 

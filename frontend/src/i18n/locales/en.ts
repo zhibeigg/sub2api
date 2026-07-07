@@ -3337,6 +3337,7 @@ export default {
         codeAssist: 'Code Assist',
         antigravityOauth: 'Antigravity OAuth',
         grokOauth: 'Grok OAuth',
+        kiroOauth: 'Kiro (credentials import)',
         antigravityApikey: 'Connect via Base URL + API Key',
         upstream: 'Upstream',
         upstreamDesc: 'Connect via Base URL + API Key'
@@ -3713,6 +3714,16 @@ export default {
       grok: {
         baseUrlHint: 'Grok OAuth accounts forward to the official xAI API base URL.',
         apiKeyHint: 'Grok subscription support uses OAuth refresh tokens; API keys are out of scope for this account type.'
+      },
+      kiro: {
+        credentialsLabel: 'Kiro credentials JSON',
+        credentialsPlaceholder: 'Paste the credentials JSON exported from Kiro-Go, e.g.:\n{\n  "accessToken": "...",\n  "refreshToken": "...",\n  "clientId": "...",\n  "clientSecret": "...",\n  "authMethod": "idc",\n  "region": "us-east-1",\n  "profileArn": "arn:aws:codewhisperer:..."\n}',
+        credentialsHint: 'Supports AWS Builder ID / IAM Identity Center (authMethod=idc, requires clientId+clientSecret) and social (authMethod=social). sub2api refreshes the token automatically and calls the upstream CodeWhisperer to serve Claude models.',
+        importNote: 'Kiro accounts are imported by pasting a credentials JSON — no browser authorization needed. Credentials are stored encrypted and tokens are refreshed automatically before expiry.',
+        errEmpty: 'Please paste the Kiro credentials JSON',
+        errInvalidJson: 'Invalid Kiro credentials JSON',
+        errNoToken: 'Credentials must contain accessToken or refreshToken',
+        errMissingClient: 'idc credentials require clientId and clientSecret to refresh tokens'
       },
       anthropic: {
         apiKeyPassthrough: 'Auto passthrough (auth only)',

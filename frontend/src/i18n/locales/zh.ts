@@ -3530,6 +3530,7 @@ export default {
         codeAssist: 'Code Assist',
         antigravityOauth: 'Antigravity OAuth',
         grokOauth: 'Grok OAuth',
+        kiroOauth: 'Kiro（凭证导入）',
         antigravityApikey: '通过 Base URL + API Key 连接',
         upstream: '对接上游',
         upstreamDesc: '通过 Base URL + API Key 连接上游',
@@ -3885,6 +3886,16 @@ export default {
       grok: {
         baseUrlHint: 'Grok OAuth 账号会转发到官方 xAI API Base URL。',
         apiKeyHint: 'Grok 订阅支持使用 OAuth refresh token；API Key 账号不在本次范围内。'
+      },
+      kiro: {
+        credentialsLabel: 'Kiro 凭证 JSON',
+        credentialsPlaceholder: '粘贴从 Kiro-Go 导出的凭证 JSON，例如：\n{\n  "accessToken": "...",\n  "refreshToken": "...",\n  "clientId": "...",\n  "clientSecret": "...",\n  "authMethod": "idc",\n  "region": "us-east-1",\n  "profileArn": "arn:aws:codewhisperer:..."\n}',
+        credentialsHint: '支持 AWS Builder ID / IAM Identity Center（authMethod=idc，需 clientId+clientSecret）与 social（authMethod=social）两种。sub2api 会自动刷新 token 并调用上游 CodeWhisperer 提供 Claude 模型。',
+        importNote: 'Kiro 账号通过粘贴凭证 JSON 导入，无需浏览器授权。凭证会加密存储，token 到期前自动刷新。',
+        errEmpty: '请粘贴 Kiro 凭证 JSON',
+        errInvalidJson: 'Kiro 凭证 JSON 格式无效',
+        errNoToken: '凭证必须包含 accessToken 或 refreshToken',
+        errMissingClient: 'idc 凭证刷新 token 需要 clientId 和 clientSecret'
       },
       anthropic: {
         apiKeyPassthrough: '自动透传（仅替换认证）',
