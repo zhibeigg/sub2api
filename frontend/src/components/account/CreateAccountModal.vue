@@ -73,7 +73,7 @@
         <div class="mt-2 flex flex-wrap rounded-lg bg-gray-100 p-1 dark:bg-dark-700" data-tour="account-form-platform">
           <button
             type="button"
-            @click="form.platform = 'anthropic'"
+            @click.stop.prevent="selectPlatform('anthropic')"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'anthropic'
@@ -86,7 +86,7 @@
           </button>
           <button
             type="button"
-            @click="form.platform = 'openai'"
+            @click.stop.prevent="selectPlatform('openai')"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'openai'
@@ -111,7 +111,7 @@
           </button>
           <button
             type="button"
-            @click="form.platform = 'gemini'"
+            @click.stop.prevent="selectPlatform('gemini')"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'gemini'
@@ -136,7 +136,7 @@
           </button>
           <button
             type="button"
-            @click="form.platform = 'antigravity'"
+            @click.stop.prevent="selectPlatform('antigravity')"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'antigravity'
@@ -149,7 +149,7 @@
           </button>
           <button
             type="button"
-            @click="form.platform = 'grok'"
+            @click.stop.prevent="selectPlatform('grok')"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'grok'
@@ -162,7 +162,7 @@
           </button>
           <button
             type="button"
-            @click="form.platform = 'kiro'"
+            @click.stop.prevent="selectPlatform('kiro')"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
               form.platform === 'kiro'
@@ -3986,6 +3986,21 @@ const isOAuthFlow = computed(() => {
   }
   return accountCategory.value === 'oauth-based'
 })
+
+const selectPlatform = (platform: AccountPlatform) => {
+  if (form.platform === platform) return
+
+  step.value = 1
+  form.platform = platform
+
+  // Kiro 是凭证 JSON 直接导入，不应继承其它平台的 OAuth/API Key/Bedrock 子类型状态。
+  if (platform === 'kiro') {
+    accountCategory.value = 'oauth-based'
+    addMethod.value = 'oauth'
+    modelRestrictionMode.value = 'mapping'
+    form.type = 'oauth'
+  }
+}
 
 const isManualInputMethod = computed(() => {
   return oauthFlowRef.value?.inputMethod === 'manual'
