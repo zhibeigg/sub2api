@@ -109,8 +109,24 @@
               >
                 <span class="flex min-w-0 items-center gap-2">
                   <Icon v-if="opt.value === 'all'" name="grid" size="sm" />
-                  <Icon v-else :name="opt.exclusive ? 'shield' : 'globe'" size="xs" :class="opt.exclusive ? 'text-purple-500' : 'text-gray-400'" />
-                  <span class="truncate">{{ opt.label }}</span>
+                  <ModelIcon
+                    v-else
+                    :model="groupBrand(opt.platform, opt.label).keyword"
+                    size="16px"
+                    class="flex-shrink-0"
+                  />
+                  <span
+                    class="truncate"
+                    :class="opt.value === 'all' ? '' : groupBrand(opt.platform, opt.label).colorClass"
+                  >
+                    {{ opt.label }}
+                  </span>
+                  <Icon
+                    v-if="opt.value !== 'all' && opt.exclusive"
+                    name="shield"
+                    size="xs"
+                    class="flex-shrink-0 text-purple-500"
+                  />
                 </span>
                 <span class="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">{{ opt.count }}</span>
               </button>
@@ -282,30 +298,36 @@
                   class="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-xs"
                   :class="
                     g.isExclusive
-                      ? 'bg-purple-500/10 text-purple-700 dark:text-purple-300'
-                      : 'bg-gray-50 text-gray-600 dark:bg-dark-700/60 dark:text-gray-300'
+                      ? 'bg-purple-500/10'
+                      : 'bg-gray-50 dark:bg-dark-700/60'
                   "
                 >
                   <span class="flex min-w-0 items-center gap-1.5">
-                    <Icon
-                      :name="g.isExclusive ? 'shield' : 'globe'"
-                      size="xs"
+                    <ModelIcon
+                      :model="groupBrand(g.platform, g.name).keyword"
+                      size="15px"
                       class="flex-shrink-0"
-                      :class="g.isExclusive ? 'text-purple-500' : 'text-gray-400'"
                     />
-                    <span class="truncate" :title="g.name">{{ g.name }}</span>
                     <span
-                      class="flex-shrink-0 rounded px-1 text-[9px] font-medium uppercase"
-                      :class="
-                        g.isExclusive
-                          ? 'bg-purple-500/20 text-purple-700 dark:text-purple-200'
-                          : 'bg-gray-200/70 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
-                      "
+                      class="truncate font-medium"
+                      :class="groupBrand(g.platform, g.name).colorClass"
+                      :title="g.name"
                     >
-                      {{ g.isExclusive ? t('availableChannels.exclusive') : t('availableChannels.public') }}
+                      {{ g.name }}
+                    </span>
+                    <span
+                      v-if="g.isExclusive"
+                      class="flex-shrink-0 rounded px-1 text-[9px] font-medium uppercase bg-purple-500/20 text-purple-700 dark:text-purple-200"
+                    >
+                      {{ t('availableChannels.exclusive') }}
                     </span>
                   </span>
-                  <span class="flex-shrink-0 font-medium tabular-nums">{{ formatMultiplier(g.rate) }}</span>
+                  <span
+                    class="flex-shrink-0 rounded px-1.5 py-0.5 font-semibold tabular-nums"
+                    :class="multiplierBadgeClass(g.rate)"
+                  >
+                    {{ formatMultiplier(g.rate) }}
+                  </span>
                 </div>
               </div>
             </article>
@@ -332,6 +354,7 @@ import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatScaled } from '@/utils/pricing'
 import { platformBadgeClass, platformLabel } from '@/utils/platformColors'
+import { resolveGroupBrand } from '@/utils/groupBrand'
 import {
   BILLING_MODE_TOKEN,
   BILLING_MODE_PER_REQUEST,
@@ -373,6 +396,7 @@ interface SquareGroup {
   name: string
   rate: number
   isExclusive: boolean
+  platform: string
 }
 
 interface SquareModel {
@@ -406,7 +430,8 @@ const allModels = computed<SquareModel[]>(() => {
         id: g.id,
         name: g.name,
         rate: userGroupRates.value[g.id] ?? g.rate_multiplier,
-        isExclusive: g.is_exclusive
+        isExclusive: g.is_exclusive,
+        platform: section.platform
       }))
       for (const m of section.supported_models) {
         const key = m.name.toLowerCase()
@@ -470,20 +495,21 @@ const providerOptions = computed(() => {
 })
 
 const groupOptions = computed(() => {
-  const seen = new Map<number, { name: string; exclusive: boolean }>()
+  const seen = new Map<number, { name: string; exclusive: boolean; platform: string }>()
   for (const m of allModels.value) {
     for (const g of m.groups) {
-      if (!seen.has(g.id)) seen.set(g.id, { name: g.name, exclusive: g.isExclusive })
+      if (!seen.has(g.id)) seen.set(g.id, { name: g.name, exclusive: g.isExclusive, platform: g.platform })
     }
   }
-  const opts: { value: string; label: string; count: number; exclusive: boolean }[] = [
-    { value: 'all', label: t('modelSquare.filters.all'), count: countWith(() => true, 'group'), exclusive: false }
+  const opts: { value: string; label: string; count: number; exclusive: boolean; platform: string }[] = [
+    { value: 'all', label: t('modelSquare.filters.all'), count: countWith(() => true, 'group'), exclusive: false, platform: '' }
   ]
   for (const [id, info] of seen) {
     opts.push({
       value: String(id),
       label: info.name,
       exclusive: info.exclusive,
+      platform: info.platform,
       count: countWith((m) => m.groupIds.includes(id), 'group')
     })
   }
@@ -584,6 +610,27 @@ function billingLabel(mode: BillingMode): string {
 
 function formatMultiplier(rate: number): string {
   return `${Number(rate.toFixed(3)).toString()}x`
+}
+
+// Cached brand resolution keyed by "platform|name" to avoid recomputing in the
+// template on every render.
+const brandCache = new Map<string, ReturnType<typeof resolveGroupBrand>>()
+function groupBrand(platform: string, name: string) {
+  const key = `${platform}|${name}`
+  let cached = brandCache.get(key)
+  if (!cached) {
+    cached = resolveGroupBrand(platform, name)
+    brandCache.set(key, cached)
+  }
+  return cached
+}
+
+// Discount-aware multiplier badge: <1 reads as a discount (green), =1 neutral,
+// >1 as a premium (amber). Mirrors the colorful rate chips in the design.
+function multiplierBadgeClass(rate: number): string {
+  if (rate < 1) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+  if (rate > 1) return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+  return 'bg-gray-200/70 text-gray-600 dark:bg-dark-600 dark:text-gray-300'
 }
 
 async function copyModel(name: string) {
