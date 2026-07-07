@@ -165,6 +165,10 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	reqStream := parsedReq.Stream
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
 
+	// 多分组：按优先级解析出实际服务分组，再克隆 apiKey 使下游（计费/会话/
+	// 订阅/调度）全部归属该分组。无多分组绑定时返回 nil，保持单分组旧逻辑。
+	apiKey = h.resolveMultiGroupAPIKey(c.Request.Context(), apiKey, reqModel)
+
 	// 解析渠道级模型映射
 	channelMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
 
@@ -1223,6 +1227,22 @@ func cloneAPIKeyWithGroup(apiKey *service.APIKey, group *service.Group) *service
 	cloned.GroupID = &groupID
 	cloned.Group = group
 	return &cloned
+}
+
+// resolveMultiGroupAPIKey resolves the effective group for a multi-group key by
+// priority (first bound group with an available account, else highest priority)
+// and returns a clone bound to that group so all downstream logic (billing,
+// sticky session, subscription, scheduling) attributes to it. Keys without
+// multi-group bindings are returned unchanged (legacy single-group path).
+func (h *GatewayHandler) resolveMultiGroupAPIKey(ctx context.Context, apiKey *service.APIKey, requestedModel string) *service.APIKey {
+	if apiKey == nil || len(apiKey.GroupBindings) == 0 {
+		return apiKey
+	}
+	group := h.gatewayService.ResolveEffectiveGroupBinding(ctx, apiKey, requestedModel)
+	if group == nil {
+		return apiKey
+	}
+	return cloneAPIKeyWithGroup(apiKey, group)
 }
 
 // Usage handles getting account balance and usage statistics for CC Switch integration

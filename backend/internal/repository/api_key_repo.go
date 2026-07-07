@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
+	"github.com/Wei-Shaw/sub2api/ent/apikeygroup"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	"github.com/Wei-Shaw/sub2api/ent/user"
@@ -61,17 +63,49 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 	}
 
 	created, err := builder.Save(ctx)
-	if err == nil {
-		key.ID = created.ID
-		key.LastUsedAt = created.LastUsedAt
-		key.CreatedAt = created.CreatedAt
-		key.UpdatedAt = created.UpdatedAt
+	if err != nil {
+		return translatePersistenceError(err, nil, service.ErrAPIKeyExists)
 	}
-	return translatePersistenceError(err, nil, service.ErrAPIKeyExists)
+	key.ID = created.ID
+	key.LastUsedAt = created.LastUsedAt
+	key.CreatedAt = created.CreatedAt
+	key.UpdatedAt = created.UpdatedAt
+
+	// Persist multi-group priority bindings (join rows), if any.
+	if err := replaceGroupBindings(ctx, clientFromContext(ctx, r.client), created.ID, key.GroupBindings); err != nil {
+		return err
+	}
+	return nil
+}
+
+// replaceGroupBindings replaces all api_key_groups rows for a key with the
+// given bindings (priority preserved). Empty bindings clears them (legacy
+// single-group behavior). Idempotent: delete-then-insert. Uses the provided
+// client so it participates in an ambient transaction when present.
+func replaceGroupBindings(ctx context.Context, client *dbent.Client, apiKeyID int64, bindings []service.APIKeyGroupBinding) error {
+	if _, err := client.APIKeyGroup.Delete().
+		Where(apikeygroup.APIKeyIDEQ(apiKeyID)).
+		Exec(ctx); err != nil {
+		return err
+	}
+	if len(bindings) == 0 {
+		return nil
+	}
+	creates := make([]*dbent.APIKeyGroupCreate, 0, len(bindings))
+	for _, b := range bindings {
+		creates = append(creates, client.APIKeyGroup.Create().
+			SetAPIKeyID(apiKeyID).
+			SetGroupID(b.GroupID).
+			SetPriority(b.Priority))
+	}
+	if err := client.APIKeyGroup.CreateBulk(creates...).Exec(ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *apiKeyRepository) GetByID(ctx context.Context, id int64) (*service.APIKey, error) {
-	m, err := r.activeQuery().
+	m, err := withAPIKeyGroupBindings(r.activeQuery()).
 		Where(apikey.IDEQ(id)).
 		WithUser().
 		WithGroup().
@@ -200,6 +234,11 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 				group.FieldPeakRateMultiplier,
 			)
 		}).
+		WithAPIKeyGroups(func(agq *dbent.APIKeyGroupQuery) {
+			// Multi-group bindings (ordered by priority). Load full group rows
+			// so scheduling/fallback have every field they need.
+			agq.Order(apikeygroup.ByPriority()).WithGroup()
+		}).
 		Only(ctx)
 	if err != nil {
 		if dbent.IsNotFound(err) {
@@ -280,6 +319,16 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey) erro
 	if affected == 0 {
 		// 更新影响行数为 0，说明记录不存在或已被软删除。
 		return service.ErrAPIKeyNotFound
+	}
+
+	// Replace multi-group priority bindings to match the incoming key state.
+	// Only when the caller explicitly manages bindings (non-nil slice); a nil
+	// slice means "leave bindings untouched" so partial updates (status/quota)
+	// don't wipe them.
+	if key.GroupBindings != nil {
+		if err := replaceGroupBindings(ctx, client, key.ID, key.GroupBindings); err != nil {
+			return err
+		}
 	}
 
 	// 使用同一时间戳回填，避免并发删除导致二次查询失败。
@@ -413,7 +462,7 @@ func (r *apiKeyRepository) ListByUserID(ctx context.Context, userID int64, param
 		return nil, nil, err
 	}
 
-	keysQuery := q.
+	keysQuery := withAPIKeyGroupBindings(q).
 		WithGroup().
 		Offset(params.Offset()).
 		Limit(params.Limit())
@@ -697,6 +746,16 @@ func (r *apiKeyRepository) GetRateLimitData(ctx context.Context, id int64) (resu
 	return data, rows.Err()
 }
 
+// withAPIKeyGroupBindings eager-loads the multi-group priority bindings
+// (join rows + their Group), ordered by priority ascending. Applied to the
+// read queries that back auth / detail / list so bindings survive to the
+// service layer.
+func withAPIKeyGroupBindings(q *dbent.APIKeyQuery) *dbent.APIKeyQuery {
+	return q.WithAPIKeyGroups(func(agq *dbent.APIKeyGroupQuery) {
+		agq.Order(apikeygroup.ByPriority()).WithGroup()
+	})
+}
+
 func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 	if m == nil {
 		return nil
@@ -739,6 +798,28 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 	}
 	if m.Edges.Group != nil {
 		out.Group = groupEntityToService(m.Edges.Group)
+	}
+	// Multi-group priority bindings (via api_key_groups join rows). Ordered by
+	// priority ascending; each row's Group is preloaded when available.
+	if rows := m.Edges.APIKeyGroups; len(rows) > 0 {
+		bindings := make([]service.APIKeyGroupBinding, 0, len(rows))
+		for _, r := range rows {
+			if r == nil {
+				continue
+			}
+			b := service.APIKeyGroupBinding{GroupID: r.GroupID, Priority: r.Priority}
+			if r.Edges.Group != nil {
+				b.Group = groupEntityToService(r.Edges.Group)
+			}
+			bindings = append(bindings, b)
+		}
+		sort.SliceStable(bindings, func(i, j int) bool {
+			if bindings[i].Priority != bindings[j].Priority {
+				return bindings[i].Priority < bindings[j].Priority
+			}
+			return bindings[i].GroupID < bindings[j].GroupID
+		})
+		out.GroupBindings = bindings
 	}
 	return out
 }

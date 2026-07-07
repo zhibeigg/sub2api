@@ -27,6 +27,16 @@ func IsWindowExpired(windowStart *time.Time, duration time.Duration) bool {
 	return windowStart == nil || time.Since(*windowStart) >= duration
 }
 
+// APIKeyGroupBinding is one entry of a key's multi-group binding, ordered by
+// Priority ascending (lower = higher call priority). Additive to the legacy
+// single GroupID: when a key has bindings, the gateway tries each group in
+// priority order; when empty, behavior falls back to the single GroupID path.
+type APIKeyGroupBinding struct {
+	GroupID  int64
+	Priority int
+	Group    *Group
+}
+
 type APIKey struct {
 	ID          int64
 	UserID      int64
@@ -36,6 +46,8 @@ type APIKey struct {
 	Status      string
 	IPWhitelist []string
 	IPBlacklist []string
+	// GroupBindings holds multi-group priority bindings (empty = legacy single-group).
+	GroupBindings []APIKeyGroupBinding
 	// 预编译的 IP 规则，用于认证热路径避免重复 ParseIP/ParseCIDR。
 	CompiledIPWhitelist *ip.CompiledIPRules `json:"-"`
 	CompiledIPBlacklist *ip.CompiledIPRules `json:"-"`

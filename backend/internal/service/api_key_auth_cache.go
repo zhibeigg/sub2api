@@ -26,6 +26,18 @@ type APIKeyAuthSnapshot struct {
 	RateLimit5h float64 `json:"rate_limit_5h"`
 	RateLimit1d float64 `json:"rate_limit_1d"`
 	RateLimit7d float64 `json:"rate_limit_7d"`
+
+	// GroupBindings holds multi-group priority bindings for the gateway to try
+	// in order. Empty = legacy single-group behavior (uses Group above).
+	GroupBindings []APIKeyAuthGroupBindingSnapshot `json:"group_bindings,omitempty"`
+}
+
+// APIKeyAuthGroupBindingSnapshot is one multi-group binding inside the auth
+// snapshot, ordered by Priority ascending.
+type APIKeyAuthGroupBindingSnapshot struct {
+	GroupID  int64                    `json:"group_id"`
+	Priority int                      `json:"priority"`
+	Group    *APIKeyAuthGroupSnapshot `json:"group,omitempty"`
 }
 
 // APIKeyAuthUserSnapshot 用户快照

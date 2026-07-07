@@ -129,6 +129,11 @@ func (APIKey) Edges() []ent.Edge {
 			Ref("api_keys").
 			Field("group_id").
 			Unique(),
+		// bound_groups: additional multi-group bindings with call priority,
+		// via the api_key_groups join table. Additive to the single group_id
+		// above; empty means legacy single-group behavior.
+		edge.To("bound_groups", Group.Type).
+			Through("api_key_groups", APIKeyGroup.Type),
 		edge.To("usage_logs", UsageLog.Type),
 	}
 }

@@ -626,6 +626,21 @@ func (_c *GroupCreate) AddAccounts(v ...*Account) *GroupCreate {
 	return _c.AddAccountIDs(ids...)
 }
 
+// AddBoundAPIKeyIDs adds the "bound_api_keys" edge to the APIKey entity by IDs.
+func (_c *GroupCreate) AddBoundAPIKeyIDs(ids ...int64) *GroupCreate {
+	_c.mutation.AddBoundAPIKeyIDs(ids...)
+	return _c
+}
+
+// AddBoundAPIKeys adds the "bound_api_keys" edges to the APIKey entity.
+func (_c *GroupCreate) AddBoundAPIKeys(v ...*APIKey) *GroupCreate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddBoundAPIKeyIDs(ids...)
+}
+
 // AddAllowedUserIDs adds the "allowed_users" edge to the User entity by IDs.
 func (_c *GroupCreate) AddAllowedUserIDs(ids ...int64) *GroupCreate {
 	_c.mutation.AddAllowedUserIDs(ids...)
@@ -1178,6 +1193,26 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		createE := &AccountGroupCreate{config: _c.config, mutation: newAccountGroupMutation(_c.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.BoundAPIKeysIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   group.BoundAPIKeysTable,
+			Columns: group.BoundAPIKeysPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(apikey.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		createE := &APIKeyGroupCreate{config: _c.config, mutation: newAPIKeyGroupMutation(_c.config, OpCreate)}
 		createE.defaults()
 		_, specE := createE.createSpec()
 		edge.Target.Fields = specE.Fields

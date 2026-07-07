@@ -82,6 +82,16 @@ type APIKey struct {
 
 	User  *User  `json:"user,omitempty"`
 	Group *Group `json:"group,omitempty"`
+	// GroupBindings: multi-group priority bindings (ordered). Empty for
+	// legacy single-group keys.
+	GroupBindings []APIKeyGroupBinding `json:"group_bindings,omitempty"`
+}
+
+// APIKeyGroupBinding is one multi-group binding in an API key response.
+type APIKeyGroupBinding struct {
+	GroupID  int64  `json:"group_id"`
+	Priority int    `json:"priority"`
+	Group    *Group `json:"group,omitempty"`
 }
 
 type Group struct {

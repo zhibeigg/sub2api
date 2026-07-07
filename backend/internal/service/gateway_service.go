@@ -1560,6 +1560,41 @@ func generateSessionUUID(seed string) string {
 		bytes[0:4], bytes[4:6], bytes[6:8], bytes[8:10], bytes[10:16])
 }
 
+// ResolveEffectiveGroupBinding picks which bound group should serve a request
+// when an API key has multiple priority-ordered group bindings.
+//
+// It probes each binding in priority order and returns the first group that has
+// an account able to serve requestedModel; if none can serve it, it returns the
+// highest-priority binding as a best-effort default (so the normal path still
+// runs and produces a consistent "no available account" error). Returns nil
+// when the key has no multi-group bindings (caller keeps legacy single-group).
+//
+// This is deliberately a thin, read-only probe layered on the existing
+// single-group selection logic: it does not change scheduling internals, so
+// billing/session/subscription all attribute to the returned group unchanged.
+func (s *GatewayService) ResolveEffectiveGroupBinding(ctx context.Context, apiKey *APIKey, requestedModel string) *Group {
+	if apiKey == nil || len(apiKey.GroupBindings) == 0 {
+		return nil
+	}
+	var firstGroup *Group
+	for i := range apiKey.GroupBindings {
+		b := apiKey.GroupBindings[i]
+		if b.Group == nil {
+			continue
+		}
+		if firstGroup == nil {
+			firstGroup = b.Group
+		}
+		gid := b.GroupID
+		// Probe availability without a sticky session and without mutating any
+		// state. A successful select means this group can serve the request.
+		if _, err := s.SelectAccountForModelWithExclusions(ctx, &gid, "", requestedModel, nil); err == nil {
+			return b.Group
+		}
+	}
+	return firstGroup
+}
+
 // SelectAccount 选择账号（粘性会话+优先级）
 func (s *GatewayService) SelectAccount(ctx context.Context, groupID *int64, sessionHash string) (*Account, error) {
 	return s.SelectAccountForModel(ctx, groupID, sessionHash, "")

@@ -1360,6 +1360,32 @@ func (s *OpenAIGatewayService) SelectAccount(ctx context.Context, groupID *int64
 	return s.SelectAccountForModel(ctx, groupID, sessionHash, "")
 }
 
+// ResolveEffectiveGroupBinding picks which bound group serves a request for a
+// multi-group key, probing each binding in priority order and returning the
+// first group with an available account (else the highest-priority binding).
+// Returns nil when the key has no multi-group bindings. Read-only probe layered
+// on the existing single-group selection — no scheduling internals change.
+func (s *OpenAIGatewayService) ResolveEffectiveGroupBinding(ctx context.Context, apiKey *APIKey, requestedModel string) *Group {
+	if apiKey == nil || len(apiKey.GroupBindings) == 0 {
+		return nil
+	}
+	var firstGroup *Group
+	for i := range apiKey.GroupBindings {
+		b := apiKey.GroupBindings[i]
+		if b.Group == nil {
+			continue
+		}
+		if firstGroup == nil {
+			firstGroup = b.Group
+		}
+		gid := b.GroupID
+		if _, err := s.SelectAccountForModelWithExclusions(ctx, &gid, "", requestedModel, nil); err == nil {
+			return b.Group
+		}
+	}
+	return firstGroup
+}
+
 // SelectAccountForModel selects an account supporting the requested model
 func (s *OpenAIGatewayService) SelectAccountForModel(ctx context.Context, groupID *int64, sessionHash string, requestedModel string) (*Account, error) {
 	return s.SelectAccountForModelWithExclusions(ctx, groupID, sessionHash, requestedModel, nil)

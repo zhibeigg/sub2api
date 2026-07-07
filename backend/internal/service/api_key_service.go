@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"html"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -150,13 +151,23 @@ type APIKeyAuthCacheInvalidator interface {
 	InvalidateAuthCacheByGroupID(ctx context.Context, groupID int64)
 }
 
+// APIKeyGroupBindingInput is one multi-group binding in a create/update
+// request. Priority ascending = higher call priority.
+type APIKeyGroupBindingInput struct {
+	GroupID  int64 `json:"group_id"`
+	Priority int   `json:"priority"`
+}
+
 // CreateAPIKeyRequest 创建API Key请求
 type CreateAPIKeyRequest struct {
 	Name        string   `json:"name"`
 	GroupID     *int64   `json:"group_id"`
-	CustomKey   *string  `json:"custom_key"`   // 可选的自定义key
-	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单
-	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单
+	// GroupBindings: optional multi-group priority bindings. When non-empty it
+	// takes precedence and GroupID is derived from the highest-priority entry.
+	GroupBindings []APIKeyGroupBindingInput `json:"group_bindings"`
+	CustomKey     *string  `json:"custom_key"`   // 可选的自定义key
+	IPWhitelist   []string `json:"ip_whitelist"` // IP 白名单
+	IPBlacklist   []string `json:"ip_blacklist"` // IP 黑名单
 
 	// Quota fields
 	Quota         float64 `json:"quota"`           // Quota limit in USD (0 = unlimited)
@@ -172,6 +183,9 @@ type CreateAPIKeyRequest struct {
 type UpdateAPIKeyRequest struct {
 	Name        *string  `json:"name"`
 	GroupID     *int64   `json:"group_id"`
+	// GroupBindings: nil = leave bindings untouched; non-nil (incl. empty) =
+	// replace bindings with this set. Non-empty also derives GroupID.
+	GroupBindings []APIKeyGroupBindingInput `json:"group_bindings"`
 	Status      *string  `json:"status"`
 	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单（空数组清空）
 	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单（空数组清空）
@@ -333,6 +347,60 @@ func (s *APIKeyService) canUserBindGroup(ctx context.Context, user *User, group 
 	return user.CanBindGroup(group.ID, group.IsExclusive)
 }
 
+// resolveGroupBindings validates and normalizes multi-group binding inputs for
+// a user: dedups by group id, validates bind permission for each group, and
+// returns bindings sorted by priority ascending. Returns nil (no error) when
+// no bindings are requested, so callers fall back to the single-group path.
+func (s *APIKeyService) resolveGroupBindings(ctx context.Context, user *User, inputs []APIKeyGroupBindingInput, fallbackGroupID *int64) ([]APIKeyGroupBinding, error) {
+	if len(inputs) == 0 {
+		return nil, nil
+	}
+	seen := make(map[int64]struct{}, len(inputs))
+	bindings := make([]APIKeyGroupBinding, 0, len(inputs))
+	for _, in := range inputs {
+		if in.GroupID <= 0 {
+			continue
+		}
+		if _, dup := seen[in.GroupID]; dup {
+			continue
+		}
+		seen[in.GroupID] = struct{}{}
+		group, err := s.groupRepo.GetByID(ctx, in.GroupID)
+		if err != nil {
+			return nil, fmt.Errorf("get group %d: %w", in.GroupID, err)
+		}
+		if !s.canUserBindGroup(ctx, user, group) {
+			return nil, ErrGroupNotAllowed
+		}
+		bindings = append(bindings, APIKeyGroupBinding{
+			GroupID:  in.GroupID,
+			Priority: in.Priority,
+			Group:    group,
+		})
+	}
+	if len(bindings) == 0 {
+		return nil, nil
+	}
+	sort.SliceStable(bindings, func(i, j int) bool {
+		if bindings[i].Priority != bindings[j].Priority {
+			return bindings[i].Priority < bindings[j].Priority
+		}
+		return bindings[i].GroupID < bindings[j].GroupID
+	})
+	return bindings, nil
+}
+
+// effectiveGroupIDFromBindings returns the single group_id to store on the key
+// for backward compatibility: the highest-priority binding, or the provided
+// fallback when there are no bindings.
+func effectiveGroupIDFromBindings(bindings []APIKeyGroupBinding, fallback *int64) *int64 {
+	if len(bindings) == 0 {
+		return fallback
+	}
+	id := bindings[0].GroupID
+	return &id
+}
+
 // Create 创建API Key
 func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIKeyRequest) (*APIKey, error) {
 	// 验证用户存在
@@ -355,8 +423,17 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 		}
 	}
 
-	// 验证分组权限（如果指定了分组）
-	if req.GroupID != nil {
+	// Resolve multi-group bindings (if provided) into validated, priority-ordered
+	// bindings. This also derives the effective single GroupID for backward
+	// compatibility (highest-priority binding).
+	bindings, err := s.resolveGroupBindings(ctx, user, req.GroupBindings, req.GroupID)
+	if err != nil {
+		return nil, err
+	}
+	effectiveGroupID := effectiveGroupIDFromBindings(bindings, req.GroupID)
+
+	// 验证分组权限（单分组路径：无多绑定时校验 req.GroupID）
+	if len(bindings) == 0 && req.GroupID != nil {
 		group, err := s.groupRepo.GetByID(ctx, *req.GroupID)
 		if err != nil {
 			return nil, fmt.Errorf("get group: %w", err)
@@ -405,18 +482,19 @@ func (s *APIKeyService) Create(ctx context.Context, userID int64, req CreateAPIK
 
 	// 创建API Key记录
 	apiKey := &APIKey{
-		UserID:      userID,
-		Key:         key,
-		Name:        html.EscapeString(req.Name),
-		GroupID:     req.GroupID,
-		Status:      StatusActive,
-		IPWhitelist: req.IPWhitelist,
-		IPBlacklist: req.IPBlacklist,
-		Quota:       req.Quota,
-		QuotaUsed:   0,
-		RateLimit5h: req.RateLimit5h,
-		RateLimit1d: req.RateLimit1d,
-		RateLimit7d: req.RateLimit7d,
+		UserID:        userID,
+		Key:           key,
+		Name:          html.EscapeString(req.Name),
+		GroupID:       effectiveGroupID,
+		GroupBindings: bindings,
+		Status:        StatusActive,
+		IPWhitelist:   req.IPWhitelist,
+		IPBlacklist:   req.IPBlacklist,
+		Quota:         req.Quota,
+		QuotaUsed:     0,
+		RateLimit5h:   req.RateLimit5h,
+		RateLimit1d:   req.RateLimit1d,
+		RateLimit7d:   req.RateLimit7d,
 	}
 
 	// Set expiration time if specified
@@ -583,8 +661,26 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 		apiKey.Name = html.EscapeString(*req.Name)
 	}
 
-	if req.GroupID != nil {
-		// 验证分组权限
+	// Multi-group bindings: when the request carries a non-nil GroupBindings
+	// slice, replace the key's bindings (empty slice clears them) and derive
+	// the effective single GroupID from the highest-priority binding.
+	if req.GroupBindings != nil {
+		user, err := s.userRepo.GetByID(ctx, userID)
+		if err != nil {
+			return nil, fmt.Errorf("get user: %w", err)
+		}
+		bindings, err := s.resolveGroupBindings(ctx, user, req.GroupBindings, req.GroupID)
+		if err != nil {
+			return nil, err
+		}
+		apiKey.GroupBindings = bindings
+		if len(bindings) > 0 {
+			apiKey.GroupID = effectiveGroupIDFromBindings(bindings, req.GroupID)
+		} else if req.GroupID != nil {
+			apiKey.GroupID = req.GroupID
+		}
+	} else if req.GroupID != nil {
+		// Legacy single-group path.
 		user, err := s.userRepo.GetByID(ctx, userID)
 		if err != nil {
 			return nil, fmt.Errorf("get user: %w", err)
@@ -600,6 +696,8 @@ func (s *APIKeyService) Update(ctx context.Context, id int64, userID int64, req 
 		}
 
 		apiKey.GroupID = req.GroupID
+		// Keep bindings consistent: single-group update clears multi bindings.
+		apiKey.GroupBindings = []APIKeyGroupBinding{}
 	}
 
 	if req.Status != nil {

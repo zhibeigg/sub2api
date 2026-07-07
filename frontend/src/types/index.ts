@@ -601,11 +601,26 @@ export interface ApiKey {
   reset_5h_at: string | null
   reset_1d_at: string | null
   reset_7d_at: string | null
+  group_bindings?: ApiKeyGroupBinding[]
+}
+
+/** One multi-group binding in an API key response (with group detail). */
+export interface ApiKeyGroupBinding {
+  group_id: number
+  priority: number
+  group?: Group
+}
+
+/** One multi-group priority binding (priority ascending = higher priority). */
+export interface ApiKeyGroupBindingInput {
+  group_id: number
+  priority: number
 }
 
 export interface CreateApiKeyRequest {
   name: string
   group_id?: number | null
+  group_bindings?: ApiKeyGroupBindingInput[]
   custom_key?: string // Optional custom API Key
   ip_whitelist?: string[]
   ip_blacklist?: string[]
@@ -619,6 +634,7 @@ export interface CreateApiKeyRequest {
 export interface UpdateApiKeyRequest {
   name?: string
   group_id?: number | null
+  group_bindings?: ApiKeyGroupBindingInput[]
   status?: 'active' | 'inactive'
   ip_whitelist?: string[]
   ip_blacklist?: string[]

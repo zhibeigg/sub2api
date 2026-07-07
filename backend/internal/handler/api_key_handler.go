@@ -28,10 +28,18 @@ func NewAPIKeyHandler(apiKeyService *service.APIKeyService) *APIKeyHandler {
 	}
 }
 
+// APIKeyGroupBindingInput is one multi-group binding in an HTTP request.
+type APIKeyGroupBindingInput struct {
+	GroupID  int64 `json:"group_id"`
+	Priority int   `json:"priority"`
+}
+
 // CreateAPIKeyRequest represents the create API key request payload
 type CreateAPIKeyRequest struct {
 	Name          string   `json:"name" binding:"required"`
 	GroupID       *int64   `json:"group_id"`        // nullable
+	// GroupBindings: optional multi-group priority bindings (takes precedence).
+	GroupBindings []APIKeyGroupBindingInput `json:"group_bindings"`
 	CustomKey     *string  `json:"custom_key"`      // 可选的自定义key
 	IPWhitelist   []string `json:"ip_whitelist"`    // IP 白名单
 	IPBlacklist   []string `json:"ip_blacklist"`    // IP 黑名单
@@ -48,6 +56,8 @@ type CreateAPIKeyRequest struct {
 type UpdateAPIKeyRequest struct {
 	Name        string   `json:"name"`
 	GroupID     *int64   `json:"group_id"`
+	// GroupBindings: nil = leave untouched; non-nil (incl. empty) = replace.
+	GroupBindings *[]APIKeyGroupBindingInput `json:"group_bindings"`
 	Status      string   `json:"status" binding:"omitempty,oneof=active inactive"`
 	IPWhitelist []string `json:"ip_whitelist"` // IP 白名单
 	IPBlacklist []string `json:"ip_blacklist"` // IP 黑名单
@@ -60,6 +70,18 @@ type UpdateAPIKeyRequest struct {
 	RateLimit1d         *float64 `json:"rate_limit_1d"`
 	RateLimit7d         *float64 `json:"rate_limit_7d"`
 	ResetRateLimitUsage *bool    `json:"reset_rate_limit_usage"` // 重置限速用量
+}
+
+// toServiceGroupBindings converts HTTP binding inputs to service-layer inputs.
+func toServiceGroupBindings(in []APIKeyGroupBindingInput) []service.APIKeyGroupBindingInput {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]service.APIKeyGroupBindingInput, 0, len(in))
+	for _, b := range in {
+		out = append(out, service.APIKeyGroupBindingInput{GroupID: b.GroupID, Priority: b.Priority})
+	}
+	return out
 }
 
 // List handles listing user's API keys with pagination
@@ -156,6 +178,7 @@ func (h *APIKeyHandler) Create(c *gin.Context) {
 	svcReq := service.CreateAPIKeyRequest{
 		Name:          req.Name,
 		GroupID:       req.GroupID,
+		GroupBindings: toServiceGroupBindings(req.GroupBindings),
 		CustomKey:     req.CustomKey,
 		IPWhitelist:   req.IPWhitelist,
 		IPBlacklist:   req.IPBlacklist,
@@ -218,6 +241,13 @@ func (h *APIKeyHandler) Update(c *gin.Context) {
 		svcReq.Name = &req.Name
 	}
 	svcReq.GroupID = req.GroupID
+	if req.GroupBindings != nil {
+		// Non-nil (incl. empty) → replace bindings; nil → leave untouched.
+		svcReq.GroupBindings = toServiceGroupBindings(*req.GroupBindings)
+		if svcReq.GroupBindings == nil {
+			svcReq.GroupBindings = []service.APIKeyGroupBindingInput{}
+		}
+	}
 	if req.Status != "" {
 		svcReq.Status = &req.Status
 	}

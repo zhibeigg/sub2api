@@ -48,6 +48,20 @@ func resolveOpenAIMessagesDispatchMappedModel(apiKey *service.APIKey, requestedM
 	return strings.TrimSpace(apiKey.Group.ResolveMessagesDispatchModel(requestedModel))
 }
 
+// resolveMultiGroupAPIKey resolves the effective group for a multi-group key by
+// priority and returns a clone bound to it (so billing/session/subscription/
+// scheduling all attribute to it). Single-group keys are returned unchanged.
+func (h *OpenAIGatewayHandler) resolveMultiGroupAPIKey(ctx context.Context, apiKey *service.APIKey, requestedModel string) *service.APIKey {
+	if apiKey == nil || len(apiKey.GroupBindings) == 0 {
+		return apiKey
+	}
+	group := h.gatewayService.ResolveEffectiveGroupBinding(ctx, apiKey, requestedModel)
+	if group == nil {
+		return apiKey
+	}
+	return cloneAPIKeyWithGroup(apiKey, group)
+}
+
 type openAIModelBodyReplaceFunc func([]byte, string) []byte
 
 func openAIModelMappedBody(body []byte, mapped bool, mappedModel string, replace openAIModelBodyReplaceFunc) []byte {
@@ -236,6 +250,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
+	apiKey = h.resolveMultiGroupAPIKey(c.Request.Context(), apiKey, reqModel)
 	previousResponseID := strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String())
 	if previousResponseID != "" {
 		previousResponseIDKind := service.ClassifyOpenAIPreviousResponseIDKind(previousResponseID)
@@ -708,6 +723,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 	}
 	reqModel := modelResult.String()
 	routingModel := service.NormalizeOpenAICompatRequestedModel(reqModel)
+	apiKey = h.resolveMultiGroupAPIKey(c.Request.Context(), apiKey, reqModel)
 	preferredMappedModel := resolveOpenAIMessagesDispatchMappedModel(apiKey, reqModel)
 	reqStream := gjson.GetBytes(body, "stream").Bool()
 
