@@ -331,6 +331,26 @@
                 <span class="text-xs">{{ t("common.edit") }}</span>
               </button>
               <button
+                @click="handleToggleStatus(row)"
+                :disabled="togglingStatusId === row.id"
+                :title="row.status === 'active' ? t('admin.groups.disableGroup') : t('admin.groups.enableGroup')"
+                :class="[
+                  'flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                  row.status === 'active'
+                    ? 'hover:bg-orange-50 hover:text-orange-600 dark:hover:bg-orange-900/20 dark:hover:text-orange-400'
+                    : 'hover:bg-green-50 hover:text-green-600 dark:hover:bg-green-900/20 dark:hover:text-green-400'
+                ]"
+              >
+                <Icon
+                  :name="togglingStatusId === row.id ? 'refresh' : row.status === 'active' ? 'ban' : 'play'"
+                  size="sm"
+                  :class="togglingStatusId === row.id ? 'animate-spin' : ''"
+                />
+                <span class="text-xs">{{
+                  row.status === 'active' ? t("admin.groups.disableGroup") : t("admin.groups.enableGroup")
+                }}</span>
+              </button>
+              <button
                 @click="handleRateMultipliers(row)"
                 class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-purple-600 dark:hover:bg-dark-700 dark:hover:text-purple-400"
               >
@@ -3613,6 +3633,7 @@ const showDeleteDialog = ref(false);
 const showSortModal = ref(false);
 const submitting = ref(false);
 const sortSubmitting = ref(false);
+const togglingStatusId = ref<number | null>(null);
 const editingGroup = ref<AdminGroup | null>(null);
 const deletingGroup = ref<AdminGroup | null>(null);
 const showRateMultipliersModal = ref(false);
@@ -4607,6 +4628,28 @@ const handleRateMultipliers = (group: AdminGroup) => {
 const handleRPMOverrides = (group: AdminGroup) => {
   rpmOverridesGroup.value = group;
   showRPMOverridesModal.value = true;
+};
+
+const handleToggleStatus = async (group: AdminGroup) => {
+  if (togglingStatusId.value === group.id) return;
+  const newStatus = group.status === "active" ? "inactive" : "active";
+  togglingStatusId.value = group.id;
+  try {
+    await adminAPI.groups.toggleStatus(group.id, newStatus);
+    appStore.showSuccess(
+      newStatus === "active"
+        ? t("admin.groups.groupEnabled")
+        : t("admin.groups.groupDisabled"),
+    );
+    loadGroups();
+  } catch (error: any) {
+    appStore.showError(
+      error.response?.data?.detail || t("admin.groups.failedToToggleStatus"),
+    );
+    console.error("Error toggling group status:", error);
+  } finally {
+    togglingStatusId.value = null;
+  }
 };
 
 const handleDelete = (group: AdminGroup) => {
