@@ -5345,6 +5345,24 @@
                 </p>
               </div>
 
+              <!-- Notice Bar (scrolling ticker) -->
+              <div>
+                <label
+                  class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  {{ t("admin.settings.site.noticeBar") }}
+                </label>
+                <textarea
+                  v-model="form.notice_bar"
+                  rows="3"
+                  class="input text-sm"
+                  :placeholder="t('admin.settings.site.noticeBarPlaceholder')"
+                ></textarea>
+                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.site.noticeBarHint") }}
+                </p>
+              </div>
+
               <!-- Hide CCS Import Button -->
               <div
                 class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
@@ -8060,6 +8078,7 @@ const form = reactive<SettingsForm>({
   contact_info: "",
   doc_url: "",
   home_content: "",
+  notice_bar: "",
   backend_mode_enabled: false,
   hide_ccs_import_button: false,
   payment_enabled: false,
@@ -9415,6 +9434,7 @@ async function saveSettings() {
       contact_info: form.contact_info,
       doc_url: form.doc_url,
       home_content: form.home_content,
+      notice_bar: form.notice_bar,
       backend_mode_enabled: form.backend_mode_enabled,
       hide_ccs_import_button: form.hide_ccs_import_button,
       table_default_page_size: form.table_default_page_size,

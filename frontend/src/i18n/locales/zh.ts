@@ -311,6 +311,7 @@ export default {
     saving: '保存中...',
     selectedCount: '（已选 {count} 个）',
     refresh: '刷新',
+    notice: '通知',
     autoRefresh: {
       title: '自动刷新',
       enable: '启用自动刷新',
@@ -6381,6 +6382,9 @@ export default {
           '自定义首页内容，支持 Markdown/HTML。如果输入的是链接（以 http:// 或 https:// 开头），则会使用该链接作为 iframe 的 src 属性，这允许你设置任意网页作为首页。设置后首页的状态信息将不再显示。',
         homeContentIframeWarning:
           '⚠️ iframe 模式提示：部分网站设置了 X-Frame-Options 或 CSP 安全策略，禁止被嵌入到 iframe 中。如果页面显示空白或报错，请确认目标网站允许被嵌入，或考虑使用 HTML 模式自行构建页面内容。',
+        noticeBar: '滚动通知栏',
+        noticeBarPlaceholder: '在此输入通知内容，登录后页面顶部会滚动显示。多条通知请用换行分隔。',
+        noticeBarHint: '顶部持久滚动通知栏文本。留空则不显示；多条用换行分隔，鼠标悬停时暂停滚动。',
         hideCcsImportButton: '隐藏 CCS 导入按钮',
         hideCcsImportButtonHint: '启用后将在 API Keys 页面隐藏"导入 CCS"按钮'
       },
