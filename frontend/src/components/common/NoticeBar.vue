@@ -15,9 +15,18 @@
           class="pk-notice-seq"
           :aria-hidden="pass === 2 ? 'true' : undefined"
         >
-          <span v-for="(item, i) in items" :key="`${pass}-${i}`" class="pk-notice-item">
-            {{ item }}
-          </span>
+          <template v-for="(item, i) in items" :key="`${pass}-${i}`">
+            <a
+              v-if="item.url"
+              :href="item.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="pk-notice-item pk-notice-item--link"
+            >
+              {{ item.text }}
+            </a>
+            <span v-else class="pk-notice-item">{{ item.text }}</span>
+          </template>
         </span>
       </div>
     </div>
@@ -33,13 +42,31 @@ import { useAppStore } from '@/stores/app'
 const { t } = useI18n()
 const appStore = useAppStore()
 
-// Split the configured text into individual notices (by newline).
-const items = computed<string[]>(() => {
+interface NoticeItem {
+  text: string
+  url?: string
+}
+
+// Split the configured text into individual notices (by newline). Each line
+// may carry an optional link using "文本 | https://..." syntax; only http(s)
+// URLs are treated as links (anything else stays plain text, XSS-safe).
+const items = computed<NoticeItem[]>(() => {
   const raw = appStore.cachedPublicSettings?.notice_bar || ''
   return raw
     .split(/\r?\n/)
-    .map((s) => s.trim())
+    .map((line) => line.trim())
     .filter(Boolean)
+    .map((line) => {
+      const sep = line.lastIndexOf('|')
+      if (sep > -1) {
+        const text = line.slice(0, sep).trim()
+        const url = line.slice(sep + 1).trim()
+        if (/^https?:\/\//i.test(url)) {
+          return { text: text || url, url }
+        }
+      }
+      return { text: line }
+    })
 })
 
 // Respect reduced-motion: render statically (user can still scroll the row).
@@ -96,6 +123,16 @@ const animate = computed(() => {
 }
 .pk-notice-item:first-child::before {
   display: none;
+}
+.pk-notice-item--link {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.pk-notice-item--link:hover {
+  color: var(--pk-notice-link-hover, #14b8a6);
+  text-decoration: underline;
 }
 
 @keyframes pk-notice-scroll {

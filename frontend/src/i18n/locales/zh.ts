@@ -6383,8 +6383,8 @@ export default {
         homeContentIframeWarning:
           '⚠️ iframe 模式提示：部分网站设置了 X-Frame-Options 或 CSP 安全策略，禁止被嵌入到 iframe 中。如果页面显示空白或报错，请确认目标网站允许被嵌入，或考虑使用 HTML 模式自行构建页面内容。',
         noticeBar: '滚动通知栏',
-        noticeBarPlaceholder: '在此输入通知内容，登录后页面顶部会滚动显示。多条通知请用换行分隔。',
-        noticeBarHint: '顶部持久滚动通知栏文本。留空则不显示；多条用换行分隔，鼠标悬停时暂停滚动。',
+        noticeBarPlaceholder: '在此输入通知内容，登录后页面顶部会滚动显示。多条用换行分隔。如需可点击跳转，用“文本 | 链接”格式，例如：加入QQ群1054130674 | https://qm.qq.com/xxx',
+        noticeBarHint: '顶部持久滚动通知栏文本。留空则不显示；多条用换行分隔，悬停暂停滚动。每条可加“ | http(s)链接”变为可点击跳转。',
         hideCcsImportButton: '隐藏 CCS 导入按钮',
         hideCcsImportButtonHint: '启用后将在 API Keys 页面隐藏"导入 CCS"按钮'
       },

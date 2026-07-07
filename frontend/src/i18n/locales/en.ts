@@ -6228,8 +6228,8 @@ export default {
         homeContentHint: 'Customize the home page content. Supports Markdown/HTML. If you enter a URL (starting with http:// or https://), it will be used as an iframe src to embed an external page. When set, the default status information will no longer be displayed.',
         homeContentIframeWarning: '⚠️ iframe mode note: Some websites have X-Frame-Options or CSP security policies that prevent embedding in iframes. If the page appears blank or shows an error, please verify the target website allows embedding, or consider using HTML mode to build your own content.',
         noticeBar: 'Notice Bar',
-        noticeBarPlaceholder: 'Enter notice text shown as a scrolling ticker at the top of pages after login. Separate multiple notices with newlines.',
-        noticeBarHint: 'Persistent scrolling ticker text at the top. Leave empty to hide. Multiple notices split by newline; scrolling pauses on hover.',
+        noticeBarPlaceholder: 'Enter notice text shown as a scrolling ticker at the top after login. Separate multiple notices with newlines. For a clickable link use "text | url", e.g. Join our QQ group | https://qm.qq.com/xxx',
+        noticeBarHint: 'Persistent scrolling ticker at the top. Leave empty to hide. Multiple notices split by newline; pauses on hover. Append " | http(s) url" to a line to make it a clickable link.',
         hideCcsImportButton: 'Hide CCS Import Button',
         hideCcsImportButtonHint: 'When enabled, the "Import to CCS" button will be hidden on the API Keys page'
       },
