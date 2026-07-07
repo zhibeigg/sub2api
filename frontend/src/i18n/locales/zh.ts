@@ -1170,16 +1170,26 @@ export default {
     description: '浏览所有可用模型、供应商与实时定价',
     count: '共 {count} 个模型',
     filtered: '筛选出 {count} 个',
-    searchPlaceholder: '搜索模型或供应商...',
+    searchPlaceholder: '搜索模型、供应商或分组...',
     empty: '暂无可用模型',
     noMatch: '没有匹配的模型',
     noPricing: '未配置定价',
     clickToCopy: '点击复制模型名',
     copied: '已复制',
+    clearFilters: '清除筛选',
+    availableGroups: '可用分组',
     filters: {
       all: '全部',
       platform: '供应商',
+      provider: '供应商',
+      group: '可用分组',
+      endpoint: '端点类型',
       billing: '计费类型'
+    },
+    endpoints: {
+      anthropic: 'Anthropic 兼容',
+      openai: 'OpenAI 兼容',
+      gemini: 'Gemini 协议'
     }
   },
 

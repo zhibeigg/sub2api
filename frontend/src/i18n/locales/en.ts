@@ -1166,16 +1166,26 @@ export default {
     description: 'Browse all available models, providers and live pricing',
     count: '{count} models',
     filtered: '{count} matched',
-    searchPlaceholder: 'Search models or providers...',
+    searchPlaceholder: 'Search models, providers or groups...',
     empty: 'No models available',
     noMatch: 'No matching models',
     noPricing: 'No pricing configured',
     clickToCopy: 'Click to copy model name',
     copied: 'Copied',
+    clearFilters: 'Clear filters',
+    availableGroups: 'Available groups',
     filters: {
       all: 'All',
       platform: 'Provider',
+      provider: 'Provider',
+      group: 'Group',
+      endpoint: 'Endpoint',
       billing: 'Billing'
+    },
+    endpoints: {
+      anthropic: 'Anthropic',
+      openai: 'OpenAI Compatible',
+      gemini: 'Gemini'
     }
   },
 

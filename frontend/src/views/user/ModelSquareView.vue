@@ -1,9 +1,9 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
-      <!-- Top bar: search + refresh -->
+      <!-- Top bar: count + search + refresh -->
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3">
           <span
             class="inline-flex items-center gap-1.5 rounded-full bg-primary-500/10 px-3 py-1 text-sm font-medium text-primary-600 dark:text-primary-400"
           >
@@ -13,6 +13,14 @@
           <span v-if="filteredModels.length !== totalModels" class="text-sm text-gray-500 dark:text-gray-400">
             {{ t('modelSquare.filtered', { count: filteredModels.length }) }}
           </span>
+          <button
+            v-if="hasActiveFilter"
+            class="inline-flex items-center gap-1 rounded-full border border-gray-200 px-2.5 py-1 text-xs text-gray-500 transition-colors hover:border-primary-400 hover:text-primary-600 dark:border-dark-600 dark:text-gray-400"
+            @click="clearFilters"
+          >
+            <Icon name="x" size="xs" />
+            {{ t('modelSquare.clearFilters') }}
+          </button>
         </div>
 
         <div class="flex items-center gap-3">
@@ -40,104 +48,123 @@
         </div>
       </div>
 
-      <!-- Mobile filter chips -->
-      <div class="flex flex-wrap gap-2 lg:hidden">
-        <button
-          v-for="opt in platformOptions"
-          :key="`m-plat-${opt.value}`"
-          class="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
-          :class="
-            activePlatform === opt.value
-              ? 'border-primary-500 bg-primary-500/10 text-primary-600 dark:text-primary-400'
-              : 'border-gray-200 text-gray-600 dark:border-dark-700 dark:text-gray-400'
-          "
-          @click="activePlatform = opt.value"
-        >
-          {{ opt.label }} · {{ opt.count }}
-        </button>
+      <!-- Mobile filter chips (provider + group) -->
+      <div class="space-y-2 lg:hidden">
+        <div class="flex flex-wrap gap-2">
+          <button
+            v-for="opt in providerOptions"
+            :key="`m-prov-${opt.value}`"
+            class="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
+            :class="chipClass(activeProvider === opt.value, opt.count === 0)"
+            :disabled="opt.count === 0"
+            @click="activeProvider = opt.value"
+          >
+            {{ opt.label }} · {{ opt.count }}
+          </button>
+        </div>
+        <div v-if="groupOptions.length > 1" class="flex flex-wrap gap-2">
+          <button
+            v-for="opt in groupOptions"
+            :key="`m-grp-${opt.value}`"
+            class="rounded-full border px-3 py-1 text-xs font-medium transition-colors"
+            :class="chipClass(activeGroup === opt.value, false)"
+            @click="activeGroup = opt.value"
+          >
+            {{ opt.label }} · {{ opt.count }}
+          </button>
+        </div>
       </div>
 
       <div class="flex flex-col gap-6 lg:flex-row">
         <!-- Left filter rail -->
-        <aside class="hidden w-56 flex-shrink-0 lg:block">
+        <aside class="hidden w-60 flex-shrink-0 lg:block">
           <div class="sticky top-6 space-y-6">
-            <div>
-              <h3 class="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                {{ t('modelSquare.filters.platform') }}
-              </h3>
-              <div class="space-y-0.5">
-                <button
-                  v-for="opt in platformOptions"
-                  :key="`plat-${opt.value}`"
-                  class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors"
-                  :class="
-                    activePlatform === opt.value
-                      ? 'bg-primary-500/10 font-medium text-primary-600 dark:text-primary-400'
-                      : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-800'
-                  "
-                  @click="activePlatform = opt.value"
-                >
-                  <span class="flex items-center gap-2">
-                    <PlatformIcon
-                      v-if="opt.value !== 'all'"
-                      :platform="opt.value as GroupPlatform"
-                      size="xs"
-                    />
-                    <Icon v-else name="grid" size="sm" />
-                    {{ opt.label }}
-                  </span>
-                  <span class="text-xs text-gray-400 dark:text-gray-500">{{ opt.count }}</span>
-                </button>
-              </div>
-            </div>
+            <!-- Provider -->
+            <FilterSection :title="t('modelSquare.filters.provider')">
+              <button
+                v-for="opt in providerOptions"
+                :key="`prov-${opt.value}`"
+                class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors"
+                :class="railClass(activeProvider === opt.value, opt.count === 0)"
+                :disabled="opt.count === 0"
+                @click="activeProvider = opt.value"
+              >
+                <span class="flex items-center gap-2">
+                  <PlatformIcon v-if="opt.value !== 'all'" :platform="opt.value as GroupPlatform" size="xs" />
+                  <Icon v-else name="grid" size="sm" />
+                  {{ opt.label }}
+                </span>
+                <span class="text-xs text-gray-400 dark:text-gray-500">{{ opt.count }}</span>
+              </button>
+            </FilterSection>
 
-            <div>
-              <h3 class="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                {{ t('modelSquare.filters.billing') }}
-              </h3>
-              <div class="space-y-0.5">
-                <button
-                  v-for="opt in billingOptions"
-                  :key="`bill-${opt.value}`"
-                  class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors"
-                  :class="
-                    activeBilling === opt.value
-                      ? 'bg-primary-500/10 font-medium text-primary-600 dark:text-primary-400'
-                      : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-800'
-                  "
-                  @click="activeBilling = opt.value"
-                >
-                  <span>{{ opt.label }}</span>
-                  <span class="text-xs text-gray-400 dark:text-gray-500">{{ opt.count }}</span>
-                </button>
-              </div>
-            </div>
+            <!-- Group -->
+            <FilterSection v-if="groupOptions.length > 1" :title="t('modelSquare.filters.group')">
+              <button
+                v-for="opt in groupOptions"
+                :key="`grp-${opt.value}`"
+                class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors"
+                :class="railClass(activeGroup === opt.value, false)"
+                @click="activeGroup = opt.value"
+              >
+                <span class="flex min-w-0 items-center gap-2">
+                  <Icon v-if="opt.value === 'all'" name="grid" size="sm" />
+                  <Icon v-else :name="opt.exclusive ? 'shield' : 'globe'" size="xs" :class="opt.exclusive ? 'text-purple-500' : 'text-gray-400'" />
+                  <span class="truncate">{{ opt.label }}</span>
+                </span>
+                <span class="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">{{ opt.count }}</span>
+              </button>
+            </FilterSection>
+
+            <!-- Endpoint -->
+            <FilterSection v-if="endpointOptions.length > 2" :title="t('modelSquare.filters.endpoint')">
+              <button
+                v-for="opt in endpointOptions"
+                :key="`ep-${opt.value}`"
+                class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors"
+                :class="railClass(activeEndpoint === opt.value, false)"
+                @click="activeEndpoint = opt.value"
+              >
+                <span>{{ opt.label }}</span>
+                <span class="text-xs text-gray-400 dark:text-gray-500">{{ opt.count }}</span>
+              </button>
+            </FilterSection>
+
+            <!-- Billing -->
+            <FilterSection :title="t('modelSquare.filters.billing')">
+              <button
+                v-for="opt in billingOptions"
+                :key="`bill-${opt.value}`"
+                class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors"
+                :class="railClass(activeBilling === opt.value, false)"
+                @click="activeBilling = opt.value"
+              >
+                <span>{{ opt.label }}</span>
+                <span class="text-xs text-gray-400 dark:text-gray-500">{{ opt.count }}</span>
+              </button>
+            </FilterSection>
           </div>
         </aside>
 
         <!-- Card grid -->
         <div class="min-w-0 flex-1">
-          <!-- Loading -->
           <div v-if="loading" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <div
-              v-for="n in 6"
-              :key="`sk-${n}`"
-              class="h-52 animate-pulse rounded-xl bg-gray-100 dark:bg-dark-800"
-            ></div>
+            <div v-for="n in 6" :key="`sk-${n}`" class="h-56 animate-pulse rounded-xl bg-gray-100 dark:bg-dark-800"></div>
           </div>
 
-          <!-- Empty -->
           <div
             v-else-if="filteredModels.length === 0"
             class="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 py-20 dark:border-dark-700"
           >
             <Icon name="inbox" size="xl" class="mb-3 h-12 w-12 text-gray-300 dark:text-gray-600" />
-            <p class="text-sm text-gray-500 dark:text-gray-400">
-              {{ searchQuery || activePlatform !== 'all' || activeBilling !== 'all' ? t('modelSquare.noMatch') : t('modelSquare.empty') }}
+            <p class="mb-3 text-sm text-gray-500 dark:text-gray-400">
+              {{ hasActiveFilter ? t('modelSquare.noMatch') : t('modelSquare.empty') }}
             </p>
+            <button v-if="hasActiveFilter" class="btn btn-secondary btn-sm" @click="clearFilters">
+              {{ t('modelSquare.clearFilters') }}
+            </button>
           </div>
 
-          <!-- Grid -->
           <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <article
               v-for="model in filteredModels"
@@ -147,9 +174,7 @@
               <!-- Header -->
               <div class="mb-3">
                 <div class="mb-2.5 flex items-center justify-between gap-2">
-                  <div
-                    class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 dark:bg-dark-700"
-                  >
+                  <div class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-gray-100 dark:bg-dark-700">
                     <ModelIcon :model="model.name" size="20px" />
                   </div>
                   <span
@@ -175,7 +200,7 @@
                 </button>
               </div>
 
-              <!-- Platforms -->
+              <!-- Providers -->
               <div class="mb-4 flex flex-wrap gap-1.5">
                 <span
                   v-for="p in model.platforms"
@@ -189,7 +214,7 @@
               </div>
 
               <!-- Pricing -->
-              <div class="mt-auto space-y-1.5 border-t border-gray-100 pt-4 text-sm dark:border-dark-700">
+              <div class="space-y-1.5 border-t border-gray-100 pt-4 text-sm dark:border-dark-700">
                 <template v-if="!model.pricing">
                   <p class="text-xs text-gray-400 dark:text-gray-500">{{ t('modelSquare.noPricing') }}</p>
                 </template>
@@ -209,10 +234,14 @@
                       <span class="text-xs font-normal text-gray-400">{{ t('availableChannels.pricing.unitPerMillion') }}</span>
                     </span>
                   </div>
-                  <div
-                    v-if="model.pricing.cache_read_price != null && model.pricing.cache_read_price > 0"
-                    class="flex justify-between"
-                  >
+                  <div v-if="model.pricing.cache_write_price != null && model.pricing.cache_write_price > 0" class="flex justify-between">
+                    <span class="text-gray-500 dark:text-gray-400">{{ t('availableChannels.pricing.cacheWritePrice') }}</span>
+                    <span class="text-gray-700 dark:text-gray-300">
+                      {{ formatScaled(model.pricing.cache_write_price, PER_M) }}
+                      <span class="text-xs text-gray-400">{{ t('availableChannels.pricing.unitPerMillion') }}</span>
+                    </span>
+                  </div>
+                  <div v-if="model.pricing.cache_read_price != null && model.pricing.cache_read_price > 0" class="flex justify-between">
                     <span class="text-gray-500 dark:text-gray-400">{{ t('availableChannels.pricing.cacheReadPrice') }}</span>
                     <span class="text-gray-700 dark:text-gray-300">
                       {{ formatScaled(model.pricing.cache_read_price, PER_M) }}
@@ -240,23 +269,43 @@
                     </span>
                   </div>
                 </template>
+              </div>
 
-                <!-- Group multipliers -->
-                <div v-if="model.groups.length > 0" class="flex flex-wrap gap-1 pt-1">
-                  <span
-                    v-for="g in model.groups"
-                    :key="`${model.key}-g-${g.id}`"
-                    class="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px]"
-                    :class="
-                      g.isExclusive
-                        ? 'bg-purple-500/10 text-purple-600 dark:text-purple-300'
-                        : 'bg-gray-100 text-gray-500 dark:bg-dark-700 dark:text-gray-400'
-                    "
-                    :title="g.name"
-                  >
-                    <Icon :name="g.isExclusive ? 'shield' : 'globe'" size="xs" />
-                    {{ formatMultiplier(g.rate) }}
+              <!-- Available groups (name + badge + multiplier) -->
+              <div v-if="model.groups.length > 0" class="mt-auto space-y-1 border-t border-gray-100 pt-3 dark:border-dark-700">
+                <div class="mb-1 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                  {{ t('modelSquare.availableGroups') }}
+                </div>
+                <div
+                  v-for="g in model.groups"
+                  :key="`${model.key}-g-${g.id}`"
+                  class="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-xs"
+                  :class="
+                    g.isExclusive
+                      ? 'bg-purple-500/10 text-purple-700 dark:text-purple-300'
+                      : 'bg-gray-50 text-gray-600 dark:bg-dark-700/60 dark:text-gray-300'
+                  "
+                >
+                  <span class="flex min-w-0 items-center gap-1.5">
+                    <Icon
+                      :name="g.isExclusive ? 'shield' : 'globe'"
+                      size="xs"
+                      class="flex-shrink-0"
+                      :class="g.isExclusive ? 'text-purple-500' : 'text-gray-400'"
+                    />
+                    <span class="truncate" :title="g.name">{{ g.name }}</span>
+                    <span
+                      class="flex-shrink-0 rounded px-1 text-[9px] font-medium uppercase"
+                      :class="
+                        g.isExclusive
+                          ? 'bg-purple-500/20 text-purple-700 dark:text-purple-200'
+                          : 'bg-gray-200/70 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
+                      "
+                    >
+                      {{ g.isExclusive ? t('availableChannels.exclusive') : t('availableChannels.public') }}
+                    </span>
                   </span>
+                  <span class="flex-shrink-0 font-medium tabular-nums">{{ formatMultiplier(g.rate) }}</span>
                 </div>
               </div>
             </article>
@@ -268,7 +317,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref, type VNode } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -296,6 +345,29 @@ const appStore = useAppStore()
 
 const PER_M = 1_000_000
 
+// All platforms sub2api supports (shown even when they have no models yet).
+const ALL_PLATFORMS = ['anthropic', 'openai', 'gemini', 'grok', 'antigravity']
+
+// Platform → endpoint protocol family.
+const ENDPOINT_OF: Record<string, string> = {
+  anthropic: 'anthropic',
+  openai: 'openai',
+  grok: 'openai',
+  gemini: 'gemini',
+  antigravity: 'gemini'
+}
+
+// Lightweight filter section wrapper (title + slotted list).
+const FilterSection = (props: { title: string }, ctx: { slots: { default?: () => VNode[] } }) =>
+  h('div', {}, [
+    h(
+      'h3',
+      { class: 'mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500' },
+      props.title
+    ),
+    h('div', { class: 'space-y-0.5' }, ctx.slots.default?.() ?? [])
+  ])
+
 interface SquareGroup {
   id: number
   name: string
@@ -310,22 +382,22 @@ interface SquareModel {
   billingMode: BillingMode
   pricing: UserSupportedModelPricing | null
   groups: SquareGroup[]
+  groupIds: number[]
+  endpoints: string[]
 }
 
 const channels = ref<UserAvailableChannel[]>([])
 const userGroupRates = ref<Record<number, number>>({})
 const loading = ref(false)
 const searchQuery = ref('')
-const activePlatform = ref<string>('all')
+const activeProvider = ref<string>('all')
+const activeGroup = ref<string>('all')
+const activeEndpoint = ref<string>('all')
 const activeBilling = ref<string>('all')
 const copiedName = ref('')
 let copyTimer: ReturnType<typeof setTimeout> | null = null
 
-/**
- * Flatten channels → platforms → supported_models into deduped model cards.
- * Same model name is merged: platforms unioned, groups unioned, pricing takes
- * the first non-null representative (same-name pricing is consistent upstream).
- */
+/** Flatten channels → platforms → supported_models into deduped model cards. */
 const allModels = computed<SquareModel[]>(() => {
   const map = new Map<string, SquareModel>()
   for (const ch of channels.value) {
@@ -346,59 +418,158 @@ const allModels = computed<SquareModel[]>(() => {
             platforms: [],
             billingMode: (m.pricing?.billing_mode as BillingMode) || BILLING_MODE_TOKEN,
             pricing: m.pricing,
-            groups: []
+            groups: [],
+            groupIds: [],
+            endpoints: []
           }
           map.set(key, entry)
         }
         const plat = m.platform || section.platform
         if (plat && !entry.platforms.includes(plat)) entry.platforms.push(plat)
+        if (plat && ENDPOINT_OF[plat] && !entry.endpoints.includes(ENDPOINT_OF[plat])) {
+          entry.endpoints.push(ENDPOINT_OF[plat])
+        }
         if (!entry.pricing && m.pricing) {
           entry.pricing = m.pricing
           entry.billingMode = (m.pricing.billing_mode as BillingMode) || BILLING_MODE_TOKEN
         }
         for (const g of sectionGroups) {
-          if (!entry.groups.some((x) => x.id === g.id)) entry.groups.push(g)
+          if (!entry.groups.some((x) => x.id === g.id)) {
+            entry.groups.push(g)
+            entry.groupIds.push(g.id)
+          }
         }
       }
     }
   }
-  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
+  const list = Array.from(map.values())
+  // Exclusive groups first within each card.
+  for (const m of list) m.groups.sort((a, b) => Number(b.isExclusive) - Number(a.isExclusive))
+  return list.sort((a, b) => a.name.localeCompare(b.name))
 })
 
 const totalModels = computed(() => allModels.value.length)
 
-const platformOptions = computed(() => {
-  const counts = new Map<string, number>()
-  for (const m of allModels.value) {
-    for (const p of m.platforms) counts.set(p, (counts.get(p) ?? 0) + 1)
+/** Count models passing every *other* active filter (so counts reflect AND context). */
+function countWith(pred: (m: SquareModel) => boolean, exclude: 'provider' | 'group' | 'endpoint' | 'billing'): number {
+  return allModels.value.filter((m) => {
+    if (exclude !== 'provider' && activeProvider.value !== 'all' && !m.platforms.includes(activeProvider.value)) return false
+    if (exclude !== 'group' && activeGroup.value !== 'all' && !m.groupIds.includes(Number(activeGroup.value))) return false
+    if (exclude !== 'endpoint' && activeEndpoint.value !== 'all' && !m.endpoints.includes(activeEndpoint.value)) return false
+    if (exclude !== 'billing' && activeBilling.value !== 'all' && m.billingMode !== activeBilling.value) return false
+    return pred(m)
+  }).length
+}
+
+const providerOptions = computed(() => {
+  const opts = [{ value: 'all', label: t('modelSquare.filters.all'), count: countWith(() => true, 'provider') }]
+  for (const p of ALL_PLATFORMS) {
+    opts.push({ value: p, label: platformLabel(p), count: countWith((m) => m.platforms.includes(p), 'provider') })
   }
-  const opts = [{ value: 'all', label: t('modelSquare.filters.all'), count: allModels.value.length }]
-  for (const [value, count] of Array.from(counts.entries()).sort((a, b) => b[1] - a[1])) {
-    opts.push({ value, label: platformLabel(value), count })
+  return opts
+})
+
+const groupOptions = computed(() => {
+  const seen = new Map<number, { name: string; exclusive: boolean }>()
+  for (const m of allModels.value) {
+    for (const g of m.groups) {
+      if (!seen.has(g.id)) seen.set(g.id, { name: g.name, exclusive: g.isExclusive })
+    }
+  }
+  const opts: { value: string; label: string; count: number; exclusive: boolean }[] = [
+    { value: 'all', label: t('modelSquare.filters.all'), count: countWith(() => true, 'group'), exclusive: false }
+  ]
+  for (const [id, info] of seen) {
+    opts.push({
+      value: String(id),
+      label: info.name,
+      exclusive: info.exclusive,
+      count: countWith((m) => m.groupIds.includes(id), 'group')
+    })
+  }
+  // Exclusive groups first, then by count desc.
+  opts.sort((a, b) => {
+    if (a.value === 'all') return -1
+    if (b.value === 'all') return 1
+    if (a.exclusive !== b.exclusive) return Number(b.exclusive) - Number(a.exclusive)
+    return b.count - a.count
+  })
+  return opts
+})
+
+const endpointOptions = computed(() => {
+  const kinds = ['anthropic', 'openai', 'gemini']
+  const opts = [{ value: 'all', label: t('modelSquare.filters.all'), count: countWith(() => true, 'endpoint') }]
+  for (const k of kinds) {
+    const count = countWith((m) => m.endpoints.includes(k), 'endpoint')
+    if (count > 0) opts.push({ value: k, label: t(`modelSquare.endpoints.${k}`), count })
   }
   return opts
 })
 
 const billingOptions = computed(() => {
-  const counts = new Map<string, number>()
-  for (const m of allModels.value) counts.set(m.billingMode, (counts.get(m.billingMode) ?? 0) + 1)
-  return [
-    { value: 'all', label: t('modelSquare.filters.all'), count: allModels.value.length },
-    { value: BILLING_MODE_TOKEN, label: t('availableChannels.pricing.billingModeToken'), count: counts.get(BILLING_MODE_TOKEN) ?? 0 },
-    { value: BILLING_MODE_PER_REQUEST, label: t('availableChannels.pricing.billingModePerRequest'), count: counts.get(BILLING_MODE_PER_REQUEST) ?? 0 },
-    { value: BILLING_MODE_IMAGE, label: t('availableChannels.pricing.billingModeImage'), count: counts.get(BILLING_MODE_IMAGE) ?? 0 }
-  ].filter((o) => o.value === 'all' || o.count > 0)
+  const opts = [{ value: 'all', label: t('modelSquare.filters.all'), count: countWith(() => true, 'billing') }]
+  const modes: { v: BillingMode; k: string }[] = [
+    { v: BILLING_MODE_TOKEN, k: 'billingModeToken' },
+    { v: BILLING_MODE_PER_REQUEST, k: 'billingModePerRequest' },
+    { v: BILLING_MODE_IMAGE, k: 'billingModeImage' }
+  ]
+  for (const { v, k } of modes) {
+    const count = countWith((m) => m.billingMode === v, 'billing')
+    if (count > 0) opts.push({ value: v, label: t(`availableChannels.pricing.${k}`), count })
+  }
+  return opts
 })
 
 const filteredModels = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   return allModels.value.filter((m) => {
-    if (activePlatform.value !== 'all' && !m.platforms.includes(activePlatform.value)) return false
+    if (activeProvider.value !== 'all' && !m.platforms.includes(activeProvider.value)) return false
+    if (activeGroup.value !== 'all' && !m.groupIds.includes(Number(activeGroup.value))) return false
+    if (activeEndpoint.value !== 'all' && !m.endpoints.includes(activeEndpoint.value)) return false
     if (activeBilling.value !== 'all' && m.billingMode !== activeBilling.value) return false
-    if (q && !m.name.toLowerCase().includes(q) && !m.platforms.some((p) => p.toLowerCase().includes(q))) return false
+    if (
+      q &&
+      !m.name.toLowerCase().includes(q) &&
+      !m.platforms.some((p) => p.toLowerCase().includes(q)) &&
+      !m.groups.some((g) => g.name.toLowerCase().includes(q))
+    ) {
+      return false
+    }
     return true
   })
 })
+
+const hasActiveFilter = computed(
+  () =>
+    activeProvider.value !== 'all' ||
+    activeGroup.value !== 'all' ||
+    activeEndpoint.value !== 'all' ||
+    activeBilling.value !== 'all' ||
+    searchQuery.value.trim() !== ''
+)
+
+function clearFilters(): void {
+  activeProvider.value = 'all'
+  activeGroup.value = 'all'
+  activeEndpoint.value = 'all'
+  activeBilling.value = 'all'
+  searchQuery.value = ''
+}
+
+function railClass(active: boolean, disabled: boolean): string {
+  if (disabled) return 'cursor-not-allowed text-gray-300 dark:text-gray-600'
+  return active
+    ? 'bg-primary-500/10 font-medium text-primary-600 dark:text-primary-400'
+    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-800'
+}
+
+function chipClass(active: boolean, disabled: boolean): string {
+  if (disabled) return 'cursor-not-allowed border-gray-100 text-gray-300 dark:border-dark-700 dark:text-gray-600'
+  return active
+    ? 'border-primary-500 bg-primary-500/10 text-primary-600 dark:text-primary-400'
+    : 'border-gray-200 text-gray-600 dark:border-dark-700 dark:text-gray-400'
+}
 
 function billingLabel(mode: BillingMode): string {
   switch (mode) {
@@ -412,8 +583,7 @@ function billingLabel(mode: BillingMode): string {
 }
 
 function formatMultiplier(rate: number): string {
-  const s = Number(rate.toFixed(3)).toString()
-  return `${s}x`
+  return `${Number(rate.toFixed(3)).toString()}x`
 }
 
 async function copyModel(name: string) {
