@@ -446,6 +446,12 @@ export default {
 
   // Auth
   auth: {
+    brand: {
+      eyebrow: '统一 · 可观测 · 弹性',
+      titleLine1: '一个入口',
+      titleLine2: '接入全部大模型',
+      more: '更多'
+    },
     welcomeBack: '欢迎回来',
     signInToAccount: '登录您的账户以继续',
     signIn: '登录',

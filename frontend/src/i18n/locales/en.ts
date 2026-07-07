@@ -446,6 +446,12 @@ export default {
 
   // Auth
   auth: {
+    brand: {
+      eyebrow: 'Unified · Observable · Elastic',
+      titleLine1: 'One endpoint',
+      titleLine2: 'for every model',
+      more: 'More'
+    },
     welcomeBack: 'Welcome Back',
     signInToAccount: 'Sign in to your account to continue',
     signIn: 'Sign In',
