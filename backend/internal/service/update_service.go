@@ -28,7 +28,9 @@ var (
 const (
 	updateCacheKey = "update_check_cache"
 	updateCacheTTL = 1200 // 20 minutes
-	githubRepo     = "Wei-Shaw/sub2api"
+	// 更新检测源：指向本 fork，使"更新"功能只跟踪自己发布的版本，
+	// 官方 upstream 发新版不会触发覆盖。
+	githubRepo = "zhibeigg/sub2api"
 
 	// Security: allowed download domains for updates
 	allowedDownloadHost = "github.com"
