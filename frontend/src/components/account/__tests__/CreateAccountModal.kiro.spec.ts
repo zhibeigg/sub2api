@@ -1,0 +1,201 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { defineComponent, nextTick } from 'vue'
+import { mount } from '@vue/test-utils'
+
+const { createAccountMock, makeOAuthMock, makeRef } = vi.hoisted(() => ({
+  createAccountMock: vi.fn(),
+  makeRef: <T>(value: T) => ({ __v_isRef: true, value }),
+  makeOAuthMock: () => ({
+    authUrl: { value: '' },
+    sessionId: { value: '' },
+    state: { value: '' },
+    loading: { value: false },
+    error: { value: '' },
+    resetState: vi.fn(),
+    generateAuthUrl: vi.fn(),
+    validateRefreshToken: vi.fn(),
+    exchangeAuthCode: vi.fn(),
+    buildCredentials: vi.fn(() => ({})),
+    buildExtraInfo: vi.fn(() => ({})),
+    parseSessionKeys: vi.fn(() => [])
+  })
+}))
+
+vi.mock('@/stores/app', () => ({
+  useAppStore: () => ({
+    showError: vi.fn(),
+    showSuccess: vi.fn(),
+    showInfo: vi.fn(),
+    showWarning: vi.fn()
+  })
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({
+    isSimpleMode: false
+  })
+}))
+
+vi.mock('@/api/admin', () => ({
+  adminAPI: {
+    accounts: {
+      create: createAccountMock,
+      checkMixedChannelRisk: vi.fn().mockResolvedValue({ needs_warning: false })
+    },
+    settings: {
+      getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] })
+    },
+    tlsFingerprintProfiles: {
+      list: vi.fn().mockResolvedValue([])
+    }
+  }
+}))
+
+vi.mock('@/api/admin/accounts', () => ({
+  accountsAPI: {
+    syncUpstreamModelsPreview: vi.fn()
+  },
+  getAntigravityDefaultModelMapping: vi.fn().mockResolvedValue([])
+}))
+
+vi.mock('vue-i18n', async () => {
+  const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
+  return {
+    ...actual,
+    useI18n: () => ({
+      t: (key: string, params?: Record<string, unknown>) => params ? `${key}:${JSON.stringify(params)}` : key
+    })
+  }
+})
+
+vi.mock('@/composables/useAccountOAuth', () => ({
+  useAccountOAuth: makeOAuthMock
+}))
+
+vi.mock('@/composables/useOpenAIOAuth', () => ({
+  useOpenAIOAuth: makeOAuthMock
+}))
+
+vi.mock('@/composables/useGeminiOAuth', () => ({
+  useGeminiOAuth: () => ({
+    ...makeOAuthMock(),
+    getCapabilities: vi.fn().mockResolvedValue({ ai_studio_oauth_enabled: false })
+  })
+}))
+
+vi.mock('@/composables/useAntigravityOAuth', () => ({
+  useAntigravityOAuth: makeOAuthMock
+}))
+
+vi.mock('@/composables/useGrokOAuth', () => ({
+  useGrokOAuth: makeOAuthMock
+}))
+
+vi.mock('@/composables/useQuotaNotifyState', () => ({
+  useQuotaNotifyState: () => ({
+    globalEnabled: makeRef(false),
+    state: makeRef({
+      daily: { enabled: false, threshold: null, thresholdType: 'percent' },
+      weekly: { enabled: false, threshold: null, thresholdType: 'percent' },
+      total: { enabled: false, threshold: null, thresholdType: 'percent' }
+    }),
+    loadGlobalState: vi.fn(),
+    writeToExtra: vi.fn()
+  })
+}))
+
+import CreateAccountModal from '../CreateAccountModal.vue'
+
+const BaseDialogStub = defineComponent({
+  name: 'BaseDialog',
+  props: {
+    show: {
+      type: Boolean,
+      default: false
+    }
+  },
+  template: '<div v-if="show" data-testid="dialog"><slot /><slot name="footer" /></div>'
+})
+
+const PlainStub = defineComponent({
+  name: 'PlainStub',
+  template: '<div><slot /></div>'
+})
+
+afterEach(() => {
+  document.body.innerHTML = ''
+  document.body.classList.remove('modal-open')
+})
+
+describe('CreateAccountModal Kiro platform', () => {
+  it('switches to Kiro import form without closing the modal', async () => {
+    const wrapper = mount(CreateAccountModal, {
+      props: {
+        show: true,
+        proxies: [],
+        groups: []
+      },
+      global: {
+        stubs: {
+          BaseDialog: BaseDialogStub,
+          ConfirmDialog: PlainStub,
+          Select: PlainStub,
+          PlatformIcon: PlainStub,
+          Icon: PlainStub,
+          ProxySelector: PlainStub,
+          ProxyAdBanner: PlainStub,
+          GroupSelector: PlainStub,
+          ModelWhitelistSelector: PlainStub,
+          QuotaLimitCard: PlainStub,
+          OAuthAuthorizationFlow: PlainStub
+        }
+      }
+    })
+
+    const kiroButton = wrapper.findAll('button').find(button => button.text().includes('Kiro'))
+    expect(kiroButton).toBeTruthy()
+
+    await kiroButton!.trigger('click')
+
+    expect(wrapper.emitted('close')).toBeUndefined()
+    expect(wrapper.find('[data-testid="dialog"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="kiro-credentials-input"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('admin.accounts.kiro.importNote')
+  })
+
+  it('keeps the real dialog mounted and the page locked only while Kiro form is open', async () => {
+    const wrapper = mount(CreateAccountModal, {
+      attachTo: document.body,
+      props: {
+        show: true,
+        proxies: [],
+        groups: []
+      },
+      global: {
+        stubs: {
+          Transition: false
+        }
+      }
+    })
+
+    expect(document.body.classList.contains('modal-open')).toBe(true)
+
+    const kiroButton = Array.from(document.body.querySelectorAll('button')).find(button =>
+      button.textContent?.includes('Kiro')
+    )
+    expect(kiroButton).toBeTruthy()
+
+    kiroButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    await nextTick()
+
+    expect(wrapper.emitted('close')).toBeUndefined()
+    expect(document.body.querySelector('.modal-overlay')).toBeTruthy()
+    expect(document.body.querySelector('[data-testid="kiro-credentials-input"]')).toBeTruthy()
+    expect(document.body.classList.contains('modal-open')).toBe(true)
+
+    await wrapper.setProps({ show: false })
+    await nextTick()
+    wrapper.unmount()
+    expect(document.body.classList.contains('modal-open')).toBe(false)
+  })
+})

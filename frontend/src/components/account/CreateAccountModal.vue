@@ -3190,7 +3190,7 @@
     :show="showGeminiHelpDialog"
     :title="t('admin.accounts.gemini.helpDialog.title')"
     @close="showGeminiHelpDialog = false"
-    max-width="max-w-3xl"
+    width="wide"
   >
     <div class="space-y-6">
       <!-- Setup Guide Section -->
