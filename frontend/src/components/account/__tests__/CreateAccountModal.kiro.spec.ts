@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent, nextTick } from 'vue'
+import { defineComponent, nextTick, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 
 const { createAccountMock, makeOAuthMock, makeRef } = vi.hoisted(() => ({
@@ -195,6 +195,54 @@ describe('CreateAccountModal Kiro platform', () => {
 
     await wrapper.setProps({ show: false })
     await nextTick()
+    wrapper.unmount()
+    expect(document.body.classList.contains('modal-open')).toBe(false)
+  })
+
+  it('does not ask a parent-controlled modal to close when selecting Kiro', async () => {
+    const ParentHarness = defineComponent({
+      components: { CreateAccountModal },
+      setup() {
+        const show = ref(true)
+        return { show }
+      },
+      template: `
+        <CreateAccountModal
+          :show="show"
+          :proxies="[]"
+          :groups="[]"
+          @close="show = false"
+        />
+      `
+    })
+
+    const wrapper = mount(ParentHarness, {
+      attachTo: document.body,
+      global: {
+        stubs: {
+          Transition: false
+        }
+      }
+    })
+
+    await nextTick()
+    expect(document.body.querySelector('.modal-overlay')).toBeTruthy()
+
+    const kiroButton = Array.from(document.body.querySelectorAll('button')).find(button =>
+      button.textContent?.includes('Kiro')
+    )
+    expect(kiroButton).toBeTruthy()
+
+    kiroButton!.dispatchEvent(new Event('pointerdown', { bubbles: true, cancelable: true }))
+    kiroButton!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+    kiroButton!.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }))
+    kiroButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    await nextTick()
+
+    expect((wrapper.vm as unknown as { show: boolean }).show).toBe(true)
+    expect(document.body.querySelector('.modal-overlay')).toBeTruthy()
+    expect(document.body.querySelector('[data-testid="kiro-credentials-input"]')).toBeTruthy()
+
     wrapper.unmount()
     expect(document.body.classList.contains('modal-open')).toBe(false)
   })

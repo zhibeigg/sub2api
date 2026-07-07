@@ -3893,7 +3893,7 @@ export default {
       },
       kiro: {
         credentialsLabel: 'Kiro 凭证 JSON',
-        credentialsPlaceholder: '粘贴从 Kiro-Go 导出的凭证 JSON，例如：\n{\n  "accessToken": "...",\n  "refreshToken": "...",\n  "clientId": "...",\n  "clientSecret": "...",\n  "authMethod": "idc",\n  "region": "us-east-1",\n  "profileArn": "arn:aws:codewhisperer:..."\n}',
+        credentialsPlaceholder: '粘贴从 Kiro-Go 导出的凭证 JSON，例如：\n{\'{\'}\n  "accessToken": "...",\n  "refreshToken": "...",\n  "clientId": "...",\n  "clientSecret": "...",\n  "authMethod": "idc",\n  "region": "us-east-1",\n  "profileArn": "arn:aws:codewhisperer:..."\n{\'}\'}',
         credentialsHint: '支持 AWS Builder ID / IAM Identity Center（authMethod=idc，需 clientId+clientSecret）与 social（authMethod=social）两种。sub2api 会自动刷新 token 并调用上游 CodeWhisperer 提供 Claude 模型。',
         importNote: 'Kiro 账号通过粘贴凭证 JSON 导入，无需浏览器授权。凭证会加密存储，token 到期前自动刷新。',
         errEmpty: '请粘贴 Kiro 凭证 JSON',

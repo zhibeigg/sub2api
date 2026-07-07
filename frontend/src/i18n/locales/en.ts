@@ -3721,7 +3721,7 @@ export default {
       },
       kiro: {
         credentialsLabel: 'Kiro credentials JSON',
-        credentialsPlaceholder: 'Paste the credentials JSON exported from Kiro-Go, e.g.:\n{\n  "accessToken": "...",\n  "refreshToken": "...",\n  "clientId": "...",\n  "clientSecret": "...",\n  "authMethod": "idc",\n  "region": "us-east-1",\n  "profileArn": "arn:aws:codewhisperer:..."\n}',
+        credentialsPlaceholder: 'Paste the credentials JSON exported from Kiro-Go, e.g.:\n{\'{\'}\n  "accessToken": "...",\n  "refreshToken": "...",\n  "clientId": "...",\n  "clientSecret": "...",\n  "authMethod": "idc",\n  "region": "us-east-1",\n  "profileArn": "arn:aws:codewhisperer:..."\n{\'}\'}',
         credentialsHint: 'Supports AWS Builder ID / IAM Identity Center (authMethod=idc, requires clientId+clientSecret) and social (authMethod=social). sub2api refreshes the token automatically and calls the upstream CodeWhisperer to serve Claude models.',
         importNote: 'Kiro accounts are imported by pasting a credentials JSON — no browser authorization needed. Credentials are stored encrypted and tokens are refreshed automatically before expiry.',
         errEmpty: 'Please paste the Kiro credentials JSON',
