@@ -21,7 +21,7 @@
 
           <div class="flex w-full flex-shrink-0 flex-wrap items-center justify-end gap-3 lg:w-auto">
             <button
-              @click="loadChannels"
+              @click="refreshNow"
               :disabled="loading"
               class="btn btn-secondary"
               :title="t('common.refresh', 'Refresh')"
@@ -49,7 +49,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
@@ -59,14 +59,29 @@ import userChannelsAPI, { type UserAvailableChannel } from '@/api/channels'
 import userGroupsAPI from '@/api/groups'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
+import { useVisibleAutoRefresh } from '@/composables/useVisibleAutoRefresh'
 
 const { t } = useI18n()
 const appStore = useAppStore()
+
+const AUTO_REFRESH_INTERVAL_MS = 60_000
 
 const channels = ref<UserAvailableChannel[]>([])
 const userGroupRates = ref<Record<number, number>>({})
 const loading = ref(false)
 const searchQuery = ref('')
+let abortController: AbortController | null = null
+let isFetching = false
+
+interface LoadChannelsOptions {
+  showLoading?: boolean
+  silent?: boolean
+}
+
+function isAbortError(error: unknown): boolean {
+  const maybeError = error as { name?: string; code?: string }
+  return maybeError.name === 'AbortError' || maybeError.name === 'CanceledError' || maybeError.code === 'ERR_CANCELED'
+}
 
 const columnLabels = computed(() => ({
   name: t('availableChannels.columns.name'),
@@ -102,26 +117,64 @@ const filteredChannels = computed(() => {
     .filter((ch): ch is UserAvailableChannel => ch !== null)
 })
 
-async function loadChannels() {
-  loading.value = true
+async function loadChannels(options: LoadChannelsOptions = {}) {
+  const autoRefresh = options.silent === true
+  if (autoRefresh && isFetching) return
+
+  abortController?.abort()
+  const currentController = new AbortController()
+  const signal = currentController.signal
+  abortController = currentController
+  isFetching = true
+
+  const showLoading = options.showLoading ?? channels.value.length === 0
+  const controlsLoading = showLoading || loading.value
+  if (controlsLoading) loading.value = true
+
   try {
     // 渠道列表和用户专属倍率并发拉取。专属倍率失败不阻塞渠道展示——
     // 失败时只是无法渲染专属倍率角标，降级为仅显示默认倍率。
     const [list, rates] = await Promise.all([
-      userChannelsAPI.getAvailable(),
-      userGroupsAPI.getUserGroupRates().catch((err: unknown) => {
+      userChannelsAPI.getAvailable({ signal }),
+      userGroupsAPI.getUserGroupRates({ signal }).catch((err: unknown) => {
+        if (signal.aborted || isAbortError(err)) return userGroupRates.value
         console.error('Failed to load user group rates:', err)
-        return {} as Record<number, number>
+        return userGroupRates.value
       }),
     ])
+
+    if (signal.aborted || abortController !== currentController) return
     channels.value = list
     userGroupRates.value = rates
   } catch (err: unknown) {
+    if (signal.aborted || isAbortError(err)) return
+    if (options.silent) {
+      console.warn('Failed to auto refresh available channels:', err)
+      return
+    }
     appStore.showError(extractApiErrorMessage(err, t('common.error')))
   } finally {
-    loading.value = false
+    if (abortController === currentController) {
+      abortController = null
+      isFetching = false
+      if (controlsLoading) loading.value = false
+    }
   }
 }
 
-onMounted(loadChannels)
+function refreshNow() {
+  void loadChannels({ showLoading: true, silent: false })
+}
+
+useVisibleAutoRefresh({
+  intervalMs: AUTO_REFRESH_INTERVAL_MS,
+  onRefresh: () => loadChannels({ showLoading: false, silent: true }),
+  shouldRefresh: () => !isFetching,
+})
+
+onMounted(refreshNow)
+
+onBeforeUnmount(() => {
+  abortController?.abort()
+})
 </script>

@@ -38,7 +38,7 @@
             />
           </div>
           <button
-            @click="loadData"
+            @click="refreshNow"
             :disabled="loading"
             class="btn btn-secondary flex-shrink-0"
             :title="t('common.refresh')"
@@ -339,7 +339,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, ref, type VNode } from 'vue'
+import { computed, h, onBeforeUnmount, onMounted, ref, type VNode } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -355,6 +355,7 @@ import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatScaled } from '@/utils/pricing'
 import { platformBadgeClass, platformLabel } from '@/utils/platformColors'
 import { resolveGroupBrand } from '@/utils/groupBrand'
+import { useVisibleAutoRefresh } from '@/composables/useVisibleAutoRefresh'
 import {
   BILLING_MODE_TOKEN,
   BILLING_MODE_PER_REQUEST,
@@ -367,6 +368,7 @@ const { t } = useI18n()
 const appStore = useAppStore()
 
 const PER_M = 1_000_000
+const AUTO_REFRESH_INTERVAL_MS = 60_000
 
 // All platforms sub2api supports (shown even when they have no models yet).
 const ALL_PLATFORMS = ['anthropic', 'openai', 'gemini', 'grok', 'antigravity']
@@ -420,6 +422,18 @@ const activeEndpoint = ref<string>('all')
 const activeBilling = ref<string>('all')
 const copiedName = ref('')
 let copyTimer: ReturnType<typeof setTimeout> | null = null
+let abortController: AbortController | null = null
+let isFetching = false
+
+interface LoadDataOptions {
+  showLoading?: boolean
+  silent?: boolean
+}
+
+function isAbortError(error: unknown): boolean {
+  const maybeError = error as { name?: string; code?: string }
+  return maybeError.name === 'AbortError' || maybeError.name === 'CanceledError' || maybeError.code === 'ERR_CANCELED'
+}
 
 /** Flatten channels → platforms → supported_models into deduped model cards. */
 const allModels = computed<SquareModel[]>(() => {
@@ -651,24 +665,63 @@ async function copyModel(name: string) {
   }, 1500)
 }
 
-async function loadData() {
-  loading.value = true
+async function loadData(options: LoadDataOptions = {}) {
+  const autoRefresh = options.silent === true
+  if (autoRefresh && isFetching) return
+
+  abortController?.abort()
+  const currentController = new AbortController()
+  const signal = currentController.signal
+  abortController = currentController
+  isFetching = true
+
+  const showLoading = options.showLoading ?? channels.value.length === 0
+  const controlsLoading = showLoading || loading.value
+  if (controlsLoading) loading.value = true
+
   try {
     const [list, rates] = await Promise.all([
-      userChannelsAPI.getAvailable(),
-      userGroupsAPI.getUserGroupRates().catch((err: unknown) => {
+      userChannelsAPI.getAvailable({ signal }),
+      userGroupsAPI.getUserGroupRates({ signal }).catch((err: unknown) => {
+        if (signal.aborted || isAbortError(err)) return userGroupRates.value
         console.error('Failed to load user group rates:', err)
-        return {} as Record<number, number>
+        return userGroupRates.value
       })
     ])
+
+    if (signal.aborted || abortController !== currentController) return
     channels.value = list
     userGroupRates.value = rates
   } catch (err: unknown) {
+    if (signal.aborted || isAbortError(err)) return
+    if (options.silent) {
+      console.warn('Failed to auto refresh model square data:', err)
+      return
+    }
     appStore.showError(extractApiErrorMessage(err, t('common.error')))
   } finally {
-    loading.value = false
+    if (abortController === currentController) {
+      abortController = null
+      isFetching = false
+      if (controlsLoading) loading.value = false
+    }
   }
 }
 
-onMounted(loadData)
+function refreshNow() {
+  void loadData({ showLoading: true, silent: false })
+}
+
+useVisibleAutoRefresh({
+  intervalMs: AUTO_REFRESH_INTERVAL_MS,
+  onRefresh: () => loadData({ showLoading: false, silent: true }),
+  shouldRefresh: () => !isFetching,
+})
+
+onMounted(refreshNow)
+
+onBeforeUnmount(() => {
+  abortController?.abort()
+  if (copyTimer) clearTimeout(copyTimer)
+})
 </script>
