@@ -94,6 +94,18 @@ func NewTokenRefreshService(
 	return s
 }
 
+// RegisterKiroRefresher registers the Kiro token refresher/executor. It is a
+// setter (rather than a constructor parameter) so the Kiro platform can be wired
+// without disturbing the variadic Grok parameter of NewTokenRefreshService.
+func (s *TokenRefreshService) RegisterKiroRefresher(kiroOAuthService KiroOAuthTokenService) {
+	if s == nil || kiroOAuthService == nil {
+		return
+	}
+	kiroRefresher := NewKiroTokenRefresher(kiroOAuthService)
+	s.refreshers = append(s.refreshers, kiroRefresher)
+	s.executors = append(s.executors, kiroRefresher)
+}
+
 // SetPrivacyDeps 注入 OpenAI privacy opt-out 所需依赖
 func (s *TokenRefreshService) SetPrivacyDeps(factory PrivacyClientFactory, proxyRepo ProxyRepository) {
 	s.privacyClientFactory = factory

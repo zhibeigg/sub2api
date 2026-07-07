@@ -23,6 +23,7 @@ const (
 	PlatformGemini      = "gemini"
 	PlatformAntigravity = "antigravity"
 	PlatformGrok        = "grok"
+	PlatformKiro        = "kiro" // AWS Kiro / CodeWhisperer (provides Claude models)
 )
 
 // Account type constants
@@ -151,4 +152,24 @@ var DefaultBedrockModelMapping = map[string]string{
 	// Claude Haiku
 	"claude-haiku-4-5":          "us.anthropic.claude-haiku-4-5-20251001-v1:0",
 	"claude-haiku-4-5-20251001": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+}
+
+// DefaultKiroModelMapping 是 Kiro 平台的默认模型映射（模型白名单）。
+// Kiro 上游（AWS CodeWhisperer）提供 Claude 系列模型，pkg/kiro 的 MapModel
+// 会在转发时把客户端模型名归一化为 Kiro 模型 ID（如 claude-sonnet-4.5），
+// 因此此处主要作为「该分组对外提供哪些模型」的白名单。值保持与 key 一致。
+// 与前端 useModelWhitelist.ts 中的 kiroDefaultMappings 保持一致。
+var DefaultKiroModelMapping = map[string]string{
+	"claude-sonnet-4-5":          "claude-sonnet-4-5",
+	"claude-sonnet-4-5-thinking": "claude-sonnet-4-5-thinking",
+	"claude-sonnet-4-6":          "claude-sonnet-4-6",
+	"claude-sonnet-4-6-thinking": "claude-sonnet-4-6-thinking",
+	"claude-opus-4-6":            "claude-opus-4-6",
+	"claude-opus-4-6-thinking":   "claude-opus-4-6-thinking",
+	"claude-opus-4-7":            "claude-opus-4-7",
+	"claude-opus-4-8":            "claude-opus-4-8",
+	"claude-haiku-4-5":           "claude-haiku-4-5",
+	// 兼容旧/别名模型（由 pkg/kiro MapModel 进一步归一化）
+	"claude-3-5-sonnet": "claude-sonnet-4-5",
+	"claude-sonnet-4":   "claude-sonnet-4",
 }

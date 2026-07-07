@@ -236,6 +236,11 @@ func (a *Account) IsGrokOAuth() bool {
 	return a.IsGrok() && a.Type == AccountTypeOAuth
 }
 
+// IsKiro reports whether this is a Kiro (AWS CodeWhisperer) account.
+func (a *Account) IsKiro() bool {
+	return a.Platform == PlatformKiro
+}
+
 func (a *Account) IsOpenAICompatible() bool {
 	return a != nil && (a.Platform == PlatformOpenAI || a.Platform == PlatformGrok)
 }
