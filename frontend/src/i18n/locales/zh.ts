@@ -39,23 +39,23 @@ export default {
       pricing: '定价'
     },
     bottomNav: {
-      about: 'About',
-      work: 'Work',
-      process: 'Process',
-      services: 'Services',
-      contact: 'Start'
+      about: '关于',
+      work: '案例',
+      process: '流程',
+      services: '服务',
+      contact: '开始'
     },
     hero: {
       badge: '多模型网关 / 可观测计费 / 协议兼容',
       posterStatement: '把所有 AI 模型入口，收束成一个真正可靠的网关。',
       posterSubstatement: '为已经跑起来的产品与团队，补上配得上规模的接入层。',
-      metaLatency: 'Routing matrix online',
+      metaLatency: '路由矩阵在线',
       metaModels: 'Claude · OpenAI · Gemini · Grok',
-      metaControl: 'Usage · Billing · Failover',
+      metaControl: '用量 · 计费 · 故障切换',
       scrollCue: '查看接入方式',
-      quickstartKicker: 'Gateway surface',
-      titleLine1: 'One key.',
-      titleLine2: 'Every model.',
+      quickstartKicker: '网关接入面',
+      titleLine1: '一个密钥',
+      titleLine2: '接入所有模型',
       description:
         'Sub2API 将 Claude、OpenAI、Gemini、Grok、Qwen 等模型收束到一个可观测、可计费、可调度的 API 入口。保留官方协议体验，同时把稳定性和成本控制交给网关。',
       ctaPrimary: '获取 API Key',
@@ -71,15 +71,15 @@ export default {
       }
     },
     visual: {
-      gatewayLabel: 'Routing Matrix',
-      gatewayMeta: 'Live Gateway'
+      gatewayLabel: '路由矩阵',
+      gatewayMeta: '实时网关'
     },
     work: {
-      kicker: 'Selected Work',
+      kicker: '精选案例',
       index: '01 / 04'
     },
     value: {
-      kicker: 'VALUE',
+      kicker: '价值',
       title: '为什么选择 Sub2API',
       subtitle: '专业、稳定、开发者友好',
       items: {
@@ -102,7 +102,7 @@ export default {
       }
     },
     workflow: {
-      kicker: 'PROCESS',
+      kicker: '流程',
       title: '三步完成迁移',
       subtitle: '从注册到发出第一个请求，只需几分钟。',
       steps: {
@@ -121,13 +121,13 @@ export default {
       }
     },
     ecosystem: {
-      kicker: 'SERVICES',
+      kicker: '服务',
       title: '主流模型与工具，一个入口全部连接',
       subtitle: '主流大模型持续接入，一个入口全部搞定',
       more: '更多持续接入'
     },
     pricing: {
-      kicker: 'PRICING',
+      kicker: '定价',
       title: '限时充值优惠',
       subtitle: '透明按量计费，余额永不过期。',
       rateLabel: '充值汇率',
@@ -139,20 +139,20 @@ export default {
       cta: '立即充值'
     },
     cta: {
-      kicker: 'CONTACT',
+      kicker: '联系',
       title: '让你的 AI 调用有稳定入口。',
       description: '免费注册，几分钟内发出第一条可观测、可计费、可调度的 AI 请求。',
       button: '开始接入 Sub2API'
     },
     about: {
-      open: 'About Sub2API',
-      close: 'Close',
-      eyebrow: 'About the gateway',
+      open: '关于 Sub2API',
+      close: '关闭',
+      eyebrow: '关于网关',
       title: '为高频 AI 调用建立一个可信入口。',
       body:
         'Sub2API 不是又一个装饰性的模型列表，而是把账号池、密钥、计费、故障切换和可观测性放在同一个控制面里。你继续使用熟悉的官方协议，平台负责让每一次请求有去处、有记录、有成本边界。',
-      est: 'EST 2024',
-      based: 'Built for developers and operators',
+      est: '创立于 2024',
+      based: '为开发者与运维而建',
       principles: {
         outcomes: {
           title: '结果优先',
@@ -516,19 +516,19 @@ export default {
   auth: {
     brand: {
       eyebrow: '统一 · 可观测 · 弹性',
-      titleLine1: 'Access layer.',
-      titleLine2: 'Built for keys.',
+      titleLine1: '接入层',
+      titleLine2: '为密钥而生',
       more: '更多',
-      formKicker: 'Secure Console Access',
-      plateLabel: 'Identity Matrix',
-      plateMeta: 'Key Ready',
+      formKicker: '安全控制台访问',
+      plateLabel: '身份矩阵',
+      plateMeta: '密钥就绪',
       proofKeys: '密钥管理',
       proofKeysValue: 'API Key',
       proofModels: '模型生态',
-      proofModelsValue: 'Multi-model',
-      navHome: 'Home',
-      navWork: 'Work',
-      navProcess: 'Process'
+      proofModelsValue: '多模型',
+      navHome: '首页',
+      navWork: '案例',
+      navProcess: '流程'
     },
     welcomeBack: '欢迎回来',
     signInToAccount: '登录您的账户以继续',

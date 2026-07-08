@@ -4,6 +4,16 @@
 
     <div class="mono-auth-controls">
       <LocaleSwitcher />
+      <button
+        type="button"
+        class="mono-auth-icon-btn"
+        :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
+        :aria-label="isDark ? t('home.switchToLight') : t('home.switchToDark')"
+        @click="toggleTheme"
+      >
+        <Icon v-if="isDark" name="sun" size="sm" :stroke-width="1.5" />
+        <Icon v-else name="moon" size="sm" :stroke-width="1.5" />
+      </button>
     </div>
 
     <div class="mono-auth-grid">
@@ -74,11 +84,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores'
 import { sanitizeUrl } from '@/utils/url'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
+import Icon from '@/components/icons/Icon.vue'
 import grainUrl from '@/assets/monolog/grain.svg'
 import authPlateUrl from '@/assets/monolog/auth-plate.svg'
 
@@ -95,7 +106,16 @@ const pageStyle = computed<Record<string, string>>(() => ({
   '--grain-url': `url("${grainUrl}")`
 }))
 
+const isDark = ref(document.documentElement.classList.contains('dark'))
+
+function toggleTheme() {
+  isDark.value = !isDark.value
+  document.documentElement.classList.toggle('dark', isDark.value)
+  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
+}
+
 onMounted(() => {
+  isDark.value = document.documentElement.classList.contains('dark')
   appStore.fetchPublicSettings()
 })
 </script>
@@ -128,6 +148,26 @@ onMounted(() => {
   font-weight: 500;
   letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
+}
+
+/* 浅色模式：暖白底 + 深墨字 */
+:global(html:not(.dark)) .mono-auth {
+  --ink: #1a1a17;
+  --ink-muted: #55504a;
+  --ink-soft: #8a857d;
+  --paper: #f4f2ec;
+  --paper-deep: #eae7df;
+  --surface: #fbfaf6;
+  --line: rgba(20, 20, 15, 0.12);
+  --line-strong: rgba(20, 20, 15, 0.3);
+  --accent: #8c8c73;
+  background:
+    radial-gradient(circle at 12% 12%, rgba(140, 140, 115, 0.14), transparent 30rem),
+    linear-gradient(180deg, var(--paper), var(--paper-deep));
+}
+:global(html:not(.dark)) .mono-auth .mono-auth-grain {
+  mix-blend-mode: multiply;
+  opacity: 0.1;
 }
 
 .mono-auth-grain {
@@ -211,7 +251,6 @@ onMounted(() => {
   width: 34px;
   height: 34px;
   object-fit: contain;
-  filter: grayscale(1) contrast(1.08);
 }
 .mono-auth-brandmark span {
   font-family: var(--display);
