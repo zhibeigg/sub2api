@@ -290,7 +290,7 @@ func (s *GeminiMessagesCompatService) isAccountValidForPlatform(account *Account
 	if account.Platform == platform {
 		return true
 	}
-	if useMixedScheduling && account.Platform == PlatformAntigravity && account.IsMixedSchedulingEnabled() {
+	if useMixedScheduling && IsMixedSchedulingCapablePlatform(account.Platform) && account.IsMixedSchedulingEnabled() {
 		return true
 	}
 	return false

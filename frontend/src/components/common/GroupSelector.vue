@@ -96,6 +96,12 @@ const filteredGroups = computed(() => {
       result = result.filter(
         (g) => g.platform === 'antigravity' || g.platform === 'anthropic' || g.platform === 'gemini'
       )
+    } else if (props.platform === 'kiro' && props.mixedScheduling) {
+      // kiro 账户启用混合调度后，可选择 anthropic（Claude via /v1/messages）
+      // 与 openai（国模等，模型 ID 透传给上游）分组
+      result = result.filter(
+        (g) => g.platform === 'kiro' || g.platform === 'anthropic' || g.platform === 'openai'
+      )
     } else {
       // 默认：只能选择同 platform 的分组
       result = result.filter((g) => g.platform === props.platform)

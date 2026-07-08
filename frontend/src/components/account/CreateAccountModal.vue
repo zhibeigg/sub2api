@@ -3008,8 +3008,8 @@
       </div>
 
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
-        <!-- Mixed Scheduling (only for antigravity accounts) -->
-        <div v-if="form.platform === 'antigravity'" class="flex items-center gap-2">
+        <!-- Mixed Scheduling (antigravity / kiro accounts) -->
+        <div v-if="form.platform === 'antigravity' || form.platform === 'kiro'" class="flex items-center gap-2">
           <label class="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
@@ -3037,7 +3037,7 @@
             </div>
           </div>
         </div>
-        <div v-if="form.platform === 'antigravity'" class="mt-3 flex items-center gap-2">
+        <div v-if="form.platform === 'antigravity' || form.platform === 'kiro'" class="mt-3 flex items-center gap-2">
           <label class="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
@@ -4982,7 +4982,7 @@ const handleKiroBuilderIDStart = async () => {
   if (modelMapping) {
     creds.model_mapping = modelMapping
   }
-  await createAccountAndFinish('kiro', 'oauth' as AccountType, creds)
+  await createAccountAndFinish('kiro', 'oauth' as AccountType, creds, buildAntigravityExtra())
 }
 
 // Kiro IAM Identity Center: generate the authorize URL (completion happens in step 2).
@@ -5023,7 +5023,7 @@ const handleKiroComplete = async () => {
     credentials.model_mapping = modelMapping
   }
 
-  await createAccountAndFinish('kiro', 'oauth' as AccountType, credentials)
+  await createAccountAndFinish('kiro', 'oauth' as AccountType, credentials, buildAntigravityExtra())
 }
 
 const handleSubmit = async () => {

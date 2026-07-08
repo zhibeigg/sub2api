@@ -1948,6 +1948,16 @@ func TestAccount_IsMixedSchedulingEnabled(t *testing.T) {
 			account:  Account{Platform: PlatformAntigravity, Extra: map[string]any{"mixed_scheduling": "true"}},
 			expected: false,
 		},
+		{
+			name:     "kiro平台-mixed_scheduling=true-返回true",
+			account:  Account{Platform: PlatformKiro, Extra: map[string]any{"mixed_scheduling": true}},
+			expected: true,
+		},
+		{
+			name:     "kiro平台-无extra-返回false",
+			account:  Account{Platform: PlatformKiro},
+			expected: false,
+		},
 	}
 
 	for _, tt := range tests {

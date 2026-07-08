@@ -13,6 +13,7 @@ sub2api 支持接入 **Kiro** 平台：把 AWS Kiro / CodeWhisperer 账户作为
 - 工具调用（tool_use / tool_calls）转换；**系统提示过滤器**（Claude Code 检测替换 / env noise / 边界标记 / 自定义规则，默认关闭）。
 - **credits / context-usage** 可观测（写入账号快照，不参与计费）。
 - **后台 UI**：账号列表「平台/类型」列正确显示 Kiro（琥珀色）；「用量窗口」列展示订阅类型、用量占比、试用、超额与上下文占比；账号编辑弹窗支持「同步最新支持模型」（本地 Claude 模型集）与「同步上游支持的模型」（调用上游 `ListAvailableModels` 动态发现）。
+- **混合调度（mixed_scheduling）**：Kiro 账号可开启「在 /v1/messages 中使用」，与 Antigravity 同机制。开启后该 Kiro 账号可被 **anthropic 分组**（Claude via `/v1/messages`）与 **openai 分组**（如「国模」分组，模型 ID 原样透传给上游）调度。因 Kiro 上游除 Claude 外还提供 Deepseek / MiniMax / GLM / Qwen 等模型，配合账号模型白名单即可对外提供这些模型。调度仍按账号模型白名单过滤，仅模型匹配的请求会路由到该账号。
 
 ## 添加 Kiro 账户
 

@@ -2388,8 +2388,8 @@
           <Select v-model="form.status" :options="statusOptions" />
         </div>
 
-        <!-- Mixed Scheduling (only for antigravity accounts, read-only in edit mode) -->
-        <div v-if="account?.platform === 'antigravity'" class="flex items-center gap-2">
+        <!-- Mixed Scheduling (antigravity / kiro accounts, read-only in edit mode) -->
+        <div v-if="account?.platform === 'antigravity' || account?.platform === 'kiro'" class="flex items-center gap-2">
           <label class="flex cursor-not-allowed items-center gap-2 opacity-60">
             <input
               type="checkbox"
@@ -2418,7 +2418,7 @@
             </div>
           </div>
         </div>
-        <div v-if="account?.platform === 'antigravity'" class="mt-3 flex items-center gap-2">
+        <div v-if="account?.platform === 'antigravity' || account?.platform === 'kiro'" class="mt-3 flex items-center gap-2">
           <label class="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
@@ -4202,8 +4202,8 @@ const handleSubmit = async () => {
       updatePayload.credentials = newCredentials
     }
 
-    // For antigravity accounts, handle mixed_scheduling and allow_overages in extra
-    if (props.account.platform === 'antigravity') {
+    // For antigravity / kiro accounts, handle mixed_scheduling and allow_overages in extra
+    if (props.account.platform === 'antigravity' || props.account.platform === 'kiro') {
       const currentExtra = (props.account.extra as Record<string, unknown>) || {}
       const newExtra: Record<string, unknown> = { ...currentExtra }
       if (mixedScheduling.value) {
