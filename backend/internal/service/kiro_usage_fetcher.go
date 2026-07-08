@@ -38,9 +38,19 @@ func buildKiroUsageInfo(account *Account) *UsageInfo {
 		usage.Error = "Kiro usage is unknown until the first usage probe"
 		return usage
 	}
+	// Context-usage percentage is written independently by the gateway on each
+	// request; surface it even when a full usage snapshot has not been probed.
+	if ctxPct, ok := account.Extra[kiroContextUsageExtraKey]; ok {
+		if v, ok := toFloat64(ctxPct); ok && v > 0 {
+			usage.KiroContextUsagePct = &v
+		}
+	}
+
 	snapshot := decodeKiroSnapshot(account.Extra[kiroUsageSnapshotExtraKey])
 	if snapshot == nil {
-		usage.Error = "Kiro usage is unknown until the first usage probe"
+		if usage.KiroContextUsagePct == nil {
+			usage.Error = "Kiro usage is unknown until the first usage probe"
+		}
 		return usage
 	}
 
@@ -64,6 +74,24 @@ func buildKiroUsageInfo(account *Account) *UsageInfo {
 	usage.KiroOverageRate = floatPtrNonZero(snapshot.OverageRate)
 	usage.KiroCurrentOverages = floatPtrNonZero(snapshot.CurrentOverages)
 	return usage
+}
+
+func toFloat64(v any) (float64, bool) {
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case float32:
+		return float64(n), true
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
+	default:
+		return 0, false
+	}
 }
 
 func floatPtr(v float64) *float64 { return &v }

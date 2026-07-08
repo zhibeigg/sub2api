@@ -572,6 +572,10 @@ type ForwardResult struct {
 	ImageOutputSizes   []string
 	ImageSizeSource    string
 	ImageSizeBreakdown map[string]int
+
+	// Kiro 可观测指标（不参与计费，仅记录/展示）。
+	KiroCredits         float64 // 本次请求上游计量的 credits（meteringEvent 累加）
+	KiroContextUsagePct float64 // 本次请求上下文使用百分比（contextUsageEvent）
 }
 
 // UpstreamFailoverError indicates an upstream error that should trigger account failover.

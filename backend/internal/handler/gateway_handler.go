@@ -1192,7 +1192,9 @@ func defaultModelIDsForPlatform(platform string) []string {
 		for id := range domain.DefaultKiroModelMapping {
 			ids = append(ids, id)
 		}
-		return ids
+		// Augment the hardcoded whitelist with models discovered from the
+		// upstream ListAvailableModels calls (populated during usage probes).
+		return mergeModelIDs(ids, service.KiroDiscoveredModelIDs())
 	default:
 		ids := make([]string, 0, len(claude.DefaultModels))
 		for _, model := range claude.DefaultModels {

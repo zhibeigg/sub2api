@@ -62,6 +62,8 @@ var schedulerNeutralExtraKeyPrefixes = []string{
 var schedulerNeutralExtraKeys = map[string]struct{}{
 	"codex_usage_updated_at":     {},
 	"session_window_utilization": {},
+	"kiro_usage_snapshot":        {},
+	"kiro_context_usage_pct":     {},
 }
 
 const postgresParameterBatchSize = 50000

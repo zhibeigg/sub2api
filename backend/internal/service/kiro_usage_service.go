@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sort"
+	"strings"
+	"sync"
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -14,6 +17,10 @@ import (
 // usage/subscription/overage snapshot. It is scheduler-neutral (observation
 // only) so writes must not trigger scheduler bucket recomputation.
 const kiroUsageSnapshotExtraKey = "kiro_usage_snapshot"
+
+// kiroContextUsageExtraKey stores the latest observed context-usage percentage
+// (0-100). Observation-only; must be scheduler-neutral.
+const kiroContextUsageExtraKey = "kiro_context_usage_pct"
 
 const (
 	kiroUsageProbeTimeout = 25 * time.Second
@@ -43,6 +50,37 @@ type KiroUsageSnapshot struct {
 type KiroUsageProbeResult struct {
 	Snapshot  *KiroUsageSnapshot `json:"snapshot"`
 	FetchedAt int64              `json:"fetched_at"`
+}
+
+// kiroDiscoveredModels caches upstream-discovered Kiro model IDs (populated as a
+// side effect of usage probes). It augments the hardcoded model whitelist for
+// the /v1/models endpoint, which is account-agnostic.
+var kiroDiscoveredModels sync.Map // map[string]struct{}
+
+// KiroDiscoveredModelIDs returns the set of model IDs discovered from the
+// upstream ListAvailableModels calls, sorted for stable output.
+func KiroDiscoveredModelIDs() []string {
+	ids := make([]string, 0)
+	kiroDiscoveredModels.Range(func(key, _ any) bool {
+		if id, ok := key.(string); ok && id != "" {
+			ids = append(ids, id)
+		}
+		return true
+	})
+	sort.Strings(ids)
+	return ids
+}
+
+func rememberKiroModels(models []kiro.ModelInfo) {
+	for _, m := range models {
+		id := strings.TrimSpace(m.ModelId)
+		if id == "" {
+			id = strings.TrimSpace(m.ModelName)
+		}
+		if id != "" {
+			kiroDiscoveredModels.Store(id, struct{}{})
+		}
+	}
 }
 
 // KiroUsageService fetches account usage / subscription / overage metadata from
@@ -105,6 +143,11 @@ func (s *KiroUsageService) ProbeUsage(ctx context.Context, accountID int64) (*Ki
 		snapshot.OverageCap = overage.OverageCap
 		snapshot.OverageRate = overage.OverageRate
 		snapshot.CurrentOverages = overage.CurrentOverages
+	}
+
+	// Best-effort model discovery to augment the account-agnostic /v1/models list.
+	if models, modelErr := kiro.ListAvailableModels(probeCtx, cred); modelErr == nil && len(models) > 0 {
+		rememberKiroModels(models)
 	}
 
 	s.persistSnapshot(ctx, account, snapshot)

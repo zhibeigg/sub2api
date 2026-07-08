@@ -116,9 +116,9 @@ func (s *KiroGatewayService) Forward(ctx context.Context, c *gin.Context, accoun
 	upstreamModel := kiro.MapModel(requestModel)
 
 	if stream {
-		return s.forwardStream(ctx, c, cred, payload, requestModel, upstreamModel, isOpenAI, start)
+		return s.forwardStream(ctx, c, account, cred, payload, requestModel, upstreamModel, isOpenAI, start)
 	}
-	return s.forwardNonStream(ctx, c, cred, payload, requestModel, upstreamModel, isOpenAI, start)
+	return s.forwardNonStream(ctx, c, account, cred, payload, requestModel, upstreamModel, isOpenAI, start)
 }
 
 func (s *KiroGatewayService) buildCredential(ctx context.Context, account *Account, accessToken string) *kiro.Credential {
@@ -142,7 +142,7 @@ func (s *KiroGatewayService) buildCredential(ctx context.Context, account *Accou
 }
 
 func (s *KiroGatewayService) forwardStream(
-	ctx context.Context, c *gin.Context, cred *kiro.Credential, payload *kiro.KiroPayload,
+	ctx context.Context, c *gin.Context, account *Account, cred *kiro.Credential, payload *kiro.KiroPayload,
 	requestModel, upstreamModel string, isOpenAI bool, start time.Time,
 ) (*ForwardResult, error) {
 	flusher, _ := c.Writer.(http.Flusher)
@@ -166,9 +166,8 @@ func (s *KiroGatewayService) forwardStream(
 	}
 
 	var usage kiro.ClaudeUsage
-	if isOpenAI {
-		state := kiro.NewOpenAIStreamState(w, requestModel)
-		cb := state.Callback()
+	var credits, contextPct float64
+	instrument := func(cb *kiro.StreamCallback) {
 		wrapText := cb.OnText
 		cb.OnText = func(t string, thinking bool) { markFirst(); wrapText(t, thinking) }
 		origComplete := cb.OnComplete
@@ -178,6 +177,14 @@ func (s *KiroGatewayService) forwardStream(
 				origComplete(in, out)
 			}
 		}
+		cb.OnCredits = func(c float64) { credits += c }
+		cb.OnContextUsage = func(pct float64) { contextPct = pct }
+	}
+
+	if isOpenAI {
+		state := kiro.NewOpenAIStreamState(w, requestModel)
+		cb := state.Callback()
+		instrument(cb)
 		if err := kiro.CallKiroAPI(ctx, cred, payload, cb); err != nil {
 			return nil, mapKiroError(err)
 		}
@@ -185,15 +192,7 @@ func (s *KiroGatewayService) forwardStream(
 	} else {
 		state := kiro.NewClaudeStreamState(w, requestModel)
 		cb := state.Callback()
-		wrapText := cb.OnText
-		cb.OnText = func(t string, thinking bool) { markFirst(); wrapText(t, thinking) }
-		origComplete := cb.OnComplete
-		cb.OnComplete = func(in, out int) {
-			usage.InputTokens, usage.OutputTokens = in, out
-			if origComplete != nil {
-				origComplete(in, out)
-			}
-		}
+		instrument(cb)
 		if err := kiro.CallKiroAPI(ctx, cred, payload, cb); err != nil {
 			return nil, mapKiroError(err)
 		}
@@ -201,22 +200,30 @@ func (s *KiroGatewayService) forwardStream(
 	}
 	w.Flush()
 
+	s.recordContextUsage(ctx, account, contextPct)
+
 	return &ForwardResult{
-		Model:         requestModel,
-		UpstreamModel: differentOrEmpty(requestModel, upstreamModel),
-		Stream:        true,
-		Duration:      time.Since(start),
-		FirstTokenMs:  firstTokenMs,
-		Usage:         ClaudeUsage{InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens},
+		Model:               requestModel,
+		UpstreamModel:       differentOrEmpty(requestModel, upstreamModel),
+		Stream:              true,
+		Duration:            time.Since(start),
+		FirstTokenMs:        firstTokenMs,
+		Usage:               ClaudeUsage{InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens},
+		KiroCredits:         credits,
+		KiroContextUsagePct: contextPct,
 	}, nil
 }
 
 func (s *KiroGatewayService) forwardNonStream(
-	ctx context.Context, c *gin.Context, cred *kiro.Credential, payload *kiro.KiroPayload,
+	ctx context.Context, c *gin.Context, account *Account, cred *kiro.Credential, payload *kiro.KiroPayload,
 	requestModel, upstreamModel string, isOpenAI bool, start time.Time,
 ) (*ForwardResult, error) {
 	agg := &kiro.Aggregator{}
-	if err := kiro.CallKiroAPI(ctx, cred, payload, agg.Callback()); err != nil {
+	cb := agg.Callback()
+	var credits, contextPct float64
+	cb.OnCredits = func(c float64) { credits += c }
+	cb.OnContextUsage = func(pct float64) { contextPct = pct }
+	if err := kiro.CallKiroAPI(ctx, cred, payload, cb); err != nil {
 		return nil, mapKiroError(err)
 	}
 
@@ -228,13 +235,34 @@ func (s *KiroGatewayService) forwardNonStream(
 		c.JSON(http.StatusOK, resp)
 	}
 
+	s.recordContextUsage(ctx, account, contextPct)
+
 	return &ForwardResult{
-		Model:         requestModel,
-		UpstreamModel: differentOrEmpty(requestModel, upstreamModel),
-		Stream:        false,
-		Duration:      time.Since(start),
-		Usage:         ClaudeUsage{InputTokens: agg.InputTokens, OutputTokens: agg.OutputTokens},
+		Model:               requestModel,
+		UpstreamModel:       differentOrEmpty(requestModel, upstreamModel),
+		Stream:              false,
+		Duration:            time.Since(start),
+		Usage:               ClaudeUsage{InputTokens: agg.InputTokens, OutputTokens: agg.OutputTokens},
+		KiroCredits:         credits,
+		KiroContextUsagePct: contextPct,
 	}, nil
+}
+
+// recordContextUsage persists the latest context-usage percentage to the
+// account's Kiro snapshot as an observability signal. It is best-effort and
+// runs asynchronously so it never blocks the response path.
+func (s *KiroGatewayService) recordContextUsage(_ context.Context, account *Account, pct float64) {
+	if s.accountRepo == nil || account == nil || pct <= 0 {
+		return
+	}
+	accountID := account.ID
+	go func() {
+		bg, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = s.accountRepo.UpdateExtra(bg, accountID, map[string]any{
+			kiroContextUsageExtraKey: pct,
+		})
+	}()
 }
 
 func differentOrEmpty(model, upstream string) string {
