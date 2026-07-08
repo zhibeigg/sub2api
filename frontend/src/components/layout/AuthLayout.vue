@@ -151,7 +151,7 @@ onMounted(() => {
 }
 
 /* 浅色模式：暖白底 + 深墨字 */
-:global(html:not(.dark)) .mono-auth {
+:global(html:not(.dark) .mono-auth) {
   --ink: #1a1a17;
   --ink-muted: #55504a;
   --ink-soft: #8a857d;
@@ -165,7 +165,7 @@ onMounted(() => {
     radial-gradient(circle at 12% 12%, rgba(140, 140, 115, 0.14), transparent 30rem),
     linear-gradient(180deg, var(--paper), var(--paper-deep));
 }
-:global(html:not(.dark)) .mono-auth .mono-auth-grain {
+:global(html:not(.dark) .mono-auth .mono-auth-grain) {
   mix-blend-mode: multiply;
   opacity: 0.1;
 }

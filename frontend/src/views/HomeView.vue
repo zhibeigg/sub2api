@@ -703,7 +703,7 @@ onBeforeUnmount(() => {
 }
 
 /* 浅色模式：整页暖白，hero 海报区仍保留深色（见下方 hero 令牌覆盖） */
-:global(html:not(.dark)) .mono-page {
+:global(html:not(.dark) .mono-page) {
   --ink: #1a1a17;
   --ink-muted: #55504a;
   --ink-soft: #8a857d;
@@ -718,13 +718,13 @@ onBeforeUnmount(() => {
     linear-gradient(180deg, var(--paper), var(--paper-deep));
 }
 /* 浅色下颗粒叠加改为正片叠底，避免屏幕混合导致发白 */
-:global(html:not(.dark)) .mono-page .mono-grain {
+:global(html:not(.dark) .mono-page .mono-grain) {
   mix-blend-mode: multiply;
   opacity: 0.12;
 }
 /* hero 海报始终深色：在浅色模式下把 hero 作用域的令牌重置回深色，
    使其内部 kicker/statement/meta/mega-word 等继续用浅字压深底。 */
-:global(html:not(.dark)) .mono-hero {
+:global(html:not(.dark) .mono-hero) {
   --ink: #e8e8e3;
   --ink-muted: #bfbfb1;
   --ink-soft: #938f8a;
