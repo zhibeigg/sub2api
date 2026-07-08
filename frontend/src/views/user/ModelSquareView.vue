@@ -89,10 +89,12 @@
                 :disabled="opt.count === 0"
                 @click="activeProvider = opt.value"
               >
-                <span class="flex items-center gap-2">
-                  <PlatformIcon v-if="opt.value !== 'all'" :platform="opt.value as GroupPlatform" size="xs" />
-                  <Icon v-else name="grid" size="sm" />
-                  {{ opt.label }}
+                <span class="flex min-w-0 items-center gap-2">
+                  <Icon v-if="opt.value === 'all'" name="grid" size="sm" />
+                  <ModelIcon v-else :model="opt.keyword" size="16px" class="flex-shrink-0" />
+                  <span class="truncate" :class="opt.colorClass">
+                    {{ opt.label }}
+                  </span>
                 </span>
                 <span class="text-xs text-gray-400 dark:text-gray-500">{{ opt.count }}</span>
               </button>
@@ -354,7 +356,7 @@ import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatScaled } from '@/utils/pricing'
 import { platformBadgeClass, platformLabel } from '@/utils/platformColors'
-import { resolveGroupBrand } from '@/utils/groupBrand'
+import { resolveGroupBrand, BRAND_LABEL } from '@/utils/groupBrand'
 import { useVisibleAutoRefresh } from '@/composables/useVisibleAutoRefresh'
 import {
   BILLING_MODE_TOKEN,
@@ -369,9 +371,6 @@ const appStore = useAppStore()
 
 const PER_M = 1_000_000
 const AUTO_REFRESH_INTERVAL_MS = 60_000
-
-// All platforms sub2api supports (shown even when they have no models yet).
-const ALL_PLATFORMS = ['anthropic', 'openai', 'gemini', 'grok', 'antigravity']
 
 // Platform → endpoint protocol family.
 const ENDPOINT_OF: Record<string, string> = {
@@ -405,6 +404,7 @@ interface SquareModel {
   key: string
   name: string
   platforms: string[]
+  brand: string
   billingMode: BillingMode
   pricing: UserSupportedModelPricing | null
   groups: SquareGroup[]
@@ -455,6 +455,7 @@ const allModels = computed<SquareModel[]>(() => {
             key,
             name: m.name,
             platforms: [],
+            brand: resolveGroupBrand(m.platform || section.platform, m.name).brand,
             billingMode: (m.pricing?.billing_mode as BillingMode) || BILLING_MODE_TOKEN,
             pricing: m.pricing,
             groups: [],
@@ -492,7 +493,7 @@ const totalModels = computed(() => allModels.value.length)
 /** Count models passing every *other* active filter (so counts reflect AND context). */
 function countWith(pred: (m: SquareModel) => boolean, exclude: 'provider' | 'group' | 'endpoint' | 'billing'): number {
   return allModels.value.filter((m) => {
-    if (exclude !== 'provider' && activeProvider.value !== 'all' && !m.platforms.includes(activeProvider.value)) return false
+    if (exclude !== 'provider' && activeProvider.value !== 'all' && m.brand !== activeProvider.value) return false
     if (exclude !== 'group' && activeGroup.value !== 'all' && !m.groupIds.includes(Number(activeGroup.value))) return false
     if (exclude !== 'endpoint' && activeEndpoint.value !== 'all' && !m.endpoints.includes(activeEndpoint.value)) return false
     if (exclude !== 'billing' && activeBilling.value !== 'all' && m.billingMode !== activeBilling.value) return false
@@ -501,10 +502,35 @@ function countWith(pred: (m: SquareModel) => boolean, exclude: 'provider' | 'gro
 }
 
 const providerOptions = computed(() => {
-  const opts = [{ value: 'all', label: t('modelSquare.filters.all'), count: countWith(() => true, 'provider') }]
-  for (const p of ALL_PLATFORMS) {
-    opts.push({ value: p, label: platformLabel(p), count: countWith((m) => m.platforms.includes(p), 'provider') })
+  // 按模型品牌/厂商动态生成（根据模型名归类），仅展示实际有模型的品牌
+  const brands = new Map<string, { label: string; keyword: string; colorClass: string }>()
+  for (const m of allModels.value) {
+    if (!m.brand || brands.has(m.brand)) continue
+    const info = resolveGroupBrand('', m.name)
+    brands.set(m.brand, {
+      label: BRAND_LABEL[m.brand] || info.label,
+      keyword: info.keyword,
+      colorClass: info.colorClass
+    })
   }
+  const opts = [
+    { value: 'all', label: t('modelSquare.filters.all'), keyword: '', colorClass: '', count: countWith(() => true, 'provider') }
+  ]
+  for (const [brand, info] of brands) {
+    opts.push({
+      value: brand,
+      label: info.label,
+      keyword: info.keyword,
+      colorClass: info.colorClass,
+      count: countWith((m) => m.brand === brand, 'provider')
+    })
+  }
+  // "全部" 置顶，其余按数量降序
+  opts.sort((a, b) => {
+    if (a.value === 'all') return -1
+    if (b.value === 'all') return 1
+    return b.count - a.count
+  })
   return opts
 })
 
@@ -564,7 +590,7 @@ const billingOptions = computed(() => {
 const filteredModels = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   return allModels.value.filter((m) => {
-    if (activeProvider.value !== 'all' && !m.platforms.includes(activeProvider.value)) return false
+    if (activeProvider.value !== 'all' && m.brand !== activeProvider.value) return false
     if (activeGroup.value !== 'all' && !m.groupIds.includes(Number(activeGroup.value))) return false
     if (activeEndpoint.value !== 'all' && !m.endpoints.includes(activeEndpoint.value)) return false
     if (activeBilling.value !== 'all' && m.billingMode !== activeBilling.value) return false

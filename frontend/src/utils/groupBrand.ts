@@ -15,6 +15,28 @@ export interface GroupBrand {
   keyword: string
   /** Tailwind text color class for the brand (light + dark). */
   colorClass: string
+  /** Normalized brand key for grouping/filtering (e.g. deepseek, qwen, claude). */
+  brand: string
+  /** Human-readable brand/vendor display name (Anthropic / DeepSeek / 通义千问 ...). */
+  label: string
+}
+
+// Brand key → human-readable vendor label used by the model marketplace provider filter.
+export const BRAND_LABEL: Record<string, string> = {
+  claude: 'Anthropic',
+  openai: 'OpenAI',
+  gemini: 'Gemini',
+  grok: 'Grok',
+  deepseek: 'DeepSeek',
+  moonshot: 'Kimi',
+  zhipu: '智谱',
+  qwen: '通义千问',
+  minimax: 'MiniMax',
+  mimo: 'MiMo',
+  wenxin: '文心',
+  spark: '星火',
+  hunyuan: '混元',
+  doubao: '豆包',
 }
 
 // Brand keyword → text color class. Keys align with ModelIcon's iconKey output
@@ -103,5 +125,7 @@ export function resolveGroupBrand(platform: string, name: string): GroupBrand {
   return {
     keyword,
     colorClass: BRAND_COLOR[brand] || DEFAULT_COLOR,
+    brand,
+    label: BRAND_LABEL[brand] || keyword,
   }
 }
