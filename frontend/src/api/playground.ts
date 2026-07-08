@@ -159,6 +159,86 @@ export async function generateImage(opts: ImageGenerationOptions): Promise<Gener
   return data as GeneratedImage[]
 }
 
+export interface VideoGenerationOptions {
+  apiKey: string
+  model: string
+  prompt: string
+  seconds?: number
+  resolution?: string
+  ratio?: string
+  signal?: AbortSignal
+}
+
+export interface VideoSubmitResult {
+  request_id: string
+  status?: string
+  model?: string
+}
+
+export interface VideoTaskStatus {
+  request_id: string
+  status: 'pending' | 'processing' | 'completed' | 'failed' | string
+  url?: string
+  video_url?: string
+  error?: string
+  model?: string
+  usage?: { total_tokens?: number }
+}
+
+/** Submit an asynchronous text-to-video generation task. Returns a request_id. */
+export async function generateVideo(opts: VideoGenerationOptions): Promise<VideoSubmitResult> {
+  const res = await fetch(buildGatewayUrl('/v1/videos/generations'), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${opts.apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: opts.model,
+      prompt: opts.prompt,
+      ...(opts.seconds && opts.seconds > 0 ? { seconds: opts.seconds } : {}),
+      ...(opts.resolution ? { resolution: opts.resolution } : {}),
+      ...(opts.ratio ? { ratio: opts.ratio } : {})
+    }),
+    signal: opts.signal
+  })
+  if (!res.ok) {
+    throw new Error(await extractError(res))
+  }
+  const json = await res.json()
+  const requestId = String(json?.request_id ?? json?.id ?? '')
+  if (!requestId) {
+    throw new Error('Video task id missing in response')
+  }
+  return { request_id: requestId, status: json?.status, model: json?.model }
+}
+
+/** Poll a video generation task's status by request_id. */
+export async function getVideoStatus(
+  apiKey: string,
+  requestId: string,
+  signal?: AbortSignal
+): Promise<VideoTaskStatus> {
+  const res = await fetch(buildGatewayUrl(`/v1/videos/${encodeURIComponent(requestId)}`), {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal
+  })
+  if (!res.ok) {
+    throw new Error(await extractError(res))
+  }
+  const json = await res.json()
+  return {
+    request_id: String(json?.request_id ?? requestId),
+    status: String(json?.status ?? 'processing'),
+    url: json?.url || json?.video_url || undefined,
+    video_url: json?.video_url || undefined,
+    error: json?.error || undefined,
+    model: json?.model || undefined,
+    usage: json?.usage || undefined
+  }
+}
+
 /** Extract a human-readable error message from a failed gateway response. */
 async function extractError(res: Response): Promise<string> {
   try {
@@ -178,7 +258,9 @@ async function extractError(res: Response): Promise<string> {
 export const playgroundAPI = {
   listModels,
   streamChat,
-  generateImage
+  generateImage,
+  generateVideo,
+  getVideoStatus
 }
 
 export default playgroundAPI

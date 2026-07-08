@@ -78,6 +78,7 @@
       <div class="min-h-0 flex-1">
         <ChatPanel v-if="mode === 'chat'" :resolved-key="resolvedKey" />
         <ImagePanel v-else-if="mode === 'image'" :resolved-key="resolvedKey" />
+        <VideoPanel v-else-if="mode === 'video'" :resolved-key="resolvedKey" />
         <ComparePanel v-else />
       </div>
     </div>
@@ -92,13 +93,14 @@ import Icon from '@/components/icons/Icon.vue'
 import KeyModelPicker from '@/components/playground/KeyModelPicker.vue'
 import ChatPanel from '@/components/playground/ChatPanel.vue'
 import ImagePanel from '@/components/playground/ImagePanel.vue'
+import VideoPanel from '@/components/playground/VideoPanel.vue'
 import ComparePanel from '@/components/playground/ComparePanel.vue'
 import { usePlaygroundSettings } from '@/composables/usePlaygroundSettings'
 
 const { t } = useI18n()
 const settings = usePlaygroundSettings()
 
-type Mode = 'chat' | 'image' | 'compare'
+type Mode = 'chat' | 'image' | 'video' | 'compare'
 const mode = ref<Mode>('chat')
 const showParams = ref(false)
 const resolvedKey = ref('')
@@ -106,6 +108,7 @@ const resolvedKey = ref('')
 const modes = computed<{ value: Mode; label: string; icon: string }[]>(() => [
   { value: 'chat', label: t('playground.modeChat'), icon: 'chat' },
   { value: 'image', label: t('playground.modeImage'), icon: 'sparkles' },
+  { value: 'video', label: t('playground.modeVideo'), icon: 'play' },
   { value: 'compare', label: t('playground.modeCompare'), icon: 'grid' }
 ])
 </script>

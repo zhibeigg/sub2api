@@ -512,6 +512,16 @@ func (s *BillingService) initFallbackPricing() {
 		SupportsCacheBreakdown:  false,
 	}
 
+	// ---- 火山方舟 Seedance 视频生成（按 token 计费）----
+	// Seedance 2.0 生成视频约 ¥30/百万 tokens（token = 高×宽×FPS×时长/1024）。
+	// 网关把任务响应的 usage.total_tokens 记入 OutputTokens，故价放 OutputPricePerToken。
+	// 汇率口径 ÷7.14（¥1≈$0.14），¥30/MTok ≈ $4.2/MTok。
+	s.fallbackPrices["doubao-seedance"] = &ModelPricing{
+		InputPricePerToken:     0,
+		OutputPricePerToken:    4.2e-6, // ¥30/MTok ≈ $4.2/MTok（视频 token）
+		SupportsCacheBreakdown: false,
+	}
+
 	// xAI Grok 4.3 (official docs: $1.25 input / $2.50 output per MTok)
 	s.fallbackPrices["grok-4.3"] = &ModelPricing{
 		InputPricePerToken:         1.25e-6,
@@ -667,6 +677,10 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	// 覆盖带版本后缀的别名（如 doubao-embedding-vision-251215）。
 	if strings.Contains(modelLower, "doubao-embedding-vision") {
 		return s.fallbackPrices["doubao-embedding-vision"]
+	}
+	// 火山方舟 Seedance 视频生成（覆盖 doubao-seedance-* 各版本与对外简洁名）。
+	if strings.Contains(modelLower, "seedance") {
+		return s.fallbackPrices["doubao-seedance"]
 	}
 
 	// OpenAI（GPT-5 / Codex 族）：仅匹配已知型号，避免未知 OpenAI 型号误计价。
