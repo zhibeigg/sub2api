@@ -2388,14 +2388,18 @@
           <Select v-model="form.status" :options="statusOptions" />
         </div>
 
-        <!-- Mixed Scheduling (antigravity / kiro accounts, read-only in edit mode) -->
+        <!-- Mixed Scheduling: antigravity 编辑态只读；kiro 允许编辑（存量账号可开启） -->
         <div v-if="account?.platform === 'antigravity' || account?.platform === 'kiro'" class="flex items-center gap-2">
-          <label class="flex cursor-not-allowed items-center gap-2 opacity-60">
+          <label
+            class="flex items-center gap-2"
+            :class="account?.platform === 'kiro' ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'"
+          >
             <input
               type="checkbox"
               v-model="mixedScheduling"
-              disabled
-              class="h-4 w-4 cursor-not-allowed rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
+              :disabled="account?.platform !== 'kiro'"
+              class="h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
+              :class="account?.platform === 'kiro' ? '' : 'cursor-not-allowed'"
             />
             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t('admin.accounts.mixedScheduling') }}
