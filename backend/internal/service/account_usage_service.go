@@ -986,7 +986,15 @@ func (s *AccountUsageService) getGrokUsage(ctx context.Context, account *Account
 // usage service is available, it actively probes the upstream (which also
 // refreshes the Extra snapshot); otherwise it serves the passive snapshot.
 func (s *AccountUsageService) getKiroUsage(ctx context.Context, account *Account, forceProbe bool) (*UsageInfo, error) {
-	if forceProbe && s.kiroUsageService != nil && account != nil {
+	// Probe upstream when explicitly forced, or when no snapshot exists yet so a
+	// newly-added account shows usage on first view instead of "获取失败".
+	needProbe := forceProbe
+	if !needProbe && account != nil {
+		if account.Extra == nil || decodeKiroSnapshot(account.Extra[kiroUsageSnapshotExtraKey]) == nil {
+			needProbe = true
+		}
+	}
+	if needProbe && s.kiroUsageService != nil && account != nil {
 		if _, err := s.kiroUsageService.ProbeUsage(ctx, account.ID); err == nil {
 			if refreshed, rerr := s.accountRepo.GetByID(ctx, account.ID); rerr == nil && refreshed != nil {
 				account = refreshed
