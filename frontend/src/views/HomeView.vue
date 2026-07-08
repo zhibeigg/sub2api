@@ -1048,15 +1048,15 @@ html.dark .mono-grain {
   position: absolute;
   z-index: 3;
   left: 50%;
-  bottom: clamp(-24px, -2.4vw, -10px);
-  width: 124vw;
-  transform: translateX(-50%) scaleX(1.08);
+  bottom: clamp(-12px, -1.2vw, -6px);
+  width: 100%;
+  transform: translateX(-50%);
   color: color-mix(in oklab, var(--ink) 68%, transparent);
   font-family: var(--display);
-  font-size: clamp(7.6rem, 29vw, 28rem);
+  font-size: clamp(4rem, 15.5vw, 15rem);
   font-weight: 500;
-  letter-spacing: -0.12em;
-  line-height: 0.72;
+  letter-spacing: -0.04em;
+  line-height: 0.78;
   text-align: center;
   white-space: nowrap;
   opacity: 0.5;
@@ -1667,9 +1667,10 @@ html.dark .mono-grain {
     text-align: center;
   }
   .mono-mega-word {
-    bottom: 20px;
-    width: 176vw;
-    font-size: clamp(7rem, 38vw, 10.4rem);
+    bottom: 24px;
+    width: 100%;
+    font-size: clamp(3rem, 17vw, 6rem);
+    letter-spacing: -0.03em;
   }
   .mono-hero-scroll {
     display: none;
