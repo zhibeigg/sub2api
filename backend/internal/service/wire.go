@@ -214,6 +214,11 @@ func ProvideKiroOAuthService(proxyRepo ProxyRepository) *KiroOAuthService {
 	return NewKiroOAuthService(proxyRepo)
 }
 
+// ProvideKiroUsageService creates the Kiro usage/overage probe service.
+func ProvideKiroUsageService(accountRepo AccountRepository, proxyRepo ProxyRepository, tokenProvider *KiroTokenProvider) *KiroUsageService {
+	return NewKiroUsageService(accountRepo, proxyRepo, tokenProvider)
+}
+
 // ProvideDashboardAggregationService 创建并启动仪表盘聚合服务
 func ProvideDashboardAggregationService(repo DashboardAggregationRepository, timingWheel *TimingWheelService, lockCache LeaderLockCache, db *sql.DB, cfg *config.Config) *DashboardAggregationService {
 	svc := NewDashboardAggregationService(repo, timingWheel, cfg)

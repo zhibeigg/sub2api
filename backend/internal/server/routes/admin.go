@@ -50,6 +50,9 @@ func RegisterAdminRoutes(
 		// Grok OAuth
 		registerGrokOAuthRoutes(admin, h)
 
+		// Kiro OAuth
+		registerKiroOAuthRoutes(admin, h)
+
 		// 代理管理
 		registerProxyRoutes(admin, h)
 
@@ -403,6 +406,21 @@ func registerGrokOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		grok.GET("/accounts/:id/quota", h.Admin.GrokOAuth.QueryQuota)
 		grok.POST("/accounts/:id/reset-quota", h.Admin.GrokOAuth.ResetQuota)
 		grok.GET("/runtime-sanity", h.Admin.GrokOAuth.RuntimeSanity)
+	}
+}
+
+func registerKiroOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	kiro := admin.Group("/kiro")
+	{
+		kiro.POST("/oauth/builderid/start", h.Admin.KiroOAuth.StartBuilderID)
+		kiro.POST("/oauth/builderid/poll", h.Admin.KiroOAuth.PollBuilderID)
+		kiro.POST("/oauth/iam-sso/start", h.Admin.KiroOAuth.StartIAMSSO)
+		kiro.POST("/oauth/iam-sso/complete", h.Admin.KiroOAuth.CompleteIAMSSO)
+		kiro.POST("/oauth/sso-token", h.Admin.KiroOAuth.ImportSSOToken)
+		kiro.POST("/oauth/create-account", h.Admin.KiroOAuth.CreateAccount)
+		kiro.POST("/accounts/:id/refresh", h.Admin.KiroOAuth.RefreshAccountToken)
+		kiro.GET("/accounts/:id/usage", h.Admin.KiroOAuth.QueryUsage)
+		kiro.POST("/accounts/:id/overage", h.Admin.KiroOAuth.SetOverage)
 	}
 }
 
