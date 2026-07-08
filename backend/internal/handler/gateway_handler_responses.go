@@ -220,7 +220,12 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		if channelMapping.Mapped {
 			forwardBody = h.gatewayService.ReplaceModelInBody(body, channelMapping.MappedModel)
 		}
-		result, err := h.gatewayService.ForwardAsResponses(requestCtx, c, account, forwardBody, parsedReq)
+		var result *service.ForwardResult
+		if account.Platform == service.PlatformKiro && account.Type != service.AccountTypeAPIKey {
+			result, err = h.kiroGatewayService.ForwardResponses(requestCtx, c, account, forwardBody)
+		} else {
+			result, err = h.gatewayService.ForwardAsResponses(requestCtx, c, account, forwardBody, parsedReq)
+		}
 
 		if accountReleaseFunc != nil {
 			accountReleaseFunc()

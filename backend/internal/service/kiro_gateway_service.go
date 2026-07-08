@@ -19,9 +19,10 @@ import (
 // gateway: Kiro's upstream is a single streaming call with automatic endpoint
 // fallback handled inside pkg/kiro.
 type KiroGatewayService struct {
-	accountRepo   AccountRepository
-	proxyRepo     ProxyRepository
-	tokenProvider *KiroTokenProvider
+	accountRepo    AccountRepository
+	proxyRepo      ProxyRepository
+	tokenProvider  *KiroTokenProvider
+	responsesStore *kiro.ResponsesStore
 }
 
 // NewKiroGatewayService constructs a KiroGatewayService.
@@ -31,9 +32,10 @@ func NewKiroGatewayService(
 	tokenProvider *KiroTokenProvider,
 ) *KiroGatewayService {
 	return &KiroGatewayService{
-		accountRepo:   accountRepo,
-		proxyRepo:     proxyRepo,
-		tokenProvider: tokenProvider,
+		accountRepo:    accountRepo,
+		proxyRepo:      proxyRepo,
+		tokenProvider:  tokenProvider,
+		responsesStore: kiro.NewResponsesStore(24 * time.Hour),
 	}
 }
 
@@ -119,6 +121,152 @@ func (s *KiroGatewayService) Forward(ctx context.Context, c *gin.Context, accoun
 		return s.forwardStream(ctx, c, account, cred, payload, requestModel, upstreamModel, isOpenAI, start)
 	}
 	return s.forwardNonStream(ctx, c, account, cred, payload, requestModel, upstreamModel, isOpenAI, start)
+}
+
+// ForwardResponses handles an OpenAI Responses API (/v1/responses) request by
+// converting it to the Kiro (Claude) payload, calling the upstream, and
+// emitting Responses-format output (SSE for stream, JSON otherwise).
+func (s *KiroGatewayService) ForwardResponses(ctx context.Context, c *gin.Context, account *Account, body []byte) (*ForwardResult, error) {
+	start := time.Now()
+
+	if s.tokenProvider == nil {
+		return nil, errors.New("kiro token provider is not configured")
+	}
+
+	var req kiro.ResponsesRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte("invalid responses request body: " + err.Error())}
+	}
+	if strings.TrimSpace(req.Model) == "" {
+		req.Model = kiro.DefaultResponsesModel
+	}
+	storeResponse := req.Store == nil || *req.Store
+	storedInput := append(json.RawMessage(nil), req.Input...)
+
+	messages, err := s.responsesStore.BuildResponsesMessages(&req)
+	if err != nil {
+		return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte(err.Error())}
+	}
+	if len(messages) == 0 {
+		return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte("input must contain at least one message")}
+	}
+
+	requestModel := req.Model
+	_, thinking := kiro.ParseModelAndThinking(req.Model, kiro.DefaultThinkingSuffix)
+	openaiReq := &kiro.OpenAIRequest{
+		Model:    req.Model,
+		Messages: messages,
+		Stream:   req.Stream,
+		Tools:    req.Tools,
+	}
+	if req.Temperature != nil {
+		openaiReq.Temperature = *req.Temperature
+	}
+	if req.MaxOutputTokens != nil {
+		openaiReq.MaxTokens = *req.MaxOutputTokens
+	}
+	payload := kiro.OpenAIToKiro(openaiReq, thinking)
+	upstreamModel := kiro.MapModel(requestModel)
+
+	accessToken, err := s.tokenProvider.GetAccessToken(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	cred := s.buildCredential(ctx, account, accessToken)
+	respID := kiro.GenerateResponseID()
+
+	if req.Stream {
+		return s.forwardResponsesStream(ctx, c, account, cred, payload, &req, requestModel, upstreamModel, thinking, respID, storedInput, storeResponse, start)
+	}
+	return s.forwardResponsesNonStream(ctx, c, account, cred, payload, &req, requestModel, upstreamModel, thinking, respID, storedInput, storeResponse, start)
+}
+
+func (s *KiroGatewayService) forwardResponsesStream(
+	ctx context.Context, c *gin.Context, account *Account, cred *kiro.Credential, payload *kiro.KiroPayload,
+	req *kiro.ResponsesRequest, requestModel, upstreamModel string, thinking bool, respID string,
+	storedInput []byte, storeResponse bool, start time.Time,
+) (*ForwardResult, error) {
+	flusher, _ := c.Writer.(http.Flusher)
+	w := &kiroSSEWriter{c: c, flusher: flusher}
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.WriteHeader(http.StatusOK)
+
+	var firstTokenMs *int
+	createdAt := start.Unix()
+	state := kiro.NewResponsesStreamState(w, requestModel, respID, req, createdAt)
+	cb := state.Callback()
+	wrapText := cb.OnText
+	cb.OnText = func(t string, thinkingChunk bool) {
+		if firstTokenMs == nil {
+			ms := int(time.Since(start).Milliseconds())
+			firstTokenMs = &ms
+		}
+		wrapText(t, thinkingChunk)
+	}
+
+	if err := kiro.CallKiroAPI(ctx, cred, payload, cb); err != nil {
+		if !state.Started() {
+			return nil, mapKiroError(err)
+		}
+		state.EmitFailed(err.Error())
+		w.Flush()
+		return nil, mapKiroError(err)
+	}
+
+	obj, inputTokens, outputTokens, credits := state.Finish(thinking, 0)
+	w.Flush()
+
+	if storeResponse && obj != nil {
+		obj.StoredInput = storedInput
+		obj.Instructions = req.Instructions
+		s.responsesStore.Save(obj)
+	}
+	s.recordContextUsage(ctx, account, 0)
+
+	return &ForwardResult{
+		Model:         requestModel,
+		UpstreamModel: differentOrEmpty(requestModel, upstreamModel),
+		Stream:        true,
+		Duration:      time.Since(start),
+		FirstTokenMs:  firstTokenMs,
+		Usage:         ClaudeUsage{InputTokens: inputTokens, OutputTokens: outputTokens},
+		KiroCredits:   credits,
+	}, nil
+}
+
+func (s *KiroGatewayService) forwardResponsesNonStream(
+	ctx context.Context, c *gin.Context, account *Account, cred *kiro.Credential, payload *kiro.KiroPayload,
+	req *kiro.ResponsesRequest, requestModel, upstreamModel string, thinking bool, respID string,
+	storedInput []byte, storeResponse bool, start time.Time,
+) (*ForwardResult, error) {
+	agg := &kiro.Aggregator{}
+	cb := agg.Callback()
+	var credits float64
+	cb.OnCredits = func(c float64) { credits += c }
+	if err := kiro.CallKiroAPI(ctx, cred, payload, cb); err != nil {
+		return nil, mapKiroError(err)
+	}
+
+	finalContent, _ := kiro.ExtractThinkingFromContent(agg.Text.String())
+	obj := kiro.BuildResponsesObject(respID, requestModel, finalContent, agg.ToolUses, agg.InputTokens, agg.OutputTokens, req)
+	if storeResponse {
+		obj.StoredInput = storedInput
+		obj.Instructions = req.Instructions
+		s.responsesStore.Save(obj)
+	}
+	c.JSON(http.StatusOK, obj)
+	s.recordContextUsage(ctx, account, 0)
+
+	return &ForwardResult{
+		Model:         requestModel,
+		UpstreamModel: differentOrEmpty(requestModel, upstreamModel),
+		Stream:        false,
+		Duration:      time.Since(start),
+		Usage:         ClaudeUsage{InputTokens: agg.InputTokens, OutputTokens: agg.OutputTokens},
+		KiroCredits:   credits,
+	}, nil
 }
 
 func (s *KiroGatewayService) buildCredential(ctx context.Context, account *Account, accessToken string) *kiro.Credential {

@@ -1375,6 +1375,12 @@ func KiroToOpenAIResponse(content string, toolUses []KiroToolUse, inputTokens, o
 	}
 }
 
+// ExtractThinkingFromContent is the exported form of extractThinkingFromContent,
+// used by callers that aggregate non-streaming Kiro output.
+func ExtractThinkingFromContent(content string) (string, string) {
+	return extractThinkingFromContent(content)
+}
+
 // extractThinkingFromContent pulls out <thinking>...</thinking> spans, returning
 // the cleaned content and the concatenated reasoning text.
 func extractThinkingFromContent(content string) (string, string) {

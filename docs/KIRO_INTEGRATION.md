@@ -4,7 +4,7 @@ sub2api 支持接入 **Kiro** 平台：把 AWS Kiro / CodeWhisperer 账户作为
 
 ## 能力
 
-- 对外端点：**Anthropic `/v1/messages`** 与 **OpenAI `/v1/chat/completions`** 均支持（Kiro 提供 Claude 模型）。
+- 对外端点：**Anthropic `/v1/messages`**、**OpenAI `/v1/chat/completions`** 与 **OpenAI Responses `/v1/responses`** 均支持（Kiro 提供 Claude 模型）。`/v1/responses` 支持 `previous_response_id` 多轮上下文（内存 store，默认 24h TTL）。
 - **四种登录方式**：AWS Builder ID 设备码、IAM Identity Center（PKCE 授权码）、SSO Token 导入、凭证 JSON 粘贴。
 - 自动 token 刷新：按 `authMethod` 分流，`idc`（AWS Builder ID / IAM Identity Center）走 AWS OIDC，`social`（GitHub/Google 桌面登录）走 Kiro 桌面刷新端点；到期前自动刷新。
 - **账号运营**：订阅类型 / 用量 / 额度 / 试用 / 重置日期 / 超额（Overages）查询与开关；健康检查（usage 探测，自动封禁/恢复）；动态模型发现。
