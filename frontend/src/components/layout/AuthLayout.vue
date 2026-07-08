@@ -1,18 +1,9 @@
 <template>
-  <div class="mono-auth" :style="pageStyle">
+  <div class="mono-auth monolog-scope" :style="pageStyle">
     <div class="mono-auth-grain" aria-hidden="true"></div>
 
     <div class="mono-auth-controls">
       <LocaleSwitcher />
-      <button
-        type="button"
-        class="mono-auth-icon-btn"
-        :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
-        @click="toggleTheme"
-      >
-        <Icon v-if="isDark" name="sun" size="sm" :stroke-width="1.5" />
-        <Icon v-else name="moon" size="sm" :stroke-width="1.5" />
-      </button>
     </div>
 
     <div class="mono-auth-grid">
@@ -83,11 +74,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores'
 import { sanitizeUrl } from '@/utils/url'
-import Icon from '@/components/icons/Icon.vue'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import grainUrl from '@/assets/monolog/grain.svg'
 import authPlateUrl from '@/assets/monolog/auth-plate.svg'
@@ -105,83 +95,39 @@ const pageStyle = computed<Record<string, string>>(() => ({
   '--grain-url': `url("${grainUrl}")`
 }))
 
-const isDark = ref(document.documentElement.classList.contains('dark'))
-
-function toggleTheme() {
-  isDark.value = !isDark.value
-  document.documentElement.classList.toggle('dark', isDark.value)
-  localStorage.setItem('theme', isDark.value ? 'dark' : 'light')
-}
-
-function initTheme() {
-  const savedTheme = localStorage.getItem('theme')
-  if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-    isDark.value = true
-    document.documentElement.classList.add('dark')
-  }
-}
-
-function loadDisplayFonts() {
-  const id = 'mono-public-fonts'
-  if (document.getElementById(id)) return
-  const pre1 = document.createElement('link')
-  pre1.rel = 'preconnect'
-  pre1.href = 'https://fonts.googleapis.com'
-  const pre2 = document.createElement('link')
-  pre2.rel = 'preconnect'
-  pre2.href = 'https://fonts.gstatic.com'
-  pre2.crossOrigin = 'anonymous'
-  const link = document.createElement('link')
-  link.id = id
-  link.rel = 'stylesheet'
-  link.href = 'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700;800&family=Geist+Mono:wght@400;500&display=swap'
-  document.head.appendChild(pre1)
-  document.head.appendChild(pre2)
-  document.head.appendChild(link)
-}
-
 onMounted(() => {
-  initTheme()
-  loadDisplayFonts()
   appStore.fetchPublicSettings()
 })
 </script>
 
 <style scoped>
 .mono-auth {
-  --ink: oklch(0.16 0.004 95);
-  --ink-muted: oklch(0.43 0.006 95);
-  --ink-soft: oklch(0.63 0.006 95);
-  --paper: oklch(0.955 0.012 85);
-  --paper-deep: oklch(0.9 0.018 82);
-  --surface: oklch(0.985 0.007 85);
-  --line: oklch(0.16 0.004 95 / 0.16);
-  --line-strong: oklch(0.16 0.004 95 / 0.38);
-  --accent: oklch(0.55 0.2 28);
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --display: 'Bricolage Grotesque', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
-  --mono: 'Geist Mono', ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
-  --body: 'PingFang SC', 'Microsoft YaHei', 'Bricolage Grotesque', system-ui, sans-serif;
+  /* bymonolog 暖米色单色系（恒深色） */
+  --ink: #e8e8e3;
+  --ink-muted: #bfbfb1;
+  --ink-soft: #938f8a;
+  --paper: #080807;
+  --paper-deep: #050504;
+  --surface: #181715;
+  --line: rgba(232, 232, 227, 0.12);
+  --line-strong: rgba(232, 232, 227, 0.34);
+  --accent: #8c8c73;
+  --ease: cubic-bezier(0.2, 1, 0.36, 1);
+  --display: 'Khteka', 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
+  --mono: 'Suisse Mono', ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
+  --body: 'Khteka', 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
 
   position: relative;
   min-height: 100vh;
   overflow-x: clip;
   background:
-    radial-gradient(circle at 12% 12%, oklch(0.82 0.03 55 / 0.22), transparent 26rem),
+    radial-gradient(circle at 12% 12%, rgba(140, 140, 115, 0.12), transparent 30rem),
     linear-gradient(180deg, var(--paper), var(--paper-deep));
   color: var(--ink);
   font-family: var(--body);
-}
-html.dark .mono-auth {
-  --ink: oklch(0.91 0.012 85);
-  --ink-muted: oklch(0.69 0.012 85);
-  --ink-soft: oklch(0.47 0.012 85);
-  --paper: oklch(0.135 0.005 95);
-  --paper-deep: oklch(0.09 0.004 95);
-  --surface: oklch(0.18 0.006 95);
-  --line: oklch(0.91 0.012 85 / 0.15);
-  --line-strong: oklch(0.91 0.012 85 / 0.38);
-  --accent: oklch(0.62 0.2 28);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
 }
 
 .mono-auth-grain {
@@ -189,15 +135,11 @@ html.dark .mono-auth {
   position: fixed;
   inset: -40px;
   z-index: 1;
-  opacity: 0.42;
+  opacity: 0.18;
   background-image: var(--grain-url);
   background-size: 180px 180px;
-  mix-blend-mode: multiply;
-  animation: mono-auth-grain 0.55s steps(6) infinite;
-}
-html.dark .mono-auth-grain {
   mix-blend-mode: screen;
-  opacity: 0.18;
+  animation: mono-auth-grain 0.55s steps(6) infinite;
 }
 @keyframes mono-auth-grain {
   0%, 100% { transform: translate(0, 0); }
@@ -274,7 +216,7 @@ html.dark .mono-auth-grain {
 .mono-auth-brandmark span {
   font-family: var(--display);
   font-size: 20px;
-  font-weight: 800;
+  font-weight: 500;
   letter-spacing: -0.03em;
 }
 .mono-auth-stage-copy {
@@ -306,7 +248,7 @@ html.dark .mono-auth-grain {
   margin: 24px 0 24px;
   font-family: var(--display);
   font-size: clamp(4rem, 8vw, 9rem);
-  font-weight: 800;
+  font-weight: 500;
   letter-spacing: -0.075em;
   line-height: 0.82;
 }
@@ -394,10 +336,7 @@ html.dark .mono-auth-grain {
   border: 1px solid var(--line);
   border-radius: 28px;
   background: color-mix(in oklab, var(--surface) 88%, transparent);
-  box-shadow: 0 24px 70px -48px oklch(0.16 0.004 95 / 0.58);
-}
-html.dark .mono-auth-card {
-  box-shadow: 0 26px 78px -48px oklch(0 0 0 / 0.78);
+  box-shadow: 0 26px 78px -48px rgba(0, 0, 0, 0.78);
 }
 .mono-auth-card-kicker {
   margin: 0 0 20px;
@@ -458,7 +397,7 @@ html.dark .mono-auth-card {
   color: var(--ink);
   font-family: var(--display);
   font-size: clamp(16px, 2vw, 22px);
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: -0.04em;
   text-decoration: none;
   transition: background-color 0.2s ease;
@@ -476,7 +415,7 @@ html.dark .mono-auth-card {
   color: var(--ink);
   font-family: var(--display);
   font-size: clamp(2.1rem, 4vw, 3.45rem);
-  font-weight: 800;
+  font-weight: 500;
   letter-spacing: -0.055em;
   line-height: 0.96;
 }
@@ -507,11 +446,8 @@ html.dark .mono-auth-card {
 }
 .mono-auth-card :deep(.input:focus) {
   border-color: var(--ink);
-  box-shadow: 0 0 0 3px oklch(0.16 0.004 95 / 0.08);
+  box-shadow: 0 0 0 3px rgba(232, 232, 227, 0.1);
   outline: none;
-}
-html.dark .mono-auth-card :deep(.input:focus) {
-  box-shadow: 0 0 0 3px oklch(0.91 0.012 85 / 0.1);
 }
 .mono-auth-card :deep(.input-error) {
   border-color: var(--accent);
@@ -562,7 +498,7 @@ html.dark .mono-auth-card :deep(.input:focus) {
 .mono-auth-card :deep(a),
 .mono-auth-footer :deep(a) {
   color: var(--ink);
-  font-weight: 600;
+  font-weight: 500;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
   transition: color 0.18s ease;

@@ -14,7 +14,8 @@
   <!-- Default Home Page: monochrome studio / bymonolog-inspired -->
   <div
     v-else
-    class="mono-page"
+    ref="pageRef"
+    class="mono-page monolog-scope"
     :style="pageStyle"
     @pointermove="handlePointerMove"
   >
@@ -101,10 +102,10 @@
           <p class="mono-hero-kicker mono-enter" style="--d: 120ms">
             {{ t('home.hero.badge') }}
           </p>
-          <h1 id="home-title" class="mono-hero-statement mono-enter" style="--d: 190ms">
-            {{ t('home.hero.posterStatement') }}
+          <h1 id="home-title" class="mono-hero-statement">
+            <SplitReveal :text="t('home.hero.posterStatement')" by="word" :on-scroll="false" />
           </h1>
-          <p class="mono-hero-substatement mono-enter" style="--d: 270ms">
+          <p class="mono-hero-substatement mono-enter" style="--d: 520ms">
             {{ t('home.hero.posterSubstatement') }}
           </p>
         </div>
@@ -372,6 +373,9 @@ import { useAuthStore, useAppStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ModelIcon from '@/components/common/ModelIcon.vue'
+import SplitReveal from '@/components/monolog/SplitReveal.vue'
+import { useReveal } from '@/composables/useReveal'
+import { useSmoothScroll } from '@/composables/useSmoothScroll'
 import grainUrl from '@/assets/monolog/grain.svg'
 import gatewayPlateUrl from '@/assets/monolog/gateway-plate.svg'
 
@@ -379,6 +383,10 @@ const { t } = useI18n()
 
 const authStore = useAuthStore()
 const appStore = useAppStore()
+
+const pageRef = ref<HTMLElement | null>(null)
+useReveal(pageRef)
+const { scrollTo: smoothScrollTo } = useSmoothScroll()
 
 const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'Sub2API')
 const siteLogo = computed(() => appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '')
@@ -413,25 +421,6 @@ function initTheme() {
     isDark.value = true
     document.documentElement.classList.add('dark')
   }
-}
-
-function loadDisplayFonts() {
-  const id = 'mono-public-fonts'
-  if (document.getElementById(id)) return
-  const pre1 = document.createElement('link')
-  pre1.rel = 'preconnect'
-  pre1.href = 'https://fonts.googleapis.com'
-  const pre2 = document.createElement('link')
-  pre2.rel = 'preconnect'
-  pre2.href = 'https://fonts.gstatic.com'
-  pre2.crossOrigin = 'anonymous'
-  const link = document.createElement('link')
-  link.id = id
-  link.rel = 'stylesheet'
-  link.href = 'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700;800&family=Geist+Mono:wght@400;500&display=swap'
-  document.head.appendChild(pre1)
-  document.head.appendChild(pre2)
-  document.head.appendChild(link)
 }
 
 const endpoints = [
@@ -503,7 +492,8 @@ function onScroll() {
 
 function scrollTo(id: string) {
   closeAbout()
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const el = document.getElementById(id)
+  if (el) smoothScrollTo(el, { offset: -12 })
 }
 
 const aboutOpen = ref(false)
@@ -655,32 +645,8 @@ function cleanupAurora() {
   }
 }
 
-let observer: IntersectionObserver | null = null
-
-function setupReveal() {
-  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  const targets = document.querySelectorAll<HTMLElement>('[data-reveal]')
-  if (prefersReduced || !('IntersectionObserver' in window)) {
-    targets.forEach((el) => el.classList.add('mono-revealed'))
-    return
-  }
-  observer = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('mono-revealed')
-          observer?.unobserve(entry.target)
-        }
-      }
-    },
-    { threshold: 0.12, rootMargin: '0px 0px -44px 0px' }
-  )
-  targets.forEach((el) => observer?.observe(el))
-}
-
 onMounted(() => {
   initTheme()
-  loadDisplayFonts()
   authStore.checkAuth()
   if (!appStore.publicSettingsLoaded) {
     appStore.fetchPublicSettings()
@@ -690,7 +656,6 @@ onMounted(() => {
   onScroll()
   requestAnimationFrame(() => {
     setupAurora()
-    setupReveal()
   })
 })
 
@@ -698,7 +663,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', onScroll)
   window.removeEventListener('keydown', onKeydown)
   cleanupAurora()
-  observer?.disconnect()
   if (copyTimer) clearTimeout(copyTimer)
   document.documentElement.classList.remove('mono-lock-scroll')
 })
@@ -710,39 +674,32 @@ onBeforeUnmount(() => {
 }
 
 .mono-page {
-  --ink: oklch(0.91 0.012 85);
-  --ink-muted: oklch(0.72 0.01 85);
-  --ink-soft: oklch(0.52 0.009 85);
-  --paper: oklch(0.105 0.004 95);
-  --paper-deep: oklch(0.055 0.003 95);
-  --line: oklch(0.91 0.012 85 / 0.13);
-  --line-strong: oklch(0.91 0.012 85 / 0.34);
-  --surface: oklch(0.16 0.005 95);
-  --accent: oklch(0.78 0.018 90);
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --display: 'Bricolage Grotesque', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
-  --mono: 'Geist Mono', ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
-  --body: 'PingFang SC', 'Microsoft YaHei', 'Bricolage Grotesque', system-ui, sans-serif;
+  /* bymonolog 暖米色单色系（恒深色） */
+  --ink: #e8e8e3;
+  --ink-muted: #bfbfb1;
+  --ink-soft: #938f8a;
+  --paper: #080807;
+  --paper-deep: #050504;
+  --line: rgba(232, 232, 227, 0.12);
+  --line-strong: rgba(232, 232, 227, 0.32);
+  --surface: #181715;
+  --accent: #8c8c73;
+  --ease: cubic-bezier(0.2, 1, 0.36, 1);
+  --display: 'Khteka', 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
+  --mono: 'Suisse Mono', ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
+  --body: 'Khteka', 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
 
   position: relative;
   min-height: 100vh;
   overflow-x: clip;
   background:
-    radial-gradient(circle at 50% -18%, oklch(0.72 0.012 85 / 0.18), transparent 36rem),
+    radial-gradient(circle at 50% -18%, rgba(191, 191, 177, 0.1), transparent 40rem),
     linear-gradient(180deg, var(--paper), var(--paper-deep));
   color: var(--ink);
   font-family: var(--body);
-}
-html.dark .mono-page {
-  --ink: oklch(0.91 0.012 85);
-  --ink-muted: oklch(0.72 0.01 85);
-  --ink-soft: oklch(0.52 0.009 85);
-  --paper: oklch(0.105 0.004 95);
-  --paper-deep: oklch(0.055 0.003 95);
-  --line: oklch(0.91 0.012 85 / 0.13);
-  --line-strong: oklch(0.91 0.012 85 / 0.34);
-  --surface: oklch(0.16 0.005 95);
-  --accent: oklch(0.78 0.018 90);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
 }
 
 .mono-grain {
@@ -782,15 +739,10 @@ html.dark .mono-grain {
 @keyframes mono-rise {
   to { opacity: 1; transform: translateY(0); }
 }
+/* GSAP (useReveal) drives [data-reveal] fade-up; JS sets the from-state on mount.
+   Default to visible so content is never stuck hidden if JS/GSAP is unavailable. */
 [data-reveal] {
-  opacity: 0;
-  transform: translateY(28px);
-  transition: opacity 0.78s var(--ease), transform 0.78s var(--ease);
-  transition-delay: var(--rd, 0ms);
-}
-[data-reveal].mono-revealed {
   opacity: 1;
-  transform: translateY(0);
 }
 
 .mono-topbar {
@@ -840,7 +792,7 @@ html.dark .mono-grain {
 .mono-brand-text {
   font-family: var(--display);
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 500;
   letter-spacing: -0.02em;
 }
 .mono-top-links {
@@ -856,7 +808,7 @@ html.dark .mono-grain {
   padding: 0;
   font-family: var(--display);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: -0.03em;
   text-transform: none;
   color: color-mix(in oklab, var(--ink) 76%, transparent);
@@ -1051,7 +1003,7 @@ html.dark .mono-grain {
   color: var(--ink);
   font-family: var(--display);
   font-size: clamp(1.08rem, 1.34vw, 1.42rem);
-  font-weight: 800;
+  font-weight: 500;
   letter-spacing: -0.05em;
   line-height: 1.05;
   overflow-wrap: anywhere;
@@ -1062,7 +1014,7 @@ html.dark .mono-grain {
   margin: 20px 0 0;
   font-family: var(--display);
   font-size: clamp(0.92rem, 0.98vw, 1.04rem);
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: -0.035em;
   line-height: 1.18;
   overflow-wrap: anywhere;
@@ -1092,7 +1044,7 @@ html.dark .mono-grain {
   color: color-mix(in oklab, var(--ink) 68%, transparent);
   font-family: var(--display);
   font-size: clamp(7.6rem, 29vw, 28rem);
-  font-weight: 800;
+  font-weight: 500;
   letter-spacing: -0.12em;
   line-height: 0.72;
   text-align: center;
@@ -1170,7 +1122,7 @@ html.dark .mono-grain {
   color: var(--ink);
   font-family: var(--display);
   font-size: clamp(3.6rem, 9vw, 8.5rem);
-  font-weight: 800;
+  font-weight: 500;
   letter-spacing: -0.085em;
   line-height: 0.84;
 }
@@ -1409,7 +1361,7 @@ html.dark .mono-grain {
   color: var(--ink);
   font-family: var(--display);
   font-size: clamp(4rem, 11vw, 10rem);
-  font-weight: 800;
+  font-weight: 500;
   letter-spacing: -0.08em;
   line-height: 0.82;
 }
@@ -1497,7 +1449,7 @@ html.dark .mono-grain {
   color: var(--ink);
   font-family: var(--display);
   font-size: clamp(16px, 2vw, 24px);
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: -0.04em;
   text-decoration: none;
   cursor: pointer;
@@ -1554,7 +1506,7 @@ html.dark .mono-grain {
   margin: 24px 0 34px;
   font-family: var(--display);
   font-size: clamp(3.2rem, 9vw, 9.5rem);
-  font-weight: 800;
+  font-weight: 500;
   letter-spacing: -0.07em;
   line-height: 0.84;
 }
