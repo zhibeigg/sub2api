@@ -189,9 +189,23 @@ func openAICompactSupportTier(account *Account) int {
 //
 // 注意：对 spark 影子账号，调用方还须额外调用 parentHealthyForShadow(account, lookup)
 // 检查母账号凭据可用性；该检查未内置于本函数，以避免注入 DB 依赖。
+// openAIPlatformAllowed 判断账号是否可进入 openai 兼容端点的候选：
+// 原生 openai/grok 账号(平台相等且兼容)，或启用了 mixed_scheduling 的
+// 混合调度平台账号(如 kiro)——后者上游透传国产模型，可被 openai 分组调度。
+func openAIPlatformAllowed(account *Account, platform string) bool {
+	if account == nil {
+		return false
+	}
+	platform = normalizeOpenAICompatiblePlatform(platform)
+	if account.Platform == platform && account.IsOpenAICompatible() {
+		return true
+	}
+	return IsMixedSchedulingCapablePlatform(account.Platform) && account.IsMixedSchedulingEnabled()
+}
+
 func isOpenAICompatibleAccountEligibleForRequest(ctx context.Context, account *Account, platform string, requestedModel string, requireCompact bool, requiredCapability OpenAIEndpointCapability) bool {
 	platform = normalizeOpenAICompatiblePlatform(platform)
-	if account == nil || account.Platform != platform || !account.IsOpenAICompatible() || !account.IsSchedulableForModelWithContext(ctx, requestedModel) {
+	if account == nil || !openAIPlatformAllowed(account, platform) || !account.IsSchedulableForModelWithContext(ctx, requestedModel) {
 		return false
 	}
 	if account.IsOpenAI() {

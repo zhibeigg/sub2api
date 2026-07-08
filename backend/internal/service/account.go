@@ -1348,7 +1348,11 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 	if capability == "" {
 		return true
 	}
+	// 混合调度平台账号(如 kiro)通过 openai 兼容端点透传，仅支持 ChatCompletions。
 	if !a.IsOpenAICompatible() {
+		if IsMixedSchedulingCapablePlatform(a.Platform) && a.IsMixedSchedulingEnabled() {
+			return capability == OpenAIEndpointCapabilityChatCompletions
+		}
 		return false
 	}
 	if a.IsGrok() {
