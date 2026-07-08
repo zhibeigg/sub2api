@@ -96,9 +96,12 @@
         </div>
 
         <div class="mono-hero-contain">
-          <div class="mono-hero-orbit mono-enter" style="--d: 60ms" aria-hidden="true">
-            <span></span>
-          </div>
+          <svg class="mono-hero-globe mono-enter" style="--d: 60ms" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+            <circle cx="16" cy="16" r="12" stroke="currentColor" stroke-width="1" />
+            <ellipse cx="16" cy="16" rx="5" ry="12" stroke="currentColor" stroke-width="1" />
+            <ellipse cx="16" cy="16" rx="12" ry="5" stroke="currentColor" stroke-width="1" />
+            <line x1="4" y1="16" x2="28" y2="16" stroke="currentColor" stroke-width="1" />
+          </svg>
           <p class="mono-hero-kicker mono-enter" style="--d: 120ms">
             {{ t('home.hero.badge') }}
           </p>
@@ -981,33 +984,12 @@ html.dark .mono-grain {
   padding-top: clamp(128px, 20vh, 194px);
   text-align: center;
 }
-.mono-hero-orbit {
-  position: relative;
-  width: 58px;
-  height: 20px;
-  margin-bottom: 24px;
-  border: 1px solid color-mix(in oklab, var(--ink) 78%, transparent);
-  border-radius: 999px;
-  opacity: 0.82;
-}
-.mono-hero-orbit::before,
-.mono-hero-orbit::after,
-.mono-hero-orbit span {
-  content: '';
-  position: absolute;
-  inset: 2px 10px;
-  border: 1px solid color-mix(in oklab, var(--ink) 60%, transparent);
-  border-radius: 999px;
-}
-.mono-hero-orbit::before {
-  transform: rotate(90deg) scaleX(0.42);
-}
-.mono-hero-orbit::after {
-  transform: rotate(0deg) scaleX(0.62);
-}
-.mono-hero-orbit span {
-  inset: 8px 2px;
-  border-inline: 0;
+.mono-hero-globe {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 26px;
+  color: color-mix(in oklab, var(--ink) 80%, transparent);
+  opacity: 0.85;
 }
 .mono-hero-kicker,
 .mono-hero-substatement,
@@ -1026,25 +1008,25 @@ html.dark .mono-grain {
   text-transform: uppercase;
 }
 .mono-hero-statement {
-  max-width: 29rem;
+  max-width: 32rem;
   margin: 0;
   color: var(--ink);
   font-family: var(--display);
-  font-size: clamp(1.08rem, 1.34vw, 1.42rem);
+  font-size: clamp(1.25rem, 1.9vw, 1.9rem);
   font-weight: 500;
-  letter-spacing: -0.05em;
-  line-height: 1.05;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
   overflow-wrap: anywhere;
   text-wrap: balance;
 }
 .mono-hero-substatement {
-  max-width: 24rem;
-  margin: 20px 0 0;
+  max-width: 28rem;
+  margin: 22px 0 0;
   font-family: var(--display);
-  font-size: clamp(0.92rem, 0.98vw, 1.04rem);
+  font-size: clamp(0.95rem, 1.1vw, 1.1rem);
   font-weight: 500;
-  letter-spacing: -0.035em;
-  line-height: 1.18;
+  letter-spacing: -0.01em;
+  line-height: 1.5;
   overflow-wrap: anywhere;
   text-wrap: balance;
 }
@@ -1059,7 +1041,7 @@ html.dark .mono-grain {
   gap: 18px;
   font-family: var(--mono);
   font-size: 10px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 .mono-mega-word {
@@ -1077,7 +1059,7 @@ html.dark .mono-grain {
   line-height: 0.72;
   text-align: center;
   white-space: nowrap;
-  opacity: 0.9;
+  opacity: 0.5;
   filter: blur(0.18px);
 }
 .mono-mega-word span {
@@ -1146,13 +1128,14 @@ html.dark .mono-grain {
 }
 .mono-quickstart-title {
   display: grid;
+  gap: 0.08em;
   margin: 0;
   color: var(--ink);
   font-family: var(--display);
-  font-size: clamp(3.6rem, 9vw, 8.5rem);
+  font-size: clamp(3rem, 7vw, 6.5rem);
   font-weight: 500;
-  letter-spacing: -0.085em;
-  line-height: 0.84;
+  letter-spacing: -0.01em;
+  line-height: 1.08;
 }
 .mono-quickstart-title span + span {
   color: var(--ink-soft);
@@ -1285,11 +1268,11 @@ html.dark .mono-grain {
   margin: 0;
   color: var(--ink);
   font-family: var(--display);
-  letter-spacing: -0.035em;
+  letter-spacing: -0.01em;
 }
 .mono-work-row h2 {
   font-size: clamp(1.45rem, 3vw, 2.6rem);
-  line-height: 0.98;
+  line-height: 1.1;
 }
 .mono-work-row p,
 .mono-sticky-heading p,
@@ -1319,8 +1302,8 @@ html.dark .mono-grain {
 }
 .mono-sticky-heading h2,
 .mono-wide-heading h2 {
-  font-size: clamp(2.4rem, 6vw, 5.5rem);
-  line-height: 0.94;
+  font-size: clamp(2.2rem, 5vw, 4.5rem);
+  line-height: 1.1;
 }
 .mono-process-list {
   display: grid;
@@ -1418,9 +1401,10 @@ html.dark .mono-grain {
   gap: 26px;
 }
 .mono-section--cta h2 {
-  max-width: 980px;
-  font-size: clamp(3.8rem, 11vw, 11rem);
-  line-height: 0.82;
+  max-width: 16ch;
+  font-size: clamp(2.8rem, 7vw, 6rem);
+  line-height: 1.12;
+  letter-spacing: -0.01em;
 }
 .mono-section--cta p {
   max-width: 34rem;
@@ -1530,13 +1514,13 @@ html.dark .mono-grain {
   padding: clamp(92px, 12vh, 140px) 0 clamp(74px, 10vh, 120px);
 }
 .mono-about-body h2 {
-  max-width: 980px;
+  max-width: 20ch;
   margin: 24px 0 34px;
   font-family: var(--display);
-  font-size: clamp(3.2rem, 9vw, 9.5rem);
+  font-size: clamp(2.6rem, 6.5vw, 6rem);
   font-weight: 500;
-  letter-spacing: -0.07em;
-  line-height: 0.84;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
 }
 .mono-about-lead {
   max-width: 62rem;
@@ -1663,15 +1647,15 @@ html.dark .mono-grain {
   }
   .mono-hero-statement {
     max-width: 20.5rem;
-    font-size: clamp(1.04rem, 5vw, 1.28rem);
-    letter-spacing: -0.04em;
-    line-height: 1.02;
+    font-size: clamp(1.15rem, 5.4vw, 1.42rem);
+    letter-spacing: -0.01em;
+    line-height: 1.35;
   }
   .mono-hero-substatement {
     max-width: 20rem;
     font-size: clamp(0.92rem, 4.2vw, 1.04rem);
-    letter-spacing: -0.03em;
-    line-height: 1.18;
+    letter-spacing: -0.01em;
+    line-height: 1.5;
   }
   .mono-hero-meta {
     bottom: 150px;
@@ -1679,7 +1663,7 @@ html.dark .mono-grain {
     grid-template-columns: 1fr;
     gap: 6px;
     font-size: 9px;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.04em;
     text-align: center;
   }
   .mono-mega-word {
@@ -1691,9 +1675,9 @@ html.dark .mono-grain {
     display: none;
   }
   .mono-quickstart-title {
-    font-size: clamp(3.2rem, 19vw, 5.4rem);
-    letter-spacing: -0.07em;
-    line-height: 0.88;
+    font-size: clamp(2.6rem, 15vw, 4.4rem);
+    letter-spacing: -0.01em;
+    line-height: 1.1;
   }
   .mono-endpoint {
     grid-template-columns: 1fr;
