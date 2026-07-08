@@ -515,6 +515,66 @@
       </div>
     </template>
 
+    <!-- Kiro OAuth accounts: subscription + agentic usage window -->
+    <template v-else-if="account.platform === 'kiro' && account.type === 'oauth'">
+      <div v-if="loading" class="space-y-1.5">
+        <div class="flex items-center gap-1">
+          <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+          <div class="h-1.5 w-8 animate-pulse rounded-full bg-gray-200 dark:bg-gray-700"></div>
+          <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+        </div>
+      </div>
+      <div v-else-if="error" class="text-xs text-red-500">
+        {{ error }}
+      </div>
+      <div v-else-if="needsReauth" class="space-y-1">
+        <span class="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
+          {{ t('admin.accounts.needsReauth') }}
+        </span>
+      </div>
+      <div v-else-if="usageInfo" class="space-y-1">
+        <!-- Subscription type badge -->
+        <div v-if="kiroSubscriptionLabel" class="mb-0.5">
+          <span
+            class="inline-block rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+            :title="usageInfo.kiro_subscription_raw || ''"
+          >
+            {{ kiroSubscriptionLabel }}
+          </span>
+        </div>
+        <!-- Agentic usage window -->
+        <UsageProgressBar
+          v-if="kiroUsageBar"
+          :label="t('admin.accounts.usageWindow.kiroUsage')"
+          :utilization="kiroUsageBar.utilization"
+          :resets-at="kiroUsageBar.resetsAt"
+          color="amber"
+        />
+        <div v-if="kiroUsageCountLabel" class="text-[10px] text-gray-500 dark:text-gray-400">
+          {{ kiroUsageCountLabel }}
+        </div>
+        <!-- Trial usage window -->
+        <UsageProgressBar
+          v-if="kiroTrialBar"
+          :label="t('admin.accounts.usageWindow.kiroTrial')"
+          :utilization="kiroTrialBar.utilization"
+          color="indigo"
+        />
+        <!-- Overage -->
+        <div v-if="kiroOverageLine" class="text-[10px] text-gray-500 dark:text-gray-400">
+          {{ kiroOverageLine }}
+        </div>
+        <!-- Context usage of last request -->
+        <div v-if="kiroContextLabel" class="text-[10px] text-gray-400 dark:text-gray-500">
+          {{ kiroContextLabel }}
+        </div>
+        <div v-if="usageInfo.error" class="truncate text-xs text-amber-600 dark:text-amber-400 max-w-[200px]" :title="usageInfo.error">
+          {{ usageErrorLabel }}
+        </div>
+      </div>
+      <div v-else class="text-xs text-gray-400">-</div>
+    </template>
+
     <!-- Other accounts: no usage window -->
     <template v-else>
       <div class="text-xs text-gray-400">-</div>
@@ -663,6 +723,9 @@ const shouldFetchUsage = computed(() => {
     return props.account.type === 'oauth'
   }
   if (props.account.platform === 'openai') {
+    return props.account.type === 'oauth'
+  }
+  if (props.account.platform === 'kiro') {
     return props.account.type === 'oauth'
   }
   return false
@@ -1135,6 +1198,59 @@ const validationURL = computed(() => usageInfo.value?.validation_url || '')
 
 // 需要重新授权（401）
 const needsReauth = computed(() => !!usageInfo.value?.needs_reauth)
+
+// ── Kiro 用量展示 ─────────────────────────────────────────
+const kiroSubscriptionLabel = computed(() => {
+  const t = usageInfo.value?.kiro_subscription_type
+  if (!t) return ''
+  switch (t.toUpperCase()) {
+    case 'FREE': return 'Free'
+    case 'PRO': return 'Pro'
+    case 'PRO_PLUS': return 'Pro+'
+    case 'POWER': return 'Power'
+    default: return usageInfo.value?.kiro_subscription_raw || t
+  }
+})
+
+const kiroUsageBar = computed(() => {
+  const pct = usageInfo.value?.kiro_usage_percent
+  if (pct == null) return null
+  return {
+    utilization: Math.min(100, Math.max(0, pct * 100)),
+    resetsAt: usageInfo.value?.kiro_next_reset_date || null
+  }
+})
+
+const kiroUsageCountLabel = computed(() => {
+  const cur = usageInfo.value?.kiro_usage_current
+  const lim = usageInfo.value?.kiro_usage_limit
+  if (cur == null || lim == null || lim <= 0) return ''
+  const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
+  return t('admin.accounts.usageWindow.kiroUsageCount', { current: fmt(cur), limit: fmt(lim) })
+})
+
+const kiroTrialBar = computed(() => {
+  const cur = usageInfo.value?.kiro_trial_current
+  const lim = usageInfo.value?.kiro_trial_limit
+  if (cur == null || lim == null || lim <= 0) return null
+  return { utilization: Math.min(100, Math.max(0, (cur / lim) * 100)) }
+})
+
+const kiroOverageLine = computed(() => {
+  if (usageInfo.value?.kiro_overage_status !== 'ENABLED') return ''
+  const used = usageInfo.value?.kiro_current_overages
+  const cap = usageInfo.value?.kiro_overage_cap
+  if (used == null && cap == null) return ''
+  const usedStr = used != null ? `$${used.toFixed(2)}` : '$0.00'
+  const capStr = cap != null && cap > 0 ? `$${cap.toFixed(2)}` : '∞'
+  return t('admin.accounts.usageWindow.kiroOverage', { used: usedStr, cap: capStr })
+})
+
+const kiroContextLabel = computed(() => {
+  const pct = usageInfo.value?.kiro_context_usage_pct
+  if (pct == null) return ''
+  return t('admin.accounts.usageWindow.kiroContext', { pct: Math.round(pct * 100) })
+})
 
 // 降级错误标签（rate_limited / network_error）
 const usageErrorLabel = computed(() => {

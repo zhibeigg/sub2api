@@ -12,6 +12,7 @@ sub2api 支持接入 **Kiro** 平台：把 AWS Kiro / CodeWhisperer 账户作为
 - 流式（AWS 二进制 event-stream 解析 → SSE）与非流式；thinking 模式（`-thinking` 后缀或 Anthropic `thinking` 配置）。
 - 工具调用（tool_use / tool_calls）转换；**系统提示过滤器**（Claude Code 检测替换 / env noise / 边界标记 / 自定义规则，默认关闭）。
 - **credits / context-usage** 可观测（写入账号快照，不参与计费）。
+- **后台 UI**：账号列表「平台/类型」列正确显示 Kiro（琥珀色）；「用量窗口」列展示订阅类型、用量占比、试用、超额与上下文占比；账号编辑弹窗支持「同步最新支持模型」（本地 Claude 模型集）与「同步上游支持的模型」（调用上游 `ListAvailableModels` 动态发现）。
 
 ## 添加 Kiro 账户
 

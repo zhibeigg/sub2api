@@ -4558,6 +4558,11 @@ export default {
         grokLastStatus: 'Status {status}',
         grokLastProbe: 'Probe {time}',
         grokLastHeadersSeen: 'Headers {time}',
+        kiroUsage: 'Usage',
+        kiroUsageCount: '{current} / {limit} requests',
+        kiroTrial: 'Trial',
+        kiroOverage: 'Overage {used} / {cap}',
+        kiroContext: 'Context {pct}%',
         passiveSampled: 'Passive',
         activeQuery: 'Query'
       },

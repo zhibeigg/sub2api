@@ -223,6 +223,71 @@ func (s *KiroUsageService) prepare(ctx context.Context, accountID int64) (*Accou
 	return account, cred, nil
 }
 
+// ListUpstreamModels 获取 Kiro 账号上游支持的模型 ID 列表（用于"同步上游支持的模型"）。
+// 复用 token provider 获取 access token，调用 kiro.ListAvailableModels 动态发现，
+// 同时把发现的模型缓存进 kiroDiscoveredModels（供 account-agnostic 的 /v1/models 使用）。
+func (s *KiroUsageService) ListUpstreamModels(ctx context.Context, account *Account) ([]string, error) {
+	if s == nil || s.tokenProvider == nil {
+		return nil, infraerrors.New(http.StatusInternalServerError, "KIRO_USAGE_NOT_CONFIGURED", "kiro usage service is not configured")
+	}
+	if account == nil {
+		return nil, infraerrors.New(http.StatusNotFound, "KIRO_USAGE_ACCOUNT_NOT_FOUND", "account not found")
+	}
+	if account.Platform != PlatformKiro {
+		return nil, infraerrors.New(http.StatusBadRequest, "KIRO_USAGE_INVALID_PLATFORM", "account is not a Kiro account")
+	}
+	if account.Type != AccountTypeOAuth {
+		return nil, infraerrors.New(http.StatusBadRequest, "KIRO_USAGE_INVALID_TYPE", "account is not an OAuth account")
+	}
+
+	token, err := s.tokenProvider.GetAccessToken(ctx, account)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "KIRO_USAGE_TOKEN_UNAVAILABLE", "failed to acquire access token: %v", err)
+	}
+
+	cred := &kiro.Credential{
+		AccessToken:  token,
+		RefreshToken: account.GetCredential("refresh_token"),
+		ClientID:     account.GetCredential("client_id"),
+		ClientSecret: account.GetCredential("client_secret"),
+		AuthMethod:   account.GetCredential("auth_method"),
+		Region:       account.GetCredential("region"),
+		ProfileArn:   account.GetCredential("profile_arn"),
+		MachineID:    account.GetCredential("machine_id"),
+		Provider:     account.GetCredential("provider"),
+		Email:        account.GetCredential("email"),
+		ProxyURL:     s.resolveProxyURL(ctx, account),
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, kiroUsageProbeTimeout)
+	defer cancel()
+
+	models, err := kiro.ListAvailableModels(probeCtx, cred)
+	if err != nil {
+		return nil, infraerrors.Newf(http.StatusBadGateway, "KIRO_LIST_MODELS_FAILED", "failed to list upstream models: %v", err)
+	}
+	rememberKiroModels(models)
+
+	seen := make(map[string]struct{}, len(models))
+	ids := make([]string, 0, len(models))
+	for _, m := range models {
+		id := strings.TrimSpace(m.ModelId)
+		if id == "" {
+			id = strings.TrimSpace(m.ModelName)
+		}
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids, nil
+}
+
 func (s *KiroUsageService) resolveProxyURL(ctx context.Context, account *Account) string {
 	if account == nil || account.ProxyID == nil {
 		return ""

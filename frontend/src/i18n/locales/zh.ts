@@ -3721,6 +3721,11 @@ export default {
         grokLastStatus: '状态 {status}',
         grokLastProbe: '探测 {time}',
         grokLastHeadersSeen: '响应头 {time}',
+        kiroUsage: '用量',
+        kiroUsageCount: '{current} / {limit} 次请求',
+        kiroTrial: '试用',
+        kiroOverage: '超额 {used} / {cap}',
+        kiroContext: '上下文 {pct}%',
         passiveSampled: '被动采样',
         activeQuery: '查询'
       },

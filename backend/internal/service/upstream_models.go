@@ -85,6 +85,10 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 		return s.fetchAntigravityOAuthUpstreamModels(ctx, account)
 	}
 
+	if account.Platform == PlatformKiro {
+		return s.fetchKiroUpstreamModels(ctx, account)
+	}
+
 	if s.httpUpstream == nil {
 		return nil, newUpstreamModelSyncConfigError("Upstream HTTP client is not configured", nil)
 	}
@@ -361,6 +365,21 @@ func (s *AccountTestService) fetchAntigravityOAuthUpstreamModels(ctx context.Con
 	models := make([]string, 0, len(modelsResp.Models))
 	for modelID := range modelsResp.Models {
 		models = append(models, strings.TrimSpace(modelID))
+	}
+	return dedupeAndSortModelIDs(models), nil
+}
+
+// fetchKiroUpstreamModels 通过 Kiro usage service 动态发现上游支持的模型。
+func (s *AccountTestService) fetchKiroUpstreamModels(ctx context.Context, account *Account) ([]string, error) {
+	if s.kiroUsageService == nil {
+		return nil, newUpstreamModelSyncConfigError("Kiro usage service is not configured", nil)
+	}
+	models, err := s.kiroUsageService.ListUpstreamModels(ctx, account)
+	if err != nil {
+		return nil, newUpstreamModelSyncUpstreamError("Failed to fetch Kiro available models", err)
+	}
+	if len(models) == 0 {
+		return nil, newUpstreamModelSyncUpstreamError("Upstream returned no supported models", nil)
 	}
 	return dedupeAndSortModelIDs(models), nil
 }

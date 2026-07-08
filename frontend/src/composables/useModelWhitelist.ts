@@ -401,7 +401,8 @@ export function getModelsByPlatform(platform: string): string[] {
   switch (platform) {
     case 'openai': return openaiModels
     case 'anthropic':
-    case 'claude': return claudeModels
+    case 'claude':
+    case 'kiro': return claudeModels
     case 'gemini': return geminiModels
     case 'antigravity': return antigravityModels
     case 'zhipu': return zhipuModels

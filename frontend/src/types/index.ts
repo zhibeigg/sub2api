@@ -1047,6 +1047,21 @@ export interface AccountUsageInfo {
   grok_last_headers_seen_at?: string
   grok_last_status_code?: number
   grok_local_usage?: WindowStats | null
+  // Kiro / AWS CodeWhisperer 账号级用量信息
+  kiro_subscription_type?: string   // FREE/PRO/PRO_PLUS/POWER
+  kiro_subscription_raw?: string    // 上游原始订阅名
+  kiro_usage_current?: number | null   // 当前用量（agentic requests）
+  kiro_usage_limit?: number | null     // 用量上限
+  kiro_usage_percent?: number | null   // 用量占比 0-1
+  kiro_trial_current?: number | null   // 试用当前用量
+  kiro_trial_limit?: number | null     // 试用上限
+  kiro_trial_status?: string           // 试用状态
+  kiro_next_reset_date?: string        // 下次重置日期 YYYY-MM-DD
+  kiro_overage_status?: string         // ENABLED/DISABLED/UNKNOWN
+  kiro_overage_cap?: number | null     // 超额上限（USD）
+  kiro_overage_rate?: number | null    // 超额单价（USD）
+  kiro_current_overages?: number | null // 已累计超额（USD）
+  kiro_context_usage_pct?: number | null // 最近一次请求上下文使用百分比
   ai_credits?: Array<{
     credit_type?: string
     amount?: number
