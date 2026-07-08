@@ -166,7 +166,8 @@ Sub2API is an AI API gateway platform designed to distribute and manage API quot
 
 ## Features
 
-- **Multi-Account Management** - Support multiple upstream account types (OAuth, API Key)
+- **Multi-Account Management** - Support multiple upstream account types (OAuth, API Key); native integration for Anthropic, OpenAI, Gemini, Antigravity, Grok, and Kiro (AWS CodeWhisperer, serving Claude models)
+- **Native Kiro Integration** - Built-in AWS Builder ID device code, IAM Identity Center (PKCE), SSO token import, and credentials-JSON login; automatic token refresh, subscription/usage/overage queries, health checks, and dynamic model discovery
 - **API Key Distribution** - Generate and manage API Keys for users
 - **Precise Billing** - Token-level usage tracking and cost calculation
 - **Smart Scheduling** - Intelligent account selection with sticky sessions
