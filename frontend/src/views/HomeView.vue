@@ -36,10 +36,10 @@
       </router-link>
 
       <nav class="mono-top-links" :aria-label="t('home.aria.primaryNav')">
+        <button type="button" @click="openAbout">{{ t('home.nav.about') }}</button>
         <a href="#work" @click.prevent="scrollTo('work')">{{ t('home.nav.features') }}</a>
-        <a href="#process" @click.prevent="scrollTo('process')">{{ t('home.nav.workflow') }}</a>
         <a href="#services" @click.prevent="scrollTo('services')">{{ t('home.nav.models') }}</a>
-        <a href="#pricing" @click.prevent="scrollTo('pricing')">{{ t('home.nav.pricing') }}</a>
+        <a href="#process" @click.prevent="scrollTo('process')">{{ t('home.nav.workflow') }}</a>
       </nav>
 
       <div class="mono-top-actions">
@@ -86,58 +86,98 @@
     </header>
 
     <main id="top">
-      <section class="mono-hero" aria-labelledby="home-title">
-        <div class="mono-container">
-          <div class="mono-hero-grid">
-            <div class="mono-hero-copy">
-              <p class="mono-eyebrow mono-enter" style="--d: 0ms">
-                <span class="mono-dot" aria-hidden="true"></span>
-                <span>{{ t('home.hero.badge') }}</span>
-              </p>
+      <section class="mono-hero mono-hero--poster" aria-labelledby="home-title">
+        <canvas ref="auroraCanvas" class="mono-aurora-canvas" aria-hidden="true"></canvas>
+        <div class="mono-aurora-fallback" aria-hidden="true"></div>
+        <div class="mono-hero-cover" aria-hidden="true">
+          <div class="mono-hero-scanline"></div>
+          <div class="mono-hero-vignette"></div>
+        </div>
 
-              <h1 id="home-title" class="mono-display">
-                <span class="mono-display-line mono-enter" style="--d: 90ms">{{ t('home.hero.titleLine1') }}</span>
-                <span class="mono-display-line mono-display-line--mute mono-enter" style="--d: 170ms">
-                  {{ t('home.hero.titleLine2') }}
-                </span>
-              </h1>
+        <div class="mono-hero-contain">
+          <div class="mono-hero-orbit mono-enter" style="--d: 60ms" aria-hidden="true">
+            <span></span>
+          </div>
+          <p class="mono-hero-kicker mono-enter" style="--d: 120ms">
+            {{ t('home.hero.badge') }}
+          </p>
+          <h1 id="home-title" class="mono-hero-statement mono-enter" style="--d: 190ms">
+            {{ t('home.hero.posterStatement') }}
+          </h1>
+          <p class="mono-hero-substatement mono-enter" style="--d: 270ms">
+            {{ t('home.hero.posterSubstatement') }}
+          </p>
+        </div>
 
-              <p class="mono-hero-lead mono-enter" style="--d: 260ms">
-                {{ t('home.hero.description') }}
-              </p>
+        <div class="mono-hero-meta mono-enter" style="--d: 350ms" aria-label="gateway highlights">
+          <span>{{ t('home.hero.metaLatency') }}</span>
+          <span>{{ t('home.hero.metaModels') }}</span>
+          <span>{{ t('home.hero.metaControl') }}</span>
+        </div>
 
-              <div class="mono-hero-actions mono-enter" style="--d: 350ms">
-                <router-link
-                  :to="isAuthenticated ? dashboardPath : '/register'"
-                  class="mono-pill mono-pill--large mono-pill--filled"
-                  @pointerenter="setCursor(t('home.cursor.start'))"
-                  @pointerleave="clearCursor"
-                >
-                  {{ isAuthenticated ? t('home.goToDashboard') : t('home.hero.ctaPrimary') }}
-                  <Icon name="arrowRight" size="sm" :stroke-width="1.5" />
-                </router-link>
-                <button
-                  type="button"
-                  class="mono-pill mono-pill--large"
-                  @click="openAbout"
-                  @pointerenter="setCursor(t('home.cursor.about'))"
-                  @pointerleave="clearCursor"
-                >
-                  {{ t('home.about.open') }}
-                </button>
-              </div>
+        <div class="mono-mega-word" aria-hidden="true">
+          <span>{{ posterWord }}</span>
+        </div>
+
+        <button
+          type="button"
+          class="mono-hero-scroll mono-enter"
+          style="--d: 460ms"
+          @click="scrollTo('work')"
+          @pointerenter="setCursor(t('home.cursor.read'))"
+          @pointerleave="clearCursor"
+        >
+          {{ t('home.hero.scrollCue') }} <span>↓</span>
+        </button>
+      </section>
+
+      <section class="mono-section mono-section--quickstart" aria-label="API gateway quickstart">
+        <div class="mono-container mono-quickstart-grid">
+          <div class="mono-quickstart-copy" data-reveal>
+            <p class="mono-eyebrow mono-eyebrow--plain">
+              <span class="mono-dot" aria-hidden="true"></span>
+              <span>{{ t('home.hero.quickstartKicker') }}</span>
+            </p>
+            <h2 class="mono-quickstart-title">
+              <span>{{ t('home.hero.titleLine1') }}</span>
+              <span>{{ t('home.hero.titleLine2') }}</span>
+            </h2>
+            <p class="mono-hero-lead">
+              {{ t('home.hero.description') }}
+            </p>
+            <div class="mono-hero-actions">
+              <router-link
+                :to="isAuthenticated ? dashboardPath : '/register'"
+                class="mono-pill mono-pill--large mono-pill--filled"
+                @pointerenter="setCursor(t('home.cursor.start'))"
+                @pointerleave="clearCursor"
+              >
+                {{ isAuthenticated ? t('home.goToDashboard') : t('home.hero.ctaPrimary') }}
+                <Icon name="arrowRight" size="sm" :stroke-width="1.5" />
+              </router-link>
+              <button
+                type="button"
+                class="mono-pill mono-pill--large"
+                @click="openAbout"
+                @pointerenter="setCursor(t('home.cursor.about'))"
+                @pointerleave="clearCursor"
+              >
+                {{ t('home.about.open') }}
+              </button>
             </div>
-
-            <aside class="mono-hero-plate mono-enter" style="--d: 420ms" aria-label="API gateway visual">
-              <img :src="gatewayPlateUrl" alt="" class="mono-plate-img" />
-              <div class="mono-plate-caption">
-                <span>{{ t('home.visual.gatewayLabel') }}</span>
-                <span>{{ t('home.visual.gatewayMeta') }}</span>
-              </div>
-            </aside>
           </div>
 
-          <div class="mono-endpoints mono-enter" style="--d: 520ms" :aria-label="t('home.aria.endpoints')">
+          <aside class="mono-hero-plate" data-reveal style="--rd: 100ms" aria-label="API gateway visual">
+            <img :src="gatewayPlateUrl" alt="" class="mono-plate-img" />
+            <div class="mono-plate-caption">
+              <span>{{ t('home.visual.gatewayLabel') }}</span>
+              <span>{{ t('home.visual.gatewayMeta') }}</span>
+            </div>
+          </aside>
+        </div>
+
+        <div class="mono-container">
+          <div class="mono-endpoints" data-reveal style="--rd: 160ms" :aria-label="t('home.aria.endpoints')">
             <div v-for="ep in endpoints" :key="ep.key" class="mono-endpoint">
               <span class="mono-endpoint-label">{{ t(ep.labelKey) }}</span>
               <code class="mono-endpoint-url">{{ ep.url }}</code>
@@ -276,7 +316,7 @@
       </div>
     </footer>
 
-    <nav class="mono-bottom-nav" :aria-label="t('home.aria.bottomNav')">
+    <nav class="mono-bottom-nav" :class="{ 'mono-bottom-nav--visible': isScrolled }" :aria-label="t('home.aria.bottomNav')">
       <button type="button" @click="openAbout">{{ t('home.bottomNav.about') }}<span>→</span></button>
       <button type="button" @click="scrollTo('work')">{{ t('home.bottomNav.work') }}<span>→</span></button>
       <button type="button" @click="scrollTo('process')">{{ t('home.bottomNav.process') }}<span>→</span></button>
@@ -342,6 +382,7 @@ const appStore = useAppStore()
 
 const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'Sub2API')
 const siteLogo = computed(() => appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '')
+const posterWord = computed(() => siteName.value.replace(/[^a-z0-9]/gi, '').toUpperCase() || 'SUB2API')
 const homeContent = computed(() => appStore.cachedPublicSettings?.home_content || '')
 
 const isHomeContentUrl = computed(() => {
@@ -432,7 +473,10 @@ const aboutPrinciples = [
 ]
 
 const copiedKey = ref('')
+const auroraCanvas = ref<HTMLCanvasElement | null>(null)
 let copyTimer: ReturnType<typeof setTimeout> | null = null
+let auroraRaf = 0
+let auroraResize: (() => void) | null = null
 
 async function copyEndpoint(ep: { key: string; url: string }) {
   try {
@@ -496,6 +540,121 @@ function clearCursor() {
   cursorLabel.value = ''
 }
 
+function setupAurora() {
+  const canvas = auroraCanvas.value
+  if (!canvas) return
+
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const ctx = canvas.getContext('2d', { alpha: true })
+  if (!ctx) return
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5)
+  const resize = () => {
+    const rect = canvas.getBoundingClientRect()
+    canvas.width = Math.max(1, Math.floor(rect.width * dpr))
+    canvas.height = Math.max(1, Math.floor(rect.height * dpr))
+  }
+
+  const draw = (time = 0) => {
+    const width = canvas.width / dpr
+    const height = canvas.height / dpr
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    ctx.clearRect(0, 0, width, height)
+
+    const t = time * 0.00018
+    ctx.globalCompositeOperation = 'source-over'
+    const base = ctx.createLinearGradient(0, 0, 0, height)
+    base.addColorStop(0, 'rgba(10, 10, 9, 0.12)')
+    base.addColorStop(0.42, 'rgba(255, 255, 246, 0.035)')
+    base.addColorStop(1, 'rgba(7, 7, 6, 0.28)')
+    ctx.fillStyle = base
+    ctx.fillRect(0, 0, width, height)
+
+    ctx.globalCompositeOperation = 'screen'
+    ctx.filter = `blur(${Math.max(34, width * 0.04)}px)`
+
+    const bands = [
+      { y: 0.2, amp: 0.075, thick: 180, alpha: 0.28, speed: 1.0 },
+      { y: 0.36, amp: 0.09, thick: 220, alpha: 0.2, speed: -0.74 },
+      { y: 0.58, amp: 0.06, thick: 170, alpha: 0.15, speed: 0.58 },
+      { y: 0.72, amp: 0.045, thick: 120, alpha: 0.1, speed: -0.48 }
+    ]
+
+    for (const band of bands) {
+      const gradient = ctx.createLinearGradient(0, height * (band.y - 0.16), width, height * (band.y + 0.16))
+      gradient.addColorStop(0, `rgba(255,255,244,0)`)
+      gradient.addColorStop(0.32, `rgba(235,235,224,${band.alpha * 0.65})`)
+      gradient.addColorStop(0.5, `rgba(255,255,249,${band.alpha})`)
+      gradient.addColorStop(0.72, `rgba(176,176,166,${band.alpha * 0.54})`)
+      gradient.addColorStop(1, `rgba(255,255,244,0)`)
+
+      ctx.beginPath()
+      ctx.moveTo(-width * 0.08, height * band.y)
+      for (let i = 0; i <= 6; i += 1) {
+        const x = (width * i) / 5 - width * 0.08
+        const wave = Math.sin(t * band.speed + i * 1.7) * height * band.amp
+        const drift = Math.cos(t * 0.72 + i * 1.15) * width * 0.025
+        ctx.lineTo(x + drift, height * band.y + wave)
+      }
+      ctx.strokeStyle = gradient
+      ctx.lineWidth = band.thick
+      ctx.lineCap = 'round'
+      ctx.stroke()
+    }
+
+    ctx.filter = 'blur(14px)'
+    for (let i = 0; i < 11; i += 1) {
+      const x = width * (0.04 + ((i * 0.125 + t * 0.075) % 1.05))
+      const y = height * (0.16 + 0.58 * Math.abs(Math.sin(t * 0.55 + i * 0.78)))
+      const radius = width * (0.055 + 0.035 * Math.sin(t + i * 0.6))
+      const glow = ctx.createRadialGradient(x, y, 0, x, y, radius)
+      glow.addColorStop(0, 'rgba(255,255,245,0.16)')
+      glow.addColorStop(0.48, 'rgba(210,210,196,0.045)')
+      glow.addColorStop(1, 'rgba(255,255,245,0)')
+      ctx.fillStyle = glow
+      ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2)
+    }
+
+    ctx.filter = `blur(${Math.max(40, width * 0.055)}px)`
+    ctx.globalCompositeOperation = 'multiply'
+    for (let i = 0; i < 4; i += 1) {
+      const x = width * (0.18 + i * 0.24 + Math.sin(t + i) * 0.04)
+      const y = height * (0.36 + Math.cos(t * 0.8 + i) * 0.16)
+      const radius = width * (0.16 + i * 0.018)
+      const shadow = ctx.createRadialGradient(x, y, 0, x, y, radius)
+      shadow.addColorStop(0, 'rgba(0,0,0,0.62)')
+      shadow.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = shadow
+      ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2)
+    }
+
+    ctx.filter = 'none'
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.fillStyle = 'rgba(0,0,0,0.08)'
+    ctx.fillRect(0, 0, width, height)
+
+    if (!prefersReduced) {
+      auroraRaf = window.requestAnimationFrame(draw)
+    }
+  }
+
+  resize()
+  auroraResize = resize
+  window.addEventListener('resize', resize, { passive: true })
+  draw(0)
+}
+
+function cleanupAurora() {
+  if (auroraRaf) {
+    window.cancelAnimationFrame(auroraRaf)
+    auroraRaf = 0
+  }
+  if (auroraResize) {
+    window.removeEventListener('resize', auroraResize)
+    auroraResize = null
+  }
+}
+
 let observer: IntersectionObserver | null = null
 
 function setupReveal() {
@@ -529,12 +688,16 @@ onMounted(() => {
   window.addEventListener('scroll', onScroll, { passive: true })
   window.addEventListener('keydown', onKeydown)
   onScroll()
-  requestAnimationFrame(() => setupReveal())
+  requestAnimationFrame(() => {
+    setupAurora()
+    setupReveal()
+  })
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', onScroll)
   window.removeEventListener('keydown', onKeydown)
+  cleanupAurora()
   observer?.disconnect()
   if (copyTimer) clearTimeout(copyTimer)
   document.documentElement.classList.remove('mono-lock-scroll')
@@ -547,15 +710,15 @@ onBeforeUnmount(() => {
 }
 
 .mono-page {
-  --ink: oklch(0.16 0.004 95);
-  --ink-muted: oklch(0.43 0.006 95);
-  --ink-soft: oklch(0.63 0.006 95);
-  --paper: oklch(0.955 0.012 85);
-  --paper-deep: oklch(0.9 0.018 82);
-  --line: oklch(0.16 0.004 95 / 0.16);
-  --line-strong: oklch(0.16 0.004 95 / 0.38);
-  --surface: oklch(0.985 0.007 85);
-  --accent: oklch(0.55 0.2 28);
+  --ink: oklch(0.91 0.012 85);
+  --ink-muted: oklch(0.72 0.01 85);
+  --ink-soft: oklch(0.52 0.009 85);
+  --paper: oklch(0.105 0.004 95);
+  --paper-deep: oklch(0.055 0.003 95);
+  --line: oklch(0.91 0.012 85 / 0.13);
+  --line-strong: oklch(0.91 0.012 85 / 0.34);
+  --surface: oklch(0.16 0.005 95);
+  --accent: oklch(0.78 0.018 90);
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --display: 'Bricolage Grotesque', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
   --mono: 'Geist Mono', ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
@@ -565,21 +728,21 @@ onBeforeUnmount(() => {
   min-height: 100vh;
   overflow-x: clip;
   background:
-    radial-gradient(circle at 10% 12%, oklch(0.82 0.03 55 / 0.24), transparent 26rem),
+    radial-gradient(circle at 50% -18%, oklch(0.72 0.012 85 / 0.18), transparent 36rem),
     linear-gradient(180deg, var(--paper), var(--paper-deep));
   color: var(--ink);
   font-family: var(--body);
 }
 html.dark .mono-page {
   --ink: oklch(0.91 0.012 85);
-  --ink-muted: oklch(0.69 0.012 85);
-  --ink-soft: oklch(0.47 0.012 85);
-  --paper: oklch(0.135 0.005 95);
-  --paper-deep: oklch(0.09 0.004 95);
-  --line: oklch(0.91 0.012 85 / 0.15);
-  --line-strong: oklch(0.91 0.012 85 / 0.38);
-  --surface: oklch(0.18 0.006 95);
-  --accent: oklch(0.62 0.2 28);
+  --ink-muted: oklch(0.72 0.01 85);
+  --ink-soft: oklch(0.52 0.009 85);
+  --paper: oklch(0.105 0.004 95);
+  --paper-deep: oklch(0.055 0.003 95);
+  --line: oklch(0.91 0.012 85 / 0.13);
+  --line-strong: oklch(0.91 0.012 85 / 0.34);
+  --surface: oklch(0.16 0.005 95);
+  --accent: oklch(0.78 0.018 90);
 }
 
 .mono-grain {
@@ -587,15 +750,15 @@ html.dark .mono-page {
   position: fixed;
   inset: -40px;
   z-index: 2;
-  opacity: 0.42;
+  opacity: 0.22;
   background-image: var(--grain-url);
   background-size: 180px 180px;
-  mix-blend-mode: multiply;
+  mix-blend-mode: screen;
   animation: mono-grain 0.55s steps(6) infinite;
 }
 html.dark .mono-grain {
   mix-blend-mode: screen;
-  opacity: 0.18;
+  opacity: 0.22;
 }
 @keyframes mono-grain {
   0%, 100% { transform: translate(0, 0); }
@@ -631,21 +794,26 @@ html.dark .mono-grain {
 }
 
 .mono-topbar {
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 40;
+  left: 0;
+  right: 0;
+  z-index: 50;
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 28px;
-  padding: 22px clamp(22px, 3vw, 42px);
+  padding: 14px clamp(14px, 2vw, 28px);
   border-bottom: 1px solid transparent;
-  transition: background-color 0.24s ease, border-color 0.24s ease;
+  color: oklch(0.92 0.01 85);
+  mix-blend-mode: difference;
+  transition: background-color 0.24s ease, border-color 0.24s ease, mix-blend-mode 0.24s ease;
 }
 .mono-topbar--scrolled {
-  background: color-mix(in oklab, var(--paper) 82%, transparent);
+  background: color-mix(in oklab, var(--paper) 72%, transparent);
   border-bottom-color: var(--line);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(18px);
+  mix-blend-mode: normal;
 }
 .mono-brand,
 .mono-top-links,
@@ -681,16 +849,23 @@ html.dark .mono-grain {
   gap: 30px;
 }
 .mono-top-links a,
+.mono-top-links button,
 .mono-text-link {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-muted);
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-family: var(--display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  text-transform: none;
+  color: color-mix(in oklab, var(--ink) 76%, transparent);
   text-decoration: none;
-  transition: color 0.18s ease;
+  cursor: pointer;
+  transition: color 0.18s ease, opacity 0.18s ease;
 }
 .mono-top-links a:hover,
+.mono-top-links button:hover,
 .mono-text-link:hover {
   color: var(--ink);
 }
@@ -763,15 +938,193 @@ html.dark .mono-grain {
 .mono-hero {
   position: relative;
   z-index: 3;
-  min-height: calc(100vh - 84px);
-  padding: clamp(30px, 5vh, 62px) 0 clamp(120px, 16vh, 172px);
+  isolation: isolate;
+  min-height: 100svh;
+  overflow: hidden;
   border-bottom: 1px solid var(--line);
+  background: oklch(0.055 0.003 95);
 }
-.mono-hero-grid {
+.mono-aurora-canvas,
+.mono-aurora-fallback,
+.mono-hero-cover,
+.mono-hero-scanline,
+.mono-hero-vignette {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+}
+.mono-aurora-canvas {
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.96;
+  mix-blend-mode: screen;
+  filter: grayscale(1) contrast(1.08) saturate(0.2);
+}
+.mono-aurora-fallback {
+  z-index: -1;
+  background:
+    radial-gradient(ellipse at 50% 22%, oklch(0.76 0.012 85 / 0.28), transparent 24%),
+    radial-gradient(ellipse at 18% 54%, oklch(0.72 0.01 85 / 0.16), transparent 28%),
+    radial-gradient(ellipse at 82% 48%, oklch(0.62 0.008 85 / 0.12), transparent 30%),
+    linear-gradient(180deg, oklch(0.08 0.004 95), oklch(0.035 0.003 95));
+  animation: mono-aurora-drift 15s ease-in-out infinite alternate;
+}
+@keyframes mono-aurora-drift {
+  from { transform: scale(1.04) translate3d(-1.5%, -1%, 0); filter: blur(0); }
+  to { transform: scale(1.1) translate3d(1.5%, 1%, 0); filter: blur(3px); }
+}
+.mono-hero-cover {
+  z-index: 1;
+}
+.mono-hero-scanline {
+  opacity: 0.42;
+  background:
+    repeating-linear-gradient(0deg, oklch(1 0 0 / 0.04) 0 1px, transparent 1px 3px),
+    radial-gradient(circle at center, transparent 0 42%, oklch(0 0 0 / 0.36) 82%);
+  mix-blend-mode: overlay;
+}
+.mono-hero-vignette {
+  background:
+    linear-gradient(180deg, oklch(0 0 0 / 0.42), transparent 20%, transparent 66%, oklch(0 0 0 / 0.55)),
+    radial-gradient(ellipse at center, transparent 28%, oklch(0 0 0 / 0.58) 100%);
+}
+.mono-hero-contain {
+  position: relative;
+  z-index: 4;
   display: grid;
-  grid-template-columns: minmax(0, 1.06fr) minmax(300px, 0.72fr);
-  gap: clamp(38px, 7vw, 96px);
-  align-items: end;
+  justify-items: center;
+  align-content: start;
+  min-height: 100svh;
+  width: min(100% - 36px, 620px);
+  margin-inline: auto;
+  padding-top: clamp(128px, 20vh, 194px);
+  text-align: center;
+}
+.mono-hero-orbit {
+  position: relative;
+  width: 58px;
+  height: 20px;
+  margin-bottom: 24px;
+  border: 1px solid color-mix(in oklab, var(--ink) 78%, transparent);
+  border-radius: 999px;
+  opacity: 0.82;
+}
+.mono-hero-orbit::before,
+.mono-hero-orbit::after,
+.mono-hero-orbit span {
+  content: '';
+  position: absolute;
+  inset: 2px 10px;
+  border: 1px solid color-mix(in oklab, var(--ink) 60%, transparent);
+  border-radius: 999px;
+}
+.mono-hero-orbit::before {
+  transform: rotate(90deg) scaleX(0.42);
+}
+.mono-hero-orbit::after {
+  transform: rotate(0deg) scaleX(0.62);
+}
+.mono-hero-orbit span {
+  inset: 8px 2px;
+  border-inline: 0;
+}
+.mono-hero-kicker,
+.mono-hero-substatement,
+.mono-hero-meta,
+.mono-hero-scroll {
+  color: color-mix(in oklab, var(--ink) 76%, transparent);
+  text-shadow: 0 1px 18px oklch(0 0 0 / 0.5);
+}
+.mono-hero-kicker {
+  max-width: 24rem;
+  margin: 0 0 18px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.13em;
+  line-height: 1.55;
+  text-transform: uppercase;
+}
+.mono-hero-statement {
+  max-width: 29rem;
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: clamp(1.08rem, 1.34vw, 1.42rem);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.mono-hero-substatement {
+  max-width: 24rem;
+  margin: 20px 0 0;
+  font-family: var(--display);
+  font-size: clamp(0.92rem, 0.98vw, 1.04rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.mono-hero-meta {
+  position: absolute;
+  z-index: 4;
+  left: clamp(18px, 3vw, 44px);
+  right: clamp(18px, 3vw, 44px);
+  bottom: clamp(156px, 18vw, 220px);
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.mono-mega-word {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  bottom: clamp(-24px, -2.4vw, -10px);
+  width: 124vw;
+  transform: translateX(-50%) scaleX(1.08);
+  color: color-mix(in oklab, var(--ink) 68%, transparent);
+  font-family: var(--display);
+  font-size: clamp(7.6rem, 29vw, 28rem);
+  font-weight: 800;
+  letter-spacing: -0.12em;
+  line-height: 0.72;
+  text-align: center;
+  white-space: nowrap;
+  opacity: 0.9;
+  filter: blur(0.18px);
+}
+.mono-mega-word span {
+  display: inline-block;
+}
+.mono-hero-scroll {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  bottom: clamp(88px, 10vw, 118px);
+  transform: translateX(-50%);
+  border: 1px solid color-mix(in oklab, var(--ink) 16%, transparent);
+  border-radius: 999px;
+  background: oklch(0.08 0.004 95 / 0.24);
+  padding: 7px 11px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  backdrop-filter: blur(12px);
+}
+.mono-hero-scroll span {
+  display: inline-block;
+  margin-left: 6px;
 }
 .mono-eyebrow {
   display: inline-flex;
@@ -796,18 +1149,32 @@ html.dark .mono-grain {
 @keyframes mono-pulse {
   50% { opacity: 0.35; }
 }
-.mono-display {
-  margin: clamp(20px, 3.5vh, 38px) 0 clamp(22px, 3.5vh, 36px);
+.mono-section--quickstart {
+  background:
+    radial-gradient(circle at 75% 18%, oklch(0.7 0.01 85 / 0.08), transparent 28rem),
+    linear-gradient(180deg, oklch(0.085 0.004 95), var(--paper-deep));
+}
+.mono-quickstart-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(300px, 0.72fr);
+  gap: clamp(38px, 7vw, 96px);
+  align-items: end;
+}
+.mono-quickstart-copy {
+  display: grid;
+  gap: 22px;
+}
+.mono-quickstart-title {
+  display: grid;
+  margin: 0;
+  color: var(--ink);
   font-family: var(--display);
-  font-size: clamp(4rem, 10.3vw, 10rem);
+  font-size: clamp(3.6rem, 9vw, 8.5rem);
   font-weight: 800;
-  letter-spacing: -0.075em;
+  letter-spacing: -0.085em;
   line-height: 0.84;
 }
-.mono-display-line {
-  display: block;
-}
-.mono-display-line--mute {
+.mono-quickstart-title span + span {
   color: var(--ink-soft);
 }
 .mono-hero-lead {
@@ -823,7 +1190,6 @@ html.dark .mono-grain {
   display: flex;
   flex-wrap: wrap;
   gap: 18px;
-  margin-top: 24px;
 }
 .mono-hero-plate {
   position: relative;
@@ -855,7 +1221,7 @@ html.dark .mono-grain {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0 clamp(18px, 4vw, 44px);
-  margin-top: clamp(24px, 4vh, 46px);
+  margin-top: clamp(44px, 8vh, 82px);
   border-top: 1px solid var(--line);
 }
 .mono-endpoint {
@@ -1102,11 +1468,21 @@ html.dark .mono-grain {
   z-index: 42;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  border: 1px solid var(--line-strong);
-  border-radius: 18px;
   overflow: hidden;
-  background: color-mix(in oklab, var(--paper) 82%, transparent);
-  backdrop-filter: blur(18px);
+  border: 1px solid color-mix(in oklab, var(--ink) 24%, transparent);
+  border-radius: 16px;
+  background: oklch(0.07 0.004 95 / 0.72);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.06), 0 18px 70px oklch(0 0 0 / 0.38);
+  opacity: 0;
+  transform: translateY(110%);
+  pointer-events: none;
+  backdrop-filter: blur(20px);
+  transition: opacity 0.42s var(--ease), transform 0.42s var(--ease);
+}
+.mono-bottom-nav--visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
 }
 .mono-bottom-nav button,
 .mono-bottom-nav a {
@@ -1264,7 +1640,7 @@ html.dark .mono-grain {
   .mono-top-links {
     display: none;
   }
-  .mono-hero-grid,
+  .mono-quickstart-grid,
   .mono-process-grid,
   .mono-price-grid {
     grid-template-columns: 1fr;
@@ -1301,9 +1677,42 @@ html.dark .mono-grain {
   .mono-about-body {
     width: min(100% - 32px, 1320px);
   }
-  .mono-display {
-    font-size: clamp(3.4rem, 18vw, 5.2rem);
-    letter-spacing: -0.065em;
+  .mono-hero-contain {
+    width: min(100% - 40px, 360px);
+    padding-top: 116px;
+  }
+  .mono-hero-statement {
+    max-width: 20.5rem;
+    font-size: clamp(1.04rem, 5vw, 1.28rem);
+    letter-spacing: -0.04em;
+    line-height: 1.02;
+  }
+  .mono-hero-substatement {
+    max-width: 20rem;
+    font-size: clamp(0.92rem, 4.2vw, 1.04rem);
+    letter-spacing: -0.03em;
+    line-height: 1.18;
+  }
+  .mono-hero-meta {
+    bottom: 150px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-align: center;
+  }
+  .mono-mega-word {
+    bottom: 20px;
+    width: 176vw;
+    font-size: clamp(7rem, 38vw, 10.4rem);
+  }
+  .mono-hero-scroll {
+    display: none;
+  }
+  .mono-quickstart-title {
+    font-size: clamp(3.2rem, 19vw, 5.4rem);
+    letter-spacing: -0.07em;
     line-height: 0.88;
   }
   .mono-endpoint {
@@ -1356,6 +1765,7 @@ html.dark .mono-grain {
   [data-reveal],
   .mono-grain,
   .mono-dot,
+  .mono-aurora-fallback,
   .mono-model-track {
     animation: none;
     transition: none;

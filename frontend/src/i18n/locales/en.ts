@@ -32,6 +32,7 @@ export default {
       close: 'Close'
     },
     nav: {
+      about: 'About',
       features: 'Work',
       workflow: 'Process',
       models: 'Services',
@@ -45,7 +46,14 @@ export default {
       contact: 'Start'
     },
     hero: {
-      badge: 'Enterprise AI API Gateway',
+      badge: 'Multi-model gateway / Observable billing / Protocol compatible',
+      posterStatement: 'One reliable gateway for every AI model your product depends on.',
+      posterSubstatement: 'Built for teams whose model layer has outgrown scattered provider keys.',
+      metaLatency: 'Routing matrix online',
+      metaModels: 'Claude · OpenAI · Gemini · Grok',
+      metaControl: 'Usage · Billing · Failover',
+      scrollCue: 'See the gateway',
+      quickstartKicker: 'Gateway surface',
       titleLine1: 'One key.',
       titleLine2: 'Every model.',
       description:

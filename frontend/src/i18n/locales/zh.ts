@@ -32,9 +32,10 @@ export default {
       close: '关闭'
     },
     nav: {
-      features: '能力',
+      about: '关于',
+      features: '案例',
       workflow: '流程',
-      models: '模型',
+      models: '服务',
       pricing: '定价'
     },
     bottomNav: {
@@ -45,7 +46,14 @@ export default {
       contact: 'Start'
     },
     hero: {
-      badge: '企业级 AI API 网关',
+      badge: '多模型网关 / 可观测计费 / 协议兼容',
+      posterStatement: '把所有 AI 模型入口，收束成一个真正可靠的网关。',
+      posterSubstatement: '为已经跑起来的产品与团队，补上配得上规模的接入层。',
+      metaLatency: 'Routing matrix online',
+      metaModels: 'Claude · OpenAI · Gemini · Grok',
+      metaControl: 'Usage · Billing · Failover',
+      scrollCue: '查看接入方式',
+      quickstartKicker: 'Gateway surface',
       titleLine1: 'One key.',
       titleLine2: 'Every model.',
       description:
