@@ -1,7 +1,6 @@
 <template>
   <!-- Custom Home Content: Full Page Mode -->
   <div v-if="homeContent" class="min-h-screen">
-    <!-- iframe mode -->
     <iframe
       v-if="isHomeContentUrl"
       :src="homeContent.trim()"
@@ -12,211 +11,257 @@
     <div v-else v-html="homeContent"></div>
   </div>
 
-  <!-- Default Home Page: monochrome editorial (bymonolog-inspired) -->
-  <div v-else class="pk-page">
-    <!-- ============ NAV ============ -->
-    <header class="pk-nav" :class="{ 'pk-nav--scrolled': isScrolled }">
-      <nav class="pk-nav-inner">
-        <a class="pk-brand" href="#top" @click.prevent="scrollToTop">
-          <img :src="siteLogo || '/logo.png'" alt="Logo" class="pk-brand-logo" />
-          <span class="pk-brand-name">{{ siteName }}</span>
-        </a>
+  <!-- Default Home Page: monochrome studio / bymonolog-inspired -->
+  <div
+    v-else
+    class="mono-page"
+    :style="pageStyle"
+    @pointermove="handlePointerMove"
+  >
+    <div class="mono-grain" aria-hidden="true"></div>
 
-        <div class="pk-nav-links">
-          <a href="#value" @click.prevent="scrollTo('value')">{{ t('home.nav.features') }}</a>
-          <a href="#workflow" @click.prevent="scrollTo('workflow')">{{ t('home.nav.workflow') }}</a>
-          <a href="#ecosystem" @click.prevent="scrollTo('ecosystem')">{{ t('home.nav.models') }}</a>
-          <a href="#pricing" @click.prevent="scrollTo('pricing')">{{ t('home.nav.pricing') }}</a>
-          <a v-if="docUrl" :href="docUrl" target="_blank" rel="noopener noreferrer">{{ t('home.docs') }}</a>
-        </div>
+    <div class="mono-cursor" :class="{ 'mono-cursor--active': cursorLabel }" :style="cursorStyle" aria-hidden="true">
+      <span>{{ cursorLabel || 'VIEW' }}</span>
+    </div>
 
-        <div class="pk-nav-actions">
-          <LocaleSwitcher />
-          <button
-            type="button"
-            class="pk-theme-toggle"
-            :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
-            @click="toggleTheme"
-          >
-            <Icon v-if="isDark" name="sun" size="sm" :stroke-width="1.5" />
-            <Icon v-else name="moon" size="sm" :stroke-width="1.5" />
-          </button>
-          <router-link v-if="isAuthenticated" :to="dashboardPath" class="pk-btn pk-btn--sm">
-            {{ t('home.dashboard') }}
-          </router-link>
-          <template v-else>
-            <router-link to="/login" class="pk-nav-login">{{ t('home.login') }}</router-link>
-            <router-link to="/register" class="pk-btn pk-btn--sm">
-              {{ t('home.getStarted') }}
-            </router-link>
-          </template>
-        </div>
+    <header class="mono-topbar" :class="{ 'mono-topbar--scrolled': isScrolled }">
+      <router-link
+        to="/home"
+        class="mono-brand"
+        @pointerenter="setCursor(t('home.cursor.home'))"
+        @pointerleave="clearCursor"
+      >
+        <img :src="siteLogo || '/logo.png'" alt="Logo" class="mono-brand-logo" />
+        <span class="mono-brand-text">{{ siteName }}</span>
+      </router-link>
+
+      <nav class="mono-top-links" :aria-label="t('home.aria.primaryNav')">
+        <a href="#work" @click.prevent="scrollTo('work')">{{ t('home.nav.features') }}</a>
+        <a href="#process" @click.prevent="scrollTo('process')">{{ t('home.nav.workflow') }}</a>
+        <a href="#services" @click.prevent="scrollTo('services')">{{ t('home.nav.models') }}</a>
+        <a href="#pricing" @click.prevent="scrollTo('pricing')">{{ t('home.nav.pricing') }}</a>
       </nav>
+
+      <div class="mono-top-actions">
+        <LocaleSwitcher />
+        <button
+          type="button"
+          class="mono-icon-btn"
+          :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
+          @click="toggleTheme"
+          @pointerenter="setCursor(isDark ? t('home.cursor.light') : t('home.cursor.dark'))"
+          @pointerleave="clearCursor"
+        >
+          <Icon v-if="isDark" name="sun" size="sm" :stroke-width="1.5" />
+          <Icon v-else name="moon" size="sm" :stroke-width="1.5" />
+        </button>
+        <router-link
+          v-if="isAuthenticated"
+          :to="dashboardPath"
+          class="mono-pill mono-pill--filled"
+          @pointerenter="setCursor(t('home.cursor.enter'))"
+          @pointerleave="clearCursor"
+        >
+          {{ t('home.dashboard') }}
+        </router-link>
+        <template v-else>
+          <router-link
+            to="/login"
+            class="mono-text-link"
+            @pointerenter="setCursor(t('home.cursor.login'))"
+            @pointerleave="clearCursor"
+          >
+            {{ t('home.login') }}
+          </router-link>
+          <router-link
+            to="/register"
+            class="mono-pill mono-pill--filled"
+            @pointerenter="setCursor(t('home.cursor.start'))"
+            @pointerleave="clearCursor"
+          >
+            {{ t('home.getStarted') }}
+          </router-link>
+        </template>
+      </div>
     </header>
 
     <main id="top">
-      <!-- ============ HERO ============ -->
-      <section class="pk-hero">
-        <div class="pk-container">
-          <p class="pk-eyebrow pk-enter" style="--d: 0ms">
-            <span class="pk-dot" aria-hidden="true"></span>
-            <span>{{ t('home.hero.badge') }}</span>
-          </p>
+      <section class="mono-hero" aria-labelledby="home-title">
+        <div class="mono-container">
+          <div class="mono-hero-grid">
+            <div class="mono-hero-copy">
+              <p class="mono-eyebrow mono-enter" style="--d: 0ms">
+                <span class="mono-dot" aria-hidden="true"></span>
+                <span>{{ t('home.hero.badge') }}</span>
+              </p>
 
-          <h1 class="pk-display">
-            <span class="pk-display-line pk-enter" style="--d: 90ms">{{ t('home.hero.titleLine1') }}</span>
-            <span class="pk-display-line pk-display-line--muted pk-enter" style="--d: 180ms">{{
-              t('home.hero.titleLine2')
-            }}</span>
-          </h1>
+              <h1 id="home-title" class="mono-display">
+                <span class="mono-display-line mono-enter" style="--d: 90ms">{{ t('home.hero.titleLine1') }}</span>
+                <span class="mono-display-line mono-display-line--mute mono-enter" style="--d: 170ms">
+                  {{ t('home.hero.titleLine2') }}
+                </span>
+              </h1>
 
-          <div class="pk-hero-body">
-            <p class="pk-hero-lead pk-enter" style="--d: 280ms">
-              {{ t('home.hero.description') }}
-            </p>
+              <p class="mono-hero-lead mono-enter" style="--d: 260ms">
+                {{ t('home.hero.description') }}
+              </p>
 
-            <div class="pk-hero-actions pk-enter" style="--d: 360ms">
-              <div class="pk-cta-row">
-                <router-link :to="isAuthenticated ? dashboardPath : '/register'" class="pk-btn pk-btn--lg">
+              <div class="mono-hero-actions mono-enter" style="--d: 350ms">
+                <router-link
+                  :to="isAuthenticated ? dashboardPath : '/register'"
+                  class="mono-pill mono-pill--large mono-pill--filled"
+                  @pointerenter="setCursor(t('home.cursor.start'))"
+                  @pointerleave="clearCursor"
+                >
                   {{ isAuthenticated ? t('home.goToDashboard') : t('home.hero.ctaPrimary') }}
                   <Icon name="arrowRight" size="sm" :stroke-width="1.5" />
                 </router-link>
-                <a
-                  v-if="docUrl"
-                  :href="docUrl"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="pk-textlink"
+                <button
+                  type="button"
+                  class="mono-pill mono-pill--large"
+                  @click="openAbout"
+                  @pointerenter="setCursor(t('home.cursor.about'))"
+                  @pointerleave="clearCursor"
                 >
-                  {{ t('home.hero.ctaDocs') }}
-                </a>
+                  {{ t('home.about.open') }}
+                </button>
               </div>
+            </div>
 
-              <div class="pk-endpoints">
-                <div v-for="ep in endpoints" :key="ep.key" class="pk-endpoint">
-                  <span class="pk-endpoint-label">{{ t(ep.labelKey) }}</span>
-                  <code class="pk-endpoint-url">{{ ep.url }}</code>
-                  <button
-                    type="button"
-                    class="pk-copy"
-                    :class="{ 'pk-copy--done': copiedKey === ep.key }"
-                    :aria-label="t('home.hero.copy')"
-                    @click="copyEndpoint(ep)"
-                  >
-                    <Icon :name="copiedKey === ep.key ? 'check' : 'copy'" size="xs" :stroke-width="1.5" />
-                    <span>{{ copiedKey === ep.key ? t('home.hero.copied') : t('home.hero.copy') }}</span>
-                  </button>
-                </div>
+            <aside class="mono-hero-plate mono-enter" style="--d: 420ms" aria-label="API gateway visual">
+              <img :src="gatewayPlateUrl" alt="" class="mono-plate-img" />
+              <div class="mono-plate-caption">
+                <span>{{ t('home.visual.gatewayLabel') }}</span>
+                <span>{{ t('home.visual.gatewayMeta') }}</span>
               </div>
+            </aside>
+          </div>
+
+          <div class="mono-endpoints mono-enter" style="--d: 520ms" :aria-label="t('home.aria.endpoints')">
+            <div v-for="ep in endpoints" :key="ep.key" class="mono-endpoint">
+              <span class="mono-endpoint-label">{{ t(ep.labelKey) }}</span>
+              <code class="mono-endpoint-url">{{ ep.url }}</code>
+              <button
+                type="button"
+                class="mono-copy"
+                :class="{ 'mono-copy--done': copiedKey === ep.key }"
+                :aria-label="t('home.hero.copy')"
+                @click="copyEndpoint(ep)"
+                @pointerenter="setCursor(t('home.cursor.copy'))"
+                @pointerleave="clearCursor"
+              >
+                <Icon :name="copiedKey === ep.key ? 'check' : 'copy'" size="xs" :stroke-width="1.5" />
+                <span>{{ copiedKey === ep.key ? t('home.hero.copied') : t('home.hero.copy') }}</span>
+              </button>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- ============ VALUE ============ -->
-      <section id="value" class="pk-section">
-        <div class="pk-container">
-          <header class="pk-section-head" data-reveal>
-            <span class="pk-eyebrow pk-eyebrow--plain">({{ t('home.value.kicker') }})</span>
-            <h2 class="pk-heading">{{ t('home.value.title') }}</h2>
-          </header>
+      <section id="work" class="mono-section mono-section--work">
+        <div class="mono-container">
+          <div class="mono-section-kicker" data-reveal>
+            <span>{{ t('home.work.kicker') }}</span>
+            <span>{{ t('home.work.index') }}</span>
+          </div>
 
-          <div class="pk-ledger">
+          <div class="mono-work-list">
             <article
-              v-for="(item, i) in valueItems"
+              v-for="(item, i) in workItems"
               :key="item.key"
-              class="pk-ledger-row"
+              class="mono-work-row"
               data-reveal
               :style="{ '--rd': i * 70 + 'ms' }"
+              @pointerenter="setCursor(t('home.cursor.read'))"
+              @pointerleave="clearCursor"
             >
-              <span class="pk-ledger-num">{{ String(i + 1).padStart(2, '0') }}</span>
-              <h3 class="pk-ledger-title">{{ t(`home.value.items.${item.key}.title`) }}</h3>
-              <p class="pk-ledger-desc">{{ t(`home.value.items.${item.key}.desc`) }}</p>
+              <span class="mono-row-num">{{ String(i + 1).padStart(2, '0') }}</span>
+              <h2>{{ t(`home.value.items.${item.key}.title`) }}</h2>
+              <p>{{ t(`home.value.items.${item.key}.desc`) }}</p>
             </article>
           </div>
         </div>
       </section>
 
-      <!-- ============ WORKFLOW ============ -->
-      <section id="workflow" class="pk-section">
-        <div class="pk-container">
-          <header class="pk-section-head" data-reveal>
-            <span class="pk-eyebrow pk-eyebrow--plain">({{ t('home.workflow.kicker') }})</span>
-            <h2 class="pk-heading">{{ t('home.workflow.title') }}</h2>
-            <p class="pk-section-lead">{{ t('home.workflow.subtitle') }}</p>
+      <section id="process" class="mono-section">
+        <div class="mono-container mono-process-grid">
+          <header class="mono-sticky-heading" data-reveal>
+            <span class="mono-eyebrow mono-eyebrow--plain">{{ t('home.workflow.kicker') }}</span>
+            <h2>{{ t('home.workflow.title') }}</h2>
+            <p>{{ t('home.workflow.subtitle') }}</p>
           </header>
 
-          <div class="pk-steps">
+          <div class="mono-process-list">
             <article
               v-for="(step, i) in workflowSteps"
               :key="step.key"
-              class="pk-step"
+              class="mono-process-card"
               data-reveal
               :style="{ '--rd': i * 90 + 'ms' }"
             >
-              <span class="pk-step-num">{{ String(i + 1).padStart(2, '0') }}</span>
-              <h3 class="pk-step-title">{{ t(`home.workflow.steps.${step.key}.title`) }}</h3>
-              <p class="pk-step-desc">{{ t(`home.workflow.steps.${step.key}.desc`) }}</p>
-              <code v-if="step.code" class="pk-step-code">{{ step.code }}</code>
+              <span>{{ String(i + 1).padStart(2, '0') }}</span>
+              <h3>{{ t(`home.workflow.steps.${step.key}.title`) }}</h3>
+              <p>{{ t(`home.workflow.steps.${step.key}.desc`) }}</p>
+              <code v-if="step.code">{{ step.code }}</code>
             </article>
           </div>
         </div>
       </section>
 
-      <!-- ============ ECOSYSTEM ============ -->
-      <section id="ecosystem" class="pk-section">
-        <div class="pk-container">
-          <header class="pk-section-head" data-reveal>
-            <span class="pk-eyebrow pk-eyebrow--plain">({{ t('home.ecosystem.kicker') }})</span>
-            <h2 class="pk-heading">{{ t('home.ecosystem.title') }}</h2>
+      <section id="services" class="mono-section mono-section--models">
+        <div class="mono-container">
+          <header class="mono-wide-heading" data-reveal>
+            <span class="mono-eyebrow mono-eyebrow--plain">{{ t('home.ecosystem.kicker') }}</span>
+            <h2>{{ t('home.ecosystem.title') }}</h2>
           </header>
 
-          <div class="pk-models" data-reveal>
-            <div v-for="m in models" :key="m.label" class="pk-model">
-              <ModelIcon :model="m.icon" size="18px" class="pk-model-icon" />
-              <span>{{ m.label }}</span>
-            </div>
-            <div class="pk-model pk-model--more">
-              <span>{{ t('home.ecosystem.more') }}</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ============ PRICING ============ -->
-      <section id="pricing" class="pk-section">
-        <div class="pk-container">
-          <header class="pk-section-head" data-reveal>
-            <span class="pk-eyebrow pk-eyebrow--plain">({{ t('home.pricing.kicker') }})</span>
-            <h2 class="pk-heading">{{ t('home.pricing.title') }}</h2>
-            <p class="pk-section-lead">{{ t('home.pricing.subtitle') }}</p>
-          </header>
-
-          <div class="pk-rate" data-reveal>
-            <div class="pk-rate-main">
-              <span class="pk-eyebrow pk-eyebrow--plain">{{ t('home.pricing.rateLabel') }} · {{ t('home.pricing.badge') }}</span>
-              <div class="pk-rate-value">{{ t('home.pricing.rateValue') }}</div>
-              <div class="pk-rate-ref">
-                {{ t('home.pricing.officialLabel') }} <s>{{ t('home.pricing.officialValue') }}</s>
+          <div class="mono-model-marquee" data-reveal>
+            <div class="mono-model-track">
+              <div v-for="m in doubledModels" :key="m.id" class="mono-model-chip">
+                <ModelIcon :model="m.icon" size="18px" />
+                <span>{{ m.label }}</span>
               </div>
             </div>
-            <div class="pk-rate-aside">
-              <p class="pk-rate-note">{{ t('home.pricing.note') }}</p>
-              <router-link :to="isAuthenticated ? dashboardPath : '/register'" class="pk-btn pk-btn--lg">
-                {{ t('home.pricing.cta') }}
-                <Icon name="arrowRight" size="sm" :stroke-width="1.5" />
-              </router-link>
-            </div>
           </div>
         </div>
       </section>
 
-      <!-- ============ CTA ============ -->
-      <section class="pk-section pk-section--cta">
-        <div class="pk-container" data-reveal>
-          <h2 class="pk-cta-display">{{ t('home.cta.title') }}</h2>
-          <p class="pk-cta-lead">{{ t('home.cta.description') }}</p>
-          <router-link :to="isAuthenticated ? dashboardPath : '/register'" class="pk-btn pk-btn--lg">
+      <section id="pricing" class="mono-section mono-section--pricing">
+        <div class="mono-container mono-price-grid">
+          <div data-reveal>
+            <span class="mono-eyebrow mono-eyebrow--plain">{{ t('home.pricing.kicker') }}</span>
+            <h2 class="mono-price-value">{{ t('home.pricing.rateValue') }}</h2>
+            <p class="mono-price-note">
+              {{ t('home.pricing.officialLabel') }} <s>{{ t('home.pricing.officialValue') }}</s>
+              · {{ t('home.pricing.note') }}
+            </p>
+          </div>
+          <div class="mono-price-aside" data-reveal style="--rd: 100ms">
+            <p>{{ t('home.pricing.subtitle') }}</p>
+            <router-link
+              :to="isAuthenticated ? dashboardPath : '/register'"
+              class="mono-pill mono-pill--large mono-pill--filled"
+              @pointerenter="setCursor(t('home.cursor.start'))"
+              @pointerleave="clearCursor"
+            >
+              {{ t('home.pricing.cta') }}
+              <Icon name="arrowRight" size="sm" :stroke-width="1.5" />
+            </router-link>
+          </div>
+        </div>
+      </section>
+
+      <section id="contact" class="mono-section mono-section--cta">
+        <div class="mono-container" data-reveal>
+          <p class="mono-eyebrow mono-eyebrow--plain">{{ t('home.cta.kicker') }}</p>
+          <h2>{{ t('home.cta.title') }}</h2>
+          <p>{{ t('home.cta.description') }}</p>
+          <router-link
+            :to="isAuthenticated ? dashboardPath : '/register'"
+            class="mono-pill mono-pill--large mono-pill--filled"
+            @pointerenter="setCursor(t('home.cursor.enter'))"
+            @pointerleave="clearCursor"
+          >
             {{ t('home.cta.button') }}
             <Icon name="arrowRight" size="sm" :stroke-width="1.5" />
           </router-link>
@@ -224,16 +269,59 @@
       </section>
     </main>
 
-    <!-- ============ FOOTER ============ -->
-    <footer class="pk-footer">
-      <div class="pk-container pk-footer-inner">
-        <p>&copy; {{ currentYear }} {{ siteName }} · {{ t('home.footer.allRightsReserved') }}</p>
-        <div class="pk-footer-links">
-          <a v-if="docUrl" :href="docUrl" target="_blank" rel="noopener noreferrer">{{ t('home.docs') }}</a>
-          <router-link to="/login">{{ t('home.footer.console') }}</router-link>
-        </div>
+    <footer class="mono-footer">
+      <div class="mono-container mono-footer-inner">
+        <span>&copy; {{ currentYear }} {{ siteName }}</span>
+        <span>{{ t('home.footer.allRightsReserved') }}</span>
       </div>
     </footer>
+
+    <nav class="mono-bottom-nav" :aria-label="t('home.aria.bottomNav')">
+      <button type="button" @click="openAbout">{{ t('home.bottomNav.about') }}<span>→</span></button>
+      <button type="button" @click="scrollTo('work')">{{ t('home.bottomNav.work') }}<span>→</span></button>
+      <button type="button" @click="scrollTo('process')">{{ t('home.bottomNav.process') }}<span>→</span></button>
+      <button type="button" @click="scrollTo('services')">{{ t('home.bottomNav.services') }}<span>→</span></button>
+      <router-link :to="isAuthenticated ? dashboardPath : '/register'">
+        {{ t('home.bottomNav.contact') }}<span>→</span>
+      </router-link>
+    </nav>
+
+    <transition name="mono-overlay">
+      <section v-if="aboutOpen" class="mono-about" role="dialog" aria-modal="true" :aria-label="t('home.about.title')">
+        <div class="mono-grain" aria-hidden="true"></div>
+        <button
+          type="button"
+          class="mono-about-close"
+          @click="closeAbout"
+          @pointerenter="setCursor(t('home.cursor.close'))"
+          @pointerleave="clearCursor"
+        >
+          <span>{{ t('home.about.close') }}</span>
+          <kbd>esc</kbd>
+        </button>
+
+        <div class="mono-about-body">
+          <p class="mono-eyebrow">
+            <span class="mono-dot" aria-hidden="true"></span>
+            <span>{{ t('home.about.eyebrow') }}</span>
+          </p>
+          <h2>{{ t('home.about.title') }}</h2>
+          <p class="mono-about-lead">{{ t('home.about.body') }}</p>
+
+          <div class="mono-about-meta">
+            <span>{{ t('home.about.est') }}</span>
+            <span>{{ t('home.about.based') }}</span>
+          </div>
+
+          <div class="mono-about-principles">
+            <article v-for="item in aboutPrinciples" :key="item.key">
+              <h3>{{ t(`home.about.principles.${item.key}.title`) }}</h3>
+              <p>{{ t(`home.about.principles.${item.key}.desc`) }}</p>
+            </article>
+          </div>
+        </div>
+      </section>
+    </transition>
   </div>
 </template>
 
@@ -244,16 +332,16 @@ import { useAuthStore, useAppStore } from '@/stores'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ModelIcon from '@/components/common/ModelIcon.vue'
+import grainUrl from '@/assets/monolog/grain.svg'
+import gatewayPlateUrl from '@/assets/monolog/gateway-plate.svg'
 
 const { t } = useI18n()
 
 const authStore = useAuthStore()
 const appStore = useAppStore()
 
-// Site settings
-const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'Poke API')
+const siteName = computed(() => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'Sub2API')
 const siteLogo = computed(() => appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '')
-const docUrl = computed(() => appStore.cachedPublicSettings?.doc_url || appStore.docUrl || '')
 const homeContent = computed(() => appStore.cachedPublicSettings?.home_content || '')
 
 const isHomeContentUrl = computed(() => {
@@ -261,14 +349,15 @@ const isHomeContentUrl = computed(() => {
   return content.startsWith('http://') || content.startsWith('https://')
 })
 
-// Auth state
 const isAuthenticated = computed(() => authStore.isAuthenticated)
 const isAdmin = computed(() => authStore.isAdmin)
 const dashboardPath = computed(() => (isAdmin.value ? '/admin/dashboard' : '/dashboard'))
-
 const currentYear = computed(() => new Date().getFullYear())
 
-// ---- Theme (follows sub2api html.dark convention) ----
+const pageStyle = computed<Record<string, string>>(() => ({
+  '--grain-url': `url("${grainUrl}")`
+}))
+
 const isDark = ref(document.documentElement.classList.contains('dark'))
 
 function toggleTheme() {
@@ -279,18 +368,14 @@ function toggleTheme() {
 
 function initTheme() {
   const savedTheme = localStorage.getItem('theme')
-  if (
-    savedTheme === 'dark' ||
-    (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  ) {
+  if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
     isDark.value = true
     document.documentElement.classList.add('dark')
   }
 }
 
-// ---- Display fonts (loaded only on the home page) ----
 function loadDisplayFonts() {
-  const id = 'pk-home-fonts'
+  const id = 'mono-public-fonts'
   if (document.getElementById(id)) return
   const pre1 = document.createElement('link')
   pre1.rel = 'preconnect'
@@ -302,20 +387,18 @@ function loadDisplayFonts() {
   const link = document.createElement('link')
   link.id = id
   link.rel = 'stylesheet'
-  link.href =
-    'https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Geist+Mono:wght@400;500&display=swap'
+  link.href = 'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700;800&family=Geist+Mono:wght@400;500&display=swap'
   document.head.appendChild(pre1)
   document.head.appendChild(pre2)
   document.head.appendChild(link)
 }
 
-// ---- Data ----
 const endpoints = [
   { key: 'openai', labelKey: 'home.hero.baseUrlOpenai', url: `${window.location.origin}/v1` },
   { key: 'anthropic', labelKey: 'home.hero.baseUrlAnthropic', url: window.location.origin }
 ]
 
-const valueItems = [
+const workItems = [
   { key: 'unified' },
   { key: 'observability' },
   { key: 'elastic' },
@@ -337,7 +420,17 @@ const models = [
   { label: 'Qwen', icon: 'qwen-max' }
 ]
 
-// ---- Copy interaction ----
+const doubledModels = computed(() =>
+  [...models, ...models].map((model, index) => ({ ...model, id: `${model.label}-${index}` }))
+)
+
+const aboutPrinciples = [
+  { key: 'outcomes' },
+  { key: 'signal' },
+  { key: 'human' },
+  { key: 'pace' }
+]
+
 const copiedKey = ref('')
 let copyTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -359,39 +452,69 @@ async function copyEndpoint(ep: { key: string; url: string }) {
   }, 1800)
 }
 
-// ---- Scroll state (nav) ----
 const isScrolled = ref(false)
 function onScroll() {
-  isScrolled.value = window.scrollY > 12
+  isScrolled.value = window.scrollY > 16
 }
 
 function scrollTo(id: string) {
+  closeAbout()
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
-function scrollToTop() {
-  window.scrollTo({ top: 0, behavior: 'smooth' })
+
+const aboutOpen = ref(false)
+function openAbout() {
+  aboutOpen.value = true
+  document.documentElement.classList.add('mono-lock-scroll')
+}
+function closeAbout() {
+  aboutOpen.value = false
+  document.documentElement.classList.remove('mono-lock-scroll')
 }
 
-// ---- Scroll reveal ----
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && aboutOpen.value) {
+    closeAbout()
+  }
+}
+
+const cursorX = ref(0)
+const cursorY = ref(0)
+const cursorLabel = ref('')
+const cursorStyle = computed(() => ({
+  transform: `translate3d(${cursorX.value + 18}px, ${cursorY.value + 18}px, 0)`
+}))
+
+function handlePointerMove(event: PointerEvent) {
+  cursorX.value = event.clientX
+  cursorY.value = event.clientY
+}
+function setCursor(label: string) {
+  cursorLabel.value = label
+}
+function clearCursor() {
+  cursorLabel.value = ''
+}
+
 let observer: IntersectionObserver | null = null
 
 function setupReveal() {
   const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   const targets = document.querySelectorAll<HTMLElement>('[data-reveal]')
   if (prefersReduced || !('IntersectionObserver' in window)) {
-    targets.forEach((el) => el.classList.add('pk-revealed'))
+    targets.forEach((el) => el.classList.add('mono-revealed'))
     return
   }
   observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
         if (entry.isIntersecting) {
-          entry.target.classList.add('pk-revealed')
+          entry.target.classList.add('mono-revealed')
           observer?.unobserve(entry.target)
         }
       }
     },
-    { threshold: 0.12, rootMargin: '0px 0px -40px 0px' }
+    { threshold: 0.12, rootMargin: '0px 0px -44px 0px' }
   )
   targets.forEach((el) => observer?.observe(el))
 }
@@ -404,714 +527,840 @@ onMounted(() => {
     appStore.fetchPublicSettings()
   }
   window.addEventListener('scroll', onScroll, { passive: true })
+  window.addEventListener('keydown', onKeydown)
   onScroll()
   requestAnimationFrame(() => setupReveal())
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', onScroll)
+  window.removeEventListener('keydown', onKeydown)
   observer?.disconnect()
   if (copyTimer) clearTimeout(copyTimer)
+  document.documentElement.classList.remove('mono-lock-scroll')
 })
 </script>
 
 <style scoped>
-/* =====================================================
-   Poke API home — cold monochrome editorial.
-   Inspired by bymonolog: near-black ink, off-white,
-   oversized display type, mono eyebrows, hairlines.
-   Light/dark via html.dark. One tiny red accent.
-   ===================================================== */
-.pk-page {
-  /* light */
-  --ink: oklch(0.2 0.004 250);
-  --ink-mute: oklch(0.46 0.005 250);
-  --ink-faint: oklch(0.62 0.005 250);
-  --paper: oklch(0.96 0.002 250);
-  --line: oklch(0.2 0.004 250 / 0.14);
-  --line-strong: oklch(0.2 0.004 250 / 0.36);
-  --hover: oklch(0.2 0.004 250 / 0.04);
-  --red: oklch(0.58 0.2 27);
+:global(html.mono-lock-scroll) {
+  overflow: hidden;
+}
 
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --display: 'Archivo', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+.mono-page {
+  --ink: oklch(0.16 0.004 95);
+  --ink-muted: oklch(0.43 0.006 95);
+  --ink-soft: oklch(0.63 0.006 95);
+  --paper: oklch(0.955 0.012 85);
+  --paper-deep: oklch(0.9 0.018 82);
+  --line: oklch(0.16 0.004 95 / 0.16);
+  --line-strong: oklch(0.16 0.004 95 / 0.38);
+  --surface: oklch(0.985 0.007 85);
+  --accent: oklch(0.55 0.2 28);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --display: 'Bricolage Grotesque', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
   --mono: 'Geist Mono', ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
-  --body: 'PingFang SC', 'Microsoft YaHei', 'Archivo', system-ui, -apple-system, sans-serif;
+  --body: 'PingFang SC', 'Microsoft YaHei', 'Bricolage Grotesque', system-ui, sans-serif;
 
+  position: relative;
   min-height: 100vh;
-  background: var(--paper);
+  overflow-x: clip;
+  background:
+    radial-gradient(circle at 10% 12%, oklch(0.82 0.03 55 / 0.24), transparent 26rem),
+    linear-gradient(180deg, var(--paper), var(--paper-deep));
   color: var(--ink);
   font-family: var(--body);
-  overflow-x: clip;
-  transition:
-    background-color 0.35s ease,
-    color 0.35s ease;
 }
-html.dark .pk-page {
-  /* dark — cold near-black à la bymonolog rgb(8,8,7) */
-  --ink: oklch(0.93 0.004 250);
-  --ink-mute: oklch(0.66 0.006 250);
-  --ink-faint: oklch(0.5 0.006 250);
-  --paper: oklch(0.155 0.003 250);
-  --line: oklch(0.93 0.004 250 / 0.12);
-  --line-strong: oklch(0.93 0.004 250 / 0.32);
-  --hover: oklch(0.93 0.004 250 / 0.045);
-  --red: oklch(0.62 0.2 27);
+html.dark .mono-page {
+  --ink: oklch(0.91 0.012 85);
+  --ink-muted: oklch(0.69 0.012 85);
+  --ink-soft: oklch(0.47 0.012 85);
+  --paper: oklch(0.135 0.005 95);
+  --paper-deep: oklch(0.09 0.004 95);
+  --line: oklch(0.91 0.012 85 / 0.15);
+  --line-strong: oklch(0.91 0.012 85 / 0.38);
+  --surface: oklch(0.18 0.006 95);
+  --accent: oklch(0.62 0.2 28);
 }
 
-.pk-container {
-  max-width: 1240px;
+.mono-grain {
+  pointer-events: none;
+  position: fixed;
+  inset: -40px;
+  z-index: 2;
+  opacity: 0.42;
+  background-image: var(--grain-url);
+  background-size: 180px 180px;
+  mix-blend-mode: multiply;
+  animation: mono-grain 0.55s steps(6) infinite;
+}
+html.dark .mono-grain {
+  mix-blend-mode: screen;
+  opacity: 0.18;
+}
+@keyframes mono-grain {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-2%, 1%); }
+  40% { transform: translate(1%, -2%); }
+  60% { transform: translate(2%, 2%); }
+  80% { transform: translate(-1%, -1%); }
+}
+
+.mono-container {
+  width: min(100% - 44px, 1320px);
   margin-inline: auto;
-  padding-inline: 32px;
-}
-@media (max-width: 640px) {
-  .pk-container {
-    padding-inline: 22px;
-  }
 }
 
-/* ---------- motion ---------- */
-.pk-enter {
+.mono-enter {
   opacity: 0;
-  transform: translateY(18px);
-  animation: pk-rise 0.85s var(--ease) forwards;
+  transform: translateY(24px);
+  animation: mono-rise 0.9s var(--ease) forwards;
   animation-delay: var(--d, 0ms);
 }
-@keyframes pk-rise {
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+@keyframes mono-rise {
+  to { opacity: 1; transform: translateY(0); }
 }
 [data-reveal] {
   opacity: 0;
-  transform: translateY(26px);
-  transition:
-    opacity 0.75s var(--ease),
-    transform 0.75s var(--ease);
+  transform: translateY(28px);
+  transition: opacity 0.78s var(--ease), transform 0.78s var(--ease);
   transition-delay: var(--rd, 0ms);
 }
-[data-reveal].pk-revealed {
+[data-reveal].mono-revealed {
   opacity: 1;
   transform: translateY(0);
 }
+
+.mono-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 28px;
+  padding: 22px clamp(22px, 3vw, 42px);
+  border-bottom: 1px solid transparent;
+  transition: background-color 0.24s ease, border-color 0.24s ease;
+}
+.mono-topbar--scrolled {
+  background: color-mix(in oklab, var(--paper) 82%, transparent);
+  border-bottom-color: var(--line);
+  backdrop-filter: blur(16px);
+}
+.mono-brand,
+.mono-top-links,
+.mono-top-actions,
+.mono-bottom-nav,
+.mono-footer,
+.mono-about-close {
+  position: relative;
+  z-index: 4;
+}
+.mono-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: inherit;
+  text-decoration: none;
+}
+.mono-brand-logo {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  filter: grayscale(1) contrast(1.1);
+}
+.mono-brand-text {
+  font-family: var(--display);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.mono-top-links {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+}
+.mono-top-links a,
+.mono-text-link {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  text-decoration: none;
+  transition: color 0.18s ease;
+}
+.mono-top-links a:hover,
+.mono-text-link:hover {
+  color: var(--ink);
+}
+.mono-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.mono-top-actions :deep(button) {
+  color: var(--ink-muted);
+}
+.mono-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, transform 0.14s var(--ease);
+}
+.mono-icon-btn:hover {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.mono-icon-btn:active {
+  transform: scale(0.92);
+}
+
+.mono-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 9px 18px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.24s ease, color 0.24s ease, transform 0.14s var(--ease);
+}
+.mono-pill--large {
+  min-height: 50px;
+  padding: 14px 28px;
+  font-size: 12px;
+}
+.mono-pill--filled,
+.mono-pill:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+.mono-pill--filled:hover {
+  background: transparent;
+  color: var(--ink);
+}
+.mono-pill:active {
+  transform: scale(0.97);
+}
+
+.mono-hero {
+  position: relative;
+  z-index: 3;
+  min-height: calc(100vh - 84px);
+  padding: clamp(30px, 5vh, 62px) 0 clamp(120px, 16vh, 172px);
+  border-bottom: 1px solid var(--line);
+}
+.mono-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.06fr) minmax(300px, 0.72fr);
+  gap: clamp(38px, 7vw, 96px);
+  align-items: end;
+}
+.mono-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink-muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.mono-eyebrow--plain {
+  color: var(--ink-soft);
+}
+.mono-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: mono-pulse 2.6s ease-in-out infinite;
+}
+@keyframes mono-pulse {
+  50% { opacity: 0.35; }
+}
+.mono-display {
+  margin: clamp(20px, 3.5vh, 38px) 0 clamp(22px, 3.5vh, 36px);
+  font-family: var(--display);
+  font-size: clamp(4rem, 10.3vw, 10rem);
+  font-weight: 800;
+  letter-spacing: -0.075em;
+  line-height: 0.84;
+}
+.mono-display-line {
+  display: block;
+}
+.mono-display-line--mute {
+  color: var(--ink-soft);
+}
+.mono-hero-lead {
+  max-width: 44rem;
+  margin: 0;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-size: clamp(1rem, 1.35vw, 1.14rem);
+  line-height: 1.72;
+}
+.mono-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 24px;
+}
+.mono-hero-plate {
+  position: relative;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: color-mix(in oklab, var(--surface) 80%, transparent);
+  transform: rotate(-1.4deg);
+}
+.mono-plate-img {
+  display: block;
+  width: 100%;
+  border-radius: 18px;
+  filter: grayscale(1) contrast(1.02);
+}
+.mono-plate-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 4px 2px;
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.mono-endpoints {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 clamp(18px, 4vw, 44px);
+  margin-top: clamp(24px, 4vh, 46px);
+  border-top: 1px solid var(--line);
+}
+.mono-endpoint {
+  display: grid;
+  grid-template-columns: 156px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 54px;
+  border-bottom: 1px solid var(--line);
+}
+.mono-endpoint-label,
+.mono-row-num,
+.mono-section-kicker,
+.mono-copy,
+.mono-process-card span {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.mono-endpoint-url {
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mono-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  padding: 7px 13px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+.mono-copy:hover,
+.mono-copy--done {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+
+.mono-section {
+  position: relative;
+  z-index: 3;
+  padding: clamp(80px, 12vh, 140px) 0;
+  border-bottom: 1px solid var(--line);
+}
+.mono-section-kicker {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: clamp(34px, 6vh, 70px);
+}
+.mono-work-list {
+  display: grid;
+}
+.mono-work-row {
+  display: grid;
+  grid-template-columns: 80px minmax(220px, 0.48fr) minmax(0, 1fr);
+  gap: clamp(18px, 4vw, 58px);
+  align-items: baseline;
+  padding: clamp(26px, 3.8vw, 42px) 0;
+  border-top: 1px solid var(--line);
+  transition: background-color 0.28s ease;
+}
+.mono-work-row:last-child {
+  border-bottom: 1px solid var(--line);
+}
+.mono-work-row:hover {
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+}
+.mono-work-row h2,
+.mono-sticky-heading h2,
+.mono-wide-heading h2,
+.mono-process-card h3,
+.mono-section--cta h2 {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--display);
+  letter-spacing: -0.035em;
+}
+.mono-work-row h2 {
+  font-size: clamp(1.45rem, 3vw, 2.6rem);
+  line-height: 0.98;
+}
+.mono-work-row p,
+.mono-sticky-heading p,
+.mono-process-card p,
+.mono-price-aside p,
+.mono-section--cta p,
+.mono-about-lead,
+.mono-about-principles p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 14.5px;
+  line-height: 1.9;
+}
+
+.mono-process-grid,
+.mono-price-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.58fr) minmax(0, 1fr);
+  gap: clamp(42px, 8vw, 120px);
+}
+.mono-sticky-heading {
+  position: sticky;
+  top: 110px;
+  align-self: start;
+  display: grid;
+  gap: 18px;
+}
+.mono-sticky-heading h2,
+.mono-wide-heading h2 {
+  font-size: clamp(2.4rem, 6vw, 5.5rem);
+  line-height: 0.94;
+}
+.mono-process-list {
+  display: grid;
+  gap: 18px;
+}
+.mono-process-card {
+  display: grid;
+  gap: 18px;
+  padding: clamp(24px, 4vw, 42px);
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: color-mix(in oklab, var(--surface) 68%, transparent);
+}
+.mono-process-card h3 {
+  font-size: clamp(1.45rem, 2.2vw, 2.1rem);
+}
+.mono-process-card code {
+  overflow-x: auto;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.mono-wide-heading {
+  display: grid;
+  gap: 20px;
+  max-width: 820px;
+  margin-bottom: clamp(44px, 8vh, 76px);
+}
+.mono-model-marquee {
+  overflow: hidden;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.mono-model-track {
+  display: flex;
+  width: max-content;
+  animation: mono-marquee 28s linear infinite;
+}
+.mono-model-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 180px;
+  padding: 24px 42px 24px 0;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.mono-model-chip :deep(svg),
+.mono-model-chip :deep(img) {
+  filter: grayscale(1) contrast(1.08);
+  opacity: 0.82;
+}
+@keyframes mono-marquee {
+  to { transform: translateX(-50%); }
+}
+
+.mono-price-value {
+  margin: 22px 0 18px;
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: clamp(4rem, 11vw, 10rem);
+  font-weight: 800;
+  letter-spacing: -0.08em;
+  line-height: 0.82;
+}
+.mono-price-note {
+  max-width: 46rem;
+  color: var(--ink-muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.8;
+  text-transform: uppercase;
+}
+.mono-price-aside {
+  display: grid;
+  gap: 28px;
+  align-content: end;
+  padding-top: 28px;
+  border-top: 1px solid var(--line);
+}
+
+.mono-section--cta {
+  text-align: center;
+}
+.mono-section--cta .mono-container {
+  display: grid;
+  justify-items: center;
+  gap: 26px;
+}
+.mono-section--cta h2 {
+  max-width: 980px;
+  font-size: clamp(3.8rem, 11vw, 11rem);
+  line-height: 0.82;
+}
+.mono-section--cta p {
+  max-width: 34rem;
+}
+
+.mono-footer {
+  position: relative;
+  z-index: 3;
+  padding: 34px 0 92px;
+}
+.mono-footer-inner {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.mono-bottom-nav {
+  position: fixed;
+  inset: auto clamp(14px, 2vw, 28px) 16px;
+  z-index: 42;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--paper) 82%, transparent);
+  backdrop-filter: blur(18px);
+}
+.mono-bottom-nav button,
+.mono-bottom-nav a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: clamp(16px, 2vw, 24px);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.mono-bottom-nav > :last-child {
+  border-right: 0;
+}
+.mono-bottom-nav button:hover,
+.mono-bottom-nav a:hover {
+  background: color-mix(in oklab, var(--ink) 8%, transparent);
+}
+
+.mono-about {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  overflow-y: auto;
+  background: var(--paper);
+  color: var(--ink);
+}
+.mono-about-close {
+  position: fixed;
+  top: 24px;
+  right: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  padding: 9px 12px 9px 18px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.mono-about-close kbd {
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 4px 8px;
+  font: inherit;
+}
+.mono-about-body {
+  width: min(100% - 44px, 1180px);
+  margin-inline: auto;
+  padding: clamp(92px, 12vh, 140px) 0 clamp(74px, 10vh, 120px);
+}
+.mono-about-body h2 {
+  max-width: 980px;
+  margin: 24px 0 34px;
+  font-family: var(--display);
+  font-size: clamp(3.2rem, 9vw, 9.5rem);
+  font-weight: 800;
+  letter-spacing: -0.07em;
+  line-height: 0.84;
+}
+.mono-about-lead {
+  max-width: 62rem;
+  font-size: clamp(1.1rem, 2.1vw, 1.8rem);
+  line-height: 1.55;
+}
+.mono-about-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: clamp(38px, 7vh, 70px) 0;
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.mono-about-principles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+}
+.mono-about-principles article {
+  padding: 28px 24px 0 0;
+  border-right: 1px solid var(--line);
+}
+.mono-about-principles article:last-child {
+  border-right: 0;
+}
+.mono-about-principles h3 {
+  margin: 0 0 14px;
+  font-family: var(--display);
+  font-size: 1.3rem;
+  letter-spacing: -0.03em;
+}
+
+.mono-overlay-enter-active,
+.mono-overlay-leave-active {
+  transition: opacity 0.32s var(--ease), transform 0.32s var(--ease);
+}
+.mono-overlay-enter-from,
+.mono-overlay-leave-to {
+  opacity: 0;
+  transform: translateY(28px);
+}
+
+.mono-cursor {
+  pointer-events: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  display: none;
+  padding: 8px 12px;
+  border-radius: 9px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0;
+  clip-path: inset(0 100% 0 0 round 9px);
+  transition: opacity 0.18s ease, clip-path 0.34s var(--ease);
+}
+.mono-cursor--active {
+  opacity: 1;
+  clip-path: inset(0 0 0 0 round 9px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mono-cursor {
+    display: block;
+  }
+}
+
+@media (max-width: 980px) {
+  .mono-topbar {
+    grid-template-columns: 1fr auto;
+  }
+  .mono-top-links {
+    display: none;
+  }
+  .mono-hero-grid,
+  .mono-process-grid,
+  .mono-price-grid {
+    grid-template-columns: 1fr;
+  }
+  .mono-hero-plate {
+    transform: none;
+  }
+  .mono-sticky-heading {
+    position: static;
+  }
+  .mono-work-row {
+    grid-template-columns: 58px 1fr;
+  }
+  .mono-work-row p {
+    grid-column: 2;
+  }
+  .mono-about-principles {
+    grid-template-columns: 1fr 1fr;
+  }
+  .mono-about-principles article:nth-child(2) {
+    border-right: 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .mono-topbar {
+    padding: 18px 18px;
+  }
+  .mono-top-actions :deep(.locale-switcher),
+  .mono-top-actions > .mono-text-link {
+    display: none;
+  }
+  .mono-container,
+  .mono-about-body {
+    width: min(100% - 32px, 1320px);
+  }
+  .mono-display {
+    font-size: clamp(3.4rem, 18vw, 5.2rem);
+    letter-spacing: -0.065em;
+    line-height: 0.88;
+  }
+  .mono-endpoint {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 16px 0;
+  }
+  .mono-copy {
+    width: fit-content;
+  }
+  .mono-work-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .mono-work-row p {
+    grid-column: auto;
+  }
+  .mono-bottom-nav {
+    grid-template-columns: 1fr 1fr;
+  }
+  .mono-bottom-nav button,
+  .mono-bottom-nav a {
+    justify-content: space-between;
+    padding-inline: 14px;
+    font-size: 18px;
+    border-bottom: 1px solid var(--line);
+  }
+  .mono-bottom-nav > :nth-last-child(-n + 1) {
+    grid-column: 1 / -1;
+    border-bottom: 0;
+  }
+  .mono-footer {
+    padding-bottom: 178px;
+  }
+  .mono-footer-inner {
+    flex-direction: column;
+  }
+  .mono-about-principles {
+    grid-template-columns: 1fr;
+  }
+  .mono-about-principles article {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 24px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .pk-enter,
-  [data-reveal] {
+  .mono-enter,
+  [data-reveal],
+  .mono-grain,
+  .mono-dot,
+  .mono-model-track {
     animation: none;
     transition: none;
     opacity: 1;
     transform: none;
   }
-}
-
-/* ---------- eyebrow (mono kicker) ---------- */
-.pk-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  font-weight: 500;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-}
-.pk-eyebrow--plain {
-  color: var(--ink-faint);
-}
-.pk-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--red);
-  animation: pk-pulse 2.6s ease-in-out infinite;
-}
-@keyframes pk-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .pk-dot {
-    animation: none;
-  }
-}
-
-/* ---------- nav ---------- */
-.pk-nav {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  border-bottom: 1px solid transparent;
-  transition:
-    background-color 0.25s ease,
-    border-color 0.25s ease;
-}
-.pk-nav--scrolled {
-  background: color-mix(in oklab, var(--paper) 82%, transparent);
-  backdrop-filter: blur(14px);
-  border-bottom-color: var(--line);
-}
-.pk-nav-inner {
-  max-width: 1240px;
-  margin-inline: auto;
-  padding: 18px 32px;
-  display: flex;
-  align-items: center;
-  gap: 28px;
-}
-@media (max-width: 640px) {
-  .pk-nav-inner {
-    padding: 16px 22px;
-  }
-}
-.pk-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 11px;
-  text-decoration: none;
-  color: inherit;
-}
-.pk-brand-logo {
-  width: 24px;
-  height: 24px;
-  object-fit: contain;
-  filter: grayscale(1) contrast(1.1);
-}
-.pk-brand-name {
-  font-family: var(--display);
-  font-weight: 700;
-  font-size: 16px;
-  letter-spacing: -0.01em;
-}
-.pk-nav-links {
-  display: none;
-  gap: 28px;
-  margin-inline: auto;
-}
-@media (min-width: 900px) {
-  .pk-nav-links {
-    display: flex;
-  }
-}
-.pk-nav-links a {
-  position: relative;
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-  text-decoration: none;
-  padding: 3px 0;
-  transition: color 0.2s ease;
-}
-.pk-nav-links a::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 100%;
-  height: 1px;
-  background: currentColor;
-  transform: scaleX(0);
-  transform-origin: right;
-  transition: transform 0.32s var(--ease);
-}
-.pk-nav-links a:hover {
-  color: var(--ink);
-}
-.pk-nav-links a:hover::after {
-  transform: scaleX(1);
-  transform-origin: left;
-}
-.pk-nav-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-left: auto;
-}
-.pk-nav-login {
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
-.pk-nav-login:hover {
-  color: var(--ink);
-}
-.pk-theme-toggle {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink-mute);
-  cursor: pointer;
-  transition:
-    color 0.2s ease,
-    border-color 0.2s ease,
-    transform 0.15s var(--ease);
-}
-.pk-theme-toggle:hover {
-  color: var(--ink);
-  border-color: var(--line-strong);
-}
-.pk-theme-toggle:active {
-  transform: scale(0.9);
-}
-.pk-nav-actions :deep(button) {
-  color: var(--ink-mute);
-}
-.pk-nav-actions :deep(button:hover) {
-  color: var(--ink);
-  background: var(--hover);
-}
-
-/* ---------- buttons ---------- */
-.pk-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  font-family: var(--mono);
-  font-size: 12.5px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  border: 1px solid var(--ink);
-  background: transparent;
-  color: var(--ink);
-  text-decoration: none;
-  border-radius: 999px;
-  cursor: pointer;
-  transition:
-    background-color 0.24s ease,
-    color 0.24s ease,
-    transform 0.15s var(--ease);
-}
-.pk-btn:hover {
-  background: var(--ink);
-  color: var(--paper);
-}
-.pk-btn:active {
-  transform: scale(0.97);
-}
-.pk-btn--sm {
-  padding: 8px 18px;
-}
-.pk-btn--lg {
-  font-size: 13px;
-  padding: 15px 30px;
-}
-.pk-textlink {
-  position: relative;
-  font-family: var(--mono);
-  font-size: 12.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink);
-  text-decoration: none;
-  padding-bottom: 3px;
-  align-self: center;
-}
-.pk-textlink::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 100%;
-  height: 1px;
-  background: currentColor;
-  transform-origin: right;
-  transition: transform 0.32s var(--ease);
-}
-.pk-textlink:hover::after {
-  transform: scaleX(0.4);
-  transform-origin: left;
-}
-
-/* ---------- hero ---------- */
-.pk-hero {
-  position: relative;
-  padding: clamp(72px, 12vh, 132px) 0 clamp(64px, 10vh, 104px);
-  border-bottom: 1px solid var(--line);
-}
-.pk-eyebrow.pk-enter {
-  margin-bottom: clamp(28px, 5vh, 48px);
-}
-.pk-display {
-  font-family: var(--display);
-  font-size: clamp(3rem, 9vw, 8rem);
-  font-weight: 700;
-  line-height: 0.98;
-  letter-spacing: -0.04em;
-  margin: 0 0 clamp(40px, 6vh, 60px);
-}
-.pk-display-line {
-  display: block;
-}
-.pk-display-line--muted {
-  color: var(--ink-faint);
-}
-.pk-hero-body {
-  display: grid;
-  gap: 44px;
-  align-items: start;
-}
-@media (min-width: 960px) {
-  .pk-hero-body {
-    grid-template-columns: 0.95fr 1.05fr;
-    gap: 80px;
-  }
-}
-.pk-hero-lead {
-  font-size: clamp(1rem, 1.4vw, 1.15rem);
-  line-height: 1.9;
-  color: var(--ink-mute);
-  max-width: 30em;
-  margin: 0;
-  padding-top: 28px;
-  border-top: 1px solid var(--line);
-}
-.pk-hero-actions {
-  display: grid;
-  gap: 34px;
-  padding-top: 28px;
-  border-top: 1px solid var(--line);
-}
-.pk-cta-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 28px;
-  align-items: center;
-}
-
-/* endpoints */
-.pk-endpoints {
-  display: grid;
-}
-.pk-endpoint {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 14px 2px;
-  border-bottom: 1px solid var(--line);
-}
-.pk-endpoint:first-child {
-  border-top: 1px solid var(--line);
-}
-.pk-endpoint-label {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  white-space: nowrap;
-  min-width: 132px;
-}
-.pk-endpoint-url {
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
-.pk-copy {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-mute);
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 6px 13px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    color 0.18s ease,
-    border-color 0.18s ease,
-    transform 0.12s var(--ease);
-}
-.pk-copy:hover {
-  color: var(--ink);
-  border-color: var(--line-strong);
-}
-.pk-copy:active {
-  transform: scale(0.94);
-}
-.pk-copy--done {
-  color: var(--ink);
-  border-color: var(--ink);
-}
-
-/* ---------- sections ---------- */
-.pk-section {
-  position: relative;
-  padding: clamp(72px, 11vh, 120px) 0;
-  border-bottom: 1px solid var(--line);
-}
-.pk-section-head {
-  display: grid;
-  gap: 16px;
-  margin-bottom: clamp(44px, 7vh, 72px);
-  max-width: 44em;
-}
-.pk-heading {
-  font-family: var(--display);
-  font-size: clamp(1.9rem, 4.4vw, 3.4rem);
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.06;
-  margin: 0;
-}
-.pk-section-lead {
-  font-size: 15px;
-  color: var(--ink-mute);
-  line-height: 1.85;
-  margin: 4px 0 0;
-  max-width: 40em;
-}
-
-/* ---------- value ledger ---------- */
-.pk-ledger {
-  display: grid;
-}
-.pk-ledger-row {
-  display: grid;
-  grid-template-columns: 68px 300px 1fr;
-  gap: 24px;
-  align-items: baseline;
-  padding: clamp(24px, 3vw, 34px) 2px;
-  border-top: 1px solid var(--line);
-  transition: background-color 0.28s ease;
-}
-.pk-ledger-row:last-child {
-  border-bottom: 1px solid var(--line);
-}
-.pk-ledger-row:hover {
-  background: var(--hover);
-}
-@media (max-width: 860px) {
-  .pk-ledger-row {
-    grid-template-columns: 54px 1fr;
-  }
-  .pk-ledger-desc {
-    grid-column: 2;
-  }
-}
-.pk-ledger-num {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--ink-faint);
-}
-.pk-ledger-title {
-  font-family: var(--display);
-  font-size: clamp(1.15rem, 1.8vw, 1.5rem);
-  font-weight: 600;
-  letter-spacing: -0.015em;
-  margin: 0;
-}
-.pk-ledger-desc {
-  font-size: 14px;
-  line-height: 1.9;
-  color: var(--ink-mute);
-  margin: 0;
-  max-width: 42em;
-}
-
-/* ---------- workflow ---------- */
-.pk-steps {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-}
-.pk-step {
-  padding: 4px 30px 4px 0;
-}
-.pk-step + .pk-step {
-  border-left: 1px solid var(--line);
-  padding-left: 32px;
-}
-@media (max-width: 860px) {
-  .pk-step + .pk-step {
-    border-left: none;
-    padding-left: 0;
-    border-top: 1px solid var(--line);
-    margin-top: 28px;
-    padding-top: 28px;
-  }
-}
-.pk-step-num {
-  display: block;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--ink-faint);
-  margin-bottom: 22px;
-}
-.pk-step-title {
-  font-family: var(--display);
-  font-size: 1.15rem;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-  margin: 0 0 12px;
-}
-.pk-step-desc {
-  font-size: 14px;
-  line-height: 1.9;
-  color: var(--ink-mute);
-  margin: 0;
-}
-.pk-step-code {
-  display: block;
-  margin-top: 18px;
-  padding: 12px 0;
-  border-top: 1px solid var(--line);
-  font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--ink-mute);
-  overflow-x: auto;
-  white-space: nowrap;
-}
-
-/* ---------- ecosystem ---------- */
-.pk-models {
-  display: flex;
-  flex-wrap: wrap;
-}
-.pk-model {
-  display: inline-flex;
-  align-items: center;
-  gap: 11px;
-  padding: 16px 30px 16px 0;
-  margin-right: 30px;
-  font-family: var(--mono);
-  font-size: 13px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink);
-  border-bottom: 1px solid var(--line);
-  transition: border-color 0.28s ease;
-}
-.pk-model:hover {
-  border-bottom-color: var(--ink);
-}
-.pk-model-icon {
-  filter: grayscale(1) contrast(1.05);
-  opacity: 0.82;
-}
-.pk-model--more {
-  color: var(--ink-faint);
-}
-
-/* ---------- pricing ---------- */
-.pk-rate {
-  display: grid;
-  gap: 44px;
-  align-items: end;
-}
-@media (min-width: 900px) {
-  .pk-rate {
-    grid-template-columns: 1.25fr 0.75fr;
-    gap: 80px;
-  }
-}
-.pk-rate-value {
-  font-family: var(--display);
-  font-size: clamp(3.2rem, 10vw, 7rem);
-  font-weight: 700;
-  letter-spacing: -0.05em;
-  line-height: 0.94;
-  margin: 18px 0 16px;
-}
-.pk-rate-ref {
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--ink-faint);
-}
-.pk-rate-ref s {
-  color: var(--ink-faint);
-}
-.pk-rate-aside {
-  border-top: 1px solid var(--line);
-  padding-top: 26px;
-}
-.pk-rate-note {
-  font-size: 14px;
-  line-height: 2;
-  color: var(--ink-mute);
-  margin: 0 0 28px;
-}
-
-/* ---------- CTA ---------- */
-.pk-section--cta {
-  text-align: center;
-  padding: clamp(96px, 16vh, 180px) 0;
-}
-.pk-cta-display {
-  font-family: var(--display);
-  font-size: clamp(2.6rem, 8vw, 6.5rem);
-  font-weight: 700;
-  letter-spacing: -0.045em;
-  line-height: 1;
-  margin: 0 0 24px;
-}
-.pk-cta-lead {
-  font-size: 15.5px;
-  color: var(--ink-mute);
-  line-height: 1.9;
-  margin: 0 auto 40px;
-  max-width: 32em;
-}
-
-/* ---------- footer ---------- */
-.pk-footer {
-  padding: 34px 0;
-}
-.pk-footer-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-}
-@media (min-width: 640px) {
-  .pk-footer-inner {
-    flex-direction: row;
-    justify-content: space-between;
-  }
-}
-.pk-footer-inner p {
-  margin: 0;
-}
-.pk-footer-links {
-  display: flex;
-  gap: 24px;
-}
-.pk-footer-links a {
-  color: var(--ink-faint);
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
-.pk-footer-links a:hover {
-  color: var(--ink);
 }
 </style>

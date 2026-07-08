@@ -14,19 +14,43 @@ export default {
     login: '登录',
     getStarted: '立即开始',
     goToDashboard: '进入控制台',
+    aria: {
+      primaryNav: '主页主导航',
+      bottomNav: '底部快速导航',
+      endpoints: 'API 接入端点'
+    },
+    cursor: {
+      home: '首页',
+      light: '浅色',
+      dark: '暗色',
+      enter: '进入',
+      login: '登录',
+      start: '开始',
+      about: '关于',
+      copy: '复制',
+      read: '阅读',
+      close: '关闭'
+    },
     nav: {
-      features: '特性',
-      workflow: '接入',
+      features: '能力',
+      workflow: '流程',
       models: '模型',
       pricing: '定价'
     },
+    bottomNav: {
+      about: 'About',
+      work: 'Work',
+      process: 'Process',
+      services: 'Services',
+      contact: 'Start'
+    },
     hero: {
       badge: '企业级 AI API 网关',
-      titleLine1: '一个 API Key',
-      titleLine2: '接入全球 AI 能力',
+      titleLine1: 'One key.',
+      titleLine2: 'Every model.',
       description:
-        'Poke API 聚合 Claude、OpenAI、Gemini、Grok 等主流大模型，完整兼容官方接口协议。现有代码几乎零改动，即刻迁移。',
-      ctaPrimary: '免费获取 API Key',
+        'Sub2API 将 Claude、OpenAI、Gemini、Grok、Qwen 等模型收束到一个可观测、可计费、可调度的 API 入口。保留官方协议体验，同时把稳定性和成本控制交给网关。',
+      ctaPrimary: '获取 API Key',
       ctaDocs: '查看文档',
       baseUrlOpenai: 'OpenAI 兼容',
       baseUrlAnthropic: 'Anthropic 兼容',
@@ -38,14 +62,22 @@ export default {
         billing: { title: '按量计费', desc: '用多少付多少，无固定月费' }
       }
     },
+    visual: {
+      gatewayLabel: 'Routing Matrix',
+      gatewayMeta: 'Live Gateway'
+    },
+    work: {
+      kicker: 'Selected Work',
+      index: '01 / 04'
+    },
     value: {
       kicker: 'VALUE',
-      title: '为什么选择 Poke API',
+      title: '为什么选择 Sub2API',
       subtitle: '专业、稳定、开发者友好',
       items: {
         unified: {
           title: '统一接入',
-          desc: '一个密钥调用全部模型，完整兼容 OpenAI Responses / Chat 与 Anthropic Messages 协议，代码零改动迁移。'
+          desc: '一个密钥调用全部模型，完整兼容 OpenAI Responses / Chat 与 Anthropic Messages 协议，现有代码低成本迁移。'
         },
         observability: {
           title: '全链路可观测',
@@ -62,9 +94,9 @@ export default {
       }
     },
     workflow: {
-      kicker: 'WORKFLOW',
-      title: '三步开始使用',
-      subtitle: '从注册到发出第一个请求，只需几分钟',
+      kicker: 'PROCESS',
+      title: '三步完成迁移',
+      subtitle: '从注册到发出第一个请求，只需几分钟。',
       steps: {
         register: {
           title: '注册获取 Key',
@@ -72,26 +104,26 @@ export default {
         },
         configure: {
           title: '替换 Base URL',
-          desc: '把 Base URL 指向 Poke API：OpenAI 用 /v1，Claude 用根地址，其余保持不变。'
+          desc: '把 Base URL 指向 Sub2API：OpenAI 用 /v1，Claude 用根地址，其余保持不变。'
         },
         observe: {
           title: '调用与观测',
-          desc: '用官方 SDK 或 CLI 工具直接调用，在控制台实时查看用量与费用。'
+          desc: '用官方 SDK 或 CLI 工具直接调用，在控制台实时查看用量、费用与通道状态。'
         }
       }
     },
     ecosystem: {
-      kicker: 'ECOSYSTEM',
-      title: '已支持的模型生态',
+      kicker: 'SERVICES',
+      title: '主流模型与工具，一个入口全部连接',
       subtitle: '主流大模型持续接入，一个入口全部搞定',
       more: '更多持续接入'
     },
     pricing: {
       kicker: 'PRICING',
       title: '限时充值优惠',
-      subtitle: '透明按量计费，余额永不过期',
+      subtitle: '透明按量计费，余额永不过期。',
       rateLabel: '充值汇率',
-      rateValue: '¥1 = $1 额度',
+      rateValue: '¥1 = $1',
       officialLabel: '官方汇率参考',
       officialValue: '$1 ≈ ¥7.2',
       badge: '限时优惠',
@@ -99,9 +131,38 @@ export default {
       cta: '立即充值'
     },
     cta: {
-      title: '准备好了吗？',
-      description: '免费注册，几分钟内发出你的第一个 AI 请求。',
-      button: '免费注册 Poke API'
+      kicker: 'CONTACT',
+      title: '让你的 AI 调用有稳定入口。',
+      description: '免费注册，几分钟内发出第一条可观测、可计费、可调度的 AI 请求。',
+      button: '开始接入 Sub2API'
+    },
+    about: {
+      open: 'About Sub2API',
+      close: 'Close',
+      eyebrow: 'About the gateway',
+      title: '为高频 AI 调用建立一个可信入口。',
+      body:
+        'Sub2API 不是又一个装饰性的模型列表，而是把账号池、密钥、计费、故障切换和可观测性放在同一个控制面里。你继续使用熟悉的官方协议，平台负责让每一次请求有去处、有记录、有成本边界。',
+      est: 'EST 2024',
+      based: 'Built for developers and operators',
+      principles: {
+        outcomes: {
+          title: '结果优先',
+          desc: '每个能力都围绕稳定调用、低迁移成本和可解释费用展开。'
+        },
+        signal: {
+          title: '信号清晰',
+          desc: '用量、模型、费用、错误和通道状态都要能被快速理解。'
+        },
+        human: {
+          title: '开发者友好',
+          desc: '保持官方 SDK 与 CLI 的使用习惯，让接入不打断工作流。'
+        },
+        pace: {
+          title: '长期稳定',
+          desc: '多账号、多通道与限流策略共同降低单点风险。'
+        }
+      }
     },
     footer: {
       allRightsReserved: '保留所有权利。',
@@ -447,9 +508,19 @@ export default {
   auth: {
     brand: {
       eyebrow: '统一 · 可观测 · 弹性',
-      titleLine1: '一个入口',
-      titleLine2: '接入全部大模型',
-      more: '更多'
+      titleLine1: 'Access layer.',
+      titleLine2: 'Built for keys.',
+      more: '更多',
+      formKicker: 'Secure Console Access',
+      plateLabel: 'Identity Matrix',
+      plateMeta: 'Key Ready',
+      proofKeys: '密钥管理',
+      proofKeysValue: 'API Key',
+      proofModels: '模型生态',
+      proofModelsValue: 'Multi-model',
+      navHome: 'Home',
+      navWork: 'Work',
+      navProcess: 'Process'
     },
     welcomeBack: '欢迎回来',
     signInToAccount: '登录您的账户以继续',

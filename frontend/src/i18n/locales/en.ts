@@ -14,19 +14,43 @@ export default {
     login: 'Login',
     getStarted: 'Get Started',
     goToDashboard: 'Go to Dashboard',
+    aria: {
+      primaryNav: 'Primary home navigation',
+      bottomNav: 'Bottom quick navigation',
+      endpoints: 'API endpoints'
+    },
+    cursor: {
+      home: 'Home',
+      light: 'Light',
+      dark: 'Dark',
+      enter: 'Enter',
+      login: 'Login',
+      start: 'Start',
+      about: 'About',
+      copy: 'Copy',
+      read: 'Read',
+      close: 'Close'
+    },
     nav: {
-      features: 'Features',
-      workflow: 'Workflow',
-      models: 'Models',
+      features: 'Work',
+      workflow: 'Process',
+      models: 'Services',
       pricing: 'Pricing'
+    },
+    bottomNav: {
+      about: 'About',
+      work: 'Work',
+      process: 'Process',
+      services: 'Services',
+      contact: 'Start'
     },
     hero: {
       badge: 'Enterprise AI API Gateway',
-      titleLine1: 'One API Key',
-      titleLine2: 'for Global AI Models',
+      titleLine1: 'One key.',
+      titleLine2: 'Every model.',
       description:
-        'Poke API aggregates Claude, OpenAI, Gemini, Grok and more, fully compatible with official protocols. Migrate with almost zero code changes.',
-      ctaPrimary: 'Get Your Free API Key',
+        'Sub2API compresses Claude, OpenAI, Gemini, Grok, Qwen and more into one observable, billable, routable API gateway. Keep the official protocol experience while the gateway handles stability and cost control.',
+      ctaPrimary: 'Get an API Key',
       ctaDocs: 'View Docs',
       baseUrlOpenai: 'OpenAI Compatible',
       baseUrlAnthropic: 'Anthropic Compatible',
@@ -38,14 +62,22 @@ export default {
         billing: { title: 'Pay As You Go', desc: 'Only pay for what you use, no monthly fees' }
       }
     },
+    visual: {
+      gatewayLabel: 'Routing Matrix',
+      gatewayMeta: 'Live Gateway'
+    },
+    work: {
+      kicker: 'Selected Work',
+      index: '01 / 04'
+    },
     value: {
       kicker: 'VALUE',
-      title: 'Why Poke API',
+      title: 'Why Sub2API',
       subtitle: 'Professional, reliable, developer-friendly',
       items: {
         unified: {
           title: 'Unified Access',
-          desc: 'One key for all models. Fully compatible with OpenAI Responses / Chat and Anthropic Messages protocols. Zero code changes.'
+          desc: 'One key for all models. Fully compatible with OpenAI Responses / Chat and Anthropic Messages protocols. Low-friction migration.'
         },
         observability: {
           title: 'Full Observability',
@@ -62,9 +94,9 @@ export default {
       }
     },
     workflow: {
-      kicker: 'WORKFLOW',
-      title: 'Start in Three Steps',
-      subtitle: 'From sign-up to your first request in minutes',
+      kicker: 'PROCESS',
+      title: 'Migrate in Three Steps',
+      subtitle: 'From sign-up to your first request in minutes.',
       steps: {
         register: {
           title: 'Register & Get a Key',
@@ -72,26 +104,26 @@ export default {
         },
         configure: {
           title: 'Point the Base URL',
-          desc: 'Set the Base URL to Poke API: /v1 for OpenAI, root path for Claude. Everything else stays the same.'
+          desc: 'Set the Base URL to Sub2API: /v1 for OpenAI, root path for Claude. Everything else stays the same.'
         },
         observe: {
           title: 'Call & Observe',
-          desc: 'Use official SDKs or CLI tools directly, and watch usage and spend in real time.'
+          desc: 'Use official SDKs or CLI tools directly, then watch usage, spend and channel health in real time.'
         }
       }
     },
     ecosystem: {
-      kicker: 'ECOSYSTEM',
-      title: 'Supported Model Ecosystem',
+      kicker: 'SERVICES',
+      title: 'Major models and tools, connected through one entrance',
       subtitle: 'Major models onboard, one endpoint for everything',
       more: 'More coming soon'
     },
     pricing: {
       kicker: 'PRICING',
       title: 'Limited-time Top-up Offer',
-      subtitle: 'Transparent usage-based billing, credits never expire',
+      subtitle: 'Transparent usage-based billing, credits never expire.',
       rateLabel: 'Top-up Rate',
-      rateValue: '¥1 = $1 Credit',
+      rateValue: '¥1 = $1',
       officialLabel: 'Market Reference',
       officialValue: '$1 ≈ ¥7.2',
       badge: 'Limited Time',
@@ -99,9 +131,38 @@ export default {
       cta: 'Top Up Now'
     },
     cta: {
-      title: 'Ready to Start?',
-      description: 'Sign up for free and send your first AI request within minutes.',
-      button: 'Sign Up for Poke API'
+      kicker: 'CONTACT',
+      title: 'Give your AI traffic a stable entrance.',
+      description: 'Sign up for free and send your first observable, billable and routable AI request within minutes.',
+      button: 'Start with Sub2API'
+    },
+    about: {
+      open: 'About Sub2API',
+      close: 'Close',
+      eyebrow: 'About the gateway',
+      title: 'A trusted entrance for high-frequency AI calls.',
+      body:
+        'Sub2API is not another decorative model list. It brings account pools, keys, billing, failover and observability into one control plane. You keep the official protocol workflow; the platform makes every request routed, recorded and cost-bounded.',
+      est: 'EST 2024',
+      based: 'Built for developers and operators',
+      principles: {
+        outcomes: {
+          title: 'Outcomes first',
+          desc: 'Every capability points back to stable calls, low migration cost and explainable spend.'
+        },
+        signal: {
+          title: 'Clear signal',
+          desc: 'Usage, models, costs, errors and channel health should be legible at a glance.'
+        },
+        human: {
+          title: 'Developer-first',
+          desc: 'Keep the official SDK and CLI habits intact so adoption does not interrupt the workflow.'
+        },
+        pace: {
+          title: 'Long-term stability',
+          desc: 'Multiple accounts, channels and throttling policies reduce single-point risk.'
+        }
+      }
     },
     footer: {
       allRightsReserved: 'All rights reserved.',
@@ -447,9 +508,19 @@ export default {
   auth: {
     brand: {
       eyebrow: 'Unified · Observable · Elastic',
-      titleLine1: 'One endpoint',
-      titleLine2: 'for every model',
-      more: 'More'
+      titleLine1: 'Access layer.',
+      titleLine2: 'Built for keys.',
+      more: 'More',
+      formKicker: 'Secure Console Access',
+      plateLabel: 'Identity Matrix',
+      plateMeta: 'Key Ready',
+      proofKeys: 'Key Management',
+      proofKeysValue: 'API Key',
+      proofModels: 'Model Ecosystem',
+      proofModelsValue: 'Multi-model',
+      navHome: 'Home',
+      navWork: 'Work',
+      navProcess: 'Process'
     },
     welcomeBack: 'Welcome Back',
     signInToAccount: 'Sign in to your account to continue',
