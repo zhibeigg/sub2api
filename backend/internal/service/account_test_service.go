@@ -72,6 +72,13 @@ type AccountTestService struct {
 	httpUpstream              HTTPUpstream
 	cfg                       *config.Config
 	tlsFPProfileService       *TLSFingerprintProfileService
+	kiroUsageService          *KiroUsageService
+}
+
+// SetKiroUsageService injects the Kiro usage service used to health-check Kiro
+// accounts (via a live usage-limits probe). Optional.
+func (s *AccountTestService) SetKiroUsageService(k *KiroUsageService) {
+	s.kiroUsageService = k
 }
 
 // NewAccountTestService creates a new AccountTestService
@@ -198,6 +205,10 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 
 	if account.Platform == PlatformAntigravity {
 		return s.routeAntigravityTest(c, account, modelID, prompt)
+	}
+
+	if account.Platform == PlatformKiro {
+		return s.testKiroAccountConnection(c, account, modelID)
 	}
 
 	return s.testClaudeAccountConnection(c, account, modelID)
@@ -653,6 +664,49 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 }
 
 // testGrokAccountConnection tests a Grok OAuth account through xAI's Responses API.
+// testKiroAccountConnection health-checks a Kiro account by probing the
+// upstream usage-limits API. A successful probe means the token is valid and
+// the account is not suspended; the subscription/usage snapshot is refreshed as
+// a side effect.
+func (s *AccountTestService) testKiroAccountConnection(c *gin.Context, account *Account, modelID string) error {
+	ctx := c.Request.Context()
+
+	if account.Type != AccountTypeOAuth {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Unsupported Kiro account type: %s", account.Type))
+	}
+	if s.kiroUsageService == nil {
+		return s.sendErrorAndEnd(c, "Kiro usage service not configured")
+	}
+
+	testModelID := strings.TrimSpace(modelID)
+	if testModelID == "" {
+		testModelID = "claude-sonnet-4.5"
+	}
+
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+	c.Writer.Flush()
+
+	s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})
+
+	result, err := s.kiroUsageService.ProbeUsage(ctx, account.ID)
+	if err != nil {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Kiro usage probe failed: %s", err.Error()))
+	}
+
+	msg := "Kiro account healthy"
+	if result != nil && result.Snapshot != nil {
+		if result.Snapshot.SubscriptionType != "" {
+			msg = fmt.Sprintf("Kiro account healthy (plan: %s)", result.Snapshot.SubscriptionType)
+		}
+	}
+	s.sendEvent(c, TestEvent{Type: "text", Text: msg})
+	s.sendEvent(c, TestEvent{Type: "done", Success: true, Status: "success"})
+	return nil
+}
+
 func (s *AccountTestService) testGrokAccountConnection(c *gin.Context, account *Account, modelID string) error {
 	ctx := c.Request.Context()
 

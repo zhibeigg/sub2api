@@ -233,6 +233,22 @@ type UsageInfo struct {
 	// 错误码（机器可读）：forbidden / unauthenticated / rate_limited / network_error
 	ErrorCode string `json:"error_code,omitempty"`
 
+	// Kiro / AWS CodeWhisperer 账号级信息
+	KiroSubscriptionType string   `json:"kiro_subscription_type,omitempty"` // FREE/PRO/PRO_PLUS/POWER
+	KiroSubscriptionRaw  string   `json:"kiro_subscription_raw,omitempty"`  // 上游原始订阅名/标题
+	KiroUsageCurrent     *float64 `json:"kiro_usage_current,omitempty"`     // 当前用量（agentic requests）
+	KiroUsageLimit       *float64 `json:"kiro_usage_limit,omitempty"`       // 用量上限
+	KiroUsagePercent     *float64 `json:"kiro_usage_percent,omitempty"`     // 用量占比 0-1
+	KiroTrialCurrent     *float64 `json:"kiro_trial_current,omitempty"`     // 试用当前用量
+	KiroTrialLimit       *float64 `json:"kiro_trial_limit,omitempty"`       // 试用上限
+	KiroTrialStatus      string   `json:"kiro_trial_status,omitempty"`      // 试用状态
+	KiroNextResetDate    string   `json:"kiro_next_reset_date,omitempty"`   // 下次重置日期 YYYY-MM-DD
+	KiroOverageStatus    string   `json:"kiro_overage_status,omitempty"`    // ENABLED/DISABLED/UNKNOWN
+	KiroOverageCap       *float64 `json:"kiro_overage_cap,omitempty"`       // 超额上限（USD）
+	KiroOverageRate      *float64 `json:"kiro_overage_rate,omitempty"`      // 超额单价（USD）
+	KiroCurrentOverages  *float64 `json:"kiro_current_overages,omitempty"`  // 已累计超额（USD）
+	KiroContextUsagePct  *float64 `json:"kiro_context_usage_pct,omitempty"` // 最近一次请求上下文使用百分比
+
 	// 获取 usage 时的错误信息（降级返回，而非 500）
 	Error string `json:"error,omitempty"`
 }
@@ -291,6 +307,13 @@ type AccountUsageService struct {
 	cache                   *UsageCache
 	identityCache           IdentityCache
 	tlsFPProfileService     *TLSFingerprintProfileService
+	kiroUsageService        *KiroUsageService
+}
+
+// SetKiroUsageService injects the Kiro usage service used for active probes.
+// Optional; when nil, Kiro usage is served passively from the Extra snapshot.
+func (s *AccountUsageService) SetKiroUsageService(k *KiroUsageService) {
+	s.kiroUsageService = k
 }
 
 // NewAccountUsageService 创建AccountUsageService实例
@@ -359,6 +382,14 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 
 	if account.Platform == PlatformGrok {
 		usage, err := s.getGrokUsage(ctx, account)
+		if err == nil {
+			s.tryClearRecoverableAccountError(ctx, account)
+		}
+		return usage, err
+	}
+
+	if account.Platform == PlatformKiro {
+		usage, err := s.getKiroUsage(ctx, account, forceProbe)
 		if err == nil {
 			s.tryClearRecoverableAccountError(ctx, account)
 		}
@@ -947,6 +978,23 @@ func (s *AccountUsageService) getGrokUsage(ctx context.Context, account *Account
 		}
 	}
 
+	enrichUsageWithAccountError(usage, account)
+	return usage, nil
+}
+
+// getKiroUsage returns Kiro account usage. When forceProbe is set and the Kiro
+// usage service is available, it actively probes the upstream (which also
+// refreshes the Extra snapshot); otherwise it serves the passive snapshot.
+func (s *AccountUsageService) getKiroUsage(ctx context.Context, account *Account, forceProbe bool) (*UsageInfo, error) {
+	if forceProbe && s.kiroUsageService != nil && account != nil {
+		if _, err := s.kiroUsageService.ProbeUsage(ctx, account.ID); err == nil {
+			if refreshed, rerr := s.accountRepo.GetByID(ctx, account.ID); rerr == nil && refreshed != nil {
+				account = refreshed
+			}
+		}
+		// On probe error fall through to whatever snapshot exists (degraded).
+	}
+	usage := buildKiroUsageInfo(account)
 	enrichUsageWithAccountError(usage, account)
 	return usage, nil
 }

@@ -40,11 +40,15 @@ type KiroTokenInfo struct {
 // ID / IAM Identity Center / social), and this service refreshes their tokens.
 type KiroOAuthService struct {
 	proxyRepo ProxyRepository
+	sessions  *kiroSessionStore
 }
 
 // NewKiroOAuthService constructs a KiroOAuthService.
 func NewKiroOAuthService(proxyRepo ProxyRepository) *KiroOAuthService {
-	return &KiroOAuthService{proxyRepo: proxyRepo}
+	return &KiroOAuthService{
+		proxyRepo: proxyRepo,
+		sessions:  newKiroSessionStore(),
+	}
 }
 
 // credentialFromAccount assembles a kiro.Credential from stored account credentials.

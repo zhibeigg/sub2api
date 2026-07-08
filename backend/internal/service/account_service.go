@@ -138,8 +138,15 @@ type UpdateAccountRequest struct {
 
 // AccountService 账号管理服务
 type AccountService struct {
-	accountRepo AccountRepository
-	groupRepo   GroupRepository
+	accountRepo      AccountRepository
+	groupRepo        GroupRepository
+	kiroUsageService *KiroUsageService
+}
+
+// SetKiroUsageService injects the Kiro usage service used by TestCredentials to
+// validate Kiro accounts via a live usage-limits probe. Optional.
+func (s *AccountService) SetKiroUsageService(k *KiroUsageService) {
+	s.kiroUsageService = k
 }
 
 type groupExistenceBatchChecker interface {
@@ -440,7 +447,14 @@ func (s *AccountService) TestCredentials(ctx context.Context, id int64) error {
 		// Grok OAuth credentials are validated via token exchange/refresh and request-path probes.
 		return nil
 	case PlatformKiro:
-		// Kiro OAuth credentials are validated via token refresh and request-path probes.
+		// Validate Kiro OAuth credentials via a live usage-limits probe when the
+		// usage service is available; otherwise treat as best-effort (refresh /
+		// request-path probes will surface issues).
+		if s.kiroUsageService != nil {
+			if _, err := s.kiroUsageService.ProbeUsage(ctx, id); err != nil {
+				return fmt.Errorf("kiro credential probe failed: %w", err)
+			}
+		}
 		return nil
 	default:
 		return fmt.Errorf("unsupported platform: %s", account.Platform)
