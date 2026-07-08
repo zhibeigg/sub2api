@@ -702,8 +702,8 @@ func (s *AccountTestService) testKiroAccountConnection(c *gin.Context, account *
 			msg = fmt.Sprintf("Kiro account healthy (plan: %s)", result.Snapshot.SubscriptionType)
 		}
 	}
-	s.sendEvent(c, TestEvent{Type: "text", Text: msg})
-	s.sendEvent(c, TestEvent{Type: "done", Success: true, Status: "success"})
+	s.sendEvent(c, TestEvent{Type: "content", Text: msg})
+	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 	return nil
 }
 
