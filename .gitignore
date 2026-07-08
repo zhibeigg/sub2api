@@ -113,6 +113,12 @@ deploy/config.yaml
 backend/.installed
 
 # ===================
+# Kiro-Go 参考源码（移植依据，不入库）
+# ===================
+Kiro-Go-main/
+.kiro-integration-plan.md
+
+# ===================
 # 其他
 # ===================
 tests

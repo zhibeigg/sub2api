@@ -229,7 +229,7 @@ func ClaudeToKiro(req *ClaudeRequest, thinking bool) *KiroPayload {
 }
 
 func buildClaudeSystemPrompt(system interface{}, thinking bool) string {
-	systemPrompt := strings.TrimSpace(extractSystemPrompt(system))
+	systemPrompt := applyPromptFilters(extractSystemPrompt(system))
 	if !thinking {
 		return systemPrompt
 	}
@@ -602,8 +602,13 @@ func OpenAIToKiro(req *OpenAIRequest, thinking bool) *KiroPayload {
 		}
 	}
 
+	systemPrompt = applyPromptFilters(systemPrompt)
 	if thinking {
-		systemPrompt = ThinkingModePrompt + "\n\n" + systemPrompt
+		if systemPrompt == "" {
+			systemPrompt = ThinkingModePrompt
+		} else {
+			systemPrompt = ThinkingModePrompt + "\n\n" + systemPrompt
+		}
 	}
 
 	history := make([]KiroHistoryMessage, 0)
@@ -1366,6 +1371,84 @@ func KiroToOpenAIResponse(content string, toolUses []KiroToolUse, inputTokens, o
 			PromptTokens:     inputTokens,
 			CompletionTokens: outputTokens,
 			TotalTokens:      inputTokens + outputTokens,
+		},
+	}
+}
+
+// extractThinkingFromContent pulls out <thinking>...</thinking> spans, returning
+// the cleaned content and the concatenated reasoning text.
+func extractThinkingFromContent(content string) (string, string) {
+	var reasoning string
+	result := content
+	for {
+		start := strings.Index(result, "<thinking>")
+		if start == -1 {
+			break
+		}
+		rest := result[start:]
+		end := strings.Index(rest, "</thinking>")
+		if end == -1 {
+			break
+		}
+		end += start
+		reasoning += result[start+len("<thinking>") : end]
+		result = result[:start] + result[end+len("</thinking>"):]
+	}
+	return strings.TrimSpace(result), reasoning
+}
+
+// KiroToOpenAIResponseWithReasoning builds a chat.completion including thinking
+// output, formatted per thinkingFormat ("reasoning_content" | "thinking" |
+// "think"). Returns a generic map so the reasoning field can be emitted without
+// polluting the strongly-typed OpenAIResponse.
+func KiroToOpenAIResponseWithReasoning(content, reasoningContent string, toolUses []KiroToolUse, inputTokens, outputTokens int, model, thinkingFormat string) map[string]interface{} {
+	finishReason := "stop"
+	message := map[string]interface{}{"role": "assistant"}
+
+	if len(toolUses) > 0 {
+		message["content"] = nil
+		toolCalls := make([]map[string]interface{}, len(toolUses))
+		for i, tu := range toolUses {
+			args, _ := json.Marshal(tu.Input)
+			toolCalls[i] = map[string]interface{}{
+				"id":   tu.ToolUseID,
+				"type": "function",
+				"function": map[string]string{
+					"name":      tu.Name,
+					"arguments": string(args),
+				},
+			}
+		}
+		message["tool_calls"] = toolCalls
+		finishReason = "tool_calls"
+	} else if reasoningContent != "" {
+		switch thinkingFormat {
+		case "thinking":
+			message["content"] = "<thinking>" + reasoningContent + "</thinking>" + content
+		case "think":
+			message["content"] = "<think>" + reasoningContent + "</think>" + content
+		default: // "reasoning_content"
+			message["content"] = content
+			message["reasoning_content"] = reasoningContent
+		}
+	} else {
+		message["content"] = content
+	}
+
+	return map[string]interface{}{
+		"id":      "chatcmpl-" + uuid.New().String(),
+		"object":  "chat.completion",
+		"created": nowUnix(),
+		"model":   model,
+		"choices": []map[string]interface{}{{
+			"index":         0,
+			"message":       message,
+			"finish_reason": finishReason,
+		}},
+		"usage": map[string]int{
+			"prompt_tokens":     inputTokens,
+			"completion_tokens": outputTokens,
+			"total_tokens":      inputTokens + outputTokens,
 		},
 	}
 }

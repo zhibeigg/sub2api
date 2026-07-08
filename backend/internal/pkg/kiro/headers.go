@@ -48,6 +48,13 @@ func buildStreamingHeaderValues(cred *Credential, host string) kiroHeaderValues 
 	return buildKiroHeaderValues(cred, host, "codewhispererstreaming", kiroStreamingSDKVersion, "m/E")
 }
 
+// buildRuntimeHeaderValues builds the User-Agent header values for the
+// non-streaming CodeWhisperer runtime REST APIs (usage limits, models,
+// profiles, user info, overage preference).
+func buildRuntimeHeaderValues(cred *Credential, host string) kiroHeaderValues {
+	return buildKiroHeaderValues(cred, host, "codewhispererruntime", kiroRuntimeSDKVersion, "m/N,E")
+}
+
 func buildKiroHeaderValues(cred *Credential, host, apiName, sdkVersion, mode string) kiroHeaderValues {
 	cfg := defaultClientConfig
 	machineID := ""
@@ -88,4 +95,17 @@ func applyKiroBaseHeaders(req *http.Request, cred *Credential, values kiroHeader
 	if values.Host != "" {
 		req.Host = values.Host
 	}
+}
+
+// setKiroRuntimeHeaders applies the standard headers for a REST runtime request
+// (usage limits, models, profiles, user info, overage). It derives the Host from
+// the request URL and sets Accept: application/json.
+func setKiroRuntimeHeaders(req *http.Request, cred *Credential) {
+	host := ""
+	if req.URL != nil {
+		host = req.URL.Host
+	}
+	values := buildRuntimeHeaderValues(cred, host)
+	req.Header.Set("Accept", "application/json")
+	applyKiroBaseHeaders(req, cred, values)
 }
