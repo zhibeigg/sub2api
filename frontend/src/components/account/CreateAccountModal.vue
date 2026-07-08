@@ -400,7 +400,7 @@
         </p>
       </div>
 
-      <!-- Kiro: interactive login + credentials JSON import -->
+      <!-- Kiro Step 1: choose authorization method + basic config -->
       <div v-if="form.platform === 'kiro'" class="space-y-3">
         <!-- method selector -->
         <div>
@@ -413,72 +413,16 @@
           </select>
         </div>
 
-        <!-- shared region -->
+        <!-- shared region (not needed for credentials JSON) -->
         <div v-if="kiroAddMethod !== 'credentials'">
           <label class="input-label">{{ t('admin.accounts.oauth.kiro.region') }}</label>
           <input v-model="kiroRegion" class="input" :placeholder="t('admin.accounts.oauth.kiro.regionPlaceholder')" />
         </div>
 
-        <!-- Builder ID device code -->
-        <div v-if="kiroAddMethod === 'builderid'" class="space-y-2">
-          <p class="input-hint">{{ t('admin.accounts.oauth.kiro.builderIDStep') }}</p>
-          <button type="button" class="btn-secondary" :disabled="kiroOAuth.loading.value || kiroOAuth.polling.value" @click="handleKiroBuilderIDStart">
-            {{ t('admin.accounts.oauth.kiro.startLogin') }}
-          </button>
-          <div v-if="kiroOAuth.userCode.value" class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm dark:border-gray-700 dark:bg-gray-800/40">
-            <div class="flex items-center gap-2">
-              <span class="text-gray-500">{{ t('admin.accounts.oauth.kiro.userCode') }}:</span>
-              <code class="font-mono text-base font-semibold">{{ kiroOAuth.userCode.value }}</code>
-            </div>
-            <a :href="kiroOAuth.verificationUri.value" target="_blank" rel="noopener" class="mt-1 inline-block text-blue-600 hover:underline dark:text-blue-400">
-              {{ t('admin.accounts.oauth.kiro.openVerificationUri') }}
-            </a>
-            <p v-if="kiroOAuth.polling.value" class="mt-2 text-xs text-amber-600 dark:text-amber-400">{{ t('admin.accounts.oauth.kiro.waitingAuthorization') }}</p>
-          </div>
-        </div>
-
-        <!-- IAM Identity Center PKCE -->
-        <div v-else-if="kiroAddMethod === 'iamsso'" class="space-y-2">
-          <div>
-            <label class="input-label">{{ t('admin.accounts.oauth.kiro.startUrl') }}</label>
-            <input v-model="kiroStartUrl" class="input" :placeholder="t('admin.accounts.oauth.kiro.startUrlPlaceholder')" />
-          </div>
-          <p class="input-hint">{{ t('admin.accounts.oauth.kiro.iamSSOStep') }}</p>
-          <button type="button" class="btn-secondary" :disabled="kiroOAuth.loading.value" @click="handleKiroIAMSSOStart">
-            {{ t('admin.accounts.oauth.kiro.generateAuthUrl') }}
-          </button>
-          <a v-if="kiroOAuth.authUrl.value" :href="kiroOAuth.authUrl.value" target="_blank" rel="noopener" class="block truncate text-blue-600 hover:underline dark:text-blue-400">
-            {{ t('admin.accounts.oauth.kiro.openAuthUrl') }}
-          </a>
-          <div v-if="kiroOAuth.ssoSessionId.value">
-            <label class="input-label">{{ t('admin.accounts.oauth.kiro.callbackUrl') }}</label>
-            <input v-model="kiroCallbackUrl" class="input font-mono text-xs" :placeholder="t('admin.accounts.oauth.kiro.callbackUrlPlaceholder')" />
-          </div>
-        </div>
-
-        <!-- SSO token import -->
-        <div v-else-if="kiroAddMethod === 'ssotoken'" class="space-y-2">
-          <label class="input-label">{{ t('admin.accounts.oauth.kiro.bearerToken') }}</label>
-          <textarea v-model="kiroBearerToken" rows="4" spellcheck="false" class="input font-mono text-xs" :placeholder="t('admin.accounts.oauth.kiro.bearerTokenPlaceholder')"></textarea>
-        </div>
-
-        <!-- credentials JSON import (original path) -->
-        <div v-else class="space-y-3">
-          <div>
-            <label class="input-label">{{ t('admin.accounts.kiro.credentialsLabel') }}</label>
-            <textarea
-              v-model="kiroCredentialsJson"
-              rows="8"
-              spellcheck="false"
-              class="input font-mono text-xs"
-              :placeholder="t('admin.accounts.kiro.credentialsPlaceholder')"
-              data-testid="kiro-credentials-input"
-            ></textarea>
-            <p class="input-hint">{{ t('admin.accounts.kiro.credentialsHint') }}</p>
-          </div>
-          <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
-            {{ t('admin.accounts.kiro.importNote') }}
-          </div>
+        <!-- IAM SSO start URL (config; authorization happens in step 2) -->
+        <div v-if="kiroAddMethod === 'iamsso'">
+          <label class="input-label">{{ t('admin.accounts.oauth.kiro.startUrl') }}</label>
+          <input v-model="kiroStartUrl" class="input" :placeholder="t('admin.accounts.oauth.kiro.startUrlPlaceholder')" />
         </div>
       </div>
 
@@ -3136,7 +3080,80 @@
 
     <!-- Step 2: OAuth Authorization -->
     <div v-else class="space-y-5">
+      <!-- Kiro: interactive authorization by method -->
+      <div v-if="form.platform === 'kiro'" class="space-y-4">
+        <div class="rounded-lg border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/30 dark:bg-blue-900/10">
+          <div class="mb-3 flex items-center gap-2">
+            <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500 text-white">
+              <Icon name="link" size="sm" />
+            </span>
+            <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100">
+              {{ t('admin.accounts.oauth.kiro.title') }}
+            </h3>
+          </div>
+
+          <!-- Builder ID device code -->
+          <div v-if="kiroAddMethod === 'builderid'" class="space-y-2">
+            <p class="input-hint">{{ t('admin.accounts.oauth.kiro.builderIDStep') }}</p>
+            <button type="button" class="btn-secondary" :disabled="kiroOAuth.loading.value || kiroOAuth.polling.value" @click="handleKiroBuilderIDStart">
+              {{ t('admin.accounts.oauth.kiro.startLogin') }}
+            </button>
+            <div v-if="kiroOAuth.userCode.value" class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm dark:border-gray-700 dark:bg-gray-800/40">
+              <div class="flex items-center gap-2">
+                <span class="text-gray-500">{{ t('admin.accounts.oauth.kiro.userCode') }}:</span>
+                <code class="font-mono text-base font-semibold">{{ kiroOAuth.userCode.value }}</code>
+              </div>
+              <a :href="kiroOAuth.verificationUri.value" target="_blank" rel="noopener" class="mt-1 inline-block text-blue-600 hover:underline dark:text-blue-400">
+                {{ t('admin.accounts.oauth.kiro.openVerificationUri') }}
+              </a>
+              <p v-if="kiroOAuth.polling.value" class="mt-2 text-xs text-amber-600 dark:text-amber-400">{{ t('admin.accounts.oauth.kiro.waitingAuthorization') }}</p>
+            </div>
+          </div>
+
+          <!-- IAM Identity Center PKCE -->
+          <div v-else-if="kiroAddMethod === 'iamsso'" class="space-y-2">
+            <p class="input-hint">{{ t('admin.accounts.oauth.kiro.iamSSOStep') }}</p>
+            <button type="button" class="btn-secondary" :disabled="kiroOAuth.loading.value" @click="handleKiroIAMSSOStart">
+              {{ t('admin.accounts.oauth.kiro.generateAuthUrl') }}
+            </button>
+            <a v-if="kiroOAuth.authUrl.value" :href="kiroOAuth.authUrl.value" target="_blank" rel="noopener" class="block truncate text-blue-600 hover:underline dark:text-blue-400">
+              {{ t('admin.accounts.oauth.kiro.openAuthUrl') }}
+            </a>
+            <div v-if="kiroOAuth.ssoSessionId.value">
+              <label class="input-label">{{ t('admin.accounts.oauth.kiro.callbackUrl') }}</label>
+              <input v-model="kiroCallbackUrl" class="input font-mono text-xs" :placeholder="t('admin.accounts.oauth.kiro.callbackUrlPlaceholder')" />
+            </div>
+          </div>
+
+          <!-- SSO token import -->
+          <div v-else-if="kiroAddMethod === 'ssotoken'" class="space-y-2">
+            <label class="input-label">{{ t('admin.accounts.oauth.kiro.bearerToken') }}</label>
+            <textarea v-model="kiroBearerToken" rows="4" spellcheck="false" class="input font-mono text-xs" :placeholder="t('admin.accounts.oauth.kiro.bearerTokenPlaceholder')"></textarea>
+          </div>
+
+          <!-- credentials JSON import -->
+          <div v-else class="space-y-3">
+            <div>
+              <label class="input-label">{{ t('admin.accounts.kiro.credentialsLabel') }}</label>
+              <textarea
+                v-model="kiroCredentialsJson"
+                rows="8"
+                spellcheck="false"
+                class="input font-mono text-xs"
+                :placeholder="t('admin.accounts.kiro.credentialsPlaceholder')"
+                data-testid="kiro-credentials-input"
+              ></textarea>
+              <p class="input-hint">{{ t('admin.accounts.kiro.credentialsHint') }}</p>
+            </div>
+            <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-300">
+              {{ t('admin.accounts.kiro.importNote') }}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <OAuthAuthorizationFlow
+        v-else
         ref="oauthFlowRef"
         :add-method="form.platform === 'anthropic' ? addMethod : 'oauth'"
         :auth-url="currentAuthUrl"
@@ -3211,8 +3228,27 @@
         <button type="button" class="btn btn-secondary" @click="goBackToBasicInfo">
           {{ t('common.back') }}
         </button>
+        <!-- Kiro: complete authorization (builderid completes via device polling, no button needed) -->
         <button
-          v-if="isManualInputMethod"
+          v-if="form.platform === 'kiro' && kiroAddMethod !== 'builderid'"
+          type="button"
+          :disabled="submitting || kiroOAuth.loading.value"
+          class="btn btn-primary"
+          @click="handleKiroComplete"
+        >
+          <svg
+            v-if="submitting || kiroOAuth.loading.value"
+            class="-ml-1 mr-2 h-4 w-4 animate-spin"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          {{ t('admin.accounts.oauth.completeAuth') }}
+        </button>
+        <button
+          v-else-if="form.platform !== 'kiro' && isManualInputMethod"
           type="button"
           :disabled="!canExchangeCode"
           class="btn btn-primary"
@@ -3572,6 +3608,7 @@ const oauthStepTitle = computed(() => {
   if (form.platform === 'gemini') return t('admin.accounts.oauth.gemini.title')
   if (form.platform === 'antigravity') return t('admin.accounts.oauth.antigravity.title')
   if (form.platform === 'grok') return t('admin.accounts.oauth.grok.title')
+  if (form.platform === 'kiro') return t('admin.accounts.oauth.kiro.title')
   return t('admin.accounts.oauth.title')
 })
 
@@ -4052,9 +4089,9 @@ const isOAuthFlow = computed(() => {
   if (form.platform === 'anthropic' && accountCategory.value === 'bedrock') {
     return false
   }
-  // Kiro 通过粘贴凭证 JSON 直接导入，不走浏览器 OAuth 授权流程
+  // Kiro 走两步向导：第一步选授权方式，第二步完成账户授权
   if (form.platform === 'kiro') {
-    return false
+    return true
   }
   return accountCategory.value === 'oauth-based'
 })
@@ -4948,9 +4985,45 @@ const handleKiroBuilderIDStart = async () => {
   await createAccountAndFinish('kiro', 'oauth' as AccountType, creds)
 }
 
-// Kiro IAM Identity Center: generate the authorize URL (completion happens on submit).
+// Kiro IAM Identity Center: generate the authorize URL (completion happens in step 2).
 const handleKiroIAMSSOStart = async () => {
   await kiroOAuth.startIAMSSO(kiroStartUrl.value, kiroRegion.value, form.proxy_id)
+}
+
+// Kiro step 2: complete authorization and create the account.
+// credentials / iamsso / ssotoken complete here; builderid completes via polling
+// in handleKiroBuilderIDStart (which creates directly on success).
+const handleKiroComplete = async () => {
+  if (!form.name.trim()) {
+    appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
+    return
+  }
+
+  let credentials: Record<string, unknown> | null = null
+  if (kiroAddMethod.value === 'credentials') {
+    credentials = buildKiroCredentials(kiroCredentialsJson.value)
+  } else if (kiroAddMethod.value === 'iamsso') {
+    credentials = (await kiroOAuth.completeIAMSSO(kiroCallbackUrl.value)) as Record<string, unknown> | null
+  } else if (kiroAddMethod.value === 'ssotoken') {
+    credentials = (await kiroOAuth.importSSOToken(kiroBearerToken.value, kiroRegion.value, form.proxy_id)) as Record<string, unknown> | null
+  } else {
+    // builderid completes via polling; user must start the device flow first.
+    appStore.showError(t('admin.accounts.oauth.kiro.builderIDStep'))
+    return
+  }
+  if (!credentials) {
+    return
+  }
+
+  // Optional model mapping / whitelist
+  const modelMapping = buildModelMappingObject(
+    modelRestrictionMode.value, allowedModels.value, modelMappings.value
+  )
+  if (modelMapping) {
+    credentials.model_mapping = modelMapping
+  }
+
+  await createAccountAndFinish('kiro', 'oauth' as AccountType, credentials)
 }
 
 const handleSubmit = async () => {
@@ -5033,40 +5106,8 @@ const handleSubmit = async () => {
   }
 
   // For Kiro, dispatch by add method: credentials JSON (paste) or interactive login.
-  if (form.platform === 'kiro') {
-    if (!form.name.trim()) {
-      appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
-      return
-    }
-
-    let credentials: Record<string, unknown> | null = null
-    if (kiroAddMethod.value === 'credentials') {
-      credentials = buildKiroCredentials(kiroCredentialsJson.value)
-    } else if (kiroAddMethod.value === 'iamsso') {
-      credentials = (await kiroOAuth.completeIAMSSO(kiroCallbackUrl.value)) as Record<string, unknown> | null
-    } else if (kiroAddMethod.value === 'ssotoken') {
-      credentials = (await kiroOAuth.importSSOToken(kiroBearerToken.value, kiroRegion.value, form.proxy_id)) as Record<string, unknown> | null
-    } else {
-      // builderid completes via polling (handled by handleKiroBuilderIDStart); if we
-      // got here without credentials, the user must start the device flow first.
-      appStore.showError(t('admin.accounts.oauth.kiro.builderIDStep'))
-      return
-    }
-    if (!credentials) {
-      return
-    }
-
-    // Optional model mapping / whitelist
-    const modelMapping = buildModelMappingObject(
-      modelRestrictionMode.value, allowedModels.value, modelMappings.value
-    )
-    if (modelMapping) {
-      credentials.model_mapping = modelMapping
-    }
-
-    await createAccountAndFinish('kiro', 'oauth' as AccountType, credentials)
-    return
-  }
+  // Kiro 在第二步通过 handleKiroComplete 完成创建，handleSubmit 只负责第一步翻页
+  // （已被上方 isOAuthFlow 分支处理），此处无需处理 kiro。
 
   // For Antigravity upstream type, create directly
   if (form.platform === 'antigravity' && antigravityAccountType.value === 'upstream') {
@@ -5218,6 +5259,7 @@ const goBackToBasicInfo = () => {
   geminiOAuth.resetState()
   antigravityOAuth.resetState()
   grokOAuth.resetState()
+  kiroOAuth.resetState()
   oauthFlowRef.value?.reset()
 }
 

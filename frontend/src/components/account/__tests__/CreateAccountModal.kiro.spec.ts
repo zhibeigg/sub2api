@@ -128,7 +128,7 @@ afterEach(() => {
 })
 
 describe('CreateAccountModal Kiro platform', () => {
-  it('switches to Kiro import form without closing the modal', async () => {
+  it('shows the two-step wizard for Kiro without closing the modal', async () => {
     const wrapper = mount(CreateAccountModal, {
       props: {
         show: true,
@@ -156,11 +156,14 @@ describe('CreateAccountModal Kiro platform', () => {
     expect(kiroButton).toBeTruthy()
 
     await kiroButton!.trigger('click')
+    await nextTick()
 
+    // 选中 Kiro 后仍在第一步：显示步骤指示器与"添加方式"选择，尚未显示凭证输入
     expect(wrapper.emitted('close')).toBeUndefined()
     expect(wrapper.find('[data-testid="dialog"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="kiro-credentials-input"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('admin.accounts.kiro.importNote')
+    expect(wrapper.text()).toContain('admin.accounts.oauth.authMethod')
+    expect(wrapper.text()).toContain('admin.accounts.oauth.kiro.method')
+    expect(wrapper.find('[data-testid="kiro-credentials-input"]').exists()).toBe(false)
   })
 
   it('keeps the real dialog mounted and the page locked only while Kiro form is open', async () => {
@@ -190,7 +193,9 @@ describe('CreateAccountModal Kiro platform', () => {
 
     expect(wrapper.emitted('close')).toBeUndefined()
     expect(document.body.querySelector('.modal-overlay')).toBeTruthy()
-    expect(document.body.querySelector('[data-testid="kiro-credentials-input"]')).toBeTruthy()
+    // 两步流程：选中 Kiro 后仍在第一步（凭证输入在第二步才出现），弹窗保持挂载与锁定
+    expect(document.body.querySelector('[data-testid="kiro-credentials-input"]')).toBeFalsy()
+    expect(document.body.textContent).toContain('admin.accounts.oauth.kiro.method')
     expect(document.body.classList.contains('modal-open')).toBe(true)
 
     await wrapper.setProps({ show: false })
@@ -241,7 +246,8 @@ describe('CreateAccountModal Kiro platform', () => {
 
     expect((wrapper.vm as unknown as { show: boolean }).show).toBe(true)
     expect(document.body.querySelector('.modal-overlay')).toBeTruthy()
-    expect(document.body.querySelector('[data-testid="kiro-credentials-input"]')).toBeTruthy()
+    // 两步流程：第一步显示添加方式选择，不因选中 Kiro 而关闭父级弹窗
+    expect(document.body.textContent).toContain('admin.accounts.oauth.kiro.method')
 
     wrapper.unmount()
     expect(document.body.classList.contains('modal-open')).toBe(false)
