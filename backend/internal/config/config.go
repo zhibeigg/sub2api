@@ -91,6 +91,7 @@ type Config struct {
 	RunMode                 string                        `mapstructure:"run_mode" yaml:"run_mode"`
 	Timezone                string                        `mapstructure:"timezone"` // e.g. "Asia/Shanghai", "UTC"
 	Gemini                  GeminiConfig                  `mapstructure:"gemini"`
+	Kiro                    KiroConfig                    `mapstructure:"kiro"`
 	Update                  UpdateConfig                  `mapstructure:"update"`
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
 	BatchImage              BatchImageConfig              `mapstructure:"batch_image"`
@@ -131,6 +132,46 @@ type LogSamplingConfig struct {
 type GeminiConfig struct {
 	OAuth GeminiOAuthConfig `mapstructure:"oauth"`
 	Quota GeminiQuotaConfig `mapstructure:"quota"`
+}
+
+// KiroConfig holds Kiro / AWS CodeWhisperer platform tuning: the spoofed IDE
+// client identity, system-prompt filters, and thinking-output formats.
+type KiroConfig struct {
+	Client   KiroClientConfig   `mapstructure:"client"`
+	Filter   KiroFilterConfig   `mapstructure:"filter"`
+	Thinking KiroThinkingConfig `mapstructure:"thinking"`
+}
+
+// KiroClientConfig overrides the Kiro IDE client version strings embedded in the
+// upstream User-Agent. Empty fields keep the built-in defaults.
+type KiroClientConfig struct {
+	KiroVersion   string `mapstructure:"kiro_version"`
+	NodeVersion   string `mapstructure:"node_version"`
+	SystemVersion string `mapstructure:"system_version"`
+}
+
+// KiroFilterConfig toggles system-prompt token-optimization filters.
+type KiroFilterConfig struct {
+	ClaudeCode      bool                   `mapstructure:"claude_code"`
+	EnvNoise        bool                   `mapstructure:"env_noise"`
+	StripBoundaries bool                   `mapstructure:"strip_boundaries"`
+	Rules           []KiroPromptFilterRule `mapstructure:"rules"`
+}
+
+// KiroPromptFilterRule is a user-defined prompt filter rule.
+type KiroPromptFilterRule struct {
+	Type    string `mapstructure:"type"`
+	Match   string `mapstructure:"match"`
+	Replace string `mapstructure:"replace"`
+	Enabled bool   `mapstructure:"enabled"`
+}
+
+// KiroThinkingConfig controls reasoning output formatting and the suffix that
+// enables thinking mode.
+type KiroThinkingConfig struct {
+	Suffix       string `mapstructure:"suffix"`
+	OpenAIFormat string `mapstructure:"openai_format"`
+	ClaudeFormat string `mapstructure:"claude_format"`
 }
 
 type GeminiOAuthConfig struct {

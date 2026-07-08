@@ -1122,6 +1122,54 @@ gemini:
         cooldown_minutes: 5
 
 # =============================================================================
+# Kiro Configuration (Kiro / AWS CodeWhisperer 平台配置)
+# =============================================================================
+kiro:
+  # Kiro IDE client identity embedded in the upstream User-Agent.
+  # Kiro IDE 客户端身份标识（嵌入上游 User-Agent）。
+  # Leave empty to use the built-in defaults. Override only if AWS starts
+  # rejecting stale client versions.
+  # 留空使用内置默认值；仅当 AWS 开始拒绝旧版本客户端时才需覆盖。
+  client:
+    kiro_version: ""   # e.g. "0.11.107"
+    node_version: ""   # e.g. "20.18.1"
+    system_version: "" # e.g. "darwin#24.5.0"
+  # System-prompt token-optimization filters (all default false = no filtering).
+  # 系统提示词 token 优化过滤器（默认全部关闭 = 不过滤）。
+  filter:
+    # Replace a detected Claude Code CLI system prompt with a minimal backend prompt.
+    # 检测到 Claude Code CLI 系统提示词时替换为精简后端提示词。
+    claude_code: false
+    # Strip environment metadata lines (git status, env sections, etc.).
+    # 剥离环境元数据行（git 状态、环境段落等）。
+    env_noise: false
+    # Strip "--- SYSTEM PROMPT ---" boundary markers.
+    # 剥离 "--- SYSTEM PROMPT ---" 边界标记。
+    strip_boundaries: false
+    # User-defined rules. type: "regex" (find/replace) or "lines-containing" (drop matching lines).
+    # 用户自定义规则。type 可选 "regex"（查找替换）或 "lines-containing"（删除匹配行）。
+    rules: []
+    #  - type: "lines-containing"
+    #    match: "internal-secret"
+    #    enabled: true
+    #  - type: "regex"
+    #    match: "\\d{4}-\\d{4}"
+    #    replace: "[redacted]"
+    #    enabled: true
+  # Thinking-mode output formatting.
+  # 思考模式输出格式。
+  thinking:
+    # Model-name suffix that enables thinking mode (default "-thinking").
+    # 启用思考模式的模型名后缀（默认 "-thinking"）。
+    suffix: "-thinking"
+    # OpenAI thinking output: "reasoning_content" | "thinking" | "think".
+    # OpenAI 思考输出格式。
+    openai_format: "reasoning_content"
+    # Claude thinking output: "thinking".
+    # Claude 思考输出格式。
+    claude_format: "thinking"
+
+# =============================================================================
 # Update Configuration (在线更新配置)
 # =============================================================================
 update:

@@ -18,6 +18,7 @@ import (
 	_ "github.com/Wei-Shaw/sub2api/ent/runtime"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/kiro"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/setup"
@@ -143,6 +144,8 @@ func runMainServer() {
 		log.Println("⚠️  WARNING: Running in SIMPLE mode - billing and quota checks are DISABLED")
 	}
 
+	applyKiroRuntimeConfig(cfg)
+
 	buildInfo := handler.BuildInfo{
 		Version:   Version,
 		BuildType: BuildType,
@@ -178,4 +181,37 @@ func runMainServer() {
 	}
 
 	log.Println("Server exited")
+}
+
+// applyKiroRuntimeConfig pushes Kiro platform settings (client identity spoof
+// and system-prompt filters) from the loaded config into the pkg/kiro package.
+func applyKiroRuntimeConfig(cfg *config.Config) {
+	if cfg == nil {
+		return
+	}
+	client := cfg.Kiro.Client
+	if client.KiroVersion != "" || client.NodeVersion != "" || client.SystemVersion != "" {
+		kiro.SetClientConfig(kiro.ClientConfig{
+			KiroVersion:   client.KiroVersion,
+			NodeVersion:   client.NodeVersion,
+			SystemVersion: client.SystemVersion,
+		})
+	}
+
+	filter := cfg.Kiro.Filter
+	rules := make([]kiro.PromptFilterRule, 0, len(filter.Rules))
+	for _, r := range filter.Rules {
+		rules = append(rules, kiro.PromptFilterRule{
+			Type:    r.Type,
+			Match:   r.Match,
+			Replace: r.Replace,
+			Enabled: r.Enabled,
+		})
+	}
+	kiro.SetPromptFilterConfig(kiro.PromptFilterConfig{
+		FilterClaudeCode:      filter.ClaudeCode,
+		FilterEnvNoise:        filter.EnvNoise,
+		FilterStripBoundaries: filter.StripBoundaries,
+		Rules:                 rules,
+	})
 }
