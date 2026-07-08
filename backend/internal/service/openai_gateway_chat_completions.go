@@ -75,6 +75,29 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
 
+	// Kiro 账号(混合调度进入 openai 分组)：交给 Kiro 网关转发。
+	// KiroGatewayService.Forward 已支持 OpenAI 入站格式(isOpenAIInboundPath)，
+	// 内部把请求模型 ID 透传给上游(可服务 GLM/DeepSeek/MiniMax 等)。
+	if account.Platform == PlatformKiro && account.Type != AccountTypeAPIKey {
+		if s.kiroGatewayService == nil {
+			return nil, errors.New("kiro gateway service is not configured")
+		}
+		fr, err := s.kiroGatewayService.Forward(ctx, c, account, body)
+		if err != nil {
+			return nil, err
+		}
+		result := &OpenAIForwardResult{
+			RequestID:     fr.RequestID,
+			Model:         fr.Model,
+			UpstreamModel: fr.UpstreamModel,
+			Usage: OpenAIUsage{
+				InputTokens:  fr.Usage.InputTokens,
+				OutputTokens: fr.Usage.OutputTokens,
+			},
+		}
+		return result, nil
+	}
+
 	// 入口分流：APIKey 账号 + 强制或已探测确认上游不支持 Responses，走 CC 直转。
 	// 自动模式下标记缺失（未探测）按"现状即证据"原则继续走下方原 Responses 转换路径。
 	if account.Type == AccountTypeAPIKey && !openai_compat.ShouldUseResponsesAPI(account.Extra) {

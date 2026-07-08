@@ -357,6 +357,7 @@ type OpenAIGatewayService struct {
 	balanceNotifyService  *BalanceNotifyService
 	settingService        *SettingService
 	userPlatformQuotaRepo UserPlatformQuotaRepository
+	kiroGatewayService    *KiroGatewayService
 
 	openaiWSPoolOnce              sync.Once
 	openaiWSStateStoreOnce        sync.Once
@@ -377,6 +378,13 @@ type OpenAIGatewayService struct {
 	codexSnapshotThrottle               *accountWriteThrottle
 	openaiCompatSessionResponses        sync.Map
 	openaiCompatAnthropicDigestSessions sync.Map
+}
+
+// SetKiroGatewayService injects the Kiro gateway service so mixed-scheduling
+// kiro accounts selected for openai-compatible endpoints can be forwarded
+// through Kiro's own upstream (它内部已支持 OpenAI 入站格式)。Optional.
+func (s *OpenAIGatewayService) SetKiroGatewayService(k *KiroGatewayService) {
+	s.kiroGatewayService = k
 }
 
 // NewOpenAIGatewayService creates a new OpenAIGatewayService

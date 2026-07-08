@@ -254,6 +254,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	kiroUsageService := service.NewKiroUsageService(accountRepository, proxyRepository, kiroTokenProvider)
 	accountUsageService.SetKiroUsageService(kiroUsageService)
 	accountTestService.SetKiroUsageService(kiroUsageService)
+	openAIGatewayService.SetKiroGatewayService(kiroGatewayService)
 	kiroOAuthHandler := admin.NewKiroOAuthHandler(kiroOAuthService, kiroUsageService, adminService)
 	adminHandlers := handler.ProvideAdminHandlers(dashboardHandler, adminUserHandler, groupHandler, accountHandler, adminAnnouncementHandler, dataManagementHandler, backupHandler, oAuthHandler, openAIOAuthHandler, geminiOAuthHandler, antigravityOAuthHandler, grokOAuthHandler, kiroOAuthHandler, proxyHandler, adminRedeemHandler, promoHandler, settingHandler, opsHandler, systemHandler, adminSubscriptionHandler, adminUsageHandler, userAttributeHandler, errorPassthroughHandler, tlsFingerprintProfileHandler, adminAPIKeyHandler, scheduledTestHandler, channelHandler, channelMonitorHandler, channelMonitorRequestTemplateHandler, contentModerationHandler, paymentHandler, affiliateHandler, complianceHandler)
 	usageRecordWorkerPool := service.NewUsageRecordWorkerPool(configConfig)
