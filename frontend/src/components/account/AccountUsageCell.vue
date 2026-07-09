@@ -1313,7 +1313,9 @@ const kiroOverageLine = computed(() => {
 const kiroContextLabel = computed(() => {
   const pct = usageInfo.value?.kiro_context_usage_pct
   if (pct == null) return ''
-  return t('admin.accounts.usageWindow.kiroContext', { pct: Math.round(pct * 100) })
+  // 后端存的 kiro_context_usage_pct 已经是百分比数值（如 36.42 表示 36.42%），
+  // 不能再 ×100，否则会显示成 3642%。
+  return t('admin.accounts.usageWindow.kiroContext', { pct: Math.round(pct) })
 })
 
 // 降级错误标签（rate_limited / network_error）

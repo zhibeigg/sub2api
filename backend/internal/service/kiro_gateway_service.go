@@ -95,6 +95,8 @@ func (s *KiroGatewayService) Forward(ctx context.Context, c *gin.Context, accoun
 		stream       bool
 	)
 
+	var estimatedInput int
+
 	if isOpenAI {
 		var req kiro.OpenAIRequest
 		if err := json.Unmarshal(body, &req); err != nil {
@@ -103,6 +105,7 @@ func (s *KiroGatewayService) Forward(ctx context.Context, c *gin.Context, accoun
 		requestModel = req.Model
 		stream = req.Stream
 		_, thinking := kiro.ParseModelAndThinking(req.Model, kiro.DefaultThinkingSuffix)
+		estimatedInput = kiro.EstimateOpenAIRequestInputTokens(&req)
 		payload = kiro.OpenAIToKiro(&req, thinking)
 	} else {
 		var req kiro.ClaudeRequest
@@ -112,15 +115,16 @@ func (s *KiroGatewayService) Forward(ctx context.Context, c *gin.Context, accoun
 		requestModel = req.Model
 		stream = req.Stream
 		_, thinking := kiro.ResolveClaudeThinkingMode(req.Model, req.Thinking, kiro.DefaultThinkingSuffix)
+		estimatedInput = kiro.EstimateClaudeRequestInputTokens(&req)
 		payload = kiro.ClaudeToKiro(&req, thinking)
 	}
 
 	upstreamModel := kiro.MapModel(requestModel)
 
 	if stream {
-		return s.forwardStream(ctx, c, account, cred, payload, requestModel, upstreamModel, isOpenAI, start)
+		return s.forwardStream(ctx, c, account, cred, payload, requestModel, upstreamModel, isOpenAI, estimatedInput, start)
 	}
-	return s.forwardNonStream(ctx, c, account, cred, payload, requestModel, upstreamModel, isOpenAI, start)
+	return s.forwardNonStream(ctx, c, account, cred, payload, requestModel, upstreamModel, isOpenAI, estimatedInput, start)
 }
 
 // ForwardResponses handles an OpenAI Responses API (/v1/responses) request by
@@ -291,16 +295,12 @@ func (s *KiroGatewayService) buildCredential(ctx context.Context, account *Accou
 
 func (s *KiroGatewayService) forwardStream(
 	ctx context.Context, c *gin.Context, account *Account, cred *kiro.Credential, payload *kiro.KiroPayload,
-	requestModel, upstreamModel string, isOpenAI bool, start time.Time,
+	requestModel, upstreamModel string, isOpenAI bool, estimatedInput int, start time.Time,
 ) (*ForwardResult, error) {
 	flusher, _ := c.Writer.(http.Flusher)
 	w := &kiroSSEWriter{c: c, flusher: flusher}
 
-	if isOpenAI {
-		c.Writer.Header().Set("Content-Type", "text/event-stream")
-	} else {
-		c.Writer.Header().Set("Content-Type", "text/event-stream")
-	}
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
 	c.Writer.WriteHeader(http.StatusOK)
@@ -313,14 +313,33 @@ func (s *KiroGatewayService) forwardStream(
 		}
 	}
 
-	var usage kiro.ClaudeUsage
+	// Aggregate output content locally so token counts can be estimated when the
+	// Kiro upstream does not report them (which is the common case).
+	var textBuf, thinkingBuf strings.Builder
+	var toolUses []kiro.KiroToolUse
+	var upstreamIn, upstreamOut int
 	var credits, contextPct float64
 	instrument := func(cb *kiro.StreamCallback) {
 		wrapText := cb.OnText
-		cb.OnText = func(t string, thinking bool) { markFirst(); wrapText(t, thinking) }
+		cb.OnText = func(t string, thinking bool) {
+			markFirst()
+			if thinking {
+				thinkingBuf.WriteString(t)
+			} else {
+				textBuf.WriteString(t)
+			}
+			wrapText(t, thinking)
+		}
+		wrapTool := cb.OnToolUse
+		cb.OnToolUse = func(tu kiro.KiroToolUse) {
+			toolUses = append(toolUses, tu)
+			if wrapTool != nil {
+				wrapTool(tu)
+			}
+		}
 		origComplete := cb.OnComplete
 		cb.OnComplete = func(in, out int) {
-			usage.InputTokens, usage.OutputTokens = in, out
+			upstreamIn, upstreamOut = in, out
 			if origComplete != nil {
 				origComplete(in, out)
 			}
@@ -348,6 +367,11 @@ func (s *KiroGatewayService) forwardStream(
 	}
 	w.Flush()
 
+	inputTokens, outputTokens := s.resolveKiroUsage(
+		requestModel, upstreamIn, upstreamOut, estimatedInput, contextPct,
+		textBuf.String(), thinkingBuf.String(), toolUses, isOpenAI,
+	)
+
 	s.recordContextUsage(ctx, account, contextPct)
 
 	return &ForwardResult{
@@ -356,15 +380,49 @@ func (s *KiroGatewayService) forwardStream(
 		Stream:              true,
 		Duration:            time.Since(start),
 		FirstTokenMs:        firstTokenMs,
-		Usage:               ClaudeUsage{InputTokens: usage.InputTokens, OutputTokens: usage.OutputTokens},
+		Usage:               ClaudeUsage{InputTokens: inputTokens, OutputTokens: outputTokens},
 		KiroCredits:         credits,
 		KiroContextUsagePct: contextPct,
 	}, nil
 }
 
+// resolveKiroUsage applies the token-count fallback priority shared by the
+// Kiro stream and non-stream paths:
+//
+//	input  = contextUsageEvent reverse-derived → upstream usage → request estimate
+//	output = upstream usage → local estimate
+//
+// The Kiro upstream almost never reports token counts, so without these
+// fallbacks input/output would be 0 and billing/usage would show nothing.
+func (s *KiroGatewayService) resolveKiroUsage(
+	model string, upstreamIn, upstreamOut, estimatedInput int, contextPct float64,
+	text, thinking string, toolUses []kiro.KiroToolUse, isOpenAI bool,
+) (int, int) {
+	inputTokens := 0
+	if contextPct > 0 {
+		inputTokens = int(contextPct * float64(kiro.GetContextWindowSize(model)) / 100.0)
+	}
+	if inputTokens <= 0 {
+		inputTokens = upstreamIn
+	}
+	if inputTokens <= 0 {
+		inputTokens = estimatedInput
+	}
+
+	outputTokens := upstreamOut
+	if outputTokens <= 0 {
+		if isOpenAI {
+			outputTokens = kiro.EstimateOpenAIOutputTokens(text, thinking, toolUses)
+		} else {
+			outputTokens = kiro.EstimateClaudeOutputTokens(text, thinking, toolUses)
+		}
+	}
+	return inputTokens, outputTokens
+}
+
 func (s *KiroGatewayService) forwardNonStream(
 	ctx context.Context, c *gin.Context, account *Account, cred *kiro.Credential, payload *kiro.KiroPayload,
-	requestModel, upstreamModel string, isOpenAI bool, start time.Time,
+	requestModel, upstreamModel string, isOpenAI bool, estimatedInput int, start time.Time,
 ) (*ForwardResult, error) {
 	agg := &kiro.Aggregator{}
 	cb := agg.Callback()
@@ -375,11 +433,16 @@ func (s *KiroGatewayService) forwardNonStream(
 		return nil, mapKiroError(err)
 	}
 
+	inputTokens, outputTokens := s.resolveKiroUsage(
+		requestModel, agg.InputTokens, agg.OutputTokens, estimatedInput, contextPct,
+		agg.Text.String(), agg.Thinking.String(), agg.ToolUses, isOpenAI,
+	)
+
 	if isOpenAI {
-		resp := kiro.KiroToOpenAIResponse(agg.Text.String(), agg.ToolUses, agg.InputTokens, agg.OutputTokens, requestModel)
+		resp := kiro.KiroToOpenAIResponse(agg.Text.String(), agg.ToolUses, inputTokens, outputTokens, requestModel)
 		c.JSON(http.StatusOK, resp)
 	} else {
-		resp := kiro.KiroToClaudeResponse(agg.Text.String(), agg.Thinking.String(), false, agg.ToolUses, agg.InputTokens, agg.OutputTokens, requestModel)
+		resp := kiro.KiroToClaudeResponse(agg.Text.String(), agg.Thinking.String(), false, agg.ToolUses, inputTokens, outputTokens, requestModel)
 		c.JSON(http.StatusOK, resp)
 	}
 
@@ -390,7 +453,7 @@ func (s *KiroGatewayService) forwardNonStream(
 		UpstreamModel:       differentOrEmpty(requestModel, upstreamModel),
 		Stream:              false,
 		Duration:            time.Since(start),
-		Usage:               ClaudeUsage{InputTokens: agg.InputTokens, OutputTokens: agg.OutputTokens},
+		Usage:               ClaudeUsage{InputTokens: inputTokens, OutputTokens: outputTokens},
 		KiroCredits:         credits,
 		KiroContextUsagePct: contextPct,
 	}, nil
