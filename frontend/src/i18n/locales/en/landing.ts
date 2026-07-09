@@ -5,7 +5,6 @@ export default {
   },
   // Home Page
   home: {
-    viewOnGithub: 'View on GitHub',
     viewDocs: 'View Documentation',
     docs: 'Docs',
     switchToLight: 'Switch to Light Mode',
@@ -16,166 +15,111 @@ export default {
     goToDashboard: 'Go to Dashboard',
     aria: {
       primaryNav: 'Primary home navigation',
-      bottomNav: 'Bottom quick navigation',
+      footerNav: 'Footer quick navigation',
+      skipToContent: 'Skip to main content',
       endpoints: 'API endpoints'
     },
-    cursor: {
-      home: 'Home',
-      light: 'Light',
-      dark: 'Dark',
-      enter: 'Enter',
-      login: 'Login',
-      start: 'Start',
-      about: 'About',
-      copy: 'Copy',
-      read: 'Read',
-      close: 'Close'
-    },
     nav: {
-      about: 'About',
-      features: 'Work',
-      workflow: 'Process',
-      models: 'Services',
+      features: 'Principles',
+      workflow: 'Access',
+      models: 'Models',
       pricing: 'Pricing'
     },
-    bottomNav: {
-      about: 'About',
-      work: 'Work',
-      process: 'Process',
-      services: 'Services',
-      contact: 'Start'
-    },
     hero: {
-      badge: 'Multi-model gateway / Observable billing / Protocol compatible',
-      posterStatement: 'One reliable gateway for every AI model your product depends on.',
-      posterSubstatement: 'Built for teams whose model layer has outgrown scattered provider keys.',
-      metaLatency: 'Routing matrix online',
+      badge: 'Stable · Genuine · Fair',
+      posterStatement: 'Full models.\nNo dilution.',
+      posterSubstatement: 'One gateway to leading AI models, with clear pricing and traceable usage.',
       metaModels: 'Claude · OpenAI · Gemini · Grok',
-      metaControl: 'Usage · Billing · Failover',
-      scrollCue: 'See the gateway',
-      quickstartKicker: 'Gateway surface',
-      titleLine1: 'One key.',
-      titleLine2: 'Every model.',
+      metaControl: 'Clear billing · Traceable usage',
       description:
-        'Sub2API compresses Claude, OpenAI, Gemini, Grok, Qwen and more into one observable, billable, routable API gateway. Keep the official protocol experience while the gateway handles stability and cost control.',
-      ctaPrimary: 'Get an API Key',
-      ctaDocs: 'View Docs',
+        'Sub2API is an AI aggregation gateway for developers. It preserves mainstream provider protocols and model capabilities, uses multi-channel routing to reduce single-point failures, and bills by actual usage.',
+      ctaPrimary: 'Get started',
+      ctaDocs: 'Read the docs',
       baseUrlOpenai: 'OpenAI Compatible',
       baseUrlAnthropic: 'Anthropic Compatible',
       copy: 'Copy',
-      copied: 'Copied',
-      cards: {
-        routing: { title: 'Smart Routing', desc: 'Multi-channel load balancing with automatic failover' },
-        observability: { title: 'Real-time Observability', desc: 'Track usage and cost of every single call' },
-        billing: { title: 'Pay As You Go', desc: 'Only pay for what you use, no monthly fees' }
-      }
-    },
-    visual: {
-      gatewayLabel: 'Routing Matrix',
-      gatewayMeta: 'Live Gateway'
-    },
-    work: {
-      kicker: 'Selected Work',
-      index: '01 / 04'
+      copied: 'Copied'
     },
     value: {
-      kicker: 'VALUE',
-      title: 'Why Sub2API',
-      subtitle: 'Professional, reliable, developer-friendly',
+      kicker: 'PRINCIPLES',
+      title: 'Stable. Genuine.\nFair.',
+      subtitle: 'No inflated promises. Just clear models, pricing, and usage.',
       items: {
         unified: {
-          title: 'Unified Access',
-          desc: 'One key for all models. Fully compatible with OpenAI Responses / Chat and Anthropic Messages protocols. Low-friction migration.'
+          title: 'Genuine Models',
+          desc: 'Model names, protocols, and billing rules stay explicit, without vague bundles hiding what you call.'
         },
         observability: {
-          title: 'Full Observability',
-          desc: 'Real-time stats on requests, tokens and spend, with per-model and per-key breakdowns. Know exactly where every cent goes.'
+          title: 'Clear Billing',
+          desc: 'Usage-based billing with visible prices, usage, and cost boundaries.'
         },
         elastic: {
-          title: 'Elastic & Cost-efficient',
-          desc: 'Smart multi-upstream routing with automatic failover. Full SSE streaming support. Fast, stable, usage-based billing.'
+          title: 'Stable Routing',
+          desc: 'Multi-channel routing and failover reduce the impact of upstream instability.'
         },
         developer: {
-          title: 'Built for Developers',
-          desc: 'One-line setup scripts for Claude Code, Codex, Gemini CLI and more. Official SDKs work out of the box.'
+          title: 'Simple Integration',
+          desc: 'Works with common SDKs and CLIs; switch the Base URL and key to connect.'
         }
       }
     },
     workflow: {
-      kicker: 'PROCESS',
-      title: 'Migrate in Three Steps',
-      subtitle: 'From sign-up to your first request in minutes.',
+      kicker: 'SETUP',
+      title: 'Three steps.\nSame workflow.',
+      subtitle: 'Keep your existing SDKs and CLIs; replace the endpoint and key.',
       steps: {
         register: {
-          title: 'Register & Get a Key',
-          desc: 'Sign up for free and create your API Key in the console.'
+          title: 'Create an Account and Key',
+          desc: 'Create an API key in the console after registration.'
         },
         configure: {
-          title: 'Point the Base URL',
-          desc: 'Set the Base URL to Sub2API: /v1 for OpenAI, root path for Claude. Everything else stays the same.'
+          title: 'Switch the Base URL',
+          desc: 'Choose the OpenAI- or Anthropic-compatible endpoint in the docs, then replace the Base URL and key.'
         },
         observe: {
-          title: 'Call & Observe',
-          desc: 'Use official SDKs or CLI tools directly, then watch usage, spend and channel health in real time.'
+          title: 'Send Requests and Review Usage',
+          desc: 'Review the model, tokens, cost, and status in the console after each call.'
         }
       }
     },
     ecosystem: {
-      kicker: 'SERVICES',
-      title: 'Major models and tools, connected through one entrance',
-      subtitle: 'Major models onboard, one endpoint for everything',
-      more: 'More coming soon'
+      kicker: 'MODELS',
+      title: 'Leading models. One gateway.',
+      subtitle: 'Available models are listed in the console.',
+      more: 'View the console model catalog'
     },
     pricing: {
       kicker: 'PRICING',
-      title: 'Limited-time Top-up Offer',
-      subtitle: 'Transparent usage-based billing, credits never expire.',
-      rateLabel: 'Top-up Rate',
-      rateValue: '¥1 = $1',
-      officialLabel: 'Market Reference',
-      officialValue: '$1 ≈ ¥7.2',
-      badge: 'Limited Time',
-      note: 'Billed at official model prices. Top up now to lock in the rate.',
-      cta: 'Top Up Now'
+      title: 'Clear prices.\nPay for usage.',
+      subtitle: 'Model prices, billing rules, and usage stay visible.',
+      rateLabel: 'Billing Method',
+      rateValue: 'Usage-based',
+      officialLabel: 'Current Rates',
+      officialValue: 'See console',
+      badge: 'Clear Billing',
+      note: 'Review rates before topping up and usage details after each call.',
+      cta: 'Open Console Pricing'
     },
-    cta: {
-      kicker: 'CONTACT',
-      title: 'Give your AI traffic a stable entrance.',
-      description: 'Sign up for free and send your first observable, billable and routable AI request within minutes.',
-      button: 'Start with Sub2API'
+    docsPanel: {
+      kicker: 'DOCUMENTATION',
+      title: 'Documentation.\nNo hidden rules.',
+      description: 'Review protocols, Base URLs, models, billing, and error handling.',
+      button: 'Open Documentation',
+      unavailable: 'Documentation URL is not configured'
     },
-    about: {
-      open: 'About Sub2API',
-      close: 'Close',
-      eyebrow: 'About the gateway',
-      title: 'A trusted entrance for high-frequency AI calls.',
-      body:
-        'Sub2API is not another decorative model list. It brings account pools, keys, billing, failover and observability into one control plane. You keep the official protocol workflow; the platform makes every request routed, recorded and cost-bounded.',
-      est: 'EST 2024',
-      based: 'Built for developers and operators',
-      principles: {
-        outcomes: {
-          title: 'Outcomes first',
-          desc: 'Every capability points back to stable calls, low migration cost and explainable spend.'
-        },
-        signal: {
-          title: 'Clear signal',
-          desc: 'Usage, models, costs, errors and channel health should be legible at a glance.'
-        },
-        human: {
-          title: 'Developer-first',
-          desc: 'Keep the official SDK and CLI habits intact so adoption does not interrupt the workflow.'
-        },
-        pace: {
-          title: 'Long-term stability',
-          desc: 'Multiple accounts, channels and throttling policies reduce single-point risk.'
-        }
-      }
+    privacy: {
+      kicker: 'PRIVACY',
+      title: 'Only necessary\ndata.',
+      description:
+        'We do not collect data for advertising, profiling, or resale. To provide accounts, routing, billing, and abuse prevention, we process only the data those functions require. The exact scope is stated in our privacy policy.',
+      minimum: 'Only the data required for accounts, routing, billing, and security is processed.',
+      noSale: 'We do not sell user data.',
+      noTraining: 'Sub2API does not use user data to train models.',
+      noContent: 'Prompts, response bodies, and other API content are not retained.'
     },
     footer: {
       allRightsReserved: 'All rights reserved.',
-      console: 'Console',
-      apiExamples: 'API Examples'
+      backToTop: 'Back to top'
     }
   },
 

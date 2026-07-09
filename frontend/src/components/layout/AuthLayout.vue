@@ -1,111 +1,118 @@
 <template>
-  <div class="mono-auth monolog-scope" :style="pageStyle">
-    <div class="mono-auth-grain" aria-hidden="true"></div>
+  <div class="auth-page monolog-scope">
+    <a class="public-skip-link" href="#auth-form-content">{{ t('auth.brand.skipToForm') }}</a>
 
-    <div class="mono-auth-controls">
-      <LocaleSwitcher />
-      <button
-        type="button"
-        class="mono-auth-icon-btn"
-        :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
-        :aria-label="isDark ? t('home.switchToLight') : t('home.switchToDark')"
-        @click="toggleTheme"
-      >
-        <Icon v-if="isDark" name="sun" size="sm" :stroke-width="1.5" />
-        <Icon v-else name="moon" size="sm" :stroke-width="1.5" />
-      </button>
-    </div>
-
-    <div class="mono-auth-grid">
-      <aside class="mono-auth-stage" aria-label="Brand">
-        <router-link to="/home" class="mono-auth-brandmark">
-          <img :src="siteLogo || '/logo.png'" alt="Logo" class="mono-auth-logo" />
+    <header class="auth-header">
+      <div class="public-shell auth-header-inner">
+        <router-link to="/home" class="auth-brand" :aria-label="siteName">
+          <img :src="siteLogo || '/logo.png'" :alt="siteName" class="auth-logo" />
           <span>{{ siteName }}</span>
         </router-link>
 
-        <div class="mono-auth-stage-copy">
-          <p class="mono-auth-eyebrow">
-            <span class="mono-auth-dot" aria-hidden="true"></span>
-            <span>{{ t('auth.brand.eyebrow') }}</span>
+        <div class="auth-header-actions">
+          <a
+            v-if="docUrl"
+            :href="docUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="auth-docs-link"
+          >
+            {{ t('auth.brand.navDocs') }}
+            <Icon name="externalLink" size="xs" :stroke-width="1.5" />
+          </a>
+          <LocaleSwitcher />
+          <button
+            type="button"
+            class="auth-icon-button"
+            :title="isDark ? t('home.switchToLight') : t('home.switchToDark')"
+            :aria-label="isDark ? t('home.switchToLight') : t('home.switchToDark')"
+            @click="toggleTheme"
+          >
+            <Icon v-if="isDark" name="sun" size="sm" :stroke-width="1.5" />
+            <Icon v-else name="moon" size="sm" :stroke-width="1.5" />
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="public-shell auth-main">
+      <aside class="auth-context">
+        <div>
+          <p class="public-kicker auth-eyebrow">
+            <span aria-hidden="true"></span>
+            {{ t('auth.brand.eyebrow') }}
           </p>
           <h1>
             <span>{{ t('auth.brand.titleLine1') }}</span>
             <span>{{ t('auth.brand.titleLine2') }}</span>
           </h1>
-          <p>{{ siteSubtitle }}</p>
+          <p class="auth-subtitle">{{ t('auth.brand.subtitle') }}</p>
         </div>
 
-        <figure class="mono-auth-plate">
-          <img :src="authPlateUrl" alt="" />
-          <figcaption>
-            <span>{{ t('auth.brand.plateLabel') }}</span>
-            <span>{{ t('auth.brand.plateMeta') }}</span>
-          </figcaption>
-        </figure>
+        <dl class="auth-facts">
+          <div>
+            <dt>01</dt>
+            <dd>{{ t('auth.brand.factStable') }}</dd>
+          </div>
+          <div>
+            <dt>02</dt>
+            <dd>{{ t('auth.brand.factTransparent') }}</dd>
+          </div>
+        </dl>
 
-        <div class="mono-auth-proof">
-          <div>
-            <span>{{ t('auth.brand.proofKeys') }}</span>
-            <strong>{{ t('auth.brand.proofKeysValue') }}</strong>
+        <section class="auth-privacy" aria-labelledby="auth-privacy-title">
+          <div class="auth-privacy-heading">
+            <Icon name="lock" size="sm" :stroke-width="1.5" />
+            <h2 id="auth-privacy-title">{{ t('auth.brand.privacyTitle') }}</h2>
           </div>
-          <div>
-            <span>{{ t('auth.brand.proofModels') }}</span>
-            <strong>{{ t('auth.brand.proofModelsValue') }}</strong>
-          </div>
-        </div>
+          <p>{{ t('auth.brand.privacyNote') }}</p>
+        </section>
       </aside>
 
-      <main class="mono-auth-panel">
-        <router-link to="/home" class="mono-auth-brandmark mono-auth-brandmark--mobile">
-          <img :src="siteLogo || '/logo.png'" alt="Logo" class="mono-auth-logo" />
-          <span>{{ siteName }}</span>
-        </router-link>
-
-        <section class="mono-auth-card" aria-live="polite">
-          <p class="mono-auth-card-kicker">{{ t('auth.brand.formKicker') }}</p>
+      <main class="auth-form-column">
+        <section id="auth-form-content" class="auth-form" aria-live="polite">
+          <p class="public-kicker auth-form-kicker">{{ t('auth.brand.formKicker') }}</p>
           <slot />
         </section>
 
-        <div class="mono-auth-footer">
+        <div class="auth-form-footer">
           <slot name="footer" />
         </div>
 
-        <p class="mono-auth-copyright">&copy; {{ currentYear }} {{ siteName }}</p>
+        <div class="auth-meta">
+          <router-link to="/home">{{ t('auth.brand.navHome') }}</router-link>
+          <span>&copy; {{ currentYear }} {{ siteName }}</span>
+        </div>
       </main>
     </div>
-
-    <nav class="mono-auth-bottom" :aria-label="t('home.aria.bottomNav')">
-      <router-link to="/home">{{ t('auth.brand.navHome') }}<span>→</span></router-link>
-      <a href="/home#work">{{ t('auth.brand.navWork') }}<span>→</span></a>
-      <a href="/home#process">{{ t('auth.brand.navProcess') }}<span>→</span></a>
-      <router-link to="/register">{{ t('auth.signUp') }}<span>→</span></router-link>
-    </nav>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useAppStore } from '@/stores'
-import { sanitizeUrl } from '@/utils/url'
+
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
-import grainUrl from '@/assets/monolog/grain.svg'
-import authPlateUrl from '@/assets/monolog/auth-plate.svg'
+import { useAppStore } from '@/stores'
+import { sanitizeUrl } from '@/utils/url'
 
 const { t } = useI18n()
 const appStore = useAppStore()
 
-const siteName = computed(() => appStore.siteName || appStore.cachedPublicSettings?.site_name || 'Sub2API')
-const siteLogo = computed(() => sanitizeUrl(appStore.siteLogo || appStore.cachedPublicSettings?.site_logo || '', { allowRelative: true, allowDataUrl: true }))
-const siteSubtitle = computed(
-  () => appStore.cachedPublicSettings?.site_subtitle || 'Subscription to API Conversion Platform'
+const siteName = computed(
+  () => appStore.siteName || appStore.cachedPublicSettings?.site_name || 'Sub2API'
 )
-const currentYear = computed(() => new Date().getFullYear())
-const pageStyle = computed<Record<string, string>>(() => ({
-  '--grain-url': `url("${grainUrl}")`
-}))
-
+const siteLogo = computed(() =>
+  sanitizeUrl(appStore.siteLogo || appStore.cachedPublicSettings?.site_logo || '', {
+    allowRelative: true,
+    allowDataUrl: true
+  })
+)
+const docUrl = computed(() =>
+  sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || '')
+)
+const currentYear = new Date().getFullYear()
 const isDark = ref(document.documentElement.classList.contains('dark'))
 
 function toggleTheme() {
@@ -116,499 +123,469 @@ function toggleTheme() {
 
 onMounted(() => {
   isDark.value = document.documentElement.classList.contains('dark')
-  appStore.fetchPublicSettings()
+  if (!appStore.publicSettingsLoaded) {
+    appStore.fetchPublicSettings()
+  }
 })
 </script>
 
 <style scoped>
-.mono-auth {
-  /* bymonolog 暖米色单色系（恒深色） */
-  --ink: #e8e8e3;
-  --ink-muted: #bfbfb1;
-  --ink-soft: #938f8a;
-  --paper: #080807;
-  --paper-deep: #050504;
-  --surface: #181715;
-  --line: rgba(232, 232, 227, 0.12);
-  --line-strong: rgba(232, 232, 227, 0.34);
-  --accent: #8c8c73;
-  --ease: cubic-bezier(0.2, 1, 0.36, 1);
-  --display: 'Khteka', 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
-  --mono: 'Suisse Mono', ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
-  --body: 'Khteka', 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
-
-  position: relative;
+.auth-page {
   min-height: 100vh;
   overflow-x: clip;
-  background:
-    radial-gradient(circle at 12% 12%, rgba(140, 140, 115, 0.12), transparent 30rem),
-    linear-gradient(180deg, var(--paper), var(--paper-deep));
-  color: var(--ink);
-  font-family: var(--body);
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  -webkit-font-smoothing: antialiased;
 }
 
-/* 浅色模式：暖白底 + 深墨字 */
-:global(html:not(.dark) .mono-auth) {
-  --ink: #1a1a17;
-  --ink-muted: #55504a;
-  --ink-soft: #8a857d;
-  --paper: #f4f2ec;
-  --paper-deep: #eae7df;
-  --surface: #fbfaf6;
-  --line: rgba(20, 20, 15, 0.12);
-  --line-strong: rgba(20, 20, 15, 0.3);
-  --accent: #8c8c73;
-  background:
-    radial-gradient(circle at 12% 12%, rgba(140, 140, 115, 0.14), transparent 30rem),
-    linear-gradient(180deg, var(--paper), var(--paper-deep));
-}
-:global(html:not(.dark) .mono-auth .mono-auth-grain) {
-  mix-blend-mode: multiply;
-  opacity: 0.1;
+.auth-header {
+  border-bottom: 1px solid var(--public-line);
 }
 
-.mono-auth-grain {
-  pointer-events: none;
-  position: fixed;
-  inset: -40px;
-  z-index: 1;
-  opacity: 0.18;
-  background-image: var(--grain-url);
-  background-size: 180px 180px;
-  mix-blend-mode: screen;
-  animation: mono-auth-grain 0.55s steps(6) infinite;
-}
-@keyframes mono-auth-grain {
-  0%, 100% { transform: translate(0, 0); }
-  20% { transform: translate(-2%, 1%); }
-  40% { transform: translate(1%, -2%); }
-  60% { transform: translate(2%, 2%); }
-  80% { transform: translate(-1%, -1%); }
-}
-
-.mono-auth-controls {
-  position: fixed;
-  top: 22px;
-  right: 26px;
-  z-index: 20;
+.auth-header-inner {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  min-height: 72px;
 }
-.mono-auth-controls :deep(button) {
-  color: var(--ink-muted);
+
+.auth-brand,
+.auth-header-actions,
+.auth-docs-link,
+.auth-privacy-heading,
+.auth-meta {
+  display: flex;
+  align-items: center;
 }
-.mono-auth-icon-btn {
+
+.auth-brand {
+  gap: 10px;
+  color: var(--public-ink);
+  font-size: 18px;
+  text-decoration: none;
+}
+
+.auth-logo {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.auth-header-actions {
+  gap: 8px;
+}
+
+.auth-docs-link {
+  justify-content: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 10px;
+  color: var(--public-muted);
+  font-family: var(--public-font-mono);
+  font-size: 11px;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.auth-docs-link:hover {
+  color: var(--public-ink);
+}
+
+.auth-icon-button {
   display: grid;
   place-items: center;
   width: 36px;
   height: 36px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--paper) 80%, transparent);
-  color: var(--ink-muted);
+  border: 1px solid var(--public-line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--public-ink);
   cursor: pointer;
-  transition: border-color 0.2s ease, color 0.2s ease, transform 0.14s var(--ease);
-}
-.mono-auth-icon-btn:hover {
-  color: var(--ink);
-  border-color: var(--line-strong);
-}
-.mono-auth-icon-btn:active {
-  transform: scale(0.92);
+  transition: border-color 160ms var(--public-ease), background-color 160ms var(--public-ease);
 }
 
-.mono-auth-grid {
-  position: relative;
-  z-index: 3;
-  box-sizing: border-box;
+.auth-icon-button:hover {
+  border-color: var(--public-line-strong);
+  background: var(--public-surface-strong);
+}
+
+.auth-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(460px, 0.85fr);
+  min-height: calc(100svh - 73px);
+  padding-inline: 0;
+  border-left: 1px solid var(--public-line);
+  border-right: 1px solid var(--public-line);
+}
+
+.auth-context {
+  display: grid;
+  grid-template-rows: 1fr auto auto;
+  gap: 52px;
   min-width: 0;
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(420px, 0.92fr);
+  padding: clamp(64px, 9vh, 112px) clamp(34px, 6vw, 96px) 44px;
 }
 
-.mono-auth-stage {
-  min-height: 100vh;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
-  gap: clamp(28px, 5vh, 54px);
-  padding: clamp(34px, 5vw, 62px);
-  border-right: 1px solid var(--line);
-}
-.mono-auth-brandmark {
-  display: inline-flex;
+.auth-eyebrow {
+  display: flex;
   align-items: center;
-  gap: 12px;
-  width: fit-content;
+  gap: 10px;
+}
+
+.auth-eyebrow span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--public-accent);
+}
+
+.auth-context h1 {
+  display: grid;
+  gap: 0.125rem;
+  max-width: 9ch;
+  margin: 1.875rem 0 0;
+  color: var(--public-ink);
+  font-size: clamp(3.5rem, 6.5vw, 5.25rem);
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  line-height: 0.96;
+}
+
+.auth-context h1 span:last-child {
+  color: var(--public-muted);
+}
+
+.auth-subtitle {
+  max-width: 36rem;
+  margin: 1.875rem 0 0;
+  color: var(--public-muted);
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.auth-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin: 0;
+  border-top: 1px solid var(--public-line-strong);
+}
+
+.auth-facts div {
+  display: grid;
+  gap: 18px;
+  min-height: 112px;
+  padding: 20px 22px 18px 0;
+  border-right: 1px solid var(--public-line);
+}
+
+.auth-facts div:last-child {
+  padding-left: 22px;
+  border-right: 0;
+}
+
+.auth-facts dt {
+  color: var(--public-soft);
+  font-family: var(--public-font-mono);
+  font-size: 10px;
+}
+
+.auth-facts dd {
+  align-self: end;
+  margin: 0;
+  color: var(--public-ink);
+  font-size: 1.375rem;
+}
+
+.auth-privacy {
+  padding-top: 20px;
+  border-top: 1px solid var(--public-line);
+}
+
+.auth-privacy-heading {
+  gap: 8px;
+}
+
+.auth-privacy-heading h2 {
+  margin: 0;
+  color: var(--public-ink);
+  font-family: var(--public-font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: uppercase;
+}
+
+.auth-privacy p {
+  max-width: 38rem;
+  margin: 12px 0 0;
+  color: var(--public-muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.auth-form-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: clamp(58px, 8vh, 96px) clamp(28px, 5vw, 76px) 32px;
+  border-left: 1px solid var(--public-line);
+  background: var(--public-surface);
+}
+
+.auth-form {
+  width: min(100%, 540px);
+  margin-inline: auto;
+}
+
+.auth-form-kicker {
+  margin-bottom: 22px;
+}
+
+.auth-form-footer {
+  width: min(100%, 540px);
+  margin: 24px auto 0;
+  color: var(--public-muted);
+  font-size: 13px;
+  text-align: left;
+}
+
+.auth-meta {
+  justify-content: space-between;
+  gap: 18px;
+  width: min(100%, 540px);
+  margin: auto auto 0;
+  padding-top: 42px;
+  color: var(--public-soft);
+  font-family: var(--public-font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.auth-meta a {
   color: inherit;
   text-decoration: none;
 }
-.mono-auth-logo {
-  width: 34px;
-  height: 34px;
-  object-fit: contain;
+
+.auth-meta a:hover {
+  color: var(--public-ink);
 }
-.mono-auth-brandmark span {
-  font-family: var(--display);
-  font-size: 20px;
-  font-weight: 500;
-  letter-spacing: -0.03em;
+
+.auth-form :deep(*) {
+  min-width: 0;
 }
-.mono-auth-stage-copy {
-  align-self: center;
-  max-width: 720px;
-}
-.mono-auth-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--ink-muted);
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-.mono-auth-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: mono-auth-pulse 2.6s ease-in-out infinite;
-}
-@keyframes mono-auth-pulse {
-  50% { opacity: 0.35; }
-}
-.mono-auth-stage-copy h1 {
-  display: grid;
-  margin: 24px 0 24px;
-  font-family: var(--display);
-  font-size: clamp(4rem, 8vw, 9rem);
-  font-weight: 500;
-  letter-spacing: -0.075em;
-  line-height: 0.82;
-}
-.mono-auth-stage-copy h1 span:last-child {
-  color: var(--ink-soft);
-}
-.mono-auth-stage-copy p {
-  max-width: 34rem;
+
+.auth-form :deep(h2) {
   margin: 0;
-  padding-top: 24px;
-  border-top: 1px solid var(--line);
-  color: var(--ink-muted);
-  font-size: 15px;
-  line-height: 1.9;
+  color: var(--public-ink);
+  font-size: 2.5rem;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  line-height: 1.08;
 }
-.mono-auth-plate {
-  max-width: 420px;
-  margin: 0;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 26px;
-  background: color-mix(in oklab, var(--surface) 70%, transparent);
-  transform: rotate(-1.2deg);
+
+.auth-form :deep(h2 + p) {
+  margin-top: 0.625rem;
+  color: var(--public-muted);
+  font-size: 1rem;
+  line-height: 1.6;
 }
-.mono-auth-plate img {
-  display: block;
-  width: 100%;
-  max-height: 360px;
-  object-fit: cover;
-  border-radius: 18px;
-  filter: grayscale(1) contrast(1.04);
-}
-.mono-auth-plate figcaption {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 12px 4px 2px;
-  color: var(--ink-soft);
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.mono-auth-proof {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-top: 1px solid var(--line);
-}
-.mono-auth-proof div {
-  display: grid;
-  gap: 6px;
-  padding-top: 20px;
-}
-.mono-auth-proof span {
-  color: var(--ink-soft);
-  font-family: var(--mono);
+
+.auth-form :deep(.input-label) {
+  margin-bottom: 8px;
+  color: var(--public-muted);
+  font-family: var(--public-font-mono);
   font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-.mono-auth-proof strong {
-  font-family: var(--display);
-  font-size: clamp(1.5rem, 2.4vw, 2.4rem);
-  letter-spacing: -0.05em;
-}
-
-.mono-auth-panel {
-  box-sizing: border-box;
-  min-width: 0;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-  padding: 78px clamp(22px, 5vw, 72px) 104px;
-}
-.mono-auth-brandmark--mobile {
-  display: none;
-}
-.mono-auth-card {
-  box-sizing: border-box;
-  width: min(100%, 470px);
-  padding: clamp(28px, 4vw, 42px);
-  border: 1px solid var(--line);
-  border-radius: 28px;
-  background: color-mix(in oklab, var(--surface) 88%, transparent);
-  box-shadow: 0 26px 78px -48px rgba(0, 0, 0, 0.78);
-}
-.mono-auth-card-kicker {
-  margin: 0 0 20px;
-  color: var(--ink-soft);
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-.mono-auth-card :deep(*) {
-  box-sizing: border-box;
-  min-width: 0;
-}
-.mono-auth-card :deep(form),
-.mono-auth-card :deep(.space-y-6),
-.mono-auth-card :deep(.space-y-5),
-.mono-auth-card :deep(.relative),
-.mono-auth-card :deep(.btn),
-.mono-auth-card :deep(.input),
-.mono-auth-card :deep(input) {
-  width: 100%;
-  max-width: 100%;
-}
-.mono-auth-footer {
-  width: min(100%, 470px);
-  color: var(--ink-muted);
-  text-align: center;
-  font-size: 14px;
-}
-.mono-auth-copyright {
-  margin: 0;
-  color: var(--ink-soft);
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.12em;
+  font-weight: 400;
   text-transform: uppercase;
 }
 
-.mono-auth-bottom {
-  position: fixed;
-  inset: auto clamp(14px, 2vw, 28px) 16px;
-  z-index: 22;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  overflow: hidden;
-  border: 1px solid var(--line-strong);
-  border-radius: 18px;
-  background: color-mix(in oklab, var(--paper) 82%, transparent);
-  backdrop-filter: blur(18px);
-}
-.mono-auth-bottom a {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+.auth-form :deep(.input) {
   min-height: 48px;
-  border-right: 1px solid var(--line);
-  color: var(--ink);
-  font-family: var(--display);
-  font-size: clamp(16px, 2vw, 22px);
-  font-weight: 500;
-  letter-spacing: -0.04em;
-  text-decoration: none;
-  transition: background-color 0.2s ease;
-}
-.mono-auth-bottom a:last-child {
-  border-right: 0;
-}
-.mono-auth-bottom a:hover {
-  background: color-mix(in oklab, var(--ink) 8%, transparent);
+  border: 1px solid var(--public-line);
+  border-radius: 2px;
+  background: var(--public-bg);
+  color: var(--public-ink);
+  box-shadow: none;
 }
 
-/* Deep restyle for LoginView / RegisterView internals. */
-.mono-auth-card :deep(h2) {
-  margin: 0;
-  color: var(--ink);
-  font-family: var(--display);
-  font-size: clamp(2.1rem, 4vw, 3.45rem);
-  font-weight: 500;
-  letter-spacing: -0.055em;
-  line-height: 0.96;
+.auth-form :deep(.input::placeholder) {
+  color: var(--public-soft);
 }
-.mono-auth-card :deep(p) {
-  color: var(--ink-muted);
+
+.auth-form :deep(.input:focus),
+.auth-form :deep(.input:focus-visible) {
+  border-color: var(--public-ink);
+  outline: 3px solid color-mix(in oklch, var(--public-accent) 48%, transparent);
+  outline-offset: 1px;
+  box-shadow: none;
 }
-.mono-auth-card :deep(.input-label) {
-  color: var(--ink-muted);
-  font-family: var(--mono);
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.14em;
+
+.auth-form :deep(.input-error) {
+  border-color: var(--public-danger);
+}
+
+.auth-form :deep(.input-hint),
+.auth-form :deep(.text-gray-400),
+.auth-form :deep(.text-gray-500),
+.auth-form :deep(.dark\:text-dark-400),
+.auth-form :deep(.dark\:text-dark-500) {
+  color: var(--public-soft);
+}
+
+.auth-form :deep(.btn) {
+  min-height: 48px;
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+.auth-form :deep(.btn-primary) {
+  border: 1px solid var(--public-accent);
+  background: var(--public-accent);
+  color: var(--public-inverse-bg);
+  font-family: var(--public-font-mono);
+  font-size: 0.75rem;
   text-transform: uppercase;
 }
-.mono-auth-card :deep(.input),
-.mono-auth-card :deep(input[type='email']),
-.mono-auth-card :deep(input[type='password']),
-.mono-auth-card :deep(input[type='text']) {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--paper);
-  color: var(--ink);
-  box-shadow: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+
+.auth-form :deep(.btn-primary:hover:not(:disabled)) {
+  border-color: var(--public-ink);
+  background: var(--public-ink);
+  color: var(--public-bg);
 }
-.mono-auth-card :deep(.input::placeholder) {
-  color: var(--ink-soft);
+
+.auth-form :deep(.btn-primary svg) {
+  color: currentColor;
 }
-.mono-auth-card :deep(.input:focus) {
-  border-color: var(--ink);
-  box-shadow: 0 0 0 3px rgba(232, 232, 227, 0.1);
-  outline: none;
-}
-.mono-auth-card :deep(.input-error) {
-  border-color: var(--accent);
-}
-.mono-auth-card :deep(.text-gray-400),
-.mono-auth-card :deep(.text-gray-500),
-.mono-auth-card :deep(.dark\:text-dark-400),
-.mono-auth-card :deep(.dark\:text-dark-500) {
-  color: var(--ink-soft);
-}
-.mono-auth-card :deep(.btn-primary) {
-  min-height: 46px;
-  border: 1px solid var(--ink);
-  border-radius: 999px;
-  background: var(--ink);
-  color: var(--paper);
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  box-shadow: none;
-  transition: background-color 0.22s ease, color 0.22s ease, transform 0.14s var(--ease);
-}
-.mono-auth-card :deep(.btn-primary:hover:not(:disabled)) {
+
+.auth-form :deep(.btn-secondary),
+.auth-form :deep(.btn-ghost) {
+  border: 1px solid var(--public-line);
   background: transparent;
-  color: var(--ink);
+  color: var(--public-ink);
 }
-.mono-auth-card :deep(.btn-primary:active:not(:disabled)) {
-  transform: scale(0.98);
+
+.auth-form :deep(.btn-secondary:hover:not(:disabled)),
+.auth-form :deep(.btn-ghost:hover:not(:disabled)) {
+  border-color: var(--public-line-strong);
+  background: var(--public-surface-strong);
 }
-.mono-auth-card :deep(.btn-primary:disabled) {
-  opacity: 0.52;
-}
-.mono-auth-card :deep(.btn-secondary),
-.mono-auth-card :deep(.btn-ghost) {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink);
-  box-shadow: none;
-}
-.mono-auth-card :deep(.btn-secondary:hover),
-.mono-auth-card :deep(.btn-ghost:hover) {
-  border-color: var(--line-strong);
-  background: color-mix(in oklab, var(--ink) 5%, transparent);
-}
-.mono-auth-card :deep(a),
-.mono-auth-footer :deep(a) {
-  color: var(--ink);
-  font-weight: 500;
+
+.auth-form :deep(a),
+.auth-form-footer :deep(a) {
+  color: var(--public-ink);
+  text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
-  transition: color 0.18s ease;
-}
-.mono-auth-card :deep(a:hover),
-.mono-auth-footer :deep(a:hover) {
-  color: var(--accent);
-}
-.mono-auth-card :deep(.h-px) {
-  background: var(--line);
-}
-.mono-auth-card :deep(.rounded-lg.bg-green-50),
-.mono-auth-card :deep(.dark\:bg-green-900\/20) {
-  border: 1px solid var(--line);
-  background: color-mix(in oklab, var(--surface) 88%, transparent);
 }
 
-@media (max-width: 1040px) {
-  .mono-auth-grid {
+.auth-form :deep(a:hover),
+.auth-form-footer :deep(a:hover) {
+  color: var(--public-muted);
+}
+
+.auth-form :deep(.h-px) {
+  background: var(--public-line);
+}
+
+.auth-form :deep(.auth-status),
+.auth-form :deep(.auth-validation-success) {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  border: 1px solid var(--public-line);
+  border-radius: 2px;
+  padding: 0.875rem 1rem;
+}
+
+.auth-form :deep(.auth-status--warning) {
+  background: var(--public-surface-strong);
+  color: var(--public-ink);
+}
+
+.auth-form :deep(.auth-validation-success) {
+  margin-top: 0.5rem;
+  background: var(--public-accent-soft);
+  color: var(--public-ink);
+}
+
+.auth-form :deep(.auth-status p),
+.auth-form :deep(.auth-validation-success span) {
+  margin: 0;
+  color: inherit;
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 980px) {
+  .auth-main {
     grid-template-columns: 1fr;
+    border-inline: 0;
   }
-  .mono-auth-stage {
+
+  .auth-context {
+    grid-row: 2;
+    grid-template-rows: auto auto;
+    gap: 2.125rem;
+    padding: 3rem var(--public-gutter) max(2.25rem, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--public-line);
+  }
+
+  .auth-context h1 {
+    max-width: 12ch;
+    font-size: 3.25rem;
+  }
+
+  .auth-facts {
     display: none;
   }
-  .mono-auth-brandmark--mobile {
-    display: inline-flex;
+
+  .auth-privacy {
+    max-width: 680px;
   }
-  .mono-auth-panel {
-    padding-top: 92px;
+
+  .auth-form-column {
+    grid-row: 1;
+    padding: 3.375rem var(--public-gutter) 1.875rem;
+    border-left: 0;
   }
 }
 
-@media (max-width: 640px) {
-  .mono-auth-controls {
-    top: 16px;
-    right: 16px;
+@media (max-width: 600px) {
+  .auth-header-inner {
+    min-height: 64px;
   }
-  .mono-auth-panel {
+
+  .auth-brand span,
+  .auth-docs-link {
+    display: none;
+  }
+
+  .auth-context {
+    padding-top: 38px;
+  }
+
+  .auth-context h1 {
+    margin-top: 22px;
+    font-size: 2.625rem;
+    line-height: 1.04;
+  }
+
+  .auth-subtitle {
+    margin-top: 20px;
+    font-size: 1rem;
+  }
+
+  .auth-privacy {
+    padding-top: 16px;
+  }
+
+  .auth-form-column {
+    padding-top: 42px;
+  }
+
+  .auth-form :deep(h2) {
+    font-size: 2.125rem;
+  }
+
+  .auth-meta {
     align-items: flex-start;
-    padding-inline: 16px;
-    padding-bottom: 164px;
-  }
-  .mono-auth-card,
-  .mono-auth-footer {
-    width: calc(100vw - 44px);
-    max-width: calc(100vw - 44px);
-  }
-  .mono-auth-bottom {
-    grid-template-columns: 1fr 1fr;
-  }
-  .mono-auth-bottom a {
-    justify-content: space-between;
-    padding-inline: 14px;
-    border-bottom: 1px solid var(--line);
-  }
-  .mono-auth-bottom a:nth-last-child(-n + 2) {
-    border-bottom: 0;
-  }
-  .mono-auth-bottom a:nth-child(2n) {
-    border-right: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mono-auth-grain,
-  .mono-auth-dot {
-    animation: none;
-  }
-  * {
-    transition-duration: 1ms !important;
-    scroll-behavior: auto !important;
+    flex-direction: column;
   }
 }
 </style>

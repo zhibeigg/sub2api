@@ -198,7 +198,8 @@ describe('PendingOAuthCreateAccountForm', () => {
   it('requires a turnstile token before sending a verify code when turnstile is enabled', async () => {
     getPublicSettings.mockResolvedValue({
       turnstile_enabled: true,
-      turnstile_site_key: 'site-key'
+      turnstile_site_key: 'site-key',
+      turnstile_endpoint: 'https://cap.example.com'
     })
     sendPendingOAuthVerifyCode.mockResolvedValue({
       message: 'sent',

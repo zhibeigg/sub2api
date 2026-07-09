@@ -5,7 +5,6 @@ export default {
   },
   // Home Page
   home: {
-    viewOnGithub: '在 GitHub 上查看',
     viewDocs: '查看文档',
     docs: '文档',
     switchToLight: '切换到浅色模式',
@@ -16,166 +15,111 @@ export default {
     goToDashboard: '进入控制台',
     aria: {
       primaryNav: '主页主导航',
-      bottomNav: '底部快速导航',
+      footerNav: '页脚快捷导航',
+      skipToContent: '跳到主要内容',
       endpoints: 'API 接入端点'
     },
-    cursor: {
-      home: '首页',
-      light: '浅色',
-      dark: '暗色',
-      enter: '进入',
-      login: '登录',
-      start: '开始',
-      about: '关于',
-      copy: '复制',
-      read: '阅读',
-      close: '关闭'
-    },
     nav: {
-      about: '关于',
-      features: '案例',
-      workflow: '流程',
-      models: '服务',
+      features: '原则',
+      workflow: '接入',
+      models: '模型',
       pricing: '定价'
     },
-    bottomNav: {
-      about: '关于',
-      work: '案例',
-      process: '流程',
-      services: '服务',
-      contact: '开始'
-    },
     hero: {
-      badge: '多模型网关 / 可观测计费 / 协议兼容',
-      posterStatement: '把所有 AI 模型入口，收束成一个真正可靠的网关。',
-      posterSubstatement: '为已经跑起来的产品与团队，补上配得上规模的接入层。',
-      metaLatency: '路由矩阵在线',
+      badge: '稳定 · 真实 · 平价',
+      posterStatement: '满血模型\n不掺水。',
+      posterSubstatement: '一个入口接入主流 AI 模型，价格透明，用量可查。',
       metaModels: 'Claude · OpenAI · Gemini · Grok',
-      metaControl: '用量 · 计费 · 故障切换',
-      scrollCue: '查看接入方式',
-      quickstartKicker: '网关接入面',
-      titleLine1: '一个密钥',
-      titleLine2: '接入所有模型',
+      metaControl: '透明计费 · 用量可查',
       description:
-        'Sub2API 将 Claude、OpenAI、Gemini、Grok、Qwen 等模型收束到一个可观测、可计费、可调度的 API 入口。保留官方协议体验，同时把稳定性和成本控制交给网关。',
-      ctaPrimary: '获取 API Key',
-      ctaDocs: '查看文档',
+        'Sub2API 是面向开发者的 AI 聚合中转站。保留主流官方协议与模型能力，通过多通道路由降低单点影响，并按实际用量计费。',
+      ctaPrimary: '开始使用',
+      ctaDocs: '阅读接入文档',
       baseUrlOpenai: 'OpenAI 兼容',
       baseUrlAnthropic: 'Anthropic 兼容',
       copy: '复制',
-      copied: '已复制',
-      cards: {
-        routing: { title: '智能调度', desc: '多通道负载均衡，故障自动切换' },
-        observability: { title: '实时可观测', desc: '每次调用的用量与费用尽在掌握' },
-        billing: { title: '按量计费', desc: '用多少付多少，无固定月费' }
-      }
-    },
-    visual: {
-      gatewayLabel: '路由矩阵',
-      gatewayMeta: '实时网关'
-    },
-    work: {
-      kicker: '精选案例',
-      index: '01 / 04'
+      copied: '已复制'
     },
     value: {
-      kicker: '价值',
-      title: '为什么选择 Sub2API',
-      subtitle: '专业、稳定、开发者友好',
+      kicker: '原则',
+      title: '稳定、真实\n价格透明',
+      subtitle: '不靠夸张承诺，只把模型、价格与用量说清楚。',
       items: {
         unified: {
-          title: '统一接入',
-          desc: '一个密钥调用全部模型，完整兼容 OpenAI Responses / Chat 与 Anthropic Messages 协议，现有代码低成本迁移。'
+          title: '真实模型',
+          desc: '模型名称、协议与计费规则清楚展示，不用模糊套餐掩盖实际调用。'
         },
         observability: {
-          title: '全链路可观测',
-          desc: '请求数、Token、费用实时统计，按模型与密钥多维分析，每一分钱花在哪里一目了然。'
+          title: '透明计费',
+          desc: '按量计费，价格与用量可查，成本边界清楚。'
         },
         elastic: {
-          title: '弹性调度与成本',
-          desc: '多上游智能调度、自动故障切换，SSE 流式全接口支持，稳定快速且按量计费。'
+          title: '稳定路由',
+          desc: '多通道路由与故障切换，尽量减少单点波动对调用的影响。'
         },
         developer: {
-          title: '为开发者而建',
-          desc: 'Claude Code、Codex、Gemini CLI 等工具一键脚本接入，官方 SDK 直接可用。'
+          title: '简单接入',
+          desc: '兼容常用 SDK 与 CLI，替换 Base URL 和密钥即可接入。'
         }
       }
     },
     workflow: {
-      kicker: '流程',
-      title: '三步完成迁移',
-      subtitle: '从注册到发出第一个请求，只需几分钟。',
+      kicker: '接入',
+      title: '三步接入\n不改习惯',
+      subtitle: '沿用常用 SDK 和 CLI，只替换接入地址与密钥。',
       steps: {
         register: {
-          title: '注册获取 Key',
-          desc: '免费注册账号，在控制台密钥管理中创建你的 API Key。'
+          title: '创建账户与密钥',
+          desc: '注册后在控制台创建 API Key。'
         },
         configure: {
           title: '替换 Base URL',
-          desc: '把 Base URL 指向 Sub2API：OpenAI 用 /v1，Claude 用根地址，其余保持不变。'
+          desc: '按文档选择 OpenAI 或 Anthropic 兼容入口，再替换 Base URL 与密钥。'
         },
         observe: {
-          title: '调用与观测',
-          desc: '用官方 SDK 或 CLI 工具直接调用，在控制台实时查看用量、费用与通道状态。'
+          title: '发起请求，核对用量',
+          desc: '调用后在控制台核对模型、Token、费用与状态。'
         }
       }
     },
     ecosystem: {
-      kicker: '服务',
-      title: '主流模型与工具，一个入口全部连接',
-      subtitle: '主流大模型持续接入，一个入口全部搞定',
-      more: '更多持续接入'
+      kicker: '模型',
+      title: '主流模型，一个入口。',
+      subtitle: '实际可用模型以控制台列表为准。',
+      more: '查看控制台模型列表'
     },
     pricing: {
       kicker: '定价',
-      title: '限时充值优惠',
-      subtitle: '透明按量计费，余额永不过期。',
-      rateLabel: '充值汇率',
-      rateValue: '¥1 = $1',
-      officialLabel: '官方汇率参考',
-      officialValue: '$1 ≈ ¥7.2',
-      badge: '限时优惠',
-      note: '按官方模型定价扣费，充值即享超低汇率。',
-      cta: '立即充值'
+      title: '价格透明\n按量付费',
+      subtitle: '模型单价、扣费规则和调用用量公开可查。',
+      rateLabel: '计费方式',
+      rateValue: '按量计费',
+      officialLabel: '当前价格',
+      officialValue: '以控制台为准',
+      badge: '透明计费',
+      note: '充值前看价格，调用后看明细。',
+      cta: '进入控制台查看价格'
     },
-    cta: {
-      kicker: '联系',
-      title: '让你的 AI 调用有稳定入口。',
-      description: '免费注册，几分钟内发出第一条可观测、可计费、可调度的 AI 请求。',
-      button: '开始接入 Sub2API'
+    docsPanel: {
+      kicker: '文档',
+      title: '接入文档\n规则写清楚',
+      description: '查看协议、Base URL、模型列表、计费与错误处理。',
+      button: '打开文档站',
+      unavailable: '文档地址暂未配置'
     },
-    about: {
-      open: '关于 Sub2API',
-      close: '关闭',
-      eyebrow: '关于网关',
-      title: '为高频 AI 调用建立一个可信入口。',
-      body:
-        'Sub2API 不是又一个装饰性的模型列表，而是把账号池、密钥、计费、故障切换和可观测性放在同一个控制面里。你继续使用熟悉的官方协议，平台负责让每一次请求有去处、有记录、有成本边界。',
-      est: '创立于 2024',
-      based: '为开发者与运维而建',
-      principles: {
-        outcomes: {
-          title: '结果优先',
-          desc: '每个能力都围绕稳定调用、低迁移成本和可解释费用展开。'
-        },
-        signal: {
-          title: '信号清晰',
-          desc: '用量、模型、费用、错误和通道状态都要能被快速理解。'
-        },
-        human: {
-          title: '开发者友好',
-          desc: '保持官方 SDK 与 CLI 的使用习惯，让接入不打断工作流。'
-        },
-        pace: {
-          title: '长期稳定',
-          desc: '多账号、多通道与限流策略共同降低单点风险。'
-        }
-      }
+    privacy: {
+      kicker: '隐私',
+      title: '只处理\n必要数据',
+      description:
+        '我们不为广告、画像或转售而采集数据。为完成账户、路由、计费与安全防护，只处理这些功能所必需的数据；具体范围以隐私政策为准。',
+      minimum: '仅处理账户、路由、计费与安全所必需的数据。',
+      noSale: '不出售用户数据。',
+      noTraining: 'Sub2API 不将用户数据用于模型训练。',
+      noContent: '不保存提示词、回复正文等 API 请求内容。'
     },
     footer: {
       allRightsReserved: '保留所有权利。',
-      console: '控制台',
-      apiExamples: 'API 示例'
+      backToTop: '返回顶部'
     }
   },
 
