@@ -80,3 +80,20 @@ describe.each(Object.keys(roots))('locale %s spread assembly', (locale) => {
     expect(collisions(admins[locale])).toEqual([])
   })
 })
+
+describe('admin group status action locales', () => {
+  it('defines every status action message in Chinese and English', () => {
+    const keys = [
+      'disableGroup',
+      'enableGroup',
+      'groupEnabled',
+      'groupDisabled',
+      'failedToToggleStatus'
+    ] as const
+
+    for (const key of keys) {
+      expect(zhAdminOverview.groups[key]).toBeTruthy()
+      expect(enAdminOverview.groups[key]).toBeTruthy()
+    }
+  })
+})
