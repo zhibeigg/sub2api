@@ -32,11 +32,12 @@ export default {
       metaModels: 'Claude · OpenAI · Gemini · Grok',
       metaControl: 'Clear billing · Traceable usage',
       description:
-        'Sub2API is an AI aggregation gateway for developers. It preserves mainstream provider protocols and model capabilities, uses multi-channel routing to reduce single-point failures, and bills by actual usage.',
+        'PokeAPI is an AI aggregation gateway for developers. It preserves mainstream provider protocols and model capabilities, uses multi-channel routing to reduce single-point failures, and bills by actual usage.',
       ctaPrimary: 'Get started',
       ctaDocs: 'Read the docs',
       baseUrlOpenai: 'OpenAI Compatible',
       baseUrlAnthropic: 'Anthropic Compatible',
+      websiteNode: 'Website Node',
       copy: 'Copy',
       copied: 'Copied'
     },
@@ -114,7 +115,7 @@ export default {
         'We do not collect data for advertising, profiling, or resale. To provide accounts, routing, billing, and abuse prevention, we process only the data those functions require. The exact scope is stated in our privacy policy.',
       minimum: 'Only the data required for accounts, routing, billing, and security is processed.',
       noSale: 'We do not sell user data.',
-      noTraining: 'Sub2API does not use user data to train models.',
+      noTraining: 'PokeAPI does not use user data to train models.',
       noContent: 'Prompts, response bodies, and other API content are not retained.'
     },
     footer: {

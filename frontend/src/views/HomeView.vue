@@ -279,9 +279,7 @@ const { t } = useI18n()
 const appStore = useAppStore()
 const authStore = useAuthStore()
 
-const siteName = computed(
-  () => appStore.cachedPublicSettings?.site_name || appStore.siteName || 'Sub2API'
-)
+const siteName = 'PokeAPI'
 const siteLogo = computed(() =>
   sanitizeUrl(appStore.cachedPublicSettings?.site_logo || appStore.siteLogo || '', {
     allowRelative: true,
@@ -313,7 +311,8 @@ const endpoints = computed(() => {
   const openAi = root.endsWith('/v1') ? root : `${root}/v1`
   return [
     { key: 'openai', labelKey: 'home.hero.baseUrlOpenai', url: openAi },
-    { key: 'anthropic', labelKey: 'home.hero.baseUrlAnthropic', url: root.replace(/\/v1$/, '') }
+    { key: 'anthropic', labelKey: 'home.hero.baseUrlAnthropic', url: root.replace(/\/v1$/, '') },
+    { key: 'website', labelKey: 'home.hero.websiteNode', url: 'https://www.poke2api.com' }
   ]
 })
 

@@ -20,6 +20,12 @@ describe('public page structure', () => {
     )
   })
 
+  it('uses the PokeAPI public brand and exposes the alternate website node', () => {
+    expect(homeViewSource).toContain("const siteName = 'PokeAPI'")
+    expect(homeViewSource).toContain("labelKey: 'home.hero.websiteNode'")
+    expect(homeViewSource).toContain("url: 'https://www.poke2api.com'")
+  })
+
   it('states the privacy boundary on home and auth pages', () => {
     expect(homeViewSource).toContain("t('home.privacy.title')")
     expect(homeViewSource).toContain("t('home.privacy.minimum')")

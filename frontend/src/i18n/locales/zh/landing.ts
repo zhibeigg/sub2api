@@ -32,11 +32,12 @@ export default {
       metaModels: 'Claude · OpenAI · Gemini · Grok',
       metaControl: '透明计费 · 用量可查',
       description:
-        'Sub2API 是面向开发者的 AI 聚合中转站。保留主流官方协议与模型能力，通过多通道路由降低单点影响，并按实际用量计费。',
+        'PokeAPI 是面向开发者的 AI 聚合中转站。保留主流官方协议与模型能力，通过多通道路由降低单点影响，并按实际用量计费。',
       ctaPrimary: '开始使用',
       ctaDocs: '阅读接入文档',
       baseUrlOpenai: 'OpenAI 兼容',
       baseUrlAnthropic: 'Anthropic 兼容',
+      websiteNode: '网站节点',
       copy: '复制',
       copied: '已复制'
     },
@@ -114,7 +115,7 @@ export default {
         '我们不为广告、画像或转售而采集数据。为完成账户、路由、计费与安全防护，只处理这些功能所必需的数据；具体范围以隐私政策为准。',
       minimum: '仅处理账户、路由、计费与安全所必需的数据。',
       noSale: '不出售用户数据。',
-      noTraining: 'Sub2API 不将用户数据用于模型训练。',
+      noTraining: 'PokeAPI 不将用户数据用于模型训练。',
       noContent: '不保存提示词、回复正文等 API 请求内容。'
     },
     footer: {
