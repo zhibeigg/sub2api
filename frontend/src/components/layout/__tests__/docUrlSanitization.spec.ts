@@ -6,31 +6,29 @@ import { describe, expect, it } from 'vitest'
 
 const dir = dirname(fileURLToPath(import.meta.url))
 const headerSource = readFileSync(resolve(dir, '../AppHeader.vue'), 'utf8')
+const authLayoutSource = readFileSync(resolve(dir, '../AuthLayout.vue'), 'utf8')
 const homeViewSource = readFileSync(resolve(dir, '../../../views/HomeView.vue'), 'utf8')
 const keyUsageViewSource = readFileSync(resolve(dir, '../../../views/KeyUsageView.vue'), 'utf8')
+const urlSource = readFileSync(resolve(dir, '../../../utils/url.ts'), 'utf8')
 
-describe('doc_url sanitization', () => {
-  it('AppHeader imports sanitizeUrl', () => {
-    expect(headerSource).toContain("import { sanitizeUrl } from '@/utils/url'")
+const documentationSurfaces = [headerSource, authLayoutSource, homeViewSource, keyUsageViewSource]
+
+describe('documentation URL policy', () => {
+  it('pins the public documentation host to docs.poke2api.com', () => {
+    expect(urlSource).toContain("export const PUBLIC_DOCS_URL = 'https://docs.poke2api.com'")
   })
 
-  it('AppHeader applies sanitizeUrl to docUrl', () => {
-    expect(headerSource).toContain('sanitizeUrl(appStore.docUrl)')
+  it('uses the shared public documentation URL on every user-facing surface', () => {
+    for (const source of documentationSurfaces) {
+      expect(source).toContain('PUBLIC_DOCS_URL')
+      expect(source).toContain('const docUrl = PUBLIC_DOCS_URL')
+    }
   })
 
-  it('HomeView imports sanitizeUrl', () => {
-    expect(homeViewSource).toContain("import { sanitizeUrl } from '@/utils/url'")
-  })
-
-  it('HomeView applies sanitizeUrl to docUrl', () => {
-    expect(homeViewSource).toContain('sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl')
-  })
-
-  it('KeyUsageView imports sanitizeUrl', () => {
-    expect(keyUsageViewSource).toContain("import { sanitizeUrl } from '@/utils/url'")
-  })
-
-  it('KeyUsageView applies sanitizeUrl to docUrl', () => {
-    expect(keyUsageViewSource).toContain('sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl')
+  it('does not allow public settings to override documentation links', () => {
+    for (const source of documentationSurfaces) {
+      expect(source).not.toContain('cachedPublicSettings?.doc_url')
+      expect(source).not.toContain('appStore.docUrl')
+    }
   })
 })

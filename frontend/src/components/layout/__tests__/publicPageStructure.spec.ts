@@ -15,9 +15,8 @@ describe('public page structure', () => {
   it('keeps documentation one click away from the home page', () => {
     expect(homeViewSource).toContain('data-testid="home-docs-link"')
     expect(homeViewSource).toContain('data-testid="home-docs-section"')
-    expect(homeViewSource).toContain(
-      'sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl'
-    )
+    expect(homeViewSource).toContain("import { PUBLIC_DOCS_URL, sanitizeUrl } from '@/utils/url'")
+    expect(homeViewSource).toContain('const docUrl = PUBLIC_DOCS_URL')
   })
 
   it('uses the PokeAPI public brand and exposes the alternate website node', () => {

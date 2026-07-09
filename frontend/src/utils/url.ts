@@ -4,6 +4,8 @@
  * @param value 用户输入的 URL
  * @returns 规范化后的 URL，如果无效则返回空字符串
  */
+export const PUBLIC_DOCS_URL = 'https://docs.poke2api.com'
+
 type SanitizeOptions = {
   allowRelative?: boolean
   allowDataUrl?: boolean

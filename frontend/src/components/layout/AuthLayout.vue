@@ -95,7 +95,7 @@ import { useI18n } from 'vue-i18n'
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { useAppStore } from '@/stores'
-import { sanitizeUrl } from '@/utils/url'
+import { PUBLIC_DOCS_URL, sanitizeUrl } from '@/utils/url'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -109,9 +109,7 @@ const siteLogo = computed(() =>
     allowDataUrl: true
   })
 )
-const docUrl = computed(() =>
-  sanitizeUrl(appStore.cachedPublicSettings?.doc_url || appStore.docUrl || '')
-)
+const docUrl = PUBLIC_DOCS_URL
 const currentYear = new Date().getFullYear()
 const isDark = ref(document.documentElement.classList.contains('dark'))
 
