@@ -239,6 +239,82 @@ func buildClaudeSystemPrompt(system interface{}, thinking bool) string {
 	return ThinkingModePrompt + "\n\n" + systemPrompt
 }
 
+// CloneClaudeRequestForThinking returns a shallow request clone whose system
+// prompt matches the thinking priming that ClaudeToKiro sends upstream.
+// The original request and its structured system blocks are not mutated.
+func CloneClaudeRequestForThinking(req *ClaudeRequest, thinking bool) *ClaudeRequest {
+	if req == nil {
+		return nil
+	}
+
+	cloned := *req
+	if thinking {
+		cloned.System = PrependThinkingSystem(req.System)
+	}
+	return &cloned
+}
+
+// PrependThinkingSystem returns a structured Claude system prompt with the
+// Kiro thinking-mode priming inserted before the original system content.
+func PrependThinkingSystem(system interface{}) interface{} {
+	thinkingText := ThinkingModePrompt
+	if hasClaudeSystemContent(system) {
+		thinkingText += "\n"
+	}
+	thinkingBlock := map[string]interface{}{
+		"type": "text",
+		"text": thinkingText,
+	}
+
+	switch value := system.(type) {
+	case nil:
+		return []interface{}{thinkingBlock}
+	case string:
+		if value == "" {
+			return []interface{}{thinkingBlock}
+		}
+		return []interface{}{
+			thinkingBlock,
+			map[string]interface{}{
+				"type": "text",
+				"text": value,
+			},
+		}
+	case []interface{}:
+		blocks := make([]interface{}, 0, len(value)+1)
+		blocks = append(blocks, thinkingBlock)
+		blocks = append(blocks, value...)
+		return blocks
+	case []string:
+		blocks := make([]interface{}, 0, len(value)+1)
+		blocks = append(blocks, thinkingBlock)
+		for _, block := range value {
+			blocks = append(blocks, map[string]interface{}{
+				"type": "text",
+				"text": block,
+			})
+		}
+		return blocks
+	default:
+		return []interface{}{thinkingBlock}
+	}
+}
+
+func hasClaudeSystemContent(system interface{}) bool {
+	switch value := system.(type) {
+	case nil:
+		return false
+	case string:
+		return value != ""
+	case []interface{}:
+		return len(value) > 0
+	case []string:
+		return len(value) > 0
+	default:
+		return true
+	}
+}
+
 func extractSystemPrompt(system interface{}) string {
 	if system == nil {
 		return ""
@@ -666,9 +742,9 @@ func OpenAIToKiro(req *OpenAIRequest, thinking bool) *KiroPayload {
 				if !isLast {
 					history = append(history, KiroHistoryMessage{
 						UserInputMessage: &KiroUserInputMessage{
-							ModelID: modelID,
-							Origin:  origin,
-							Images:  currentImages,
+							ModelID:                 modelID,
+							Origin:                  origin,
+							Images:                  currentImages,
 							UserInputMessageContext: &UserInputMessageContext{ToolResults: currentToolResults},
 						},
 					})

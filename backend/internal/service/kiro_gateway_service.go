@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ type KiroGatewayService struct {
 	proxyRepo      ProxyRepository
 	tokenProvider  *KiroTokenProvider
 	responsesStore *kiro.ResponsesStore
+	promptCache    *kiro.PromptCacheTracker
 }
 
 // NewKiroGatewayService constructs a KiroGatewayService.
@@ -36,6 +38,7 @@ func NewKiroGatewayService(
 		proxyRepo:      proxyRepo,
 		tokenProvider:  tokenProvider,
 		responsesStore: kiro.NewResponsesStore(24 * time.Hour),
+		promptCache:    kiro.NewPromptCacheTracker(),
 	}
 }
 
@@ -90,12 +93,12 @@ func (s *KiroGatewayService) Forward(ctx context.Context, c *gin.Context, accoun
 	isOpenAI := isOpenAIInboundPath(c)
 
 	var (
-		payload      *kiro.KiroPayload
-		requestModel string
-		stream       bool
+		payload        *kiro.KiroPayload
+		requestModel   string
+		stream         bool
+		estimatedInput int
+		cacheProfile   *kiro.PromptCacheProfile
 	)
-
-	var estimatedInput int
 
 	if isOpenAI {
 		var req kiro.OpenAIRequest
@@ -114,17 +117,22 @@ func (s *KiroGatewayService) Forward(ctx context.Context, c *gin.Context, accoun
 		}
 		requestModel = req.Model
 		stream = req.Stream
-		_, thinking := kiro.ResolveClaudeThinkingMode(req.Model, req.Thinking, kiro.DefaultThinkingSuffix)
-		estimatedInput = kiro.EstimateClaudeRequestInputTokens(&req)
+		accountingModel, thinking := kiro.ResolveClaudeThinkingMode(req.Model, req.Thinking, kiro.DefaultThinkingSuffix)
+		effectiveReq := kiro.CloneClaudeRequestForThinking(&req, thinking)
+		effectiveReq.Model = accountingModel
+		estimatedInput = kiro.EstimateClaudeRequestInputTokens(effectiveReq)
+		if s.promptCache != nil {
+			cacheProfile = s.promptCache.BuildClaudeProfile(effectiveReq, estimatedInput)
+		}
 		payload = kiro.ClaudeToKiro(&req, thinking)
 	}
 
 	upstreamModel := kiro.MapModel(requestModel)
 
 	if stream {
-		return s.forwardStream(ctx, c, account, cred, payload, requestModel, upstreamModel, isOpenAI, estimatedInput, start)
+		return s.forwardStream(ctx, c, account, cred, payload, requestModel, upstreamModel, isOpenAI, estimatedInput, cacheProfile, start)
 	}
-	return s.forwardNonStream(ctx, c, account, cred, payload, requestModel, upstreamModel, isOpenAI, estimatedInput, start)
+	return s.forwardNonStream(ctx, c, account, cred, payload, requestModel, upstreamModel, isOpenAI, estimatedInput, cacheProfile, start)
 }
 
 // ForwardResponses handles an OpenAI Responses API (/v1/responses) request by
@@ -295,7 +303,7 @@ func (s *KiroGatewayService) buildCredential(ctx context.Context, account *Accou
 
 func (s *KiroGatewayService) forwardStream(
 	ctx context.Context, c *gin.Context, account *Account, cred *kiro.Credential, payload *kiro.KiroPayload,
-	requestModel, upstreamModel string, isOpenAI bool, estimatedInput int, start time.Time,
+	requestModel, upstreamModel string, isOpenAI bool, estimatedInput int, cacheProfile *kiro.PromptCacheProfile, start time.Time,
 ) (*ForwardResult, error) {
 	flusher, _ := c.Writer.(http.Flusher)
 	w := &kiroSSEWriter{c: c, flusher: flusher}
@@ -348,30 +356,42 @@ func (s *KiroGatewayService) forwardStream(
 		cb.OnContextUsage = func(pct float64) { contextPct = pct }
 	}
 
+	cacheUsage := s.computePromptCacheUsage(account, cacheProfile)
+	initialUsage := buildKiroClaudeUsage(estimatedInput, 0, cacheUsage)
+
+	var callback *kiro.StreamCallback
+	var finish func(ClaudeUsage)
 	if isOpenAI {
 		state := kiro.NewOpenAIStreamState(w, requestModel)
-		cb := state.Callback()
-		instrument(cb)
-		if err := kiro.CallKiroAPI(ctx, cred, payload, cb); err != nil {
-			return nil, mapKiroError(err)
+		callback = state.Callback()
+		finish = func(usage ClaudeUsage) {
+			state.OnComplete(usage.InputTokens, usage.OutputTokens)
+			state.Finish()
 		}
-		state.Finish()
 	} else {
 		state := kiro.NewClaudeStreamState(w, requestModel)
-		cb := state.Callback()
-		instrument(cb)
-		if err := kiro.CallKiroAPI(ctx, cred, payload, cb); err != nil {
-			return nil, mapKiroError(err)
+		state.SetUsage(toKiroClaudeUsage(initialUsage))
+		callback = state.Callback()
+		finish = func(usage ClaudeUsage) {
+			state.SetUsage(toKiroClaudeUsage(usage))
+			state.Finish()
 		}
-		state.Finish()
 	}
-	w.Flush()
 
-	inputTokens, outputTokens := s.resolveKiroUsage(
+	instrument(callback)
+	if err := kiro.CallKiroAPI(ctx, cred, payload, callback); err != nil {
+		return nil, mapKiroError(err)
+	}
+
+	totalInputTokens, outputTokens := s.resolveKiroUsage(
 		requestModel, upstreamIn, upstreamOut, estimatedInput, contextPct,
 		textBuf.String(), thinkingBuf.String(), toolUses, isOpenAI,
 	)
+	usage := buildKiroClaudeUsage(totalInputTokens, outputTokens, cacheUsage)
+	finish(usage)
+	w.Flush()
 
+	s.updatePromptCache(account, cacheProfile)
 	s.recordContextUsage(ctx, account, contextPct)
 
 	return &ForwardResult{
@@ -380,7 +400,7 @@ func (s *KiroGatewayService) forwardStream(
 		Stream:              true,
 		Duration:            time.Since(start),
 		FirstTokenMs:        firstTokenMs,
-		Usage:               ClaudeUsage{InputTokens: inputTokens, OutputTokens: outputTokens},
+		Usage:               usage,
 		KiroCredits:         credits,
 		KiroContextUsagePct: contextPct,
 	}, nil
@@ -420,32 +440,111 @@ func (s *KiroGatewayService) resolveKiroUsage(
 	return inputTokens, outputTokens
 }
 
+func (s *KiroGatewayService) computePromptCacheUsage(account *Account, profile *kiro.PromptCacheProfile) kiro.PromptCacheUsage {
+	if s == nil || s.promptCache == nil || account == nil || profile == nil {
+		return kiro.PromptCacheUsage{}
+	}
+	return s.promptCache.Compute(strconv.FormatInt(account.ID, 10), profile)
+}
+
+func (s *KiroGatewayService) updatePromptCache(account *Account, profile *kiro.PromptCacheProfile) {
+	if s == nil || s.promptCache == nil || account == nil || profile == nil {
+		return
+	}
+	s.promptCache.Update(strconv.FormatInt(account.ID, 10), profile)
+}
+
+func buildKiroClaudeUsage(totalInputTokens, outputTokens int, cacheUsage kiro.PromptCacheUsage) ClaudeUsage {
+	cacheUsage = normalizeKiroPromptCacheUsage(totalInputTokens, cacheUsage)
+	return ClaudeUsage{
+		InputTokens:              cacheUsage.UncachedInputTokens(totalInputTokens),
+		OutputTokens:             outputTokens,
+		CacheCreationInputTokens: cacheUsage.CacheCreationInputTokens,
+		CacheReadInputTokens:     cacheUsage.CacheReadInputTokens,
+		CacheCreation5mTokens:    cacheUsage.CacheCreation5mInputTokens,
+		CacheCreation1hTokens:    cacheUsage.CacheCreation1hInputTokens,
+	}
+}
+
+func normalizeKiroPromptCacheUsage(totalInputTokens int, usage kiro.PromptCacheUsage) kiro.PromptCacheUsage {
+	if totalInputTokens <= 0 {
+		return kiro.PromptCacheUsage{}
+	}
+
+	usage.CacheReadInputTokens = max(usage.CacheReadInputTokens, 0)
+	usage.CacheCreationInputTokens = max(usage.CacheCreationInputTokens, 0)
+	usage.CacheCreation5mInputTokens = max(usage.CacheCreation5mInputTokens, 0)
+	usage.CacheCreation1hInputTokens = max(usage.CacheCreation1hInputTokens, 0)
+
+	if usage.CacheReadInputTokens > totalInputTokens {
+		usage.CacheReadInputTokens = totalInputTokens
+	}
+	remaining := totalInputTokens - usage.CacheReadInputTokens
+	if usage.CacheCreationInputTokens > remaining {
+		usage.CacheCreationInputTokens = remaining
+	}
+
+	breakdownTotal := usage.CacheCreation5mInputTokens + usage.CacheCreation1hInputTokens
+	switch {
+	case usage.CacheCreationInputTokens == 0:
+		usage.CacheCreation5mInputTokens = 0
+		usage.CacheCreation1hInputTokens = 0
+	case breakdownTotal == 0:
+		usage.CacheCreation5mInputTokens = usage.CacheCreationInputTokens
+	case breakdownTotal != usage.CacheCreationInputTokens:
+		usage.CacheCreation5mInputTokens = usage.CacheCreationInputTokens * usage.CacheCreation5mInputTokens / breakdownTotal
+		usage.CacheCreation1hInputTokens = usage.CacheCreationInputTokens - usage.CacheCreation5mInputTokens
+	}
+
+	return usage
+}
+
+func toKiroClaudeUsage(usage ClaudeUsage) kiro.ClaudeUsage {
+	result := kiro.ClaudeUsage{
+		InputTokens:              usage.InputTokens,
+		OutputTokens:             usage.OutputTokens,
+		CacheCreationInputTokens: usage.CacheCreationInputTokens,
+		CacheReadInputTokens:     usage.CacheReadInputTokens,
+	}
+	if usage.CacheCreation5mTokens > 0 || usage.CacheCreation1hTokens > 0 {
+		result.CacheCreation = &kiro.ClaudeCacheCreationUsage{
+			Ephemeral5mInputTokens: usage.CacheCreation5mTokens,
+			Ephemeral1hInputTokens: usage.CacheCreation1hTokens,
+		}
+	}
+	return result
+}
+
 func (s *KiroGatewayService) forwardNonStream(
 	ctx context.Context, c *gin.Context, account *Account, cred *kiro.Credential, payload *kiro.KiroPayload,
-	requestModel, upstreamModel string, isOpenAI bool, estimatedInput int, start time.Time,
+	requestModel, upstreamModel string, isOpenAI bool, estimatedInput int, cacheProfile *kiro.PromptCacheProfile, start time.Time,
 ) (*ForwardResult, error) {
 	agg := &kiro.Aggregator{}
 	cb := agg.Callback()
 	var credits, contextPct float64
 	cb.OnCredits = func(c float64) { credits += c }
 	cb.OnContextUsage = func(pct float64) { contextPct = pct }
+	cacheUsage := s.computePromptCacheUsage(account, cacheProfile)
 	if err := kiro.CallKiroAPI(ctx, cred, payload, cb); err != nil {
 		return nil, mapKiroError(err)
 	}
 
-	inputTokens, outputTokens := s.resolveKiroUsage(
+	totalInputTokens, outputTokens := s.resolveKiroUsage(
 		requestModel, agg.InputTokens, agg.OutputTokens, estimatedInput, contextPct,
 		agg.Text.String(), agg.Thinking.String(), agg.ToolUses, isOpenAI,
 	)
+	usage := buildKiroClaudeUsage(totalInputTokens, outputTokens, cacheUsage)
 
 	if isOpenAI {
-		resp := kiro.KiroToOpenAIResponse(agg.Text.String(), agg.ToolUses, inputTokens, outputTokens, requestModel)
+		resp := kiro.KiroToOpenAIResponse(agg.Text.String(), agg.ToolUses, usage.InputTokens, usage.OutputTokens, requestModel)
 		c.JSON(http.StatusOK, resp)
 	} else {
-		resp := kiro.KiroToClaudeResponse(agg.Text.String(), agg.Thinking.String(), false, agg.ToolUses, inputTokens, outputTokens, requestModel)
+		resp := kiro.KiroToClaudeResponse(agg.Text.String(), agg.Thinking.String(), false, agg.ToolUses, usage.InputTokens, usage.OutputTokens, requestModel)
+		resp.Usage = toKiroClaudeUsage(usage)
 		c.JSON(http.StatusOK, resp)
 	}
 
+	s.updatePromptCache(account, cacheProfile)
 	s.recordContextUsage(ctx, account, contextPct)
 
 	return &ForwardResult{
@@ -453,7 +552,7 @@ func (s *KiroGatewayService) forwardNonStream(
 		UpstreamModel:       differentOrEmpty(requestModel, upstreamModel),
 		Stream:              false,
 		Duration:            time.Since(start),
-		Usage:               ClaudeUsage{InputTokens: inputTokens, OutputTokens: outputTokens},
+		Usage:               usage,
 		KiroCredits:         credits,
 		KiroContextUsagePct: contextPct,
 	}, nil

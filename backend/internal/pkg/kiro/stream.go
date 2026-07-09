@@ -58,8 +58,7 @@ type ClaudeStreamState struct {
 	blockOpen     bool
 	openBlockType string // "thinking" | "text"
 	toolUses      []KiroToolUse
-	inputTokens   int
-	outputTokens  int
+	usage         ClaudeUsage
 }
 
 // NewClaudeStreamState creates a Claude SSE assembler.
@@ -67,11 +66,13 @@ func NewClaudeStreamState(w SSEWriter, model string) *ClaudeStreamState {
 	return &ClaudeStreamState{w: w, model: model, messageID: "msg_" + uuid.New().String(), blockIndex: -1}
 }
 
-func (s *ClaudeStreamState) ensureStarted(inputTokens int) {
+func (s *ClaudeStreamState) ensureStarted() {
 	if s.started {
 		return
 	}
 	s.started = true
+	startUsage := s.usage
+	startUsage.OutputTokens = 0
 	start := map[string]interface{}{
 		"type": "message_start",
 		"message": map[string]interface{}{
@@ -82,7 +83,7 @@ func (s *ClaudeStreamState) ensureStarted(inputTokens int) {
 			"content":       []interface{}{},
 			"stop_reason":   nil,
 			"stop_sequence": nil,
-			"usage":         map[string]int{"input_tokens": inputTokens, "output_tokens": 0},
+			"usage":         startUsage,
 		},
 	}
 	s.emit("message_start", start)
@@ -101,7 +102,7 @@ func (s *ClaudeStreamState) OnText(text string, isThinking bool) {
 	if text == "" {
 		return
 	}
-	s.ensureStarted(s.inputTokens)
+	s.ensureStarted()
 	wantType := "text"
 	deltaType := "text_delta"
 	deltaField := "text"
@@ -140,15 +141,23 @@ func (s *ClaudeStreamState) OnToolUse(tu KiroToolUse) {
 	s.toolUses = append(s.toolUses, tu)
 }
 
-// OnComplete records final usage.
+// OnComplete records final upstream usage. KiroGatewayService may replace it
+// with cache-aware usage after applying local token fallbacks.
 func (s *ClaudeStreamState) OnComplete(in, out int) {
-	s.inputTokens = in
-	s.outputTokens = out
+	s.usage.InputTokens = in
+	s.usage.OutputTokens = out
+}
+
+// SetUsage replaces the usage payload emitted to Anthropic clients. Callers use
+// it before streaming starts for estimated prompt usage and again before Finish
+// for the final cache-aware token split.
+func (s *ClaudeStreamState) SetUsage(usage ClaudeUsage) {
+	s.usage = usage
 }
 
 // Finish writes tool_use blocks (if any), message_delta and message_stop.
 func (s *ClaudeStreamState) Finish() {
-	s.ensureStarted(s.inputTokens)
+	s.ensureStarted()
 	s.closeBlock()
 
 	for _, tu := range s.toolUses {
@@ -179,7 +188,7 @@ func (s *ClaudeStreamState) Finish() {
 	s.emit("message_delta", map[string]interface{}{
 		"type":  "message_delta",
 		"delta": map[string]interface{}{"stop_reason": stopReason, "stop_sequence": nil},
-		"usage": map[string]int{"output_tokens": s.outputTokens},
+		"usage": s.usage,
 	})
 	s.emit("message_stop", map[string]interface{}{"type": "message_stop"})
 }
@@ -206,14 +215,14 @@ func (s *ClaudeStreamState) emit(event string, payload interface{}) {
 
 // OpenAIStreamState assembles OpenAI chat.completion.chunk SSE.
 type OpenAIStreamState struct {
-	w             SSEWriter
-	model         string
-	id            string
-	created       int64
-	roleSent      bool
-	toolUses      []KiroToolUse
-	inputTokens   int
-	outputTokens  int
+	w            SSEWriter
+	model        string
+	id           string
+	created      int64
+	roleSent     bool
+	toolUses     []KiroToolUse
+	inputTokens  int
+	outputTokens int
 }
 
 // NewOpenAIStreamState creates an OpenAI SSE assembler.

@@ -77,6 +77,57 @@ func TestClaudeToKiroThinkingInjectsPrompt(t *testing.T) {
 	}
 }
 
+func TestCloneClaudeRequestForThinkingMatchesUpstreamPrompt(t *testing.T) {
+	req := &ClaudeRequest{
+		Model:  "claude-sonnet-4.5",
+		System: "Follow the user instructions.",
+	}
+	cloned := CloneClaudeRequestForThinking(req, true)
+	if cloned == req {
+		t.Fatal("expected a cloned request")
+	}
+	if got, want := extractSystemPrompt(cloned.System), ThinkingModePrompt+"\n\nFollow the user instructions."; got != want {
+		t.Fatalf("thinking system prompt = %q, want %q", got, want)
+	}
+	if original, ok := req.System.(string); !ok || original != "Follow the user instructions." {
+		t.Fatalf("original request was mutated: %#v", req.System)
+	}
+}
+
+func TestCloneClaudeRequestForThinkingPreservesCacheControl(t *testing.T) {
+	req := &ClaudeRequest{
+		System: []interface{}{
+			map[string]interface{}{
+				"type":          "text",
+				"text":          "cached system",
+				"cache_control": map[string]interface{}{"type": "ephemeral", "ttl": "5m"},
+			},
+		},
+	}
+	cloned := CloneClaudeRequestForThinking(req, true)
+	blocks, ok := cloned.System.([]interface{})
+	if !ok || len(blocks) != 2 {
+		t.Fatalf("expected thinking and original blocks, got %#v", cloned.System)
+	}
+	originalBlock, ok := blocks[1].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected original structured block, got %T", blocks[1])
+	}
+	cacheControl, ok := originalBlock["cache_control"].(map[string]interface{})
+	if !ok || cacheControl["type"] != "ephemeral" {
+		t.Fatalf("cache_control was not preserved: %#v", originalBlock["cache_control"])
+	}
+}
+
+func TestThinkingCloneAffectsClaudeTokenEstimate(t *testing.T) {
+	req := &ClaudeRequest{Messages: []ClaudeMessage{{Role: "user", Content: "hello"}}}
+	baseTokens := EstimateClaudeRequestInputTokens(req)
+	thinkingTokens := EstimateClaudeRequestInputTokens(CloneClaudeRequestForThinking(req, true))
+	if thinkingTokens <= baseTokens {
+		t.Fatalf("thinking tokens %d should exceed base tokens %d", thinkingTokens, baseTokens)
+	}
+}
+
 func TestOpenAIToKiroToolResult(t *testing.T) {
 	req := &OpenAIRequest{
 		Model: "gpt-4o",
@@ -109,6 +160,47 @@ func TestKiroToClaudeResponse(t *testing.T) {
 	withTool := KiroToClaudeResponse("", "", false, []KiroToolUse{{ToolUseID: "t1", Name: "search", Input: map[string]interface{}{"q": "x"}}}, 1, 1, "m")
 	if withTool.StopReason != "tool_use" {
 		t.Errorf("stop reason with tool = %q, want tool_use", withTool.StopReason)
+	}
+}
+
+func TestClaudeStreamStateEmitsCacheAwareUsage(t *testing.T) {
+	writer := &captureSSE{}
+	state := NewClaudeStreamState(writer, "claude-opus-4.8")
+	state.SetUsage(ClaudeUsage{
+		InputTokens:              100,
+		CacheCreationInputTokens: 50,
+		CacheCreation: &ClaudeCacheCreationUsage{
+			Ephemeral5mInputTokens: 50,
+		},
+	})
+	state.OnText("hello", false)
+	state.SetUsage(ClaudeUsage{
+		InputTokens:          90,
+		OutputTokens:         7,
+		CacheReadInputTokens: 80,
+	})
+	state.Finish()
+
+	var startUsage, deltaUsage map[string]interface{}
+	for index, event := range writer.events {
+		var payload map[string]interface{}
+		if err := json.Unmarshal([]byte(writer.datas[index]), &payload); err != nil {
+			t.Fatalf("unmarshal %s payload: %v", event, err)
+		}
+		switch event {
+		case "message_start":
+			message, _ := payload["message"].(map[string]interface{})
+			startUsage, _ = message["usage"].(map[string]interface{})
+		case "message_delta":
+			deltaUsage, _ = payload["usage"].(map[string]interface{})
+		}
+	}
+
+	if startUsage == nil || int(startUsage["input_tokens"].(float64)) != 100 || int(startUsage["cache_creation_input_tokens"].(float64)) != 50 {
+		t.Fatalf("unexpected message_start usage: %#v", startUsage)
+	}
+	if deltaUsage == nil || int(deltaUsage["input_tokens"].(float64)) != 90 || int(deltaUsage["output_tokens"].(float64)) != 7 || int(deltaUsage["cache_read_input_tokens"].(float64)) != 80 {
+		t.Fatalf("unexpected message_delta usage: %#v", deltaUsage)
 	}
 }
 

@@ -12,6 +12,7 @@ sub2api 支持接入 **Kiro** 平台：把 AWS Kiro / CodeWhisperer 账户作为
 - 流式（AWS 二进制 event-stream 解析 → SSE）与非流式；thinking 模式（`-thinking` 后缀或 Anthropic `thinking` 配置）。
 - 工具调用（tool_use / tool_calls）转换；**系统提示过滤器**（Claude Code 检测替换 / env noise / 边界标记 / 自定义规则，默认关闭）。
 - **credits / context-usage** 可观测（写入账号快照，不参与计费）。
+- **Anthropic Prompt Cache 兼容**：`/v1/messages` 请求携带 `cache_control: {"type":"ephemeral"}` 时，按 Kiro 账号隔离追踪提示前缀，支持 5 分钟 / 1 小时缓存创建与读取统计；拆分结果写入标准 Anthropic usage、`usage_logs` 并按缓存价格计费。
 - **后台 UI**：账号列表「平台/类型」列正确显示 Kiro（琥珀色）；「用量窗口」列展示订阅类型、用量占比、试用、超额与上下文占比；账号编辑弹窗支持「同步最新支持模型」（本地 Claude 模型集）与「同步上游支持的模型」（调用上游 `ListAvailableModels` 动态发现）。
 - **混合调度（mixed_scheduling）**：Kiro 账号可开启「在 /v1/messages 中使用」，与 Antigravity 同机制。开启后该 Kiro 账号可被 **anthropic 分组**（Claude via `/v1/messages`）与 **openai 分组**（如「国模」分组，模型 ID 原样透传给上游）调度。因 Kiro 上游除 Claude 外还提供 Deepseek / MiniMax / GLM / Qwen 等模型，配合账号模型白名单即可对外提供这些模型。调度仍按账号模型白名单过滤，仅模型匹配的请求会路由到该账号。
 
@@ -116,7 +117,7 @@ kiro:
 
 ## 实现位置（开发者）
 
-- `backend/internal/pkg/kiro/`：自包含核心库（types / oidc 刷新 / oauth 交互式登录底层 / rest 用量接口 / overage 超额 / headers / client + AWS event-stream 解析 / translator + filters / stream SSE 组装），含单元测试。
+- `backend/internal/pkg/kiro/`：自包含核心库（types / oidc 刷新 / oauth 交互式登录底层 / rest 用量接口 / overage 超额 / headers / client + AWS event-stream 解析 / translator + filters / stream SSE 组装 / prompt cache tracker），含单元测试。
 - `backend/internal/service/kiro_oauth_service.go` / `kiro_oauth_interactive.go`：token 刷新、凭证 JSON 解析、交互式登录 session。
 - `backend/internal/service/kiro_usage_service.go` / `kiro_usage_fetcher.go`：用量/超额探测、账号 Extra 快照、UsageInfo 构建、模型发现缓存。
 - `backend/internal/service/kiro_token_provider.go` / `kiro_token_refresher.go`：请求路径取 token（带缓存）+ 后台定时刷新。
@@ -128,6 +129,7 @@ kiro:
 ## 限制与说明
 
 - **credits 仅可观测**：Kiro 的 credits/context-usage 记录到账号快照用于展示，不改 `usage_logs` 表、不参与计费。
+- **缓存统计为本地兼容估算**：Kiro 上游通常不返回精确的缓存 Token 明细，因此系统根据 Anthropic `cache_control`、请求前缀和实际选中的 Kiro 账号维护内存追踪。追踪状态不跨进程共享，服务重启后首个符合条件的请求会重新记为缓存创建；历史用量不会回填。OpenAI Chat / Responses 不具备同等的 Anthropic 缓存断点语义，因此不生成缓存命中数据。
 - AWS Builder ID（个人）不支持 `ListAvailableProfiles`，会自动回退到刷新 token 解析 profileArn，并对失败做 24h 冷却抑制。
 - Kiro 上游返回 402/403/401/429 时按 sub2api 常规上游错误处理（失败切换 / 账户标记）。
 - 免责声明：本功能仅供学习研究，与 Amazon / AWS / Kiro 无关联，使用者需自行遵守相关服务条款与法律。
