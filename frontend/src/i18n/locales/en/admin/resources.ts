@@ -393,6 +393,7 @@ export default {
       columns: {
         code: 'Code',
         bonusAmount: 'Bonus Amount',
+        rechargeBonusMultiplier: 'Recharge Bonus',
         maxUses: 'Max Uses',
         usedCount: 'Used',
         usage: 'Usage',
@@ -406,6 +407,9 @@ export default {
       autoGenerate: 'auto-generate if empty',
       codePlaceholder: 'Enter promo code or leave empty',
       bonusAmount: 'Bonus Amount ($)',
+      rechargeBonusMultiplier: 'Recharge Bonus Multiplier',
+      rechargeBonusMultiplierHint: '≥1, e.g. 1.2 credits 20% extra on recharge; 1 = no bonus',
+      rechargeBonusMultiplierValue: '{value}x',
       maxUses: 'Max Uses',
       zeroUnlimited: '0 = unlimited',
       expiresAt: 'Expires At',

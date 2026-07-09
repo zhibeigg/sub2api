@@ -41,6 +41,10 @@ func (PromoCode) Fields() []ent.Field {
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}).
 			Default(0).
 			Comment("赠送余额金额"),
+		field.Float("recharge_bonus_multiplier").
+			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
+			Default(1).
+			Comment("充值到账加成倍率，1表示无加成；绑定该优惠码的用户第三方支付充值时按此倍率放大到账余额"),
 		field.Int("max_uses").
 			Default(0).
 			Comment("最大使用次数，0表示无限制"),

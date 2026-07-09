@@ -175,6 +175,11 @@ func RpmLimit(v int) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldRpmLimit, v))
 }
 
+// PromoCodeID applies equality check predicate on the "promo_code_id" field. It's identical to PromoCodeIDEQ.
+func PromoCodeID(v int64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldPromoCodeID, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldCreatedAt, v))
@@ -1383,6 +1388,56 @@ func RpmLimitLT(v int) predicate.User {
 // RpmLimitLTE applies the LTE predicate on the "rpm_limit" field.
 func RpmLimitLTE(v int) predicate.User {
 	return predicate.User(sql.FieldLTE(FieldRpmLimit, v))
+}
+
+// PromoCodeIDEQ applies the EQ predicate on the "promo_code_id" field.
+func PromoCodeIDEQ(v int64) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldPromoCodeID, v))
+}
+
+// PromoCodeIDNEQ applies the NEQ predicate on the "promo_code_id" field.
+func PromoCodeIDNEQ(v int64) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldPromoCodeID, v))
+}
+
+// PromoCodeIDIn applies the In predicate on the "promo_code_id" field.
+func PromoCodeIDIn(vs ...int64) predicate.User {
+	return predicate.User(sql.FieldIn(FieldPromoCodeID, vs...))
+}
+
+// PromoCodeIDNotIn applies the NotIn predicate on the "promo_code_id" field.
+func PromoCodeIDNotIn(vs ...int64) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldPromoCodeID, vs...))
+}
+
+// PromoCodeIDGT applies the GT predicate on the "promo_code_id" field.
+func PromoCodeIDGT(v int64) predicate.User {
+	return predicate.User(sql.FieldGT(FieldPromoCodeID, v))
+}
+
+// PromoCodeIDGTE applies the GTE predicate on the "promo_code_id" field.
+func PromoCodeIDGTE(v int64) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldPromoCodeID, v))
+}
+
+// PromoCodeIDLT applies the LT predicate on the "promo_code_id" field.
+func PromoCodeIDLT(v int64) predicate.User {
+	return predicate.User(sql.FieldLT(FieldPromoCodeID, v))
+}
+
+// PromoCodeIDLTE applies the LTE predicate on the "promo_code_id" field.
+func PromoCodeIDLTE(v int64) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldPromoCodeID, v))
+}
+
+// PromoCodeIDIsNil applies the IsNil predicate on the "promo_code_id" field.
+func PromoCodeIDIsNil() predicate.User {
+	return predicate.User(sql.FieldIsNull(FieldPromoCodeID))
+}
+
+// PromoCodeIDNotNil applies the NotNil predicate on the "promo_code_id" field.
+func PromoCodeIDNotNil() predicate.User {
+	return predicate.User(sql.FieldNotNull(FieldPromoCodeID))
 }
 
 // HasAPIKeys applies the HasEdge predicate on the "api_keys" edge.

@@ -3145,6 +3145,20 @@ func (r *oauthPendingFlowUserRepo) ListWithFilters(context.Context, pagination.P
 	panic("unexpected ListWithFilters call")
 }
 
+func (r *oauthPendingFlowUserRepo) BindPromoCode(ctx context.Context, userID, promoCodeID int64) error {
+	if userID <= 0 || promoCodeID <= 0 {
+		return nil
+	}
+	client := r.client
+	if tx := dbent.TxFromContext(ctx); tx != nil {
+		client = tx.Client()
+	}
+	return client.User.Update().
+		Where(dbuser.IDEQ(userID), dbuser.PromoCodeIDIsNil()).
+		SetPromoCodeID(promoCodeID).
+		Exec(ctx)
+}
+
 func (r *oauthPendingFlowUserRepo) UpdateBalance(ctx context.Context, userID int64, amount float64) error {
 	client := r.client
 	if tx := dbent.TxFromContext(ctx); tx != nil {

@@ -64,6 +64,27 @@ func (_u *PromoCodeUpdate) AddBonusAmount(v float64) *PromoCodeUpdate {
 	return _u
 }
 
+// SetRechargeBonusMultiplier sets the "recharge_bonus_multiplier" field.
+func (_u *PromoCodeUpdate) SetRechargeBonusMultiplier(v float64) *PromoCodeUpdate {
+	_u.mutation.ResetRechargeBonusMultiplier()
+	_u.mutation.SetRechargeBonusMultiplier(v)
+	return _u
+}
+
+// SetNillableRechargeBonusMultiplier sets the "recharge_bonus_multiplier" field if the given value is not nil.
+func (_u *PromoCodeUpdate) SetNillableRechargeBonusMultiplier(v *float64) *PromoCodeUpdate {
+	if v != nil {
+		_u.SetRechargeBonusMultiplier(*v)
+	}
+	return _u
+}
+
+// AddRechargeBonusMultiplier adds value to the "recharge_bonus_multiplier" field.
+func (_u *PromoCodeUpdate) AddRechargeBonusMultiplier(v float64) *PromoCodeUpdate {
+	_u.mutation.AddRechargeBonusMultiplier(v)
+	return _u
+}
+
 // SetMaxUses sets the "max_uses" field.
 func (_u *PromoCodeUpdate) SetMaxUses(v int) *PromoCodeUpdate {
 	_u.mutation.ResetMaxUses()
@@ -279,6 +300,12 @@ func (_u *PromoCodeUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedBonusAmount(); ok {
 		_spec.AddField(promocode.FieldBonusAmount, field.TypeFloat64, value)
 	}
+	if value, ok := _u.mutation.RechargeBonusMultiplier(); ok {
+		_spec.SetField(promocode.FieldRechargeBonusMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedRechargeBonusMultiplier(); ok {
+		_spec.AddField(promocode.FieldRechargeBonusMultiplier, field.TypeFloat64, value)
+	}
 	if value, ok := _u.mutation.MaxUses(); ok {
 		_spec.SetField(promocode.FieldMaxUses, field.TypeInt, value)
 	}
@@ -406,6 +433,27 @@ func (_u *PromoCodeUpdateOne) SetNillableBonusAmount(v *float64) *PromoCodeUpdat
 // AddBonusAmount adds value to the "bonus_amount" field.
 func (_u *PromoCodeUpdateOne) AddBonusAmount(v float64) *PromoCodeUpdateOne {
 	_u.mutation.AddBonusAmount(v)
+	return _u
+}
+
+// SetRechargeBonusMultiplier sets the "recharge_bonus_multiplier" field.
+func (_u *PromoCodeUpdateOne) SetRechargeBonusMultiplier(v float64) *PromoCodeUpdateOne {
+	_u.mutation.ResetRechargeBonusMultiplier()
+	_u.mutation.SetRechargeBonusMultiplier(v)
+	return _u
+}
+
+// SetNillableRechargeBonusMultiplier sets the "recharge_bonus_multiplier" field if the given value is not nil.
+func (_u *PromoCodeUpdateOne) SetNillableRechargeBonusMultiplier(v *float64) *PromoCodeUpdateOne {
+	if v != nil {
+		_u.SetRechargeBonusMultiplier(*v)
+	}
+	return _u
+}
+
+// AddRechargeBonusMultiplier adds value to the "recharge_bonus_multiplier" field.
+func (_u *PromoCodeUpdateOne) AddRechargeBonusMultiplier(v float64) *PromoCodeUpdateOne {
+	_u.mutation.AddRechargeBonusMultiplier(v)
 	return _u
 }
 
@@ -653,6 +701,12 @@ func (_u *PromoCodeUpdateOne) sqlSave(ctx context.Context) (_node *PromoCode, er
 	}
 	if value, ok := _u.mutation.AddedBonusAmount(); ok {
 		_spec.AddField(promocode.FieldBonusAmount, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.RechargeBonusMultiplier(); ok {
+		_spec.SetField(promocode.FieldRechargeBonusMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedRechargeBonusMultiplier(); ok {
+		_spec.AddField(promocode.FieldRechargeBonusMultiplier, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.MaxUses(); ok {
 		_spec.SetField(promocode.FieldMaxUses, field.TypeInt, value)

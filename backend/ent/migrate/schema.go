@@ -1268,6 +1268,7 @@ var (
 		{Name: "id", Type: field.TypeInt64, Increment: true},
 		{Name: "code", Type: field.TypeString, Unique: true, Size: 32},
 		{Name: "bonus_amount", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
+		{Name: "recharge_bonus_multiplier", Type: field.TypeFloat64, Default: 1, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
 		{Name: "max_uses", Type: field.TypeInt, Default: 0},
 		{Name: "used_count", Type: field.TypeInt, Default: 0},
 		{Name: "status", Type: field.TypeString, Size: 20, Default: "active"},
@@ -1285,12 +1286,12 @@ var (
 			{
 				Name:    "promocode_status",
 				Unique:  false,
-				Columns: []*schema.Column{PromoCodesColumns[5]},
+				Columns: []*schema.Column{PromoCodesColumns[6]},
 			},
 			{
 				Name:    "promocode_expires_at",
 				Unique:  false,
-				Columns: []*schema.Column{PromoCodesColumns[6]},
+				Columns: []*schema.Column{PromoCodesColumns[7]},
 			},
 		},
 	}
@@ -1749,6 +1750,7 @@ var (
 		{Name: "balance_notify_extra_emails", Type: field.TypeString, Default: "[]", SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "total_recharged", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
 		{Name: "rpm_limit", Type: field.TypeInt, Default: 0},
+		{Name: "promo_code_id", Type: field.TypeInt64, Nullable: true},
 	}
 	// UsersTable holds the schema information for the "users" table.
 	UsersTable = &schema.Table{
@@ -1765,6 +1767,11 @@ var (
 				Name:    "user_deleted_at",
 				Unique:  false,
 				Columns: []*schema.Column{UsersColumns[3]},
+			},
+			{
+				Name:    "user_promo_code_id",
+				Unique:  false,
+				Columns: []*schema.Column{UsersColumns[25]},
 			},
 		},
 	}

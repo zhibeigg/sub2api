@@ -21,6 +21,8 @@ type PromoCode struct {
 	Code string `json:"code,omitempty"`
 	// 赠送余额金额
 	BonusAmount float64 `json:"bonus_amount,omitempty"`
+	// 充值到账加成倍率，1表示无加成；绑定该优惠码的用户第三方支付充值时按此倍率放大到账余额
+	RechargeBonusMultiplier float64 `json:"recharge_bonus_multiplier,omitempty"`
 	// 最大使用次数，0表示无限制
 	MaxUses int `json:"max_uses,omitempty"`
 	// 已使用次数
@@ -64,7 +66,7 @@ func (*PromoCode) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case promocode.FieldBonusAmount:
+		case promocode.FieldBonusAmount, promocode.FieldRechargeBonusMultiplier:
 			values[i] = new(sql.NullFloat64)
 		case promocode.FieldID, promocode.FieldMaxUses, promocode.FieldUsedCount:
 			values[i] = new(sql.NullInt64)
@@ -104,6 +106,12 @@ func (_m *PromoCode) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field bonus_amount", values[i])
 			} else if value.Valid {
 				_m.BonusAmount = value.Float64
+			}
+		case promocode.FieldRechargeBonusMultiplier:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field recharge_bonus_multiplier", values[i])
+			} else if value.Valid {
+				_m.RechargeBonusMultiplier = value.Float64
 			}
 		case promocode.FieldMaxUses:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -195,6 +203,9 @@ func (_m *PromoCode) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("bonus_amount=")
 	builder.WriteString(fmt.Sprintf("%v", _m.BonusAmount))
+	builder.WriteString(", ")
+	builder.WriteString("recharge_bonus_multiplier=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RechargeBonusMultiplier))
 	builder.WriteString(", ")
 	builder.WriteString("max_uses=")
 	builder.WriteString(fmt.Sprintf("%v", _m.MaxUses))

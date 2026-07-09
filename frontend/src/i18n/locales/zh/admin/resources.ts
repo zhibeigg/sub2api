@@ -454,6 +454,7 @@ export default {
       columns: {
         code: '优惠码',
         bonusAmount: '赠送金额',
+        rechargeBonusMultiplier: '充值加成',
         maxUses: '最大使用次数',
         usedCount: '已使用',
         usage: '使用量',
@@ -467,6 +468,8 @@ export default {
       autoGenerate: '留空自动生成',
       codePlaceholder: '输入优惠码或留空',
       bonusAmount: '赠送金额 ($)',
+      rechargeBonusMultiplier: '充值到账加成倍率',
+      rechargeBonusMultiplierHint: '通过此优惠链接注册的用户充值时按此倍率到账（≥1，如 1.2 表示到账多 20%）；留空或 1 = 无加成',
       maxUses: '最大使用次数',
       zeroUnlimited: '0 = 无限制',
       expiresAt: '过期时间',

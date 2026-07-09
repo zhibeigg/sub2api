@@ -270,6 +270,10 @@ type UsageLogFilters struct {
 	APIKeyID  int64
 	AccountID int64
 	GroupID   int64
+	// PromoCodeID 按优惠码（优惠链接）筛选：匹配所有绑定该优惠码注册的用户的日志。
+	// 通过子查询 user_id IN (SELECT id FROM users WHERE promo_code_id = ?) 实现，
+	// usage_logs 表本身不冗余该列。
+	PromoCodeID int64
 	Model     string
 	// ModelFilterSource controls how Model is matched. Empty preserves raw usage_logs.model semantics.
 	ModelFilterSource string

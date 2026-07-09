@@ -18,6 +18,8 @@ const (
 	FieldCode = "code"
 	// FieldBonusAmount holds the string denoting the bonus_amount field in the database.
 	FieldBonusAmount = "bonus_amount"
+	// FieldRechargeBonusMultiplier holds the string denoting the recharge_bonus_multiplier field in the database.
+	FieldRechargeBonusMultiplier = "recharge_bonus_multiplier"
 	// FieldMaxUses holds the string denoting the max_uses field in the database.
 	FieldMaxUses = "max_uses"
 	// FieldUsedCount holds the string denoting the used_count field in the database.
@@ -50,6 +52,7 @@ var Columns = []string{
 	FieldID,
 	FieldCode,
 	FieldBonusAmount,
+	FieldRechargeBonusMultiplier,
 	FieldMaxUses,
 	FieldUsedCount,
 	FieldStatus,
@@ -74,6 +77,8 @@ var (
 	CodeValidator func(string) error
 	// DefaultBonusAmount holds the default value on creation for the "bonus_amount" field.
 	DefaultBonusAmount float64
+	// DefaultRechargeBonusMultiplier holds the default value on creation for the "recharge_bonus_multiplier" field.
+	DefaultRechargeBonusMultiplier float64
 	// DefaultMaxUses holds the default value on creation for the "max_uses" field.
 	DefaultMaxUses int
 	// DefaultUsedCount holds the default value on creation for the "used_count" field.
@@ -106,6 +111,11 @@ func ByCode(opts ...sql.OrderTermOption) OrderOption {
 // ByBonusAmount orders the results by the bonus_amount field.
 func ByBonusAmount(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldBonusAmount, opts...).ToFunc()
+}
+
+// ByRechargeBonusMultiplier orders the results by the recharge_bonus_multiplier field.
+func ByRechargeBonusMultiplier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRechargeBonusMultiplier, opts...).ToFunc()
 }
 
 // ByMaxUses orders the results by the max_uses field.

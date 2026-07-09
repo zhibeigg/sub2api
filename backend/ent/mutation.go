@@ -33667,28 +33667,30 @@ func (m *PendingAuthSessionMutation) ResetEdge(name string) error {
 // PromoCodeMutation represents an operation that mutates the PromoCode nodes in the graph.
 type PromoCodeMutation struct {
 	config
-	op                   Op
-	typ                  string
-	id                   *int64
-	code                 *string
-	bonus_amount         *float64
-	addbonus_amount      *float64
-	max_uses             *int
-	addmax_uses          *int
-	used_count           *int
-	addused_count        *int
-	status               *string
-	expires_at           *time.Time
-	notes                *string
-	created_at           *time.Time
-	updated_at           *time.Time
-	clearedFields        map[string]struct{}
-	usage_records        map[int64]struct{}
-	removedusage_records map[int64]struct{}
-	clearedusage_records bool
-	done                 bool
-	oldValue             func(context.Context) (*PromoCode, error)
-	predicates           []predicate.PromoCode
+	op                           Op
+	typ                          string
+	id                           *int64
+	code                         *string
+	bonus_amount                 *float64
+	addbonus_amount              *float64
+	recharge_bonus_multiplier    *float64
+	addrecharge_bonus_multiplier *float64
+	max_uses                     *int
+	addmax_uses                  *int
+	used_count                   *int
+	addused_count                *int
+	status                       *string
+	expires_at                   *time.Time
+	notes                        *string
+	created_at                   *time.Time
+	updated_at                   *time.Time
+	clearedFields                map[string]struct{}
+	usage_records                map[int64]struct{}
+	removedusage_records         map[int64]struct{}
+	clearedusage_records         bool
+	done                         bool
+	oldValue                     func(context.Context) (*PromoCode, error)
+	predicates                   []predicate.PromoCode
 }
 
 var _ ent.Mutation = (*PromoCodeMutation)(nil)
@@ -33879,6 +33881,62 @@ func (m *PromoCodeMutation) AddedBonusAmount() (r float64, exists bool) {
 func (m *PromoCodeMutation) ResetBonusAmount() {
 	m.bonus_amount = nil
 	m.addbonus_amount = nil
+}
+
+// SetRechargeBonusMultiplier sets the "recharge_bonus_multiplier" field.
+func (m *PromoCodeMutation) SetRechargeBonusMultiplier(f float64) {
+	m.recharge_bonus_multiplier = &f
+	m.addrecharge_bonus_multiplier = nil
+}
+
+// RechargeBonusMultiplier returns the value of the "recharge_bonus_multiplier" field in the mutation.
+func (m *PromoCodeMutation) RechargeBonusMultiplier() (r float64, exists bool) {
+	v := m.recharge_bonus_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRechargeBonusMultiplier returns the old "recharge_bonus_multiplier" field's value of the PromoCode entity.
+// If the PromoCode object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PromoCodeMutation) OldRechargeBonusMultiplier(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRechargeBonusMultiplier is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRechargeBonusMultiplier requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRechargeBonusMultiplier: %w", err)
+	}
+	return oldValue.RechargeBonusMultiplier, nil
+}
+
+// AddRechargeBonusMultiplier adds f to the "recharge_bonus_multiplier" field.
+func (m *PromoCodeMutation) AddRechargeBonusMultiplier(f float64) {
+	if m.addrecharge_bonus_multiplier != nil {
+		*m.addrecharge_bonus_multiplier += f
+	} else {
+		m.addrecharge_bonus_multiplier = &f
+	}
+}
+
+// AddedRechargeBonusMultiplier returns the value that was added to the "recharge_bonus_multiplier" field in this mutation.
+func (m *PromoCodeMutation) AddedRechargeBonusMultiplier() (r float64, exists bool) {
+	v := m.addrecharge_bonus_multiplier
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRechargeBonusMultiplier resets all changes to the "recharge_bonus_multiplier" field.
+func (m *PromoCodeMutation) ResetRechargeBonusMultiplier() {
+	m.recharge_bonus_multiplier = nil
+	m.addrecharge_bonus_multiplier = nil
 }
 
 // SetMaxUses sets the "max_uses" field.
@@ -34287,12 +34345,15 @@ func (m *PromoCodeMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PromoCodeMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 10)
 	if m.code != nil {
 		fields = append(fields, promocode.FieldCode)
 	}
 	if m.bonus_amount != nil {
 		fields = append(fields, promocode.FieldBonusAmount)
+	}
+	if m.recharge_bonus_multiplier != nil {
+		fields = append(fields, promocode.FieldRechargeBonusMultiplier)
 	}
 	if m.max_uses != nil {
 		fields = append(fields, promocode.FieldMaxUses)
@@ -34327,6 +34388,8 @@ func (m *PromoCodeMutation) Field(name string) (ent.Value, bool) {
 		return m.Code()
 	case promocode.FieldBonusAmount:
 		return m.BonusAmount()
+	case promocode.FieldRechargeBonusMultiplier:
+		return m.RechargeBonusMultiplier()
 	case promocode.FieldMaxUses:
 		return m.MaxUses()
 	case promocode.FieldUsedCount:
@@ -34354,6 +34417,8 @@ func (m *PromoCodeMutation) OldField(ctx context.Context, name string) (ent.Valu
 		return m.OldCode(ctx)
 	case promocode.FieldBonusAmount:
 		return m.OldBonusAmount(ctx)
+	case promocode.FieldRechargeBonusMultiplier:
+		return m.OldRechargeBonusMultiplier(ctx)
 	case promocode.FieldMaxUses:
 		return m.OldMaxUses(ctx)
 	case promocode.FieldUsedCount:
@@ -34390,6 +34455,13 @@ func (m *PromoCodeMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetBonusAmount(v)
+		return nil
+	case promocode.FieldRechargeBonusMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRechargeBonusMultiplier(v)
 		return nil
 	case promocode.FieldMaxUses:
 		v, ok := value.(int)
@@ -34451,6 +34523,9 @@ func (m *PromoCodeMutation) AddedFields() []string {
 	if m.addbonus_amount != nil {
 		fields = append(fields, promocode.FieldBonusAmount)
 	}
+	if m.addrecharge_bonus_multiplier != nil {
+		fields = append(fields, promocode.FieldRechargeBonusMultiplier)
+	}
 	if m.addmax_uses != nil {
 		fields = append(fields, promocode.FieldMaxUses)
 	}
@@ -34467,6 +34542,8 @@ func (m *PromoCodeMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case promocode.FieldBonusAmount:
 		return m.AddedBonusAmount()
+	case promocode.FieldRechargeBonusMultiplier:
+		return m.AddedRechargeBonusMultiplier()
 	case promocode.FieldMaxUses:
 		return m.AddedMaxUses()
 	case promocode.FieldUsedCount:
@@ -34486,6 +34563,13 @@ func (m *PromoCodeMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddBonusAmount(v)
+		return nil
+	case promocode.FieldRechargeBonusMultiplier:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRechargeBonusMultiplier(v)
 		return nil
 	case promocode.FieldMaxUses:
 		v, ok := value.(int)
@@ -34548,6 +34632,9 @@ func (m *PromoCodeMutation) ResetField(name string) error {
 		return nil
 	case promocode.FieldBonusAmount:
 		m.ResetBonusAmount()
+		return nil
+	case promocode.FieldRechargeBonusMultiplier:
+		m.ResetRechargeBonusMultiplier()
 		return nil
 	case promocode.FieldMaxUses:
 		m.ResetMaxUses()
@@ -46312,6 +46399,8 @@ type UserMutation struct {
 	addtotal_recharged            *float64
 	rpm_limit                     *int
 	addrpm_limit                  *int
+	promo_code_id                 *int64
+	addpromo_code_id              *int64
 	clearedFields                 map[string]struct{}
 	api_keys                      map[int64]struct{}
 	removedapi_keys               map[int64]struct{}
@@ -47518,6 +47607,76 @@ func (m *UserMutation) ResetRpmLimit() {
 	m.addrpm_limit = nil
 }
 
+// SetPromoCodeID sets the "promo_code_id" field.
+func (m *UserMutation) SetPromoCodeID(i int64) {
+	m.promo_code_id = &i
+	m.addpromo_code_id = nil
+}
+
+// PromoCodeID returns the value of the "promo_code_id" field in the mutation.
+func (m *UserMutation) PromoCodeID() (r int64, exists bool) {
+	v := m.promo_code_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPromoCodeID returns the old "promo_code_id" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldPromoCodeID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPromoCodeID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPromoCodeID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPromoCodeID: %w", err)
+	}
+	return oldValue.PromoCodeID, nil
+}
+
+// AddPromoCodeID adds i to the "promo_code_id" field.
+func (m *UserMutation) AddPromoCodeID(i int64) {
+	if m.addpromo_code_id != nil {
+		*m.addpromo_code_id += i
+	} else {
+		m.addpromo_code_id = &i
+	}
+}
+
+// AddedPromoCodeID returns the value that was added to the "promo_code_id" field in this mutation.
+func (m *UserMutation) AddedPromoCodeID() (r int64, exists bool) {
+	v := m.addpromo_code_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearPromoCodeID clears the value of the "promo_code_id" field.
+func (m *UserMutation) ClearPromoCodeID() {
+	m.promo_code_id = nil
+	m.addpromo_code_id = nil
+	m.clearedFields[user.FieldPromoCodeID] = struct{}{}
+}
+
+// PromoCodeIDCleared returns if the "promo_code_id" field was cleared in this mutation.
+func (m *UserMutation) PromoCodeIDCleared() bool {
+	_, ok := m.clearedFields[user.FieldPromoCodeID]
+	return ok
+}
+
+// ResetPromoCodeID resets all changes to the "promo_code_id" field.
+func (m *UserMutation) ResetPromoCodeID() {
+	m.promo_code_id = nil
+	m.addpromo_code_id = nil
+	delete(m.clearedFields, user.FieldPromoCodeID)
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by ids.
 func (m *UserMutation) AddAPIKeyIDs(ids ...int64) {
 	if m.api_keys == nil {
@@ -48254,7 +48413,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 24)
+	fields := make([]string, 0, 25)
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
 	}
@@ -48327,6 +48486,9 @@ func (m *UserMutation) Fields() []string {
 	if m.rpm_limit != nil {
 		fields = append(fields, user.FieldRpmLimit)
 	}
+	if m.promo_code_id != nil {
+		fields = append(fields, user.FieldPromoCodeID)
+	}
 	return fields
 }
 
@@ -48383,6 +48545,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.TotalRecharged()
 	case user.FieldRpmLimit:
 		return m.RpmLimit()
+	case user.FieldPromoCodeID:
+		return m.PromoCodeID()
 	}
 	return nil, false
 }
@@ -48440,6 +48604,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldTotalRecharged(ctx)
 	case user.FieldRpmLimit:
 		return m.OldRpmLimit(ctx)
+	case user.FieldPromoCodeID:
+		return m.OldPromoCodeID(ctx)
 	}
 	return nil, fmt.Errorf("unknown User field %s", name)
 }
@@ -48617,6 +48783,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetRpmLimit(v)
 		return nil
+	case user.FieldPromoCodeID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPromoCodeID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)
 }
@@ -48643,6 +48816,9 @@ func (m *UserMutation) AddedFields() []string {
 	if m.addrpm_limit != nil {
 		fields = append(fields, user.FieldRpmLimit)
 	}
+	if m.addpromo_code_id != nil {
+		fields = append(fields, user.FieldPromoCodeID)
+	}
 	return fields
 }
 
@@ -48663,6 +48839,8 @@ func (m *UserMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedTotalRecharged()
 	case user.FieldRpmLimit:
 		return m.AddedRpmLimit()
+	case user.FieldPromoCodeID:
+		return m.AddedPromoCodeID()
 	}
 	return nil, false
 }
@@ -48714,6 +48892,13 @@ func (m *UserMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddRpmLimit(v)
 		return nil
+	case user.FieldPromoCodeID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPromoCodeID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown User numeric field %s", name)
 }
@@ -48739,6 +48924,9 @@ func (m *UserMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(user.FieldBalanceNotifyThreshold) {
 		fields = append(fields, user.FieldBalanceNotifyThreshold)
+	}
+	if m.FieldCleared(user.FieldPromoCodeID) {
+		fields = append(fields, user.FieldPromoCodeID)
 	}
 	return fields
 }
@@ -48771,6 +48959,9 @@ func (m *UserMutation) ClearField(name string) error {
 		return nil
 	case user.FieldBalanceNotifyThreshold:
 		m.ClearBalanceNotifyThreshold()
+		return nil
+	case user.FieldPromoCodeID:
+		m.ClearPromoCodeID()
 		return nil
 	}
 	return fmt.Errorf("unknown User nullable field %s", name)
@@ -48851,6 +49042,9 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldRpmLimit:
 		m.ResetRpmLimit()
+		return nil
+	case user.FieldPromoCodeID:
+		m.ResetPromoCodeID()
 		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)

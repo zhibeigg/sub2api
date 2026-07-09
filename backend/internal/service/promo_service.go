@@ -128,6 +128,12 @@ func (s *PromoService) ApplyPromoCode(ctx context.Context, userID int64, code st
 		return fmt.Errorf("update user balance: %w", err)
 	}
 
+	// 绑定优惠码到用户（用于后续充值到账加成与用量统计筛选）。
+	// 仅当用户未绑定时写入，且与余额赠送在同一事务，保证一致性。
+	if err := s.userRepo.BindPromoCode(txCtx, userID, promoCode.ID); err != nil {
+		return fmt.Errorf("bind promo code to user: %w", err)
+	}
+
 	// 创建使用记录
 	usage := &PromoCodeUsage{
 		PromoCodeID: promoCode.ID,
@@ -191,13 +197,14 @@ func (s *PromoService) Create(ctx context.Context, input *CreatePromoCodeInput) 
 	}
 
 	promoCode := &PromoCode{
-		Code:        strings.ToUpper(code),
-		BonusAmount: input.BonusAmount,
-		MaxUses:     input.MaxUses,
-		UsedCount:   0,
-		Status:      PromoCodeStatusActive,
-		ExpiresAt:   input.ExpiresAt,
-		Notes:       input.Notes,
+		Code:                    strings.ToUpper(code),
+		BonusAmount:             input.BonusAmount,
+		RechargeBonusMultiplier: normalizeRechargeBonusMultiplier(input.RechargeBonusMultiplier),
+		MaxUses:                 input.MaxUses,
+		UsedCount:               0,
+		Status:                  PromoCodeStatusActive,
+		ExpiresAt:               input.ExpiresAt,
+		Notes:                   input.Notes,
 	}
 
 	if err := s.promoRepo.Create(ctx, promoCode); err != nil {
@@ -228,6 +235,9 @@ func (s *PromoService) Update(ctx context.Context, id int64, input *UpdatePromoC
 	}
 	if input.BonusAmount != nil {
 		promoCode.BonusAmount = *input.BonusAmount
+	}
+	if input.RechargeBonusMultiplier != nil {
+		promoCode.RechargeBonusMultiplier = normalizeRechargeBonusMultiplier(*input.RechargeBonusMultiplier)
 	}
 	if input.MaxUses != nil {
 		promoCode.MaxUses = *input.MaxUses

@@ -59,6 +59,10 @@ func (s *userRepoStubForGroupUpdate) List(context.Context, pagination.Pagination
 func (s *userRepoStubForGroupUpdate) ListWithFilters(context.Context, pagination.PaginationParams, UserListFilters) ([]User, *pagination.PaginationResult, error) {
 	panic("unexpected")
 }
+func (s *userRepoStubForGroupUpdate) BindPromoCode(context.Context, int64, int64) error {
+	return nil
+}
+
 func (s *userRepoStubForGroupUpdate) UpdateBalance(context.Context, int64, float64) error {
 	panic("unexpected")
 }

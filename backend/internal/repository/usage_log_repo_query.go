@@ -116,6 +116,11 @@ func (r *usageLogRepository) ListWithFilters(ctx context.Context, params paginat
 		conditions = append(conditions, fmt.Sprintf("group_id = $%d", len(args)+1))
 		args = append(args, filters.GroupID)
 	}
+	if filters.PromoCodeID > 0 {
+		// 优惠链接维度：usage_logs 无 promo_code_id 列，改按注册时绑定该优惠码的用户过滤。
+		conditions = append(conditions, fmt.Sprintf("user_id IN (SELECT id FROM users WHERE promo_code_id = $%d)", len(args)+1))
+		args = append(args, filters.PromoCodeID)
+	}
 	conditions, args = appendUsageLogModelWhereCondition(conditions, args, filters.Model, filters.ModelFilterSource)
 	conditions, args = appendRequestTypeOrStreamWhereCondition(conditions, args, filters.RequestType, filters.Stream)
 	if filters.BillingType != nil {

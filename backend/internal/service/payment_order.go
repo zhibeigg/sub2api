@@ -58,7 +58,10 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 		orderAmount = plan.Price
 		limitAmount = plan.Price
 	} else if req.OrderType == payment.OrderTypeBalance {
-		orderAmount = calculateCreditedBalance(req.Amount, cfg.BalanceRechargeMultiplier)
+		// 余额充值到账 = 支付金额 × 全局倍率 × 用户绑定优惠码的加成倍率。
+		// 优惠加成仅作用于到账余额（orderAmount），不影响实付金额（payAmount 基于 limitAmount）。
+		promoMultiplier := s.resolveUserRechargeBonusMultiplier(ctx, user)
+		orderAmount = calculateCreditedBalanceWithPromo(req.Amount, cfg.BalanceRechargeMultiplier, promoMultiplier)
 	}
 	feeRate := cfg.RechargeFeeRate
 	methodCurrency := payment.DefaultPaymentCurrency
@@ -111,6 +114,25 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 		return nil, err
 	}
 	return resp, nil
+}
+
+// resolveUserRechargeBonusMultiplier 返回用户绑定优惠码的充值到账加成倍率。
+// 未绑定优惠码、优惠码不存在或查询失败时返回 1（无加成），保证充值主流程 fail-open。
+func (s *PaymentService) resolveUserRechargeBonusMultiplier(ctx context.Context, user *User) float64 {
+	if user == nil || user.PromoCodeID == nil || *user.PromoCodeID <= 0 || s.entClient == nil {
+		return DefaultRechargeBonusMultiplier
+	}
+	pc, err := s.entClient.PromoCode.Get(ctx, *user.PromoCodeID)
+	if err != nil || pc == nil {
+		if err != nil && !dbent.IsNotFound(err) {
+			slog.Warn("[PaymentService] resolve promo recharge multiplier failed", "user_id", user.ID, "promo_code_id", *user.PromoCodeID, "error", err)
+		}
+		return DefaultRechargeBonusMultiplier
+	}
+	if pc.RechargeBonusMultiplier < DefaultRechargeBonusMultiplier {
+		return DefaultRechargeBonusMultiplier
+	}
+	return pc.RechargeBonusMultiplier
 }
 
 func (s *PaymentService) validateOrderInput(ctx context.Context, req CreateOrderRequest, cfg *PaymentConfig) (*dbent.SubscriptionPlan, error) {

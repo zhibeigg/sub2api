@@ -55,6 +55,10 @@ type User struct {
 	// 且该 (用户, 分组) 无 rpm_override 时作为全局兜底生效，计数键 rpm:u:{userID}:{min}。
 	RPMLimit int
 
+	// PromoCodeID 注册时绑定的优惠码 ID（可空）。用于第三方支付充值到账加成，
+	// 以及按优惠链接筛选用量统计。nil 表示未通过优惠链接注册。
+	PromoCodeID *int64
+
 	// UserGroupRPMOverride 来自 auth cache snapshot 的 (user, group) RPM 覆盖值。
 	// nil = 该 API Key 对应的 (user, group) 无 override；非 nil 时 checkRPM 直接使用，
 	// 避免每请求查 DB。字段不持久化到数据库。

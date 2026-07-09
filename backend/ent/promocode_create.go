@@ -43,6 +43,20 @@ func (_c *PromoCodeCreate) SetNillableBonusAmount(v *float64) *PromoCodeCreate {
 	return _c
 }
 
+// SetRechargeBonusMultiplier sets the "recharge_bonus_multiplier" field.
+func (_c *PromoCodeCreate) SetRechargeBonusMultiplier(v float64) *PromoCodeCreate {
+	_c.mutation.SetRechargeBonusMultiplier(v)
+	return _c
+}
+
+// SetNillableRechargeBonusMultiplier sets the "recharge_bonus_multiplier" field if the given value is not nil.
+func (_c *PromoCodeCreate) SetNillableRechargeBonusMultiplier(v *float64) *PromoCodeCreate {
+	if v != nil {
+		_c.SetRechargeBonusMultiplier(*v)
+	}
+	return _c
+}
+
 // SetMaxUses sets the "max_uses" field.
 func (_c *PromoCodeCreate) SetMaxUses(v int) *PromoCodeCreate {
 	_c.mutation.SetMaxUses(v)
@@ -195,6 +209,10 @@ func (_c *PromoCodeCreate) defaults() {
 		v := promocode.DefaultBonusAmount
 		_c.mutation.SetBonusAmount(v)
 	}
+	if _, ok := _c.mutation.RechargeBonusMultiplier(); !ok {
+		v := promocode.DefaultRechargeBonusMultiplier
+		_c.mutation.SetRechargeBonusMultiplier(v)
+	}
 	if _, ok := _c.mutation.MaxUses(); !ok {
 		v := promocode.DefaultMaxUses
 		_c.mutation.SetMaxUses(v)
@@ -229,6 +247,9 @@ func (_c *PromoCodeCreate) check() error {
 	}
 	if _, ok := _c.mutation.BonusAmount(); !ok {
 		return &ValidationError{Name: "bonus_amount", err: errors.New(`ent: missing required field "PromoCode.bonus_amount"`)}
+	}
+	if _, ok := _c.mutation.RechargeBonusMultiplier(); !ok {
+		return &ValidationError{Name: "recharge_bonus_multiplier", err: errors.New(`ent: missing required field "PromoCode.recharge_bonus_multiplier"`)}
 	}
 	if _, ok := _c.mutation.MaxUses(); !ok {
 		return &ValidationError{Name: "max_uses", err: errors.New(`ent: missing required field "PromoCode.max_uses"`)}
@@ -284,6 +305,10 @@ func (_c *PromoCodeCreate) createSpec() (*PromoCode, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.BonusAmount(); ok {
 		_spec.SetField(promocode.FieldBonusAmount, field.TypeFloat64, value)
 		_node.BonusAmount = value
+	}
+	if value, ok := _c.mutation.RechargeBonusMultiplier(); ok {
+		_spec.SetField(promocode.FieldRechargeBonusMultiplier, field.TypeFloat64, value)
+		_node.RechargeBonusMultiplier = value
 	}
 	if value, ok := _c.mutation.MaxUses(); ok {
 		_spec.SetField(promocode.FieldMaxUses, field.TypeInt, value)
@@ -408,6 +433,24 @@ func (u *PromoCodeUpsert) UpdateBonusAmount() *PromoCodeUpsert {
 // AddBonusAmount adds v to the "bonus_amount" field.
 func (u *PromoCodeUpsert) AddBonusAmount(v float64) *PromoCodeUpsert {
 	u.Add(promocode.FieldBonusAmount, v)
+	return u
+}
+
+// SetRechargeBonusMultiplier sets the "recharge_bonus_multiplier" field.
+func (u *PromoCodeUpsert) SetRechargeBonusMultiplier(v float64) *PromoCodeUpsert {
+	u.Set(promocode.FieldRechargeBonusMultiplier, v)
+	return u
+}
+
+// UpdateRechargeBonusMultiplier sets the "recharge_bonus_multiplier" field to the value that was provided on create.
+func (u *PromoCodeUpsert) UpdateRechargeBonusMultiplier() *PromoCodeUpsert {
+	u.SetExcluded(promocode.FieldRechargeBonusMultiplier)
+	return u
+}
+
+// AddRechargeBonusMultiplier adds v to the "recharge_bonus_multiplier" field.
+func (u *PromoCodeUpsert) AddRechargeBonusMultiplier(v float64) *PromoCodeUpsert {
+	u.Add(promocode.FieldRechargeBonusMultiplier, v)
 	return u
 }
 
@@ -584,6 +627,27 @@ func (u *PromoCodeUpsertOne) AddBonusAmount(v float64) *PromoCodeUpsertOne {
 func (u *PromoCodeUpsertOne) UpdateBonusAmount() *PromoCodeUpsertOne {
 	return u.Update(func(s *PromoCodeUpsert) {
 		s.UpdateBonusAmount()
+	})
+}
+
+// SetRechargeBonusMultiplier sets the "recharge_bonus_multiplier" field.
+func (u *PromoCodeUpsertOne) SetRechargeBonusMultiplier(v float64) *PromoCodeUpsertOne {
+	return u.Update(func(s *PromoCodeUpsert) {
+		s.SetRechargeBonusMultiplier(v)
+	})
+}
+
+// AddRechargeBonusMultiplier adds v to the "recharge_bonus_multiplier" field.
+func (u *PromoCodeUpsertOne) AddRechargeBonusMultiplier(v float64) *PromoCodeUpsertOne {
+	return u.Update(func(s *PromoCodeUpsert) {
+		s.AddRechargeBonusMultiplier(v)
+	})
+}
+
+// UpdateRechargeBonusMultiplier sets the "recharge_bonus_multiplier" field to the value that was provided on create.
+func (u *PromoCodeUpsertOne) UpdateRechargeBonusMultiplier() *PromoCodeUpsertOne {
+	return u.Update(func(s *PromoCodeUpsert) {
+		s.UpdateRechargeBonusMultiplier()
 	})
 }
 
@@ -942,6 +1006,27 @@ func (u *PromoCodeUpsertBulk) AddBonusAmount(v float64) *PromoCodeUpsertBulk {
 func (u *PromoCodeUpsertBulk) UpdateBonusAmount() *PromoCodeUpsertBulk {
 	return u.Update(func(s *PromoCodeUpsert) {
 		s.UpdateBonusAmount()
+	})
+}
+
+// SetRechargeBonusMultiplier sets the "recharge_bonus_multiplier" field.
+func (u *PromoCodeUpsertBulk) SetRechargeBonusMultiplier(v float64) *PromoCodeUpsertBulk {
+	return u.Update(func(s *PromoCodeUpsert) {
+		s.SetRechargeBonusMultiplier(v)
+	})
+}
+
+// AddRechargeBonusMultiplier adds v to the "recharge_bonus_multiplier" field.
+func (u *PromoCodeUpsertBulk) AddRechargeBonusMultiplier(v float64) *PromoCodeUpsertBulk {
+	return u.Update(func(s *PromoCodeUpsert) {
+		s.AddRechargeBonusMultiplier(v)
+	})
+}
+
+// UpdateRechargeBonusMultiplier sets the "recharge_bonus_multiplier" field to the value that was provided on create.
+func (u *PromoCodeUpsertBulk) UpdateRechargeBonusMultiplier() *PromoCodeUpsertBulk {
+	return u.Update(func(s *PromoCodeUpsert) {
+		s.UpdateRechargeBonusMultiplier()
 	})
 }
 

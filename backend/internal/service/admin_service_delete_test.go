@@ -119,6 +119,10 @@ func (s *userRepoStub) UpdateUserLastActiveAt(ctx context.Context, userID int64,
 	panic("unexpected UpdateUserLastActiveAt call")
 }
 
+func (s *userRepoStub) BindPromoCode(ctx context.Context, userID, promoCodeID int64) error {
+	return nil
+}
+
 func (s *userRepoStub) UpdateBalance(ctx context.Context, id int64, amount float64) error {
 	panic("unexpected UpdateBalance call")
 }

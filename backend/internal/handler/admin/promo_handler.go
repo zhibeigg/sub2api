@@ -27,21 +27,23 @@ func NewPromoHandler(promoService *service.PromoService) *PromoHandler {
 
 // CreatePromoCodeRequest represents create promo code request
 type CreatePromoCodeRequest struct {
-	Code        string  `json:"code"`                                  // 可选，为空则自动生成
-	BonusAmount float64 `json:"bonus_amount" binding:"required,min=0"` // 赠送余额
-	MaxUses     int     `json:"max_uses" binding:"min=0"`              // 最大使用次数，0=无限
-	ExpiresAt   *int64  `json:"expires_at"`                            // 过期时间戳（秒）
-	Notes       string  `json:"notes"`                                 // 备注
+	Code                    string   `json:"code"`                                  // 可选，为空则自动生成
+	BonusAmount             float64  `json:"bonus_amount" binding:"required,min=0"` // 赠送余额
+	RechargeBonusMultiplier *float64 `json:"recharge_bonus_multiplier"`             // 充值到账加成倍率（>=1，如 1.2 表示到账多 20%）；留空默认 1
+	MaxUses                 int      `json:"max_uses" binding:"min=0"`              // 最大使用次数，0=无限
+	ExpiresAt               *int64   `json:"expires_at"`                            // 过期时间戳（秒）
+	Notes                   string   `json:"notes"`                                 // 备注
 }
 
 // UpdatePromoCodeRequest represents update promo code request
 type UpdatePromoCodeRequest struct {
-	Code        *string  `json:"code"`
-	BonusAmount *float64 `json:"bonus_amount" binding:"omitempty,min=0"`
-	MaxUses     *int     `json:"max_uses" binding:"omitempty,min=0"`
-	Status      *string  `json:"status" binding:"omitempty,oneof=active disabled"`
-	ExpiresAt   *int64   `json:"expires_at"`
-	Notes       *string  `json:"notes"`
+	Code                    *string  `json:"code"`
+	BonusAmount             *float64 `json:"bonus_amount" binding:"omitempty,min=0"`
+	RechargeBonusMultiplier *float64 `json:"recharge_bonus_multiplier" binding:"omitempty,min=1"`
+	MaxUses                 *int     `json:"max_uses" binding:"omitempty,min=0"`
+	Status                  *string  `json:"status" binding:"omitempty,oneof=active disabled"`
+	ExpiresAt               *int64   `json:"expires_at"`
+	Notes                   *string  `json:"notes"`
 }
 
 // List handles listing all promo codes with pagination
@@ -107,6 +109,12 @@ func (h *PromoHandler) Create(c *gin.Context) {
 		MaxUses:     req.MaxUses,
 		Notes:       req.Notes,
 	}
+	if req.RechargeBonusMultiplier != nil {
+		input.RechargeBonusMultiplier = *req.RechargeBonusMultiplier
+	} else {
+		// 未传时默认 1（无加成），避免落库为 0 被规范化后语义不清。
+		input.RechargeBonusMultiplier = service.DefaultRechargeBonusMultiplier
+	}
 
 	if req.ExpiresAt != nil {
 		t := time.Unix(*req.ExpiresAt, 0)
@@ -138,11 +146,12 @@ func (h *PromoHandler) Update(c *gin.Context) {
 	}
 
 	input := &service.UpdatePromoCodeInput{
-		Code:        req.Code,
-		BonusAmount: req.BonusAmount,
-		MaxUses:     req.MaxUses,
-		Status:      req.Status,
-		Notes:       req.Notes,
+		Code:                    req.Code,
+		BonusAmount:             req.BonusAmount,
+		RechargeBonusMultiplier: req.RechargeBonusMultiplier,
+		MaxUses:                 req.MaxUses,
+		Status:                  req.Status,
+		Notes:                   req.Notes,
 	}
 
 	if req.ExpiresAt != nil {

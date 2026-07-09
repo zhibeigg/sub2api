@@ -432,6 +432,33 @@ func (_u *UserUpdate) AddRpmLimit(v int) *UserUpdate {
 	return _u
 }
 
+// SetPromoCodeID sets the "promo_code_id" field.
+func (_u *UserUpdate) SetPromoCodeID(v int64) *UserUpdate {
+	_u.mutation.ResetPromoCodeID()
+	_u.mutation.SetPromoCodeID(v)
+	return _u
+}
+
+// SetNillablePromoCodeID sets the "promo_code_id" field if the given value is not nil.
+func (_u *UserUpdate) SetNillablePromoCodeID(v *int64) *UserUpdate {
+	if v != nil {
+		_u.SetPromoCodeID(*v)
+	}
+	return _u
+}
+
+// AddPromoCodeID adds value to the "promo_code_id" field.
+func (_u *UserUpdate) AddPromoCodeID(v int64) *UserUpdate {
+	_u.mutation.AddPromoCodeID(v)
+	return _u
+}
+
+// ClearPromoCodeID clears the value of the "promo_code_id" field.
+func (_u *UserUpdate) ClearPromoCodeID() *UserUpdate {
+	_u.mutation.ClearPromoCodeID()
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *UserUpdate) AddAPIKeyIDs(ids ...int64) *UserUpdate {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -1098,6 +1125,15 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedRpmLimit(); ok {
 		_spec.AddField(user.FieldRpmLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.PromoCodeID(); ok {
+		_spec.SetField(user.FieldPromoCodeID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedPromoCodeID(); ok {
+		_spec.AddField(user.FieldPromoCodeID, field.TypeInt64, value)
+	}
+	if _u.mutation.PromoCodeIDCleared() {
+		_spec.ClearField(user.FieldPromoCodeID, field.TypeInt64)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -2108,6 +2144,33 @@ func (_u *UserUpdateOne) AddRpmLimit(v int) *UserUpdateOne {
 	return _u
 }
 
+// SetPromoCodeID sets the "promo_code_id" field.
+func (_u *UserUpdateOne) SetPromoCodeID(v int64) *UserUpdateOne {
+	_u.mutation.ResetPromoCodeID()
+	_u.mutation.SetPromoCodeID(v)
+	return _u
+}
+
+// SetNillablePromoCodeID sets the "promo_code_id" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillablePromoCodeID(v *int64) *UserUpdateOne {
+	if v != nil {
+		_u.SetPromoCodeID(*v)
+	}
+	return _u
+}
+
+// AddPromoCodeID adds value to the "promo_code_id" field.
+func (_u *UserUpdateOne) AddPromoCodeID(v int64) *UserUpdateOne {
+	_u.mutation.AddPromoCodeID(v)
+	return _u
+}
+
+// ClearPromoCodeID clears the value of the "promo_code_id" field.
+func (_u *UserUpdateOne) ClearPromoCodeID() *UserUpdateOne {
+	_u.mutation.ClearPromoCodeID()
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *UserUpdateOne) AddAPIKeyIDs(ids ...int64) *UserUpdateOne {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -2804,6 +2867,15 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.AddedRpmLimit(); ok {
 		_spec.AddField(user.FieldRpmLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.PromoCodeID(); ok {
+		_spec.SetField(user.FieldPromoCodeID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedPromoCodeID(); ok {
+		_spec.AddField(user.FieldPromoCodeID, field.TypeInt64, value)
+	}
+	if _u.mutation.PromoCodeIDCleared() {
+		_spec.ClearField(user.FieldPromoCodeID, field.TypeInt64)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{

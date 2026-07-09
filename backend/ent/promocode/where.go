@@ -65,6 +65,11 @@ func BonusAmount(v float64) predicate.PromoCode {
 	return predicate.PromoCode(sql.FieldEQ(FieldBonusAmount, v))
 }
 
+// RechargeBonusMultiplier applies equality check predicate on the "recharge_bonus_multiplier" field. It's identical to RechargeBonusMultiplierEQ.
+func RechargeBonusMultiplier(v float64) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldEQ(FieldRechargeBonusMultiplier, v))
+}
+
 // MaxUses applies equality check predicate on the "max_uses" field. It's identical to MaxUsesEQ.
 func MaxUses(v int) predicate.PromoCode {
 	return predicate.PromoCode(sql.FieldEQ(FieldMaxUses, v))
@@ -203,6 +208,46 @@ func BonusAmountLT(v float64) predicate.PromoCode {
 // BonusAmountLTE applies the LTE predicate on the "bonus_amount" field.
 func BonusAmountLTE(v float64) predicate.PromoCode {
 	return predicate.PromoCode(sql.FieldLTE(FieldBonusAmount, v))
+}
+
+// RechargeBonusMultiplierEQ applies the EQ predicate on the "recharge_bonus_multiplier" field.
+func RechargeBonusMultiplierEQ(v float64) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldEQ(FieldRechargeBonusMultiplier, v))
+}
+
+// RechargeBonusMultiplierNEQ applies the NEQ predicate on the "recharge_bonus_multiplier" field.
+func RechargeBonusMultiplierNEQ(v float64) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldNEQ(FieldRechargeBonusMultiplier, v))
+}
+
+// RechargeBonusMultiplierIn applies the In predicate on the "recharge_bonus_multiplier" field.
+func RechargeBonusMultiplierIn(vs ...float64) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldIn(FieldRechargeBonusMultiplier, vs...))
+}
+
+// RechargeBonusMultiplierNotIn applies the NotIn predicate on the "recharge_bonus_multiplier" field.
+func RechargeBonusMultiplierNotIn(vs ...float64) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldNotIn(FieldRechargeBonusMultiplier, vs...))
+}
+
+// RechargeBonusMultiplierGT applies the GT predicate on the "recharge_bonus_multiplier" field.
+func RechargeBonusMultiplierGT(v float64) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldGT(FieldRechargeBonusMultiplier, v))
+}
+
+// RechargeBonusMultiplierGTE applies the GTE predicate on the "recharge_bonus_multiplier" field.
+func RechargeBonusMultiplierGTE(v float64) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldGTE(FieldRechargeBonusMultiplier, v))
+}
+
+// RechargeBonusMultiplierLT applies the LT predicate on the "recharge_bonus_multiplier" field.
+func RechargeBonusMultiplierLT(v float64) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldLT(FieldRechargeBonusMultiplier, v))
+}
+
+// RechargeBonusMultiplierLTE applies the LTE predicate on the "recharge_bonus_multiplier" field.
+func RechargeBonusMultiplierLTE(v float64) predicate.PromoCode {
+	return predicate.PromoCode(sql.FieldLTE(FieldRechargeBonusMultiplier, v))
 }
 
 // MaxUsesEQ applies the EQ predicate on the "max_uses" field.

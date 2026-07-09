@@ -1471,26 +1471,30 @@ func init() {
 	promocodeDescBonusAmount := promocodeFields[1].Descriptor()
 	// promocode.DefaultBonusAmount holds the default value on creation for the bonus_amount field.
 	promocode.DefaultBonusAmount = promocodeDescBonusAmount.Default.(float64)
+	// promocodeDescRechargeBonusMultiplier is the schema descriptor for recharge_bonus_multiplier field.
+	promocodeDescRechargeBonusMultiplier := promocodeFields[2].Descriptor()
+	// promocode.DefaultRechargeBonusMultiplier holds the default value on creation for the recharge_bonus_multiplier field.
+	promocode.DefaultRechargeBonusMultiplier = promocodeDescRechargeBonusMultiplier.Default.(float64)
 	// promocodeDescMaxUses is the schema descriptor for max_uses field.
-	promocodeDescMaxUses := promocodeFields[2].Descriptor()
+	promocodeDescMaxUses := promocodeFields[3].Descriptor()
 	// promocode.DefaultMaxUses holds the default value on creation for the max_uses field.
 	promocode.DefaultMaxUses = promocodeDescMaxUses.Default.(int)
 	// promocodeDescUsedCount is the schema descriptor for used_count field.
-	promocodeDescUsedCount := promocodeFields[3].Descriptor()
+	promocodeDescUsedCount := promocodeFields[4].Descriptor()
 	// promocode.DefaultUsedCount holds the default value on creation for the used_count field.
 	promocode.DefaultUsedCount = promocodeDescUsedCount.Default.(int)
 	// promocodeDescStatus is the schema descriptor for status field.
-	promocodeDescStatus := promocodeFields[4].Descriptor()
+	promocodeDescStatus := promocodeFields[5].Descriptor()
 	// promocode.DefaultStatus holds the default value on creation for the status field.
 	promocode.DefaultStatus = promocodeDescStatus.Default.(string)
 	// promocode.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	promocode.StatusValidator = promocodeDescStatus.Validators[0].(func(string) error)
 	// promocodeDescCreatedAt is the schema descriptor for created_at field.
-	promocodeDescCreatedAt := promocodeFields[7].Descriptor()
+	promocodeDescCreatedAt := promocodeFields[8].Descriptor()
 	// promocode.DefaultCreatedAt holds the default value on creation for the created_at field.
 	promocode.DefaultCreatedAt = promocodeDescCreatedAt.Default.(func() time.Time)
 	// promocodeDescUpdatedAt is the schema descriptor for updated_at field.
-	promocodeDescUpdatedAt := promocodeFields[8].Descriptor()
+	promocodeDescUpdatedAt := promocodeFields[9].Descriptor()
 	// promocode.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	promocode.DefaultUpdatedAt = promocodeDescUpdatedAt.Default.(func() time.Time)
 	// promocode.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

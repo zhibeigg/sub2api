@@ -354,6 +354,20 @@ func (_c *UserCreate) SetNillableRpmLimit(v *int) *UserCreate {
 	return _c
 }
 
+// SetPromoCodeID sets the "promo_code_id" field.
+func (_c *UserCreate) SetPromoCodeID(v int64) *UserCreate {
+	_c.mutation.SetPromoCodeID(v)
+	return _c
+}
+
+// SetNillablePromoCodeID sets the "promo_code_id" field if the given value is not nil.
+func (_c *UserCreate) SetNillablePromoCodeID(v *int64) *UserCreate {
+	if v != nil {
+		_c.SetPromoCodeID(*v)
+	}
+	return _c
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_c *UserCreate) AddAPIKeyIDs(ids ...int64) *UserCreate {
 	_c.mutation.AddAPIKeyIDs(ids...)
@@ -867,6 +881,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RpmLimit(); ok {
 		_spec.SetField(user.FieldRpmLimit, field.TypeInt, value)
 		_node.RpmLimit = value
+	}
+	if value, ok := _c.mutation.PromoCodeID(); ok {
+		_spec.SetField(user.FieldPromoCodeID, field.TypeInt64, value)
+		_node.PromoCodeID = &value
 	}
 	if nodes := _c.mutation.APIKeysIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -1480,6 +1498,30 @@ func (u *UserUpsert) AddRpmLimit(v int) *UserUpsert {
 	return u
 }
 
+// SetPromoCodeID sets the "promo_code_id" field.
+func (u *UserUpsert) SetPromoCodeID(v int64) *UserUpsert {
+	u.Set(user.FieldPromoCodeID, v)
+	return u
+}
+
+// UpdatePromoCodeID sets the "promo_code_id" field to the value that was provided on create.
+func (u *UserUpsert) UpdatePromoCodeID() *UserUpsert {
+	u.SetExcluded(user.FieldPromoCodeID)
+	return u
+}
+
+// AddPromoCodeID adds v to the "promo_code_id" field.
+func (u *UserUpsert) AddPromoCodeID(v int64) *UserUpsert {
+	u.Add(user.FieldPromoCodeID, v)
+	return u
+}
+
+// ClearPromoCodeID clears the value of the "promo_code_id" field.
+func (u *UserUpsert) ClearPromoCodeID() *UserUpsert {
+	u.SetNull(user.FieldPromoCodeID)
+	return u
+}
+
 // UpdateNewValues updates the mutable fields using the new values that were set on create.
 // Using this option is equivalent to using:
 //
@@ -1928,6 +1970,34 @@ func (u *UserUpsertOne) AddRpmLimit(v int) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateRpmLimit() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateRpmLimit()
+	})
+}
+
+// SetPromoCodeID sets the "promo_code_id" field.
+func (u *UserUpsertOne) SetPromoCodeID(v int64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetPromoCodeID(v)
+	})
+}
+
+// AddPromoCodeID adds v to the "promo_code_id" field.
+func (u *UserUpsertOne) AddPromoCodeID(v int64) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.AddPromoCodeID(v)
+	})
+}
+
+// UpdatePromoCodeID sets the "promo_code_id" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdatePromoCodeID() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdatePromoCodeID()
+	})
+}
+
+// ClearPromoCodeID clears the value of the "promo_code_id" field.
+func (u *UserUpsertOne) ClearPromoCodeID() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearPromoCodeID()
 	})
 }
 
@@ -2545,6 +2615,34 @@ func (u *UserUpsertBulk) AddRpmLimit(v int) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateRpmLimit() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateRpmLimit()
+	})
+}
+
+// SetPromoCodeID sets the "promo_code_id" field.
+func (u *UserUpsertBulk) SetPromoCodeID(v int64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetPromoCodeID(v)
+	})
+}
+
+// AddPromoCodeID adds v to the "promo_code_id" field.
+func (u *UserUpsertBulk) AddPromoCodeID(v int64) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.AddPromoCodeID(v)
+	})
+}
+
+// UpdatePromoCodeID sets the "promo_code_id" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdatePromoCodeID() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdatePromoCodeID()
+	})
+}
+
+// ClearPromoCodeID clears the value of the "promo_code_id" field.
+func (u *UserUpsertBulk) ClearPromoCodeID() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearPromoCodeID()
 	})
 }
 

@@ -72,7 +72,7 @@ func (h *UsageHandler) List(c *gin.Context) {
 	}
 
 	// Parse filters
-	var userID, apiKeyID, accountID, groupID int64
+	var userID, apiKeyID, accountID, groupID, promoCodeID int64
 	if userIDStr := c.Query("user_id"); userIDStr != "" {
 		id, err := strconv.ParseInt(userIDStr, 10, 64)
 		if err != nil {
@@ -107,6 +107,14 @@ func (h *UsageHandler) List(c *gin.Context) {
 			return
 		}
 		groupID = id
+	}
+	if promoCodeIDStr := c.Query("promo_code_id"); promoCodeIDStr != "" {
+		id, err := strconv.ParseInt(promoCodeIDStr, 10, 64)
+		if err != nil {
+			response.BadRequest(c, "Invalid promo_code_id")
+			return
+		}
+		promoCodeID = id
 	}
 
 	model := c.Query("model")
@@ -176,6 +184,7 @@ func (h *UsageHandler) List(c *gin.Context) {
 		APIKeyID:    apiKeyID,
 		AccountID:   accountID,
 		GroupID:     groupID,
+		PromoCodeID: promoCodeID,
 		Model:       model,
 		RequestType: requestType,
 		Stream:      stream,
@@ -203,7 +212,7 @@ func (h *UsageHandler) List(c *gin.Context) {
 // GET /api/v1/admin/usage/stats
 func (h *UsageHandler) Stats(c *gin.Context) {
 	// Parse filters - same as List endpoint
-	var userID, apiKeyID, accountID, groupID int64
+	var userID, apiKeyID, accountID, groupID, promoCodeID int64
 	if userIDStr := c.Query("user_id"); userIDStr != "" {
 		id, err := strconv.ParseInt(userIDStr, 10, 64)
 		if err != nil {
@@ -238,6 +247,14 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 			return
 		}
 		groupID = id
+	}
+	if promoCodeIDStr := c.Query("promo_code_id"); promoCodeIDStr != "" {
+		id, err := strconv.ParseInt(promoCodeIDStr, 10, 64)
+		if err != nil {
+			response.BadRequest(c, "Invalid promo_code_id")
+			return
+		}
+		promoCodeID = id
 	}
 
 	model := c.Query("model")
@@ -316,6 +333,7 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 		APIKeyID:    apiKeyID,
 		AccountID:   accountID,
 		GroupID:     groupID,
+		PromoCodeID: promoCodeID,
 		Model:       model,
 		RequestType: requestType,
 		Stream:      stream,

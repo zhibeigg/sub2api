@@ -751,6 +751,23 @@ func (r *userRepository) UpdateBalance(ctx context.Context, id int64, amount flo
 	return nil
 }
 
+// BindPromoCode 绑定用户注册时使用的优惠码 ID。
+// 仅当 promo_code_id 当前为 NULL 时才写入（幂等，避免覆盖既有绑定）。
+func (r *userRepository) BindPromoCode(ctx context.Context, userID, promoCodeID int64) error {
+	if userID <= 0 || promoCodeID <= 0 {
+		return nil
+	}
+	client := clientFromContext(ctx, r.client)
+	_, err := client.User.Update().
+		Where(dbuser.IDEQ(userID), dbuser.PromoCodeIDIsNil()).
+		SetPromoCodeID(promoCodeID).
+		Save(ctx)
+	if err != nil {
+		return translatePersistenceError(err, service.ErrUserNotFound, nil)
+	}
+	return nil
+}
+
 // DeductBalance 扣除用户余额
 // 透支策略：允许余额变为负数，确保当前请求能够完成
 // 中间件会阻止余额 <= 0 的用户发起后续请求

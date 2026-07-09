@@ -80,6 +80,16 @@
             </span>
           </template>
 
+          <template #cell-recharge_bonus_multiplier="{ value }">
+            <span
+              v-if="value && value > 1"
+              class="badge badge-success"
+            >
+              ×{{ value }}
+            </span>
+            <span v-else class="text-sm text-gray-400 dark:text-dark-400">—</span>
+          </template>
+
           <template #cell-usage="{ row }">
             <span class="text-sm text-gray-600 dark:text-gray-300">
               {{ row.used_count }} / {{ row.max_uses === 0 ? '∞' : row.max_uses }}
@@ -189,6 +199,19 @@
         </div>
         <div>
           <label class="input-label">
+            {{ t('admin.promo.rechargeBonusMultiplier') }}
+            <span class="ml-1 text-xs font-normal text-gray-400">({{ t('admin.promo.rechargeBonusMultiplierHint') }})</span>
+          </label>
+          <input
+            v-model.number="createForm.recharge_bonus_multiplier"
+            type="number"
+            step="0.01"
+            min="1"
+            class="input"
+          />
+        </div>
+        <div>
+          <label class="input-label">
             {{ t('admin.promo.maxUses') }}
             <span class="ml-1 text-xs font-normal text-gray-400">({{ t('admin.promo.zeroUnlimited') }})</span>
           </label>
@@ -259,6 +282,19 @@
             step="0.01"
             min="0"
             required
+            class="input"
+          />
+        </div>
+        <div>
+          <label class="input-label">
+            {{ t('admin.promo.rechargeBonusMultiplier') }}
+            <span class="ml-1 text-xs font-normal text-gray-400">({{ t('admin.promo.rechargeBonusMultiplierHint') }})</span>
+          </label>
+          <input
+            v-model.number="editForm.recharge_bonus_multiplier"
+            type="number"
+            step="0.01"
+            min="1"
             class="input"
           />
         </div>
@@ -451,6 +487,7 @@ const usagesTotal = ref(0)
 const createForm = reactive({
   code: '',
   bonus_amount: 1,
+  recharge_bonus_multiplier: 1,
   max_uses: 0,
   expires_at_str: '',
   notes: ''
@@ -459,6 +496,7 @@ const createForm = reactive({
 const editForm = reactive({
   code: '',
   bonus_amount: 0,
+  recharge_bonus_multiplier: 1,
   max_uses: 0,
   status: 'active' as 'active' | 'disabled',
   expires_at_str: '',
@@ -480,6 +518,7 @@ const statusOptions = computed(() => [
 const columns = computed<Column[]>(() => [
   { key: 'code', label: t('admin.promo.columns.code') },
   { key: 'bonus_amount', label: t('admin.promo.columns.bonusAmount'), sortable: true },
+  { key: 'recharge_bonus_multiplier', label: t('admin.promo.columns.rechargeBonusMultiplier') },
   { key: 'usage', label: t('admin.promo.columns.usage') },
   { key: 'status', label: t('admin.promo.columns.status'), sortable: true },
   { key: 'expires_at', label: t('admin.promo.columns.expiresAt'), sortable: true },
@@ -598,6 +637,7 @@ const handleCreate = async () => {
     await adminAPI.promo.create({
       code: createForm.code || undefined,
       bonus_amount: createForm.bonus_amount,
+      recharge_bonus_multiplier: createForm.recharge_bonus_multiplier,
       max_uses: createForm.max_uses,
       expires_at: createForm.expires_at_str ? Math.floor(new Date(createForm.expires_at_str).getTime() / 1000) : undefined,
       notes: createForm.notes || undefined
@@ -616,6 +656,7 @@ const handleCreate = async () => {
 const resetCreateForm = () => {
   createForm.code = ''
   createForm.bonus_amount = 1
+  createForm.recharge_bonus_multiplier = 1
   createForm.max_uses = 0
   createForm.expires_at_str = ''
   createForm.notes = ''
@@ -626,6 +667,7 @@ const handleEdit = (code: PromoCode) => {
   editingCode.value = code
   editForm.code = code.code
   editForm.bonus_amount = code.bonus_amount
+  editForm.recharge_bonus_multiplier = code.recharge_bonus_multiplier ?? 1
   editForm.max_uses = code.max_uses
   editForm.status = code.status
   editForm.expires_at_str = code.expires_at ? new Date(code.expires_at).toISOString().slice(0, 16) : ''
@@ -646,6 +688,7 @@ const handleUpdate = async () => {
     await adminAPI.promo.update(editingCode.value.id, {
       code: editForm.code,
       bonus_amount: editForm.bonus_amount,
+      recharge_bonus_multiplier: editForm.recharge_bonus_multiplier,
       max_uses: editForm.max_uses,
       status: editForm.status,
       expires_at: editForm.expires_at_str ? Math.floor(new Date(editForm.expires_at_str).getTime() / 1000) : 0,

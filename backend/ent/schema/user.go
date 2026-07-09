@@ -115,6 +115,12 @@ func (User) Fields() []ent.Field {
 		// 用户级每分钟请求数上限（0 = 不限制）。仅当所在分组未设置 rpm_limit 时作为兜底生效。
 		field.Int("rpm_limit").
 			Default(0),
+
+		// 注册时绑定的优惠码 ID（可空）。用于第三方支付充值到账加成，以及按优惠链接筛选用量统计。
+		field.Int64("promo_code_id").
+			Optional().
+			Nillable().
+			Comment("注册时绑定的优惠码 ID，用于充值到账加成与用量统计筛选"),
 	}
 }
 
@@ -143,5 +149,6 @@ func (User) Indexes() []ent.Index {
 		// email 字段已在 Fields() 中声明 Unique()，无需重复索引
 		index.Fields("status"),
 		index.Fields("deleted_at"),
+		index.Fields("promo_code_id"),
 	}
 }

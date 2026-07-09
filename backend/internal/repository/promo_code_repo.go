@@ -26,6 +26,7 @@ func (r *promoCodeRepository) Create(ctx context.Context, code *service.PromoCod
 	builder := client.PromoCode.Create().
 		SetCode(code.Code).
 		SetBonusAmount(code.BonusAmount).
+		SetRechargeBonusMultiplier(code.RechargeBonusMultiplier).
 		SetMaxUses(code.MaxUses).
 		SetUsedCount(code.UsedCount).
 		SetStatus(code.Status).
@@ -92,6 +93,7 @@ func (r *promoCodeRepository) Update(ctx context.Context, code *service.PromoCod
 	builder := client.PromoCode.UpdateOneID(code.ID).
 		SetCode(code.Code).
 		SetBonusAmount(code.BonusAmount).
+		SetRechargeBonusMultiplier(code.RechargeBonusMultiplier).
 		SetMaxUses(code.MaxUses).
 		SetUsedCount(code.UsedCount).
 		SetStatus(code.Status).
@@ -254,16 +256,17 @@ func promoCodeEntityToService(m *dbent.PromoCode) *service.PromoCode {
 		return nil
 	}
 	return &service.PromoCode{
-		ID:          m.ID,
-		Code:        m.Code,
-		BonusAmount: m.BonusAmount,
-		MaxUses:     m.MaxUses,
-		UsedCount:   m.UsedCount,
-		Status:      m.Status,
-		ExpiresAt:   m.ExpiresAt,
-		Notes:       derefString(m.Notes),
-		CreatedAt:   m.CreatedAt,
-		UpdatedAt:   m.UpdatedAt,
+		ID:                      m.ID,
+		Code:                    m.Code,
+		BonusAmount:             m.BonusAmount,
+		RechargeBonusMultiplier: m.RechargeBonusMultiplier,
+		MaxUses:                 m.MaxUses,
+		UsedCount:               m.UsedCount,
+		Status:                  m.Status,
+		ExpiresAt:               m.ExpiresAt,
+		Notes:                   derefString(m.Notes),
+		CreatedAt:               m.CreatedAt,
+		UpdatedAt:               m.UpdatedAt,
 	}
 }
 
