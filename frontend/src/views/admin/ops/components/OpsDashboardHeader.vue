@@ -416,6 +416,7 @@ const durationAvgMs = computed(() => overview.value?.duration?.avg_ms ?? null)
 const durationMaxMs = computed(() => overview.value?.duration?.max_ms ?? null)
 
 const ttftP99Ms = computed(() => overview.value?.ttft?.p99_ms ?? null)
+const ttftApproximate = computed(() => overview.value?.ttft_approximate === true)
 const ttftP95Ms = computed(() => overview.value?.ttft?.p95_ms ?? null)
 const ttftP90Ms = computed(() => overview.value?.ttft?.p90_ms ?? null)
 const ttftP50Ms = computed(() => overview.value?.ttft?.p50_ms ?? null)
@@ -1332,13 +1333,19 @@ function handleToolbarRefresh() {
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-1">
               <span class="text-[10px] font-bold uppercase text-gray-400">TTFT</span>
+              <span
+                v-if="ttftApproximate"
+                class="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+              >
+                {{ t('admin.ops.ttftApproximate') }}
+              </span>
               <HelpTooltip v-if="!props.fullscreen" :content="t('admin.ops.tooltips.ttft')" />
             </div>
             <button
               v-if="!props.fullscreen"
               class="text-[10px] font-bold text-blue-500 hover:underline"
               type="button"
-              @click="openDetails({ title: t('admin.ops.ttftLabel'), sort: 'duration_desc' })"
+              @click="openDetails({ title: t('admin.ops.ttftLabel'), kind: 'success', sort: 'ttft_desc' })"
             >
               {{ t('admin.ops.requestDetails.details') }}
             </button>

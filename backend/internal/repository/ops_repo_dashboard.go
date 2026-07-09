@@ -248,13 +248,20 @@ func (r *opsRepository) getDashboardOverviewPreaggregated(ctx context.Context, f
 		{weight: head.successCount, p: head.duration},
 		{weight: tail.successCount, p: tail.duration},
 	})
-	// TTFT segments are weighted by the streaming sample count (rows that
-	// actually recorded first_token_ms), not the total success count.
+	// Keep an approximate TTFT fallback from the pre-aggregated segments, but do
+	// not expose it as an exact window percentile. Percentiles are not mergeable:
+	// taking the maximum hourly P99 can substantially overstate the real P99.
 	ttft := combineApproxPercentiles([]opsPercentileSegment{
 		{weight: preagg.ttftSampleCount, p: preagg.ttft},
 		{weight: head.ttftSampleCount, p: head.ttft},
 		{weight: tail.ttftSampleCount, p: tail.ttft},
 	})
+	ttftCtx, cancelTTFT := context.WithTimeout(ctx, opsRawLatencyQueryTimeout)
+	ttft, ttftApproximate, err := r.queryExactTTFTOrFallback(ttftCtx, filter, start, end, ttft)
+	cancelTTFT()
+	if err != nil {
+		return nil, err
+	}
 
 	windowSeconds := end.Sub(start).Seconds()
 	if windowSeconds <= 0 {
@@ -339,8 +346,9 @@ func (r *opsRepository) getDashboardOverviewPreaggregated(ctx context.Context, f
 			Avg:     tpsAvg,
 		},
 
-		Duration: duration,
-		TTFT:     ttft,
+		Duration:        duration,
+		TTFT:            ttft,
+		TTFTApproximate: ttftApproximate,
 	}, nil
 }
 
@@ -865,6 +873,59 @@ FROM usage_logs ul
 	}
 
 	return duration, ttft, tCount, nil
+}
+
+// queryUsageTTFT calculates exact percentiles from the request-level samples.
+// Unlike hourly percentiles, these values represent the complete requested
+// window and can safely be shown as P50/P90/P95/P99.
+func (r *opsRepository) queryUsageTTFT(ctx context.Context, filter *service.OpsDashboardFilter, start, end time.Time) (ttft service.OpsPercentiles, sampleCount int64, err error) {
+	join, where, args, _ := buildUsageWhere(filter, start, end, 1)
+	q := `
+SELECT
+  percentile_cont(0.50) WITHIN GROUP (ORDER BY first_token_ms) FILTER (WHERE first_token_ms IS NOT NULL) AS ttft_p50,
+  percentile_cont(0.90) WITHIN GROUP (ORDER BY first_token_ms) FILTER (WHERE first_token_ms IS NOT NULL) AS ttft_p90,
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY first_token_ms) FILTER (WHERE first_token_ms IS NOT NULL) AS ttft_p95,
+  percentile_cont(0.99) WITHIN GROUP (ORDER BY first_token_ms) FILTER (WHERE first_token_ms IS NOT NULL) AS ttft_p99,
+  AVG(first_token_ms) FILTER (WHERE first_token_ms IS NOT NULL) AS ttft_avg,
+  MAX(first_token_ms) AS ttft_max,
+  COUNT(first_token_ms) AS ttft_sample_count
+FROM usage_logs ul
+` + join + `
+` + where
+
+	var p50, p90, p95, p99 sql.NullFloat64
+	var avg sql.NullFloat64
+	var max sql.NullInt64
+	if err := r.db.QueryRowContext(ctx, q, args...).Scan(&p50, &p90, &p95, &p99, &avg, &max, &sampleCount); err != nil {
+		return service.OpsPercentiles{}, 0, err
+	}
+
+	ttft.P50 = floatToIntPtr(p50)
+	ttft.P90 = floatToIntPtr(p90)
+	ttft.P95 = floatToIntPtr(p95)
+	ttft.P99 = floatToIntPtr(p99)
+	ttft.Avg = floatToIntPtr(avg)
+	if max.Valid {
+		v := int(max.Int64)
+		ttft.Max = &v
+	}
+	return ttft, sampleCount, nil
+}
+
+func (r *opsRepository) queryExactTTFTOrFallback(
+	ctx context.Context,
+	filter *service.OpsDashboardFilter,
+	start, end time.Time,
+	fallback service.OpsPercentiles,
+) (service.OpsPercentiles, bool, error) {
+	exact, _, err := r.queryUsageTTFT(ctx, filter, start, end)
+	if err == nil {
+		return exact, false, nil
+	}
+	if isQueryTimeoutErr(err) {
+		return fallback, true, nil
+	}
+	return service.OpsPercentiles{}, false, err
 }
 
 func (r *opsRepository) queryErrorCounts(ctx context.Context, filter *service.OpsDashboardFilter, start, end time.Time) (

@@ -97,6 +97,7 @@ export default {
       upstreamRate: '上游错误率：',
       latencyDuration: '请求时长',
       ttftLabel: '首 Token 延迟（毫秒）',
+      ttftApproximate: '估算',
       p50: 'p50',
       p90: 'p90',
       p95: 'p95',
@@ -404,7 +405,8 @@ export default {
           kind: '类型',
           platform: '平台',
           model: '模型',
-          duration: '耗时',
+          firstToken: '首 Token',
+          duration: '总耗时',
           status: '状态码',
           requestId: '请求ID',
           actions: '操作'
@@ -793,7 +795,7 @@ export default {
         sla: '服务等级协议达成率，排除业务限制（如余额不足、配额超限）的成功请求占比。',
         errors: '错误统计，包括总错误数、错误率和上游错误率。',
         latency: '请求时长统计，包括 p50、p90、p95、p99 等百分位数。',
-        ttft: '首 Token 延迟（Time To First Token），衡量流式响应的首 Token 返回速度。',
+        ttft: '流式成功请求的首 Token 延迟。长窗口优先从请求级样本精确计算；查询超时时会显示“估算”标记。',
         health: '系统健康评分（0-100），综合考虑 SLA、错误率和资源使用情况。'
       },
       charts: {

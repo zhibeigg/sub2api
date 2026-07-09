@@ -65,8 +65,9 @@ type OpsDashboardOverview struct {
 	QPS OpsRateSummary `json:"qps"`
 	TPS OpsRateSummary `json:"tps"`
 
-	Duration OpsPercentiles `json:"duration"`
-	TTFT     OpsPercentiles `json:"ttft"`
+	Duration        OpsPercentiles `json:"duration"`
+	TTFT            OpsPercentiles `json:"ttft"`
+	TTFTApproximate bool           `json:"ttft_approximate"`
 }
 
 type OpsLatencyHistogramBucket struct {

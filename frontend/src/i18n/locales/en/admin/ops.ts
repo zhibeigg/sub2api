@@ -97,6 +97,7 @@ export default {
       upstreamRate: 'upstream_rate:',
       latencyDuration: 'Request Duration',
       ttftLabel: 'TTFT (first_token_ms)',
+      ttftApproximate: 'Estimated',
       p50: 'p50:',
       p90: 'p90:',
       p95: 'p95:',
@@ -404,7 +405,8 @@ export default {
           kind: 'Kind',
           platform: 'Platform',
           model: 'Model',
-          duration: 'Duration',
+          firstToken: 'First Token',
+          duration: 'Total Duration',
           status: 'Status',
           requestId: 'Request ID',
           actions: 'Actions'
@@ -792,7 +794,7 @@ export default {
         errors: 'Error statistics, including total errors, error rate, and upstream error rate.',
         upstreamErrors: 'Upstream error statistics, excluding rate limit errors (429/529).',
         latency: 'Request duration statistics, including p50, p90, p95, p99 percentiles.',
-        ttft: 'Time To First Token, measuring the speed of first token return in streaming responses.',
+        ttft: 'Time To First Token for successful streaming requests. Long windows use exact request samples when available; a badge marks timeout fallback estimates.',
         health: 'System health score (0-100), considering SLA, error rate, and resource usage.'
       },
       charts: {
