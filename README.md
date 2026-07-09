@@ -213,6 +213,22 @@ underscores_in_headers on;
 
 Nginx drops headers containing underscores by default (e.g. `session_id`), which breaks sticky session routing in multi-account setups.
 
+### Production SEO and domain normalization
+
+The embedded official frontend publishes `/robots.txt`, `/sitemap.xml`, and `/favicon.png`. Its canonical public entry is `https://www.poke2api.com/home`: `/` permanently redirects to `/home`, while login, admin, callback, and unknown SPA pages return `X-Robots-Tag: noindex, nofollow`.
+
+When changing the public domain, update the canonical origin and discovery files together:
+
+- `frontend/index.html`
+- `frontend/public/robots.txt`
+- `frontend/public/sitemap.xml`
+- `frontend/src/router/title.ts`
+- `backend/internal/web/embed_on.go`
+
+Keep redirects, Canonical URLs, and sitemap URLs aligned. Do not block private SPA routes in `robots.txt`, because crawlers must be able to read their `noindex` directive. Legacy web domains should use permanent redirects, but API prefixes must remain reachable for client compatibility.
+
+The documentation host should likewise publish its own `robots.txt` and sitemap, add a self-referencing Canonical to every indexable page, exclude 404 pages from the sitemap, and permanently redirect the legacy documentation domain to the current host.
+
 ---
 
 ## Deployment

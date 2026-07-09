@@ -64,5 +64,26 @@ declare module 'vue-router' {
      * i18n key for the page description
      */
     descriptionKey?: string
+
+    /**
+     * Whether search engines may index this route.
+     * Public routes default to noindex unless explicitly enabled.
+     */
+    indexable?: boolean
+
+    /**
+     * i18n key for the search-friendly document title.
+     */
+    seoTitleKey?: string
+
+    /**
+     * i18n key for the search result description.
+     */
+    seoDescriptionKey?: string
+
+    /**
+     * Canonical path on https://www.poke2api.com.
+     */
+    canonicalPath?: string
   }
 }

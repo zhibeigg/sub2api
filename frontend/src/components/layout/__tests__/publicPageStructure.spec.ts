@@ -10,6 +10,10 @@ const loginViewSource = readFileSync(resolve(dir, '../../../views/auth/LoginView
 const registerViewSource = readFileSync(resolve(dir, '../../../views/auth/RegisterView.vue'), 'utf8')
 const authLayoutSource = readFileSync(resolve(dir, '../AuthLayout.vue'), 'utf8')
 const monologStylesSource = readFileSync(resolve(dir, '../../../styles/monolog.css'), 'utf8')
+const routerSource = readFileSync(resolve(dir, '../../../router/index.ts'), 'utf8')
+const indexHtmlSource = readFileSync(resolve(dir, '../../../../index.html'), 'utf8')
+const robotsSource = readFileSync(resolve(dir, '../../../../public/robots.txt'), 'utf8')
+const sitemapSource = readFileSync(resolve(dir, '../../../../public/sitemap.xml'), 'utf8')
 
 describe('public page structure', () => {
   it('keeps documentation one click away from the home page', () => {
@@ -63,5 +67,24 @@ describe('public page structure', () => {
     }
 
     expect(homeViewSource).not.toContain('mono-cursor')
+  })
+
+  it('ships crawlable homepage metadata and structured data', () => {
+    expect(indexHtmlSource).toContain('<link rel="canonical" href="https://www.poke2api.com/home"')
+    expect(indexHtmlSource).toContain('name="description"')
+    expect(indexHtmlSource).toContain('id="site-structured-data"')
+    expect(indexHtmlSource).toContain('type="application/ld+json"')
+    expect(indexHtmlSource).toContain('"@type": "WebSite"')
+    expect(indexHtmlSource).toContain('"url": "https://www.poke2api.com/home"')
+    expect(indexHtmlSource).toContain('href="/favicon.png"')
+    expect(routerSource).toContain("seoTitleKey: 'seo.home.title'")
+    expect(routerSource).toContain('indexable: true')
+  })
+
+  it('publishes a canonical sitemap and robots discovery rule', () => {
+    expect(robotsSource).toContain('Sitemap: https://www.poke2api.com/sitemap.xml')
+    expect(robotsSource).toContain('Disallow: /api/')
+    expect(sitemapSource).toContain('<loc>https://www.poke2api.com/home</loc>')
+    expect(sitemapSource).not.toContain('pokeapi.top')
   })
 })

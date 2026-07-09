@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { RouterView, useRouter, useRoute } from 'vue-router'
 import { onMounted, onBeforeUnmount, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import Toast from '@/components/common/Toast.vue'
 import NavigationProgress from '@/components/common/NavigationProgress.vue'
 import AdminComplianceDialog from '@/components/admin/AdminComplianceDialog.vue'
-import { resolveRouteDocumentTitle } from '@/router/title'
+import { applyRouteSEO, resolveRouteSEO } from '@/router/title'
 import AnnouncementPopup from '@/components/common/AnnouncementPopup.vue'
 import { useAppStore, useAuthStore, useSubscriptionStore, useAnnouncementStore, useAdminComplianceStore, useAdminSettingsStore } from '@/stores'
 import { getSetupStatus } from '@/api/setup'
 
 const router = useRouter()
 const route = useRoute()
+const { locale } = useI18n()
 const appStore = useAppStore()
 const authStore = useAuthStore()
 const subscriptionStore = useSubscriptionStore()
@@ -18,12 +20,13 @@ const announcementStore = useAnnouncementStore()
 const adminComplianceStore = useAdminComplianceStore()
 const adminSettingsStore = useAdminSettingsStore()
 
-function updateDocumentTitle() {
+function updateRouteSEO() {
   const customMenuItems = [
     ...(appStore.cachedPublicSettings?.custom_menu_items ?? []),
     ...(authStore.isAdmin ? adminSettingsStore.customMenuItems : []),
   ]
-  document.title = resolveRouteDocumentTitle(route, appStore.siteName, customMenuItems)
+  const seo = resolveRouteSEO(route, appStore.siteName, customMenuItems)
+  applyRouteSEO(seo, String(locale.value), appStore.siteName)
 }
 
 /**
@@ -38,7 +41,11 @@ function updateFavicon(logoUrl: string) {
     link.rel = 'icon'
     document.head.appendChild(link)
   }
-  link.type = logoUrl.endsWith('.svg') ? 'image/svg+xml' : 'image/x-icon'
+  link.type = logoUrl.startsWith('data:image/png') || /\.png(?:$|[?#])/i.test(logoUrl)
+    ? 'image/png'
+    : logoUrl.endsWith('.svg')
+      ? 'image/svg+xml'
+      : 'image/x-icon'
   link.href = logoUrl
 }
 
@@ -58,12 +65,17 @@ watch(
     () => route.fullPath,
     () => route.meta.title,
     () => route.meta.titleKey,
+    () => route.meta.seoTitleKey,
+    () => route.meta.seoDescriptionKey,
+    () => route.meta.indexable,
+    () => route.meta.canonicalPath,
+    () => locale.value,
     () => appStore.siteName,
     () => appStore.cachedPublicSettings?.custom_menu_items,
     () => authStore.isAdmin,
     () => adminSettingsStore.customMenuItems,
   ],
-  updateDocumentTitle,
+  updateRouteSEO,
   { deep: true }
 )
 
@@ -146,8 +158,8 @@ onMounted(async () => {
   // Load public settings into appStore (will be cached for other components)
   await appStore.fetchPublicSettings()
 
-  // Re-resolve document title now that site settings are available
-  updateDocumentTitle()
+  // Re-resolve route SEO now that site settings are available
+  updateRouteSEO()
 })
 </script>
 

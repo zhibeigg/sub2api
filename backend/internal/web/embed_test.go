@@ -27,7 +27,7 @@ func TestInjectSiteTitle(t *testing.T) {
 
 		result := injectSiteTitle(html, settingsJSON)
 
-		assert.Contains(t, string(result), "<title>MyCustomSite - AI API Gateway</title>")
+		assert.Contains(t, string(result), "<title>MyCustomSite｜Claude、OpenAI、Gemini AI API 网关</title>")
 		assert.NotContains(t, string(result), "Sub2API")
 	})
 
@@ -95,7 +95,7 @@ func TestInjectSiteTitle(t *testing.T) {
 
 		result := injectSiteTitle(html, settingsJSON)
 
-		assert.Contains(t, string(result), "<title>A&amp;B - AI API Gateway</title>")
+		assert.Contains(t, string(result), "<title>A&amp;B｜Claude、OpenAI、Gemini AI API 网关</title>")
 	})
 
 	t.Run("preserves_rest_of_html", func(t *testing.T) {
@@ -107,7 +107,7 @@ func TestInjectSiteTitle(t *testing.T) {
 		assert.Contains(t, string(result), `<meta charset="UTF-8">`)
 		assert.Contains(t, string(result), `<script src="app.js"></script>`)
 		assert.Contains(t, string(result), `<div id="app"></div>`)
-		assert.Contains(t, string(result), "<title>TestSite - AI API Gateway</title>")
+		assert.Contains(t, string(result), "<title>TestSite｜Claude、OpenAI、Gemini AI API 网关</title>")
 	})
 }
 
@@ -332,14 +332,14 @@ func TestFrontendServer_ServeIndexHTML(t *testing.T) {
 
 		// First request to populate cache and get ETag
 		w1 := httptest.NewRecorder()
-		req1 := httptest.NewRequest(http.MethodGet, "/", nil)
+		req1 := httptest.NewRequest(http.MethodGet, "/home", nil)
 		router.ServeHTTP(w1, req1)
 		etag := w1.Header().Get("ETag")
 		require.NotEmpty(t, etag)
 
 		// Second request with If-None-Match
 		w2 := httptest.NewRecorder()
-		req2 := httptest.NewRequest(http.MethodGet, "/", nil)
+		req2 := httptest.NewRequest(http.MethodGet, "/home", nil)
 		req2.Header.Set("If-None-Match", etag)
 		router.ServeHTTP(w2, req2)
 
@@ -507,6 +507,84 @@ func TestFrontendServer_Middleware(t *testing.T) {
 		assert.JSONEq(t, `{"ok":true}`, w.Body.String())
 	})
 
+	t.Run("redirects_root_to_canonical_home_path", func(t *testing.T) {
+		provider := &mockSettingsProvider{settings: map[string]string{"test": "value"}}
+		server, err := NewFrontendServer(provider)
+		require.NoError(t, err)
+
+		router := gin.New()
+		router.Use(server.Middleware())
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/?utm_source=search", nil)
+		req.Host = canonicalFrontendHost
+		router.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusPermanentRedirect, w.Code)
+		assert.Equal(t, "/home?utm_source=search", w.Header().Get("Location"))
+	})
+
+	t.Run("redirects_legacy_web_routes_to_canonical_domain", func(t *testing.T) {
+		provider := &mockSettingsProvider{settings: map[string]string{"test": "value"}}
+		server, err := NewFrontendServer(provider)
+		require.NoError(t, err)
+
+		router := gin.New()
+		router.Use(server.Middleware())
+
+		tests := []struct {
+			path     string
+			expected string
+		}{
+			{path: "/", expected: canonicalHomeURL},
+			{path: "/home", expected: canonicalHomeURL},
+			{path: "/login?next=%2Fadmin%2Fdashboard", expected: canonicalFrontendOrigin + "/login?next=%2Fadmin%2Fdashboard"},
+			{path: "/admin/dashboard", expected: canonicalFrontendOrigin + "/admin/dashboard"},
+			{path: "/unknown-page", expected: canonicalFrontendOrigin + "/unknown-page"},
+		}
+
+		for _, tt := range tests {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			req.Host = legacyFrontendHost
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusPermanentRedirect, w.Code)
+			assert.Equal(t, tt.expected, w.Header().Get("Location"))
+		}
+	})
+
+	t.Run("keeps_api_routes_on_legacy_domain", func(t *testing.T) {
+		provider := &mockSettingsProvider{settings: map[string]string{"test": "value"}}
+		server, err := NewFrontendServer(provider)
+		require.NoError(t, err)
+
+		router := gin.New()
+		router.Use(server.Middleware())
+		apiPaths := []string{
+			"/v1/models",
+			"/v1beta/models",
+			"/backend-api/models",
+			"/antigravity/v1/models",
+			"/openai/v1/responses",
+		}
+		for _, path := range apiPaths {
+			router.GET(path, func(c *gin.Context) {
+				c.String(http.StatusOK, "ok")
+			})
+		}
+
+		for _, path := range apiPaths {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req.Host = legacyFrontendHost
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Equal(t, "ok", w.Body.String())
+		}
+	})
+
 	t.Run("serves_index_for_spa_routes", func(t *testing.T) {
 		provider := &mockSettingsProvider{
 			settings: map[string]string{"test": "value"},
@@ -523,7 +601,7 @@ func TestFrontendServer_Middleware(t *testing.T) {
 		router.Use(server.Middleware())
 
 		spaPaths := []string{
-			"/",
+			"/home",
 			"/dashboard",
 			"/users/123",
 			"/settings/profile",
@@ -533,10 +611,16 @@ func TestFrontendServer_Middleware(t *testing.T) {
 			t.Run(path, func(t *testing.T) {
 				w := httptest.NewRecorder()
 				req := httptest.NewRequest(http.MethodGet, path, nil)
+				req.Host = canonicalFrontendHost
 				router.ServeHTTP(w, req)
 
 				assert.Equal(t, http.StatusOK, w.Code)
 				assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
+				if path == "/home" {
+					assert.Empty(t, w.Header().Get("X-Robots-Tag"))
+				} else {
+					assert.Equal(t, noIndexRobots, w.Header().Get("X-Robots-Tag"))
+				}
 			})
 		}
 	})
@@ -615,7 +699,7 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 		assert.Contains(t, w.Header().Get("Content-Type"), "image/png")
 	})
 
-	t.Run("serves_index_html_for_root", func(t *testing.T) {
+	t.Run("redirects_root_to_home", func(t *testing.T) {
 		middleware := ServeEmbeddedFrontend()
 
 		router := gin.New()
@@ -623,11 +707,11 @@ func TestServeEmbeddedFrontend(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Host = canonicalFrontendHost
 		router.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Contains(t, w.Header().Get("Content-Type"), "text/html")
-		assert.Contains(t, w.Body.String(), "<!doctype html>")
+		assert.Equal(t, http.StatusPermanentRedirect, w.Code)
+		assert.Equal(t, "/home", w.Header().Get("Location"))
 	})
 
 	t.Run("serves_index_html_for_spa_routes", func(t *testing.T) {

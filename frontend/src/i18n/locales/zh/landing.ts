@@ -3,6 +3,12 @@ export default {
     title: '图片批量生成',
     description: '一次提交多条提示词，任务完成后可统一下载图片结果'
   },
+  seo: {
+    home: {
+      title: 'Claude、OpenAI、Gemini AI API 网关',
+      description: 'Poke API 是面向开发者与团队的 AI API 网关，一个 API Key 接入 Claude、OpenAI、Gemini 等主流模型，提供透明计费、稳定路由与隐私优先的数据处理。'
+    }
+  },
   // Home Page
   home: {
     viewDocs: '查看文档',

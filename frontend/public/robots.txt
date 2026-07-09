@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /home
+Allow: /robots.txt
+Allow: /sitemap.xml
+Disallow: /api/
+Disallow: /v1/
+Disallow: /v1beta/
+Disallow: /backend-api/
+Disallow: /antigravity/
+Disallow: /openai/
+
+Sitemap: https://www.poke2api.com/sitemap.xml

@@ -10,6 +10,7 @@ import (
 	htmlpkg "html"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -21,8 +22,14 @@ import (
 )
 
 const (
-	// NonceHTMLPlaceholder is the placeholder for nonce in HTML script tags
+	// NonceHTMLPlaceholder is the placeholder for nonce in HTML script tags.
 	NonceHTMLPlaceholder = "__CSP_NONCE_VALUE__"
+
+	canonicalFrontendHost   = "www.poke2api.com"
+	canonicalFrontendOrigin = "https://www.poke2api.com"
+	legacyFrontendHost      = "www.pokeapi.top"
+	canonicalHomeURL        = canonicalFrontendOrigin + "/home"
+	noIndexRobots           = "noindex, nofollow"
 )
 
 //go:embed all:dist
@@ -82,14 +89,62 @@ func (s *FrontendServer) InvalidateCache() {
 	}
 }
 
+func requestHostname(request *http.Request) string {
+	host := strings.ToLower(strings.TrimSpace(request.Host))
+	if hostname, _, err := net.SplitHostPort(host); err == nil {
+		host = hostname
+	}
+	return strings.TrimSuffix(host, ".")
+}
+
+func frontendCanonicalRedirect(request *http.Request, host string) (string, bool) {
+	if request.Method != http.MethodGet && request.Method != http.MethodHead {
+		return "", false
+	}
+
+	path := request.URL.Path
+	canonicalPath := path
+	if path == "/" || path == "/index.html" || path == "/home/" {
+		canonicalPath = "/home"
+	}
+
+	target := ""
+	if host == legacyFrontendHost {
+		target = canonicalFrontendOrigin + canonicalPath
+	} else if canonicalPath != path {
+		target = canonicalPath
+	} else {
+		return "", false
+	}
+
+	if request.URL.RawQuery != "" {
+		target += "?" + request.URL.RawQuery
+	}
+	return target, true
+}
+
+func applyFrontendSEOHeaders(c *gin.Context, path, host string) {
+	if path == "/home" && host == canonicalFrontendHost {
+		return
+	}
+	c.Header("X-Robots-Tag", noIndexRobots)
+}
+
 // Middleware returns the Gin middleware handler
 func (s *FrontendServer) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
 
-		// Skip API routes
+		// Skip API routes before applying website-only canonicalization.
 		if shouldBypassEmbeddedFrontend(path) {
 			c.Next()
+			return
+		}
+
+		host := requestHostname(c.Request)
+		if target, shouldRedirect := frontendCanonicalRedirect(c.Request, host); shouldRedirect {
+			c.Redirect(http.StatusPermanentRedirect, target)
+			c.Abort()
 			return
 		}
 
@@ -98,8 +153,9 @@ func (s *FrontendServer) Middleware() gin.HandlerFunc {
 			cleanPath = "index.html"
 		}
 
-		// For index.html or SPA routes, serve with injected settings
+		// For index.html or SPA routes, serve with injected settings.
 		if cleanPath == "index.html" || !s.fileExists(cleanPath) {
+			applyFrontendSEOHeaders(c, path, host)
 			s.serveIndexHTML(c)
 			return
 		}
@@ -170,16 +226,16 @@ func (s *FrontendServer) serveIndexHTML(c *gin.Context) {
 
 	settings, err := s.settings.GetPublicSettingsForInjection(ctx)
 	if err != nil {
-		// Fallback: serve without injection
-		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
+		// Fallback: serve without settings injection, but keep CSP nonces valid.
+		c.Data(http.StatusOK, "text/html; charset=utf-8", replaceNoncePlaceholder(s.baseHTML, nonce))
 		c.Abort()
 		return
 	}
 
 	settingsJSON, err := json.Marshal(settings)
 	if err != nil {
-		// Fallback: serve without injection
-		c.Data(http.StatusOK, "text/html; charset=utf-8", s.baseHTML)
+		// Fallback: serve without settings injection, but keep CSP nonces valid.
+		c.Data(http.StatusOK, "text/html; charset=utf-8", replaceNoncePlaceholder(s.baseHTML, nonce))
 		c.Abort()
 		return
 	}
@@ -231,7 +287,7 @@ func injectSiteTitle(html, settingsJSON []byte) []byte {
 		return html
 	}
 
-	newTitle := []byte("<title>" + htmlpkg.EscapeString(cfg.SiteName) + " - AI API Gateway</title>")
+	newTitle := []byte("<title>" + htmlpkg.EscapeString(cfg.SiteName) + "｜Claude、OpenAI、Gemini AI API 网关</title>")
 	var buf bytes.Buffer
 	buf.Write(html[:titleStart])
 	buf.Write(newTitle)
@@ -262,6 +318,13 @@ func ServeEmbeddedFrontend() gin.HandlerFunc {
 			return
 		}
 
+		host := requestHostname(c.Request)
+		if target, shouldRedirect := frontendCanonicalRedirect(c.Request, host); shouldRedirect {
+			c.Redirect(http.StatusPermanentRedirect, target)
+			c.Abort()
+			return
+		}
+
 		cleanPath := strings.TrimPrefix(path, "/")
 		if cleanPath == "" {
 			cleanPath = "index.html"
@@ -278,6 +341,7 @@ func ServeEmbeddedFrontend() gin.HandlerFunc {
 			return
 		}
 
+		applyFrontendSEOHeaders(c, path, host)
 		serveIndexHTML(c, distFS)
 	}
 }
@@ -304,6 +368,7 @@ func shouldBypassEmbeddedFrontend(path string) bool {
 		strings.HasPrefix(trimmed, "/v1beta/") ||
 		strings.HasPrefix(trimmed, "/backend-api/") ||
 		strings.HasPrefix(trimmed, "/antigravity/") ||
+		strings.HasPrefix(trimmed, "/openai/") ||
 		strings.HasPrefix(trimmed, "/setup/") ||
 		trimmed == "/health" ||
 		trimmed == "/responses" ||
@@ -327,6 +392,7 @@ func serveIndexHTML(c *gin.Context, fsys fs.FS) {
 		return
 	}
 
+	content = replaceNoncePlaceholder(content, middleware.GetNonceFromContext(c))
 	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 	c.Abort()
 }

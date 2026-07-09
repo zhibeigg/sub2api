@@ -3,6 +3,12 @@ export default {
     title: 'Batch Image Generation',
     description: 'Submit multiple prompts in one job and download the generated images when complete'
   },
+  seo: {
+    home: {
+      title: 'Claude, OpenAI & Gemini AI API Gateway',
+      description: 'Poke API is an AI API gateway for developers and teams. Use one API key for Claude, OpenAI, Gemini, and other leading models with transparent billing, stable routing, and privacy-first data handling.'
+    }
+  },
   // Home Page
   home: {
     viewDocs: 'View Documentation',

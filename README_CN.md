@@ -217,6 +217,22 @@ underscores_in_headers on;
 
 Nginx 默认会丢弃名称中含下划线的请求头（如 `session_id`），这会导致多账号环境下的粘性会话功能失效。
 
+### 生产 SEO 与域名规范化
+
+官方嵌入式前端会发布 `/robots.txt`、`/sitemap.xml` 和 `/favicon.png`。规范公开入口为 `https://www.poke2api.com/home`：根路径 `/` 永久重定向至 `/home`，登录、后台、回调和未知 SPA 页面则返回 `X-Robots-Tag: noindex, nofollow`。
+
+更换公开域名时，必须同步更新规范域名与搜索引擎发现文件：
+
+- `frontend/index.html`
+- `frontend/public/robots.txt`
+- `frontend/public/sitemap.xml`
+- `frontend/src/router/title.ts`
+- `backend/internal/web/embed_on.go`
+
+永久重定向、Canonical 和 Sitemap 必须保持一致。不要在 `robots.txt` 中完全屏蔽私有 SPA 路由，否则爬虫无法读取页面的 `noindex` 指令。旧网页域名应使用永久重定向，但 API 前缀必须继续可达以保证客户端兼容性。
+
+文档站也应独立发布 `robots.txt` 与 Sitemap，为每个可索引页面添加自引用 Canonical，从 Sitemap 中排除 404 页面，并将旧文档域名永久重定向到当前域名。
+
 ---
 
 ## 部署方式

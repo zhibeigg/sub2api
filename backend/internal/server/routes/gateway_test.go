@@ -116,8 +116,8 @@ func TestGatewayRoutesGrokImagesAndVideosPathsAreRegistered(t *testing.T) {
 	}
 }
 
-func TestGatewayRoutesNonGrokVideosAreRejectedAtPlatformGate(t *testing.T) {
-	router := newGatewayRoutesTestRouter(service.PlatformOpenAI)
+func TestGatewayRoutesUnsupportedVideosAreRejectedAtPlatformGate(t *testing.T) {
+	router := newGatewayRoutesTestRouter(service.PlatformAnthropic)
 
 	for _, tc := range []struct {
 		method string
