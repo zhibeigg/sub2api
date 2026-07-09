@@ -521,6 +521,8 @@ export default {
       allModels: '全部模型',
       allAccounts: '全部账户',
       allGroups: '全部分组',
+      allPromoCodes: '全部优惠码',
+      promoCode: '优惠码',
       allTypes: '全部类型',
       inputCost: '输入费用',
       outputCost: '输出费用',

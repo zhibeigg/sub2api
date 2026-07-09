@@ -163,6 +163,12 @@
           <Select v-model="filters.group_id" :options="groupOptions" searchable @change="emitChange" />
         </div>
 
+        <!-- Promo Code Filter (usage only) -->
+        <div v-if="mode !== 'errors'" class="w-full sm:w-auto sm:min-w-[200px]">
+          <label class="input-label">{{ t('admin.usage.promoCode') }}</label>
+          <Select v-model="filters.promo_code_id" :options="promoCodeOptions" searchable @change="emitChange" />
+        </div>
+
       </div>
 
       <!-- Right: actions -->
@@ -252,6 +258,7 @@ const modelOptions = computed<SelectOption[]>(() => [
   ...(props.modelOptions ?? []).map((m) => ({ value: m, label: m })),
 ])
 const groupOptions = ref<SelectOption[]>([{ value: null, label: t('admin.usage.allGroups') }])
+const promoCodeOptions = ref<SelectOption[]>([{ value: null, label: t('admin.usage.allPromoCodes') }])
 
 const requestTypeOptions = ref<SelectOption[]>([
   { value: null, label: t('admin.usage.allTypes') },
@@ -477,6 +484,12 @@ onMounted(async () => {
   try {
     const gs = await adminAPI.groups.list(1, 1000)
     groupOptions.value.push(...gs.items.map((g: any) => ({ value: g.id, label: g.name })))
+  } catch {
+    // Ignore filter option loading errors (page still usable)
+  }
+  try {
+    const pcs = await adminAPI.promo.list(1, 1000)
+    promoCodeOptions.value.push(...pcs.items.map((p) => ({ value: p.id, label: p.code })))
   } catch {
     // Ignore filter option loading errors (page still usable)
   }

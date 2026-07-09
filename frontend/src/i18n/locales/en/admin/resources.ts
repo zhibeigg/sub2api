@@ -461,6 +461,8 @@ export default {
       allModels: 'All Models',
       allAccounts: 'All Accounts',
       allGroups: 'All Groups',
+      allPromoCodes: 'All Promo Codes',
+      promoCode: 'Promo Code',
       allTypes: 'All Types',
       inputCost: 'Input Cost',
       outputCost: 'Output Cost',
