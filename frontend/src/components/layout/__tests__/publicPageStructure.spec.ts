@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 
 const dir = dirname(fileURLToPath(import.meta.url))
 const homeViewSource = readFileSync(resolve(dir, '../../../views/HomeView.vue'), 'utf8')
+const zhLandingSource = readFileSync(resolve(dir, '../../../i18n/locales/zh/landing.ts'), 'utf8')
 const loginViewSource = readFileSync(resolve(dir, '../../../views/auth/LoginView.vue'), 'utf8')
 const registerViewSource = readFileSync(resolve(dir, '../../../views/auth/RegisterView.vue'), 'utf8')
 const authLayoutSource = readFileSync(resolve(dir, '../AuthLayout.vue'), 'utf8')
@@ -38,6 +39,12 @@ describe('public page structure', () => {
     expect(homeViewSource).toContain("t('home.privacy.minimum')")
     expect(authLayoutSource).toContain("t('auth.brand.privacyTitle')")
     expect(authLayoutSource).toContain("t('auth.brand.privacyNote')")
+  })
+
+  it('puts the long-term operating commitment in the primary hero', () => {
+    expect(homeViewSource).toContain("t('home.hero.commitment')")
+    expect(homeViewSource).toContain('class="home-commitment"')
+    expect(zhLandingSource).toContain("commitment: '长期运营承诺：绝不跑路。'")
   })
 
   it('keeps light and dark theme controls on both public surfaces', () => {

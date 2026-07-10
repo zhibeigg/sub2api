@@ -70,6 +70,7 @@ export default {
       metaControl: 'Clear billing · Traceable usage',
       description:
         'PokeAPI is an AI aggregation gateway for developers. It preserves mainstream provider protocols and model capabilities, uses multi-channel routing to reduce single-point failures, and bills by actual usage.',
+      commitment: 'Long-term commitment: PokeAPI is here to stay.',
       ctaPrimary: 'Get started',
       ctaDocs: 'Read the docs',
       baseUrlOpenai: 'OpenAI Compatible',

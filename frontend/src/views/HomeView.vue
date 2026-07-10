@@ -113,6 +113,10 @@
                 </component>
                 <p class="home-hero-subtitle">{{ storySceneText(scene.key, 'subtitle') }}</p>
                 <p class="home-hero-description">{{ storySceneText(scene.key, 'description') }}</p>
+                <p v-if="index === 0" class="home-commitment">
+                  <span aria-hidden="true"></span>
+                  {{ t('home.hero.commitment') }}
+                </p>
 
                 <div v-if="index === 0" class="home-hero-actions">
                   <router-link
@@ -867,6 +871,32 @@ onBeforeUnmount(() => {
   color: var(--public-muted);
   font-size: 1rem;
   line-height: 1.75;
+}
+
+.home-commitment {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  width: fit-content;
+  margin: 1.25rem 0 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--public-line-strong);
+  background: var(--public-accent-soft);
+  color: var(--public-ink);
+  font-family: var(--public-font-mono);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+}
+
+.home-commitment span {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--public-accent);
+  box-shadow: 0 0 0 0.3rem var(--public-accent-soft);
 }
 
 .home-hero-actions {

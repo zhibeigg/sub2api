@@ -70,6 +70,7 @@ export default {
       metaControl: '透明计费 · 用量可查',
       description:
         'PokeAPI 是面向开发者的 AI 聚合中转站。保留主流官方协议与模型能力，通过多通道路由降低单点影响，并按实际用量计费。',
+      commitment: '长期运营承诺：绝不跑路。',
       ctaPrimary: '开始使用',
       ctaDocs: '阅读接入文档',
       baseUrlOpenai: 'OpenAI 兼容',
