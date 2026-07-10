@@ -106,9 +106,11 @@ func ProvideAccountTestService(
 	cfg *config.Config,
 	tlsFPProfileService *TLSFingerprintProfileService,
 	adobeTokenProvider *AdobeTokenProvider,
+	cursorGatewayService *CursorGatewayService,
 ) *AccountTestService {
 	service := NewAccountTestService(accountRepo, geminiTokenProvider, claudeTokenProvider, grokTokenProvider, antigravityGatewayService, httpUpstream, cfg, tlsFPProfileService)
 	service.SetAdobeTokenProvider(adobeTokenProvider)
+	service.SetCursorGatewayService(cursorGatewayService)
 	return service
 }
 
@@ -701,6 +703,7 @@ var ProviderSet = wire.NewSet(
 	ProvideGrokQuotaService,
 	ProvideClaudeTokenProvider,
 	NewAntigravityGatewayService,
+	NewCursorGatewayService,
 	NewKiroGatewayService,
 	ProvideRateLimitService,
 	ProvideAccountUsageService,

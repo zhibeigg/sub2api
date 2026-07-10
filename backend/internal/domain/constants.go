@@ -24,6 +24,7 @@ const (
 	PlatformAntigravity = "antigravity"
 	PlatformGrok        = "grok"
 	PlatformAdobe       = "adobe"
+	PlatformCursor      = "cursor"
 	PlatformKiro        = "kiro" // AWS Kiro / CodeWhisperer (provides Claude models)
 )
 
@@ -35,6 +36,7 @@ const (
 	AccountTypeUpstream       = "upstream"        // 上游透传类型账号（通过 Base URL + API Key 连接上游）
 	AccountTypeBedrock        = "bedrock"         // AWS Bedrock 类型账号（通过 SigV4 签名或 API Key 连接 Bedrock，由 credentials.auth_mode 区分）
 	AccountTypeServiceAccount = "service_account" // Google Service Account 类型账号（用于 Vertex AI）
+	AccountTypeCookie         = "cookie"          // Cookie 凭据账号（Cursor 文档聊天）
 )
 
 // Redeem type constants
@@ -172,6 +174,13 @@ var DefaultAdobeModelMapping = map[string]string{
 	"veo3.1":          "veo3.1",
 	"sora":            "sora",
 	"sora-2-pro":      "sora-2-pro",
+}
+
+// DefaultCursorModelMapping 是 Cursor 文档聊天平台的保守默认模型映射。
+// 管理员可通过账号 model_mapping 显式增加别名；默认不广告与真实上游脱节的模型名。
+var DefaultCursorModelMapping = map[string]string{
+	"cursor-chat":           "google/gemini-3-flash",
+	"google/gemini-3-flash": "google/gemini-3-flash",
 }
 
 // DefaultKiroModelMapping 是 Kiro 平台的默认模型映射（模型白名单）。

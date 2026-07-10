@@ -18,6 +18,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	cursorpkg "github.com/Wei-Shaw/sub2api/internal/pkg/cursor"
 	pkgerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
@@ -41,6 +42,7 @@ type GatewayHandler struct {
 	gatewayService            *service.GatewayService
 	geminiCompatService       *service.GeminiMessagesCompatService
 	antigravityGatewayService *service.AntigravityGatewayService
+	cursorGatewayService      *service.CursorGatewayService
 	kiroGatewayService        *service.KiroGatewayService
 	userService               *service.UserService
 	billingCacheService       *service.BillingCacheService
@@ -62,6 +64,7 @@ func NewGatewayHandler(
 	gatewayService *service.GatewayService,
 	geminiCompatService *service.GeminiMessagesCompatService,
 	antigravityGatewayService *service.AntigravityGatewayService,
+	cursorGatewayService *service.CursorGatewayService,
 	kiroGatewayService *service.KiroGatewayService,
 	userService *service.UserService,
 	concurrencyService *service.ConcurrencyService,
@@ -98,6 +101,7 @@ func NewGatewayHandler(
 		gatewayService:            gatewayService,
 		geminiCompatService:       geminiCompatService,
 		antigravityGatewayService: antigravityGatewayService,
+		cursorGatewayService:      cursorGatewayService,
 		kiroGatewayService:        kiroGatewayService,
 		userService:               userService,
 		billingCacheService:       billingCacheService,
@@ -799,6 +803,8 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			writerSizeBeforeForward := c.Writer.Size()
 			if account.Platform == service.PlatformAntigravity && account.Type != service.AccountTypeAPIKey {
 				result, err = h.antigravityGatewayService.Forward(requestCtx, c, account, attemptBody, hasBoundSession)
+			} else if account.Platform == service.PlatformCursor {
+				result, err = h.cursorGatewayService.Forward(requestCtx, c, account, attemptBody)
 			} else if account.Platform == service.PlatformKiro && account.Type != service.AccountTypeAPIKey {
 				result, err = h.kiroGatewayService.Forward(requestCtx, c, account, attemptBody)
 			} else {
@@ -1186,6 +1192,12 @@ func defaultModelIDsForPlatform(platform string) []string {
 		return mergeModelIDs(ids, nil)
 	case service.PlatformGrok:
 		return xai.DefaultModelIDs()
+	case service.PlatformCursor:
+		ids := make([]string, 0, len(domain.DefaultCursorModelMapping))
+		for id := range domain.DefaultCursorModelMapping {
+			ids = append(ids, id)
+		}
+		return ids
 	case service.PlatformKiro:
 		ids := make([]string, 0, len(domain.DefaultKiroModelMapping))
 		for id := range domain.DefaultKiroModelMapping {
@@ -1888,7 +1900,16 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
 	}
 	setOpsSelectedAccount(c, account.ID, account.Platform)
 
-	// 转发请求（不记录使用量）
+	// 转发请求（不记录使用量）。Cursor 文档聊天没有 count_tokens 接口，使用本地确定性估算。
+	if account.Platform == service.PlatformCursor {
+		count, countErr := h.cursorGatewayService.CountTokens(body, cursorpkg.ProtocolAnthropic)
+		if countErr != nil {
+			h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", countErr.Error())
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"input_tokens": count})
+		return
+	}
 	if err := h.gatewayService.ForwardCountTokens(c.Request.Context(), c, account, parsedReq); err != nil {
 		reqLog.Error("gateway.count_tokens_forward_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 		// 错误响应已在 ForwardCountTokens 中处理

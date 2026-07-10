@@ -92,6 +92,7 @@ type Config struct {
 	Timezone                string                        `mapstructure:"timezone"` // e.g. "Asia/Shanghai", "UTC"
 	Gemini                  GeminiConfig                  `mapstructure:"gemini"`
 	Adobe                   AdobeConfig                   `mapstructure:"adobe"`
+	Cursor                  CursorConfig                  `mapstructure:"cursor"`
 	Kiro                    KiroConfig                    `mapstructure:"kiro"`
 	Update                  UpdateConfig                  `mapstructure:"update"`
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
@@ -143,6 +144,22 @@ type AdobeConfig struct {
 	VideoTerminalTTLSeconds  int `mapstructure:"video_terminal_ttl_seconds"`
 	TokenRefreshSkewSeconds  int `mapstructure:"token_refresh_skew_seconds"`
 	CreditsCacheTTLSeconds   int `mapstructure:"credits_cache_ttl_seconds"`
+}
+
+// CursorConfig configures the manually authenticated Cursor documentation chat
+// adapter. It never controls browser automation or challenge bypass behavior.
+type CursorConfig struct {
+	BaseURL                  string `mapstructure:"base_url"`
+	RequestTimeoutSeconds    int    `mapstructure:"request_timeout_seconds"`
+	StreamIdleTimeoutSeconds int    `mapstructure:"stream_idle_timeout_seconds"`
+	DefaultModel             string `mapstructure:"default_model"`
+	Referer                  string `mapstructure:"referer"`
+	UserAgent                string `mapstructure:"user_agent"`
+	MaxHistoryTokens         int    `mapstructure:"max_history_tokens"`
+	MaxHistoryMessages       int    `mapstructure:"max_history_messages"`
+	MaxAutoContinue          int    `mapstructure:"max_auto_continue"`
+	ResponsesTTLSeconds      int    `mapstructure:"responses_ttl_seconds"`
+	ToolDescriptionMaxLength int    `mapstructure:"tool_description_max_length"`
 }
 
 // KiroConfig holds Kiro / AWS CodeWhisperer platform tuning: the spoofed IDE
@@ -1711,6 +1728,8 @@ func setDefaults() {
 		"firefly.adobe.io",
 		"firefly-3p.ff.adobe.io",
 		"*.ff.adobe.io",
+		"cursor.com",
+		"*.cursor.com",
 		"*.openai.azure.com",
 	})
 	viper.SetDefault("security.url_allowlist.pricing_hosts", []string{
@@ -1895,6 +1914,19 @@ func setDefaults() {
 	viper.SetDefault("adobe.video_terminal_ttl_seconds", 24*60*60)
 	viper.SetDefault("adobe.token_refresh_skew_seconds", 5*60)
 	viper.SetDefault("adobe.credits_cache_ttl_seconds", 5*60)
+
+	// Cursor documentation chat (manual Cookie authentication only)
+	viper.SetDefault("cursor.base_url", "https://cursor.com")
+	viper.SetDefault("cursor.request_timeout_seconds", 120)
+	viper.SetDefault("cursor.stream_idle_timeout_seconds", 60)
+	viper.SetDefault("cursor.default_model", "google/gemini-3-flash")
+	viper.SetDefault("cursor.referer", "https://cursor.com/docs")
+	viper.SetDefault("cursor.user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+	viper.SetDefault("cursor.max_history_tokens", 24000)
+	viper.SetDefault("cursor.max_history_messages", 100)
+	viper.SetDefault("cursor.max_auto_continue", 0)
+	viper.SetDefault("cursor.responses_ttl_seconds", 86400)
+	viper.SetDefault("cursor.tool_description_max_length", 1024)
 
 	// Ops (vNext)
 	viper.SetDefault("ops.enabled", true)

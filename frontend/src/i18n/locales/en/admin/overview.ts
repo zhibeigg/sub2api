@@ -496,6 +496,7 @@ export default {
         usageGemini: 'Usage (Gemini)',
         usageAntigravity: 'Usage (Antigravity)',
         usageAdobe: 'Usage (Adobe)',
+        usageCursor: 'Usage (Cursor)',
         concurrency: 'Concurrency',
         status: 'Status',
         lastActive: 'Last Active',
@@ -898,6 +899,9 @@ export default {
         gemini: 'Gemini',
         antigravity: 'Antigravity',
         grok: 'Grok',
+        adobe: 'Adobe',
+        cursor: 'Cursor',
+        kiro: 'Kiro',
       },
       deleteConfirm:
         "Are you sure you want to delete '{name}'? All associated API keys will no longer belong to any group.",

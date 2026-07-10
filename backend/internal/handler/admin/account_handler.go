@@ -1102,6 +1102,9 @@ func (h *AccountHandler) PreviewFromCRS(c *gin.Context) {
 // refreshSingleAccount refreshes credentials for a single OAuth account.
 // Returns (updatedAccount, warning, error) where warning is used for Antigravity ProjectIDMissing scenario.
 func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *service.Account) (*service.Account, string, error) {
+	if account.IsCursor() {
+		return nil, "", infraerrors.BadRequest("CURSOR_MANUAL_COOKIE_REQUIRED", "Cursor documentation chat has no OAuth refresh flow; replace the account Cookie manually")
+	}
 	if !account.IsOAuth() {
 		return nil, "", infraerrors.BadRequest("NOT_OAUTH", "cannot refresh non-OAuth account")
 	}
@@ -2293,6 +2296,19 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 			}
 			models = append(models, firefly.ModelInfo{ID: requestedModel, DisplayName: requestedModel, Type: "model"})
 		}
+		response.Success(c, models)
+		return
+	}
+
+	// Cursor uses a controlled local catalog because the documentation chat endpoint
+	// has no official model-discovery API.
+	if account.IsCursor() {
+		mapping := account.GetModelMapping()
+		models := make([]openai.Model, 0, len(mapping))
+		for requestedModel := range mapping {
+			models = append(models, openai.Model{ID: requestedModel, Object: "model", Type: "model", DisplayName: requestedModel})
+		}
+		sort.Slice(models, func(i, j int) bool { return models[i].ID < models[j].ID })
 		response.Success(c, models)
 		return
 	}

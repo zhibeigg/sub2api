@@ -494,7 +494,7 @@ export interface PaginationConfig {
 
 // ==================== API Key & Group Types ====================
 
-export type GroupPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'adobe' | 'kiro'
+export type GroupPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'adobe' | 'cursor' | 'kiro'
 
 export type SubscriptionType = 'standard' | 'subscription'
 
@@ -752,8 +752,8 @@ export interface UpdateGroupRequest {
 
 // ==================== Account & Proxy Types ====================
 
-export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'adobe' | 'kiro'
-export type AccountType = 'oauth' | 'setup-token' | 'apikey' | 'upstream' | 'bedrock' | 'service_account'
+export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'adobe' | 'cursor' | 'kiro'
+export type AccountType = 'oauth' | 'setup-token' | 'apikey' | 'upstream' | 'bedrock' | 'service_account' | 'cookie'
 export type OAuthAddMethod = 'oauth' | 'setup-token'
 export type ProxyProtocol = 'http' | 'https' | 'socks5' | 'socks5h'
 
@@ -1097,6 +1097,11 @@ export interface AccountUsageInfo {
     minimum_balance?: number
   }> | null
   adobe_credits?: AdobeCreditsInfo | null
+  // Cursor 本地用量与 Cookie 凭据状态（兼容后端逐步上线）
+  cursor_local_usage?: WindowStats | null
+  cursor_cookie_expires_at?: string | null
+  cursor_credentials_valid?: boolean | null
+  cursor_credentials_status?: string | null
   // Antigravity 403 forbidden 状态
   is_forbidden?: boolean
   forbidden_reason?: string

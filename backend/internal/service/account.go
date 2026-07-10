@@ -240,6 +240,14 @@ func (a *Account) IsAdobeOAuth() bool {
 	return a.IsAdobe() && a.Type == AccountTypeOAuth
 }
 
+func (a *Account) IsCursor() bool {
+	return a != nil && a.Platform == PlatformCursor
+}
+
+func (a *Account) IsCursorCookie() bool {
+	return a.IsCursor() && a.Type == AccountTypeCookie
+}
+
 func (a *Account) IsGrokOAuth() bool {
 	return a.IsGrok() && a.Type == AccountTypeOAuth
 }
@@ -577,6 +585,9 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 		if a.Platform == domain.PlatformAdobe {
 			return domain.DefaultAdobeModelMapping
 		}
+		if a.Platform == domain.PlatformCursor {
+			return domain.DefaultCursorModelMapping
+		}
 		// Bedrock 默认映射由 forwardBedrock 统一处理（需配合 region prefix 调整）
 		return nil
 	}
@@ -590,6 +601,9 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 		}
 		if a.Platform == domain.PlatformAdobe {
 			return domain.DefaultAdobeModelMapping
+		}
+		if a.Platform == domain.PlatformCursor {
+			return domain.DefaultCursorModelMapping
 		}
 		return nil
 	}
@@ -621,6 +635,9 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 	}
 	if a.Platform == domain.PlatformAdobe {
 		return domain.DefaultAdobeModelMapping
+	}
+	if a.Platform == domain.PlatformCursor {
+		return domain.DefaultCursorModelMapping
 	}
 	return nil
 }
@@ -1816,12 +1833,11 @@ func (a *Account) IsAnthropicOAuthOrSetupToken() bool {
 	return a.Platform == PlatformAnthropic && (a.Type == AccountTypeOAuth || a.Type == AccountTypeSetupToken)
 }
 
-// IsTLSFingerprintEnabled 检查是否启用 TLS 指纹伪装
-// 仅适用于 Anthropic OAuth/SetupToken 类型账号
-// 启用后将模拟 Claude Code (Node.js) 客户端的 TLS 握手特征
+// IsTLSFingerprintEnabled 检查是否启用 TLS 指纹伪装。
+// Anthropic OAuth/SetupToken 和 Cursor Cookie 账号可显式启用；Cursor 建议绑定管理员
+// 创建的浏览器 profile，避免把内置 Node.js 默认 profile 误认为官方 Cursor 客户端。
 func (a *Account) IsTLSFingerprintEnabled() bool {
-	// 仅支持 Anthropic OAuth/SetupToken 账号
-	if !a.IsAnthropicOAuthOrSetupToken() {
+	if !a.IsAnthropicOAuthOrSetupToken() && !a.IsCursorCookie() {
 		return false
 	}
 	if a.Extra == nil {

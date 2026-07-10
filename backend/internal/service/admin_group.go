@@ -117,6 +117,8 @@ func defaultModelsListCandidateIDs(platform string) []string {
 		return xai.DefaultModelIDs()
 	case PlatformAdobe:
 		return firefly.PublicModelIDs()
+	case PlatformCursor:
+		return []string{"cursor-chat", "google/gemini-3-flash"}
 	default:
 		ids := make([]string, 0, len(claude.DefaultModels))
 		for _, model := range claude.DefaultModels {
@@ -391,9 +393,9 @@ func (s *adminServiceImpl) validateFallbackGroup(ctx context.Context, currentGro
 			return fmt.Errorf("fallback group not found: %w", err)
 		}
 
-		// Adobe 是独立平台，整个降级链都必须保持在 Adobe 内部，不能跨平台调度。
-		if requiredPlatform == PlatformAdobe && fallbackGroup.Platform != PlatformAdobe {
-			return fmt.Errorf("adobe fallback group must use adobe platform")
+		// Adobe 与 Cursor 都是独立平台，整个降级链必须保持在同一平台内。
+		if (requiredPlatform == PlatformAdobe || requiredPlatform == PlatformCursor) && fallbackGroup.Platform != requiredPlatform {
+			return fmt.Errorf("%s fallback group must use %s platform", requiredPlatform, requiredPlatform)
 		}
 
 		// 降级分组不能启用 claude_code_only，否则会造成死循环
@@ -580,7 +582,7 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 			group.FallbackGroupID = nil
 		}
 	}
-	if input.FallbackGroupID == nil && group.Platform == PlatformAdobe && group.FallbackGroupID != nil {
+	if input.FallbackGroupID == nil && (group.Platform == PlatformAdobe || group.Platform == PlatformCursor) && group.FallbackGroupID != nil {
 		if err := s.validateFallbackGroup(ctx, id, *group.FallbackGroupID, group.Platform); err != nil {
 			return nil, err
 		}

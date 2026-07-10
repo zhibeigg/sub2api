@@ -100,7 +100,7 @@ func buildProxyKey(protocol, host string, port int, username, password string) s
 }
 
 func exportAccountCredentials(account service.Account) (map[string]any, map[string]bool) {
-	if account.IsAdobe() {
+	if account.IsAdobe() || account.IsCursor() {
 		return dto.RedactCredentials(account.Credentials)
 	}
 	return account.Credentials, nil

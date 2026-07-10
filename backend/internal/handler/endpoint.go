@@ -29,6 +29,7 @@ const (
 	EndpointAdobeVideoSubmit  = "firefly:video-submit"
 	EndpointAdobeVideoStatus  = "firefly:video-status"
 	EndpointAdobeStorage      = "firefly:storage-asset"
+	EndpointCursorChat        = "/api/chat"
 )
 
 // gin.Context keys used by the middleware and helpers below.
@@ -203,6 +204,9 @@ func DeriveUpstreamEndpoint(inbound, rawRequestPath, platform string) string {
 			return EndpointGeminiModels
 		}
 		return EndpointMessages
+
+	case service.PlatformCursor:
+		return EndpointCursorChat
 
 	case service.PlatformAdobe:
 		switch inbound {

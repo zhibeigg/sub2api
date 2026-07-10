@@ -43,6 +43,7 @@ const (
 	PlatformAntigravity = domain.PlatformAntigravity
 	PlatformGrok        = domain.PlatformGrok
 	PlatformAdobe       = domain.PlatformAdobe
+	PlatformCursor      = domain.PlatformCursor
 	PlatformKiro        = domain.PlatformKiro
 )
 
@@ -56,6 +57,7 @@ var AllowedQuotaPlatforms = []string{
 	PlatformAntigravity,
 	PlatformGrok,
 	PlatformAdobe,
+	PlatformCursor,
 }
 
 // IsAllowedQuotaPlatform 报告 s 是否为合法的 quota platform 标识。
@@ -76,6 +78,7 @@ const (
 	AccountTypeUpstream       = domain.AccountTypeUpstream       // 上游透传类型账号（通过 Base URL + API Key 连接上游）
 	AccountTypeBedrock        = domain.AccountTypeBedrock        // AWS Bedrock 类型账号（通过 SigV4 签名或 API Key 连接 Bedrock，由 credentials.auth_mode 区分）
 	AccountTypeServiceAccount = domain.AccountTypeServiceAccount // Google Service Account 类型账号（用于 Vertex AI）
+	AccountTypeCookie         = domain.AccountTypeCookie         // Cookie 凭据账号（Cursor 文档聊天）
 )
 
 // Redeem type constants

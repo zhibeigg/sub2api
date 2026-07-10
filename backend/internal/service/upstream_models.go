@@ -91,6 +91,9 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 	if account.Platform == PlatformAdobe {
 		return nil, newUpstreamModelSyncUnsupportedError("Adobe Firefly does not expose a dynamic upstream model list; use the local Firefly catalog", nil)
 	}
+	if account.Platform == PlatformCursor {
+		return nil, newUpstreamModelSyncUnsupportedError("Cursor documentation chat does not expose an official dynamic model list; use the controlled local catalog", nil)
+	}
 
 	if s.httpUpstream == nil {
 		return nil, newUpstreamModelSyncConfigError("Upstream HTTP client is not configured", nil)

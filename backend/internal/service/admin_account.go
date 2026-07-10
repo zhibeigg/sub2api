@@ -83,6 +83,12 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 			return nil, err
 		}
 	}
+	if input.Platform == PlatformCursor {
+		NormalizeCursorCredentialExpiry(input.Credentials)
+		if err := ValidateCursorAccountCredentials(input.Type, input.Credentials); err != nil {
+			return nil, err
+		}
+	}
 	// 绑定分组
 	groupIDs := input.GroupIDs
 	// 如果没有指定分组,自动绑定对应平台的默认分组
@@ -99,7 +105,7 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 		}
 	}
 
-	if input.Platform == PlatformAdobe && len(groupIDs) > 0 {
+	if (input.Platform == PlatformAdobe || input.Platform == PlatformCursor) && len(groupIDs) > 0 {
 		if err := s.validateAccountGroupPlatform(ctx, input.Platform, groupIDs); err != nil {
 			return nil, err
 		}
@@ -340,13 +346,19 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 			return nil, err
 		}
 	}
+	if account.IsCursor() {
+		NormalizeCursorCredentialExpiry(account.Credentials)
+		if err := ValidateCursorAccountCredentials(account.Type, account.Credentials); err != nil {
+			return nil, err
+		}
+	}
 
 	// 先验证分组是否存在（在任何写操作之前）
 	if input.GroupIDs != nil {
 		if err := s.validateGroupIDsExist(ctx, *input.GroupIDs); err != nil {
 			return nil, err
 		}
-		if account.IsAdobe() {
+		if account.IsAdobe() || account.IsCursor() {
 			if err := s.validateAccountGroupPlatform(ctx, account.Platform, *input.GroupIDs); err != nil {
 				return nil, err
 			}

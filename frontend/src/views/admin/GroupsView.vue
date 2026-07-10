@@ -3513,6 +3513,7 @@ import { useAppStore } from "@/stores/app";
 import { useOnboardingStore } from "@/stores/onboarding";
 import { adminAPI } from "@/api/admin";
 import type { AdminGroup, GroupPlatform, SubscriptionType } from "@/types";
+import { PLATFORM_ORDER, PLATFORM_REGISTRY } from "@/constants/platforms";
 import type { Column } from "@/components/common/types";
 import AppLayout from "@/components/layout/AppLayout.vue";
 import TablePageLayout from "@/components/layout/TablePageLayout.vue";
@@ -3689,23 +3690,16 @@ const exclusiveOptions = computed(() => [
   { value: "false", label: t("admin.groups.nonExclusive") },
 ]);
 
-const platformOptions = computed(() => [
-  { value: "anthropic", label: "Anthropic" },
-  { value: "openai", label: "OpenAI" },
-  { value: "gemini", label: "Gemini" },
-  { value: "antigravity", label: "Antigravity" },
-  { value: "grok", label: "Grok" },
-  { value: "adobe", label: "Adobe" },
-]);
+const platformOptions = computed(() =>
+  PLATFORM_ORDER.filter((platform) => platform !== "kiro").map((platform) => ({
+    value: platform,
+    label: PLATFORM_REGISTRY[platform].label,
+  })),
+);
 
 const platformFilterOptions = computed(() => [
   { value: "", label: t("admin.groups.allPlatforms") },
-  { value: "anthropic", label: "Anthropic" },
-  { value: "openai", label: "OpenAI" },
-  { value: "gemini", label: "Gemini" },
-  { value: "antigravity", label: "Antigravity" },
-  { value: "grok", label: "Grok" },
-  { value: "adobe", label: "Adobe" },
+  ...platformOptions.value,
 ]);
 
 const editStatusOptions = computed(() => [

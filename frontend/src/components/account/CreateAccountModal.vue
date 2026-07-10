@@ -175,6 +175,19 @@
           </button>
           <button
             type="button"
+            @click.stop.prevent="selectPlatform('cursor')"
+            :class="[
+              'flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500',
+              form.platform === 'cursor'
+                ? 'bg-white text-cyan-700 shadow-sm dark:bg-dark-600 dark:text-cyan-300'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <PlatformIcon platform="cursor" size="sm" />
+            Cursor
+          </button>
+          <button
+            type="button"
             @click.stop.prevent="selectPlatform('kiro')"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
@@ -188,6 +201,32 @@
           </button>
         </div>
       </div>
+
+      <!-- Cursor is a single-step Cookie credential import. -->
+      <section v-if="form.platform === 'cursor'" class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600" data-testid="cursor-credentials-form">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.accounts.cursor.credentialsTitle') }}</h3>
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.credentialsHint') }}</p>
+        </div>
+        <div>
+          <label class="input-label" for="cursor-cookie">{{ t('admin.accounts.cursor.cookie') }}</label>
+          <input id="cursor-cookie" v-model="cursorCredentials.cookie" type="password" autocomplete="new-password" class="input font-mono" :placeholder="t('admin.accounts.cursor.cookiePlaceholder')" data-1p-ignore data-lpignore="true" data-bwignore="true" />
+        </div>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label class="input-label" for="cursor-cookie-expires-at">{{ t('admin.accounts.cursor.cookieExpiresAt') }}</label>
+            <input id="cursor-cookie-expires-at" v-model="cursorCredentials.cookie_expires_at" type="datetime-local" class="input" />
+          </div>
+          <div>
+            <label class="input-label" for="cursor-upstream-model">{{ t('admin.accounts.cursor.upstreamModel') }}</label>
+            <input id="cursor-upstream-model" v-model="cursorCredentials.cursor_upstream_model" type="text" class="input font-mono" :placeholder="t('admin.accounts.cursor.upstreamModelPlaceholder')" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="input-label" for="cursor-referer">{{ t('admin.accounts.cursor.referer') }}</label>
+            <input id="cursor-referer" v-model="cursorCredentials.cursor_referer" type="url" class="input font-mono" :placeholder="t('admin.accounts.cursor.refererPlaceholder')" />
+          </div>
+        </div>
+      </section>
 
       <!-- Adobe uses oauth storage but is a single-step credential import. -->
       <section v-if="form.platform === 'adobe'" class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600">
@@ -2026,7 +2065,7 @@
 
       <!-- OpenAI / Grok / Kiro OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
       <div
-        v-if="(form.platform === 'openai' || form.platform === 'grok' || form.platform === 'adobe' || form.platform === 'kiro') && accountCategory === 'oauth-based'"
+        v-if="(form.platform === 'openai' || form.platform === 'grok' || form.platform === 'adobe' || form.platform === 'cursor' || form.platform === 'kiro') && accountCategory === 'oauth-based'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
@@ -3613,6 +3652,7 @@ import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import {
   applyAntigravityProjectID,
+  buildCursorCreateCredentials,
   buildAdobeCreateCredentials,
   validateAdobeCredentialSource,
   applyHeaderOverride,
@@ -3756,6 +3796,9 @@ const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_acco
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
+const cursorCredentials = reactive({
+  cookie: '', cookie_expires_at: '', cursor_upstream_model: '', cursor_referer: ''
+})
 const adobeCredentials = reactive({
   access_token: '', cookie: '', device_token: '', device_id: '', password: '', expires_at: ''
 })
@@ -4146,7 +4189,7 @@ const form = reactive({
 
 // Helper to check if current type needs OAuth flow
 const isOAuthFlow = computed(() => {
-  if (form.platform === 'adobe') return false
+  if (form.platform === 'adobe' || form.platform === 'cursor') return false
   // Antigravity upstream 类型不需要 OAuth 流程
   if (form.platform === 'antigravity' && antigravityAccountType.value === 'upstream') {
     return false
@@ -4167,6 +4210,15 @@ const selectPlatform = (platform: AccountPlatform) => {
 
   step.value = 1
   form.platform = platform
+
+  if (platform === 'cursor') {
+    accountCategory.value = 'oauth-based'
+    addMethod.value = 'oauth'
+    modelRestrictionMode.value = 'whitelist'
+    form.type = 'cookie'
+    form.concurrency = 1
+    form.load_factor = null
+  }
 
   if (platform === 'adobe') {
     accountCategory.value = 'oauth-based'
@@ -4247,6 +4299,10 @@ watch(
 watch(
   [accountCategory, addMethod, antigravityAccountType, () => form.platform],
   ([category, method, agType]) => {
+    if (form.platform === 'cursor') {
+      form.type = 'cookie'
+      return
+    }
     // Antigravity upstream 类型（实际创建为 apikey）
     if (form.platform === 'antigravity' && agType === 'upstream') {
       form.type = 'apikey'
@@ -4299,6 +4355,15 @@ watch(
       antigravityWhitelistModels.value = []
       antigravityModelMappings.value = []
       antigravityModelRestrictionMode.value = 'mapping'
+    }
+    if (newPlatform === 'cursor') {
+      accountCategory.value = 'oauth-based'
+      addMethod.value = 'oauth'
+      modelRestrictionMode.value = 'whitelist'
+      allowedModels.value = [...getModelsByPlatform('cursor')]
+      form.type = 'cookie'
+      form.concurrency = 1
+      form.load_factor = null
     }
     if (newPlatform === 'adobe') {
       accountCategory.value = 'oauth-based'
@@ -4718,6 +4783,7 @@ const resetForm = () => {
   addMethod.value = 'oauth'
   apiKeyBaseUrl.value = 'https://api.anthropic.com'
   apiKeyValue.value = ''
+  Object.assign(cursorCredentials, { cookie: '', cookie_expires_at: '', cursor_upstream_model: '', cursor_referer: '' })
   Object.assign(adobeCredentials, { access_token: '', cookie: '', device_token: '', device_id: '', password: '', expires_at: '' })
   Object.assign(adobeTouched, { access_token: false, cookie: false, device_token: false, device_id: false, password: false })
   adobeValidationAttempted.value = false
@@ -4806,6 +4872,7 @@ const resetForm = () => {
 }
 
 const handleClose = () => {
+  Object.assign(cursorCredentials, { cookie: '', cookie_expires_at: '', cursor_upstream_model: '', cursor_referer: '' })
   Object.assign(adobeCredentials, { access_token: '', cookie: '', device_token: '', device_id: '', password: '', expires_at: '' })
   adobeValidationAttempted.value = false
   antigravityMixedChannelConfirmed.value = false
@@ -5115,6 +5182,28 @@ const handleKiroComplete = async () => {
 }
 
 const handleSubmit = async () => {
+  if (form.platform === 'cursor') {
+    if (!form.name.trim()) {
+      appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
+      return
+    }
+    if (!cursorCredentials.cookie.trim()) {
+      appStore.showError(t('admin.accounts.cursor.cookieRequired'))
+      return
+    }
+    const credentials: Record<string, unknown> = buildCursorCreateCredentials(cursorCredentials)
+    const modelMapping = buildModelMappingObject('whitelist', allowedModels.value, [])
+    if (modelMapping) credentials.model_mapping = modelMapping
+    await doCreateAccount({
+      ...form,
+      type: 'cookie',
+      concurrency: 1,
+      credentials,
+      auto_pause_on_expired: autoPauseOnExpired.value
+    })
+    return
+  }
+
   if (form.platform === 'adobe') {
     if (!form.name.trim()) {
       appStore.showError(t('admin.accounts.pleaseEnterAccountName'))

@@ -175,8 +175,14 @@ func (s *AccountService) Create(ctx context.Context, req CreateAccountRequest) (
 		if err := ValidateAdobeAccountCredentials(req.Type, req.Credentials); err != nil {
 			return nil, err
 		}
-		req.Concurrency = normalizeAccountConcurrency(req.Platform, req.Type, req.Concurrency)
 	}
+	if req.Platform == PlatformCursor {
+		NormalizeCursorCredentialExpiry(req.Credentials)
+		if err := ValidateCursorAccountCredentials(req.Type, req.Credentials); err != nil {
+			return nil, err
+		}
+	}
+	req.Concurrency = normalizeAccountConcurrency(req.Platform, req.Type, req.Concurrency)
 	// 验证分组是否存在（如果指定了分组）
 	if len(req.GroupIDs) > 0 {
 		if err := s.validateGroupIDsExist(ctx, req.GroupIDs); err != nil {

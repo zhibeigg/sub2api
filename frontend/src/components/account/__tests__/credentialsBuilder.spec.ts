@@ -11,12 +11,50 @@ import {
   isHeaderOverridePlatform,
   splitHeaderOverridesObject,
   validateHeaderOverrideRows,
+  buildCursorCreateCredentials,
+  buildCursorCredentialUpdate,
+  createCursorCredentialEditState,
+  resetCursorCredentialEditState,
   buildAdobeCreateCredentials,
   buildAdobeCredentialUpdate,
   createAdobeCredentialEditState,
   resetAdobeCredentialEditState,
   validateAdobeCredentialSource
 } from '../credentialsBuilder'
+
+describe('Cursor credentials', () => {
+  it('builds trimmed create credentials and omits empty metadata', () => {
+    expect(buildCursorCreateCredentials({
+      cookie: '  WorkosCursorSessionToken=secret  ',
+      cookie_expires_at: ' 2026-08-01T00:00:00Z ',
+      cursor_upstream_model: ' claude-sonnet-4-5 ',
+      cursor_referer: ' https://www.cursor.com/ '
+    })).toEqual({
+      cookie: 'WorkosCursorSessionToken=secret',
+      cookie_expires_at: '2026-08-01T00:00:00Z',
+      cursor_upstream_model: 'claude-sonnet-4-5',
+      cursor_referer: 'https://www.cursor.com/'
+    })
+  })
+
+  it('keeps cookie by default and emits only replace or clear', () => {
+    const state = createCursorCredentialEditState()
+    expect(buildCursorCredentialUpdate(state, {})).toEqual({})
+    state.cookie = { action: 'replace', value: ' new-cookie ' }
+    expect(buildCursorCredentialUpdate(state, { cursor_upstream_model: ' model ' })).toEqual({
+      credentials: { cookie: 'new-cookie', cursor_upstream_model: 'model' }
+    })
+    state.cookie = { action: 'clear', value: 'ignored' }
+    expect(buildCursorCredentialUpdate(state, {})).toEqual({ clear_credentials: ['cookie'] })
+  })
+
+  it('resets transient cookie edit state without exposing an existing value', () => {
+    const state = createCursorCredentialEditState()
+    state.cookie = { action: 'replace', value: 'secret' }
+    resetCursorCredentialEditState(state)
+    expect(state.cookie).toEqual({ action: 'keep', value: '' })
+  })
+})
 
 describe('Adobe credentials', () => {
   it('builds trimmed create credentials without empty secrets', () => {

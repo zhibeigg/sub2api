@@ -548,6 +548,28 @@
       </div>
     </template>
 
+    <!-- Cursor Cookie accounts: local usage and credential status -->
+    <template v-else-if="account.platform === 'cursor' && account.type === 'cookie'">
+      <div class="space-y-1" data-testid="cursor-usage-status">
+        <div v-if="todayStats" class="flex items-center gap-1.5 text-[9px] text-gray-500 dark:text-gray-400">
+          <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">{{ formatKeyRequests }} req</span>
+          <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">{{ formatKeyTokens }}</span>
+          <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800" :title="t('usage.accountBilled')">A ${{ formatKeyCost }}</span>
+          <span v-if="todayStats.user_cost != null" class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800" :title="t('usage.userBilled')">U ${{ formatKeyUserCost }}</span>
+        </div>
+        <div v-else-if="todayStatsLoading" class="flex items-center gap-1">
+          <div class="h-3 w-10 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+          <div class="h-3 w-8 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+        </div>
+        <span :class="['inline-block rounded px-1.5 py-0.5 text-[10px] font-medium', cursorCredentialBadgeClass]">
+          {{ cursorCredentialStatusLabel }}
+        </span>
+        <div v-if="cursorCookieExpiryLabel" class="text-[10px] text-gray-500 dark:text-gray-400">
+          {{ cursorCookieExpiryLabel }}
+        </div>
+      </div>
+    </template>
+
     <!-- Kiro OAuth accounts: subscription + agentic usage window -->
     <template v-else-if="account.platform === 'kiro' && account.type === 'oauth'">
       <!-- Local today's stats: requests, tokens, account billed, user billed -->
@@ -831,7 +853,7 @@ let visibilityObserver: IntersectionObserver | null = null
 // Show usage windows for OAuth and Setup Token accounts
 const showUsageWindows = computed(() => {
   // Gemini: we can always compute local usage windows from DB logs (simulated quotas).
-  if (props.account.platform === 'gemini' || props.account.platform === 'adobe') return true
+  if (props.account.platform === 'gemini' || props.account.platform === 'adobe' || props.account.platform === 'cursor') return true
   return props.account.type === 'oauth' || props.account.type === 'setup-token'
 })
 
@@ -1343,6 +1365,27 @@ const validationURL = computed(() => usageInfo.value?.validation_url || '')
 
 // 需要重新授权（401）
 const needsReauth = computed(() => !!usageInfo.value?.needs_reauth)
+
+const cursorCookieExpiresAt = computed(() => {
+  const credentials = props.account.credentials as Record<string, unknown> | undefined
+  const value = usageInfo.value?.cursor_cookie_expires_at || credentials?.cookie_expires_at
+  return typeof value === 'string' && value.trim() ? value : null
+})
+const cursorCredentialsValid = computed(() => {
+  if (usageInfo.value?.cursor_credentials_valid != null) return usageInfo.value.cursor_credentials_valid
+  if (usageInfo.value?.cursor_credentials_status) return usageInfo.value.cursor_credentials_status === 'valid'
+  if (cursorCookieExpiresAt.value) return new Date(cursorCookieExpiresAt.value).getTime() > Date.now()
+  return props.account.credentials_status?.has_cookie === true
+})
+const cursorCredentialStatusLabel = computed(() => cursorCredentialsValid.value
+  ? t('admin.accounts.cursor.credentialValid')
+  : t('admin.accounts.cursor.credentialInvalid'))
+const cursorCredentialBadgeClass = computed(() => cursorCredentialsValid.value
+  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+  : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300')
+const cursorCookieExpiryLabel = computed(() => cursorCookieExpiresAt.value
+  ? t('admin.accounts.cursor.cookieExpiryDisplay', { time: formatRelativeTime(cursorCookieExpiresAt.value) })
+  : '')
 
 // ── Kiro 用量展示 ─────────────────────────────────────────
 const kiroSubscriptionLabel = computed(() => {

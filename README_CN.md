@@ -177,7 +177,8 @@ Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的
 
 ## 核心功能
 
-- **多账号管理** - 支持多种上游账号类型（OAuth、API Key），原生集成 Anthropic、OpenAI、Gemini、Antigravity、Grok、Kiro（AWS CodeWhisperer，提供 Claude 模型）与 Adobe Firefly
+- **多账号管理** - 支持多种上游账号类型（OAuth、API Key、Cookie），原生集成 Anthropic、OpenAI、Gemini、Antigravity、Grok、Kiro（AWS CodeWhisperer，提供 Claude 模型）、Adobe Firefly 与 Cursor 文档聊天
+- **Cursor 文档聊天接入** - 支持手动 `_vcrcs` Cookie 账号、Anthropic Messages/OpenAI Chat Completions/Responses 兼容、Redis `previous_response_id`、本地用量计费，并明确不虚构 OAuth 与订阅额度能力（[接入文档](docs/CURSOR_INTEGRATION.md)）
 - **Kiro 原生接入** - 内建 AWS Builder ID 设备码、IAM Identity Center（PKCE）、SSO Token 导入与凭证 JSON 四种登录方式，支持 token 自动刷新、订阅/用量/超额查询、健康检查与动态模型发现
 - **Adobe Firefly 原生接入** - 支持 IMS 凭据安全管理与自动续期、profile/credits 展示、OpenAI Images 兼容图片生成与编辑、Redis 异步视频任务和成功轮询幂等媒体结算（[接入文档](docs/ADOBE_INTEGRATION.md)）
 - **API Key 分发** - 为用户生成和管理 API Key
@@ -744,6 +745,19 @@ Sub2API 将 Adobe 作为独立的 `adobe` 平台接入。Adobe 分组只调度 A
 - 公开模型：`nano-banana-pro`、`nano-banana-v2`、`nano-banana`、`veo3`、`veo3.1`、`sora`、`sora-2-pro`。
 
 凭据、配置、API 示例、账务语义和运维检查详见 [Adobe 接入文档](docs/ADOBE_INTEGRATION.md)。
+
+---
+
+## Cursor 文档聊天支持
+
+Sub2API 将 Cursor 作为独立的 `cursor` 平台接入，使用管理员手动提供、包含 `_vcrcs` 的 Cookie。该能力代理 Cursor 网站文档聊天端点，并非 Cursor 桌面端账户或官方 OAuth/账户 API。
+
+- 兼容 `/v1/messages`、`/v1/chat/completions`、`/v1/responses`、`/v1/messages/count_tokens` 与 `/v1/models`。
+- 支持流式响应、本地 Token 估算、模型映射、同平台故障切换、Channel 定价、Usage、Ops 和平台 Quota。
+- 工具调用采用明确的 JSON action 兼容约定，并非 Cursor 原生工具协议。
+- 不支持图片、音频、文件、官方订阅 credits、Cookie 自动刷新、浏览器 stealth 或 Challenge 绕过。
+
+凭据、安全边界、配置、协议转换、计费与运维详见 [Cursor 接入文档](docs/CURSOR_INTEGRATION.md)。
 
 ---
 

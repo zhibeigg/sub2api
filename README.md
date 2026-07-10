@@ -173,7 +173,8 @@ Sub2API is an AI API gateway platform designed to distribute and manage API quot
 
 ## Features
 
-- **Multi-Account Management** - Support multiple upstream account types (OAuth, API Key); native integration for Anthropic, OpenAI, Gemini, Antigravity, Grok, Kiro (AWS CodeWhisperer, serving Claude models), and Adobe Firefly
+- **Multi-Account Management** - Support multiple upstream account types (OAuth, API Key, Cookie); native integration for Anthropic, OpenAI, Gemini, Antigravity, Grok, Kiro (AWS CodeWhisperer, serving Claude models), Adobe Firefly, and Cursor documentation chat
+- **Cursor Documentation Chat Integration** - Manual `_vcrcs` Cookie accounts with Anthropic Messages, OpenAI Chat Completions and Responses compatibility, Redis-backed `previous_response_id`, local usage accounting, and explicit non-OAuth capability boundaries ([Integration Guide](docs/CURSOR_INTEGRATION.md))
 - **Native Kiro Integration** - Built-in AWS Builder ID device code, IAM Identity Center (PKCE), SSO token import, and credentials-JSON login; automatic token refresh, subscription/usage/overage queries, health checks, dynamic model discovery, and compact daily request/token plus account-billed/user-billed statistics in the usage window
 - **Native Adobe Firefly Integration** - Secure IMS credential lifecycle, automatic access-token renewal, profile and credits visibility, synchronous OpenAI-compatible image generation/editing, Redis-backed asynchronous video tasks, and idempotent media billing ([Integration Guide](docs/ADOBE_INTEGRATION.md))
 - **API Key Distribution** - Generate and manage API Keys for users
@@ -676,6 +677,19 @@ Sub2API supports Adobe as an independent `adobe` platform. Adobe groups only sch
 - Public models: `nano-banana-pro`, `nano-banana-v2`, `nano-banana`, `veo3`, `veo3.1`, `sora`, and `sora-2-pro`.
 
 See the [Adobe integration guide](docs/ADOBE_INTEGRATION.md) for credentials, configuration, API examples, billing semantics, and operational checks.
+
+---
+
+## Cursor Documentation Chat Support
+
+Sub2API supports Cursor as an independent `cursor` platform using a manually supplied Cookie containing `_vcrcs`. This proxies Cursor's website documentation chat endpoint, not Cursor desktop accounts or an official OAuth/account API.
+
+- Compatible endpoints: `/v1/messages`, `/v1/chat/completions`, `/v1/responses`, `/v1/messages/count_tokens`, and `/v1/models`.
+- Streaming, local token estimation, model mapping, same-platform failover, Channel pricing, Usage, Ops, and platform Quota are supported.
+- Tool calls use an explicit JSON-action compatibility convention; they are not a native Cursor tool protocol.
+- Images, audio, files, official subscription credits, automatic Cookie refresh, browser stealth, and challenge bypass are not provided.
+
+See the [Cursor integration guide](docs/CURSOR_INTEGRATION.md) for credentials, security boundaries, configuration, protocol details, billing, and operations.
 
 ---
 

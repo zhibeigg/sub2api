@@ -74,6 +74,7 @@ type AccountTestService struct {
 	tlsFPProfileService       *TLSFingerprintProfileService
 	kiroUsageService          *KiroUsageService
 	adobeTokenProvider        *AdobeTokenProvider
+	cursorGatewayService      *CursorGatewayService
 }
 
 // SetKiroUsageService injects the Kiro usage service used to health-check Kiro
@@ -84,6 +85,10 @@ func (s *AccountTestService) SetKiroUsageService(k *KiroUsageService) {
 
 func (s *AccountTestService) SetAdobeTokenProvider(provider *AdobeTokenProvider) {
 	s.adobeTokenProvider = provider
+}
+
+func (s *AccountTestService) SetCursorGatewayService(gateway *CursorGatewayService) {
+	s.cursorGatewayService = gateway
 }
 
 func (s *AccountTestService) RefreshAdobeCredentials(ctx context.Context, account *Account) (*Account, error) {
@@ -212,6 +217,9 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	if account.IsAdobe() {
 		return s.testAdobeAccountConnection(c, account)
 	}
+	if account.IsCursor() {
+		return s.testCursorAccountConnection(c, account, modelID, prompt)
+	}
 	if account.IsOpenAI() {
 		return s.testOpenAIAccountConnection(c, account, modelID, prompt, normalizeAccountTestMode(mode))
 	}
@@ -233,6 +241,32 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	}
 
 	return s.testClaudeAccountConnection(c, account, modelID)
+}
+
+func (s *AccountTestService) testCursorAccountConnection(c *gin.Context, account *Account, modelID, prompt string) error {
+	if s.cursorGatewayService == nil {
+		return s.sendErrorAndEnd(c, "Cursor gateway service not configured")
+	}
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+	c.Writer.Flush()
+	if strings.TrimSpace(modelID) == "" {
+		modelID = "cursor-chat"
+	}
+	s.sendEvent(c, TestEvent{Type: "test_start", Model: modelID})
+	text, err := s.cursorGatewayService.Probe(c.Request.Context(), account, modelID, prompt)
+	if err != nil {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Cursor documentation chat check failed: %s", err.Error()))
+	}
+	message := "Cursor documentation chat account healthy"
+	if strings.TrimSpace(text) != "" {
+		message += ": " + strings.TrimSpace(text)
+	}
+	s.sendEvent(c, TestEvent{Type: "content", Text: message})
+	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
+	return nil
 }
 
 func (s *AccountTestService) testAdobeAccountConnection(c *gin.Context, account *Account) error {

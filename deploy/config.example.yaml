@@ -102,6 +102,8 @@ security:
       - "firefly.adobe.io"
       - "firefly-3p.ff.adobe.io"
       - "*.ff.adobe.io"
+      - "cursor.com"
+      - "*.cursor.com"
       - "*.openai.azure.com"
     # Allowed hosts for pricing data download
     # 允许下载定价数据的主机列表
@@ -1144,6 +1146,25 @@ adobe:
   token_refresh_skew_seconds: 300
   # Profile and credits cache TTL / Profile 与 credits 缓存 TTL（秒）
   credits_cache_ttl_seconds: 300
+
+# =============================================================================
+# Cursor Documentation Chat Configuration (Cursor 文档聊天反代配置)
+# =============================================================================
+# Cursor accounts use an administrator-supplied Cookie containing `_vcrcs`.
+# Cursor 账号使用管理员手动提供、包含 `_vcrcs` 的 Cookie；本服务不会启动浏览器或绕过挑战。
+cursor:
+  base_url: "https://cursor.com"
+  request_timeout_seconds: 120
+  stream_idle_timeout_seconds: 60
+  default_model: "google/gemini-3-flash"
+  referer: "https://cursor.com/docs"
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+  max_history_tokens: 24000
+  max_history_messages: 100
+  # Disabled by default. Continuation is only attempted for explicit upstream truncation.
+  max_auto_continue: 0
+  responses_ttl_seconds: 86400
+  tool_description_max_length: 1024
 
 # =============================================================================
 # Kiro Configuration (Kiro / AWS CodeWhisperer 平台配置)

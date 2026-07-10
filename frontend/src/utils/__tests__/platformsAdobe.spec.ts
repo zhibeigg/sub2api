@@ -4,6 +4,26 @@ import { getModelsByPlatform } from '@/composables/useModelWhitelist'
 import { platformBadgeClass, platformLabel } from '@/utils/platformColors'
 import { resolveGroupBrand } from '@/utils/groupBrand'
 
+describe('Cursor platform registry', () => {
+  it('registers Cursor between Adobe and Kiro with the requested capabilities', () => {
+    const cursor = PLATFORM_REGISTRY.cursor
+    expect(PLATFORM_ORDER.indexOf('cursor')).toBeGreaterThan(PLATFORM_ORDER.indexOf('adobe'))
+    expect(PLATFORM_ORDER.indexOf('cursor')).toBeLessThan(PLATFORM_ORDER.indexOf('kiro'))
+    expect(cursor.capabilities).toEqual({
+      quota: true,
+      image: false,
+      video: false,
+      models: true,
+      usage: true,
+      modelSync: false
+    })
+    expect(QUOTA_PLATFORMS).toContain('cursor')
+    expect(platformLabel('cursor')).toBe('Cursor')
+    expect(platformBadgeClass('cursor')).toContain('cyan')
+    expect(getModelsByPlatform('cursor').length).toBeGreaterThan(0)
+  })
+})
+
 describe('Adobe platform registry', () => {
   it('registers Adobe after Grok with media, quota, models and usage capabilities', () => {
     const adobe = PLATFORM_REGISTRY.adobe
