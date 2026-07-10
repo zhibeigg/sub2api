@@ -530,6 +530,97 @@ describe('AccountUsageCell', () => {
   expect(wrapper.text()).toContain('7d|100|106540000')
   })
 
+  it('Kiro OAuth 用量窗口会展示今日请求、Token 与 A/U 双口径计费', async () => {
+    getUsage.mockResolvedValue({
+      source: 'passive',
+      kiro_subscription_type: 'PRO',
+      kiro_usage_current: 2964,
+      kiro_usage_limit: 5000,
+      kiro_usage_percent: 0.5928,
+      kiro_next_reset_date: '2026-08-01',
+      kiro_context_usage_pct: 27
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({
+          id: 2954,
+          platform: 'kiro',
+          type: 'oauth',
+          extra: {}
+        }),
+        todayStats: {
+          requests: 108,
+          tokens: 12_800_000,
+          cost: 16.07,
+          standard_cost: 16.07,
+          user_cost: 12.86
+        }
+      },
+      global: {
+        stubs: {
+          UsageProgressBar: {
+            props: ['label', 'utilization', 'resetsAt', 'color'],
+            template: '<div class="usage-bar">{{ label }}|{{ utilization }}|{{ resetsAt }}</div>'
+          },
+          AccountQuotaInfo: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(getUsage).toHaveBeenCalledWith(2954)
+    expect(wrapper.get('[data-testid="kiro-today-stats"]').attributes('title'))
+      .toBe('admin.accounts.usageWindow.kiroTodayStats')
+    expect(wrapper.text()).toContain('108 req')
+    expect(wrapper.text()).toContain('12.8M')
+    expect(wrapper.text()).toContain('A $16.07')
+    expect(wrapper.text()).toContain('U $12.86')
+
+    const badges = wrapper.findAll('span[title]')
+    expect(badges.some(node => node.attributes('title') === 'usage.accountBilled')).toBe(true)
+    expect(badges.some(node => node.attributes('title') === 'usage.userBilled')).toBe(true)
+  })
+
+  it('Kiro OAuth 在 user_cost 缺失时隐藏用户扣费，统计加载中显示骨架', async () => {
+    getUsage.mockResolvedValue({
+      kiro_subscription_type: 'PRO',
+      kiro_usage_percent: 0.2
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({
+          id: 2955,
+          platform: 'kiro',
+          type: 'oauth',
+          extra: {}
+        }),
+        todayStats: {
+          requests: 2,
+          tokens: 800,
+          cost: 0.25,
+          standard_cost: 0.25
+        }
+      },
+      global: {
+        stubs: {
+          UsageProgressBar: true,
+          AccountQuotaInfo: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('A $0.25')
+    expect(wrapper.findAll('span[title="usage.userBilled"]')).toHaveLength(0)
+
+    await wrapper.setProps({ todayStats: null, todayStatsLoading: true })
+    expect(wrapper.find('[data-testid="kiro-today-stats-loading"]').exists()).toBe(true)
+  })
+
   it('Key 账号会展示 today stats 徽章并带 A/U 提示', async () => {
 		const wrapper = mount(AccountUsageCell, {
 		  props: {

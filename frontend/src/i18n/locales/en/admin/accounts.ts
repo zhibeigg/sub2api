@@ -1260,6 +1260,7 @@ export default {
         kiroTrial: 'Trial',
         kiroOverage: 'Overage {used} / {cap}',
         kiroContext: 'Context {pct}%',
+        kiroTodayStats: 'Today: requests, tokens, account billed, and user billed',
         passiveSampled: 'Passive',
         activeQuery: 'Query'
       },

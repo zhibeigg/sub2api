@@ -524,6 +524,43 @@
 
     <!-- Kiro OAuth accounts: subscription + agentic usage window -->
     <template v-else-if="account.platform === 'kiro' && account.type === 'oauth'">
+      <!-- Local today's stats: requests, tokens, account billed, user billed -->
+      <div
+        v-if="todayStats"
+        data-testid="kiro-today-stats"
+        class="mb-1 flex items-center"
+        :title="t('admin.accounts.usageWindow.kiroTodayStats')"
+        :aria-label="t('admin.accounts.usageWindow.kiroTodayStats')"
+      >
+        <div class="flex items-center gap-1.5 text-[9px] text-gray-500 dark:text-gray-400">
+          <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">
+            {{ formatKeyRequests }} req
+          </span>
+          <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">
+            {{ formatKeyTokens }}
+          </span>
+          <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800" :title="t('usage.accountBilled')">
+            A ${{ formatKeyCost }}
+          </span>
+          <span
+            v-if="todayStats.user_cost != null"
+            class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800"
+            :title="t('usage.userBilled')"
+          >
+            U ${{ formatKeyUserCost }}
+          </span>
+        </div>
+      </div>
+      <div
+        v-else-if="todayStatsLoading"
+        data-testid="kiro-today-stats-loading"
+        class="mb-1 flex items-center gap-1"
+      >
+        <div class="h-3 w-10 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+        <div class="h-3 w-8 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+        <div class="h-3 w-12 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+      </div>
+
       <div v-if="loading" class="space-y-1.5">
         <div class="flex items-center gap-1">
           <div class="h-3 w-[32px] animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>

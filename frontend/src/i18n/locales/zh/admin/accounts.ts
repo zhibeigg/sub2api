@@ -333,6 +333,7 @@ export default {
         kiroTrial: '试用',
         kiroOverage: '超额 {used} / {cap}',
         kiroContext: '上下文 {pct}%',
+        kiroTodayStats: '今日用量：请求、Token、账号计费与用户扣费',
         passiveSampled: '被动采样',
         activeQuery: '查询'
       },
