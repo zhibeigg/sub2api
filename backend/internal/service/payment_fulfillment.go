@@ -16,6 +16,7 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
+	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
@@ -327,7 +328,77 @@ func resolveRedeemAction(existing *RedeemCode, lookupErr error) redeemAction {
 	return redeemActionRedeem
 }
 
+// prepareBalanceFulfillmentOrder 在余额真正到账前原子占用用户的首充资格。
+// 多笔已支付订单可以并发进入结算，但 users.first_recharge_bonus_used 的条件更新
+// 保证最多只有一笔订单能保留优惠码加成；其余订单回退到创建时快照的基础到账金额。
+func (s *PaymentService) prepareBalanceFulfillmentOrder(ctx context.Context, o *dbent.PaymentOrder, lease *paymentFulfillmentLease) (*dbent.PaymentOrder, error) {
+	if o == nil {
+		return nil, errors.New("missing payment order")
+	}
+	if lease == nil {
+		return nil, errors.New("missing payment fulfillment lease")
+	}
+	if o.FirstRechargeBonusApplied {
+		return o, nil
+	}
+
+	tx, err := s.entClient.Tx(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin first recharge bonus transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	claimed, err := tx.User.Update().
+		Where(user.IDEQ(o.UserID), user.FirstRechargeBonusUsedEQ(false)).
+		SetFirstRechargeBonusUsed(true).
+		Save(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("claim first recharge bonus: %w", err)
+	}
+
+	// 旧版订单没有基础金额和优惠倍率快照。为了避免升级后改变已创建订单的承诺，
+	// 仅消费首充资格并保留原到账金额；所有新订单都会进入下面的严格判定。
+	if o.RechargeBaseAmount <= 0 {
+		if err := tx.Commit(); err != nil {
+			return nil, fmt.Errorf("commit legacy first recharge claim: %w", err)
+		}
+		return o, nil
+	}
+
+	applyBonus := claimed > 0 && normalizeRechargeBonusMultiplier(o.RechargeBonusMultiplier) > DefaultRechargeBonusMultiplier
+	creditedAmount := o.RechargeBaseAmount
+	if applyBonus {
+		creditedAmount = o.Amount
+	}
+
+	updated, err := tx.PaymentOrder.UpdateOneID(o.ID).
+		SetAmount(creditedAmount).
+		SetFirstRechargeBonusApplied(applyBonus).
+		// 金额快照更新属于当前 fulfillment lease，必须保留版本时间，
+		// 否则后续 markCompleted/markFailed 会把当前 worker 误判为过期。
+		SetUpdatedAt(lease.version).
+		Save(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("finalize first recharge amount: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit first recharge bonus transaction: %w", err)
+	}
+
+	updated, err = s.entClient.PaymentOrder.Get(ctx, updated.ID)
+	if err != nil {
+		return nil, fmt.Errorf("reload first recharge order: %w", err)
+	}
+	return updated, nil
+}
+
 func (s *PaymentService) doBalance(ctx context.Context, o *dbent.PaymentOrder, lease *paymentFulfillmentLease) error {
+	var err error
+	o, err = s.prepareBalanceFulfillmentOrder(ctx, o, lease)
+	if err != nil {
+		return err
+	}
+
 	// Idempotency: check if redeem code already exists (from a previous partial run)
 	existing, lookupErr := s.redeemService.GetByCode(ctx, o.RechargeCode)
 	action := resolveRedeemAction(existing, lookupErr)
@@ -378,9 +449,12 @@ func (s *PaymentService) markCompleted(ctx context.Context, o *dbent.PaymentOrde
 	}
 	if !s.hasAuditLog(ctx, o.ID, auditAction) {
 		s.writeAuditLog(ctx, o.ID, auditAction, "system", map[string]any{
-			"rechargeCode":   o.RechargeCode,
-			"creditedAmount": o.Amount,
-			"payAmount":      o.PayAmount,
+			"rechargeCode":              o.RechargeCode,
+			"creditedAmount":            o.Amount,
+			"rechargeBaseAmount":        o.RechargeBaseAmount,
+			"rechargeBonusMultiplier":   o.RechargeBonusMultiplier,
+			"firstRechargeBonusApplied": o.FirstRechargeBonusApplied,
+			"payAmount":                 o.PayAmount,
 		})
 		s.dispatchPaymentFulfillmentNotification(o, auditAction)
 	}

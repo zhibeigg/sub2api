@@ -33,6 +33,12 @@ type PaymentOrder struct {
 	PayAmount float64 `json:"pay_amount,omitempty"`
 	// FeeRate holds the value of the "fee_rate" field.
 	FeeRate float64 `json:"fee_rate,omitempty"`
+	// 余额充值未叠加优惠码首充加成时的基础到账金额；0 表示旧版订单
+	RechargeBaseAmount float64 `json:"recharge_base_amount,omitempty"`
+	// 创建订单时快照的优惠码首充到账加成倍率；1 表示无加成
+	RechargeBonusMultiplier float64 `json:"recharge_bonus_multiplier,omitempty"`
+	// 该订单是否成功占用并应用了用户的首充优惠
+	FirstRechargeBonusApplied bool `json:"first_recharge_bonus_applied,omitempty"`
 	// RechargeCode holds the value of the "recharge_code" field.
 	RechargeCode string `json:"recharge_code,omitempty"`
 	// OutTradeNo holds the value of the "out_trade_no" field.
@@ -130,9 +136,9 @@ func (*PaymentOrder) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case paymentorder.FieldProviderSnapshot:
 			values[i] = new([]byte)
-		case paymentorder.FieldForceRefund:
+		case paymentorder.FieldFirstRechargeBonusApplied, paymentorder.FieldForceRefund:
 			values[i] = new(sql.NullBool)
-		case paymentorder.FieldAmount, paymentorder.FieldPayAmount, paymentorder.FieldFeeRate, paymentorder.FieldRefundAmount:
+		case paymentorder.FieldAmount, paymentorder.FieldPayAmount, paymentorder.FieldFeeRate, paymentorder.FieldRechargeBaseAmount, paymentorder.FieldRechargeBonusMultiplier, paymentorder.FieldRefundAmount:
 			values[i] = new(sql.NullFloat64)
 		case paymentorder.FieldID, paymentorder.FieldUserID, paymentorder.FieldPlanID, paymentorder.FieldSubscriptionGroupID, paymentorder.FieldSubscriptionDays:
 			values[i] = new(sql.NullInt64)
@@ -203,6 +209,24 @@ func (_m *PaymentOrder) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field fee_rate", values[i])
 			} else if value.Valid {
 				_m.FeeRate = value.Float64
+			}
+		case paymentorder.FieldRechargeBaseAmount:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field recharge_base_amount", values[i])
+			} else if value.Valid {
+				_m.RechargeBaseAmount = value.Float64
+			}
+		case paymentorder.FieldRechargeBonusMultiplier:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field recharge_bonus_multiplier", values[i])
+			} else if value.Valid {
+				_m.RechargeBonusMultiplier = value.Float64
+			}
+		case paymentorder.FieldFirstRechargeBonusApplied:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field first_recharge_bonus_applied", values[i])
+			} else if value.Valid {
+				_m.FirstRechargeBonusApplied = value.Bool
 			}
 		case paymentorder.FieldRechargeCode:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -479,6 +503,15 @@ func (_m *PaymentOrder) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("fee_rate=")
 	builder.WriteString(fmt.Sprintf("%v", _m.FeeRate))
+	builder.WriteString(", ")
+	builder.WriteString("recharge_base_amount=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RechargeBaseAmount))
+	builder.WriteString(", ")
+	builder.WriteString("recharge_bonus_multiplier=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RechargeBonusMultiplier))
+	builder.WriteString(", ")
+	builder.WriteString("first_recharge_bonus_applied=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FirstRechargeBonusApplied))
 	builder.WriteString(", ")
 	builder.WriteString("recharge_code=")
 	builder.WriteString(_m.RechargeCode)

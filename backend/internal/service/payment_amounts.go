@@ -32,8 +32,8 @@ func calculateCreditedBalance(paymentAmount, multiplier float64) float64 {
 		InexactFloat64()
 }
 
-// calculateCreditedBalanceWithPromo 在全局充值倍率基础上叠加优惠码加成倍率。
-// 到账余额 = 支付金额 × 全局倍率 × 优惠倍率。promoMultiplier 非法（<1/NaN/Inf）时按 1 处理，
+// calculateCreditedBalanceWithPromo 在全局充值倍率基础上叠加优惠码首充加成倍率。
+// 首笔成功充值到账余额 = 支付金额 × 全局倍率 × 优惠倍率。promoMultiplier 非法（<1/NaN/Inf）时按 1 处理，
 // 确保优惠只会让用户多得、绝不少得。
 func calculateCreditedBalanceWithPromo(paymentAmount, baseMultiplier, promoMultiplier float64) float64 {
 	promo := promoMultiplier

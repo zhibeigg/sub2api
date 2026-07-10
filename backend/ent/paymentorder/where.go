@@ -90,6 +90,21 @@ func FeeRate(v float64) predicate.PaymentOrder {
 	return predicate.PaymentOrder(sql.FieldEQ(FieldFeeRate, v))
 }
 
+// RechargeBaseAmount applies equality check predicate on the "recharge_base_amount" field. It's identical to RechargeBaseAmountEQ.
+func RechargeBaseAmount(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldRechargeBaseAmount, v))
+}
+
+// RechargeBonusMultiplier applies equality check predicate on the "recharge_bonus_multiplier" field. It's identical to RechargeBonusMultiplierEQ.
+func RechargeBonusMultiplier(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldRechargeBonusMultiplier, v))
+}
+
+// FirstRechargeBonusApplied applies equality check predicate on the "first_recharge_bonus_applied" field. It's identical to FirstRechargeBonusAppliedEQ.
+func FirstRechargeBonusApplied(v bool) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldFirstRechargeBonusApplied, v))
+}
+
 // RechargeCode applies equality check predicate on the "recharge_code" field. It's identical to RechargeCodeEQ.
 func RechargeCode(v string) predicate.PaymentOrder {
 	return predicate.PaymentOrder(sql.FieldEQ(FieldRechargeCode, v))
@@ -588,6 +603,96 @@ func FeeRateLT(v float64) predicate.PaymentOrder {
 // FeeRateLTE applies the LTE predicate on the "fee_rate" field.
 func FeeRateLTE(v float64) predicate.PaymentOrder {
 	return predicate.PaymentOrder(sql.FieldLTE(FieldFeeRate, v))
+}
+
+// RechargeBaseAmountEQ applies the EQ predicate on the "recharge_base_amount" field.
+func RechargeBaseAmountEQ(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldRechargeBaseAmount, v))
+}
+
+// RechargeBaseAmountNEQ applies the NEQ predicate on the "recharge_base_amount" field.
+func RechargeBaseAmountNEQ(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNEQ(FieldRechargeBaseAmount, v))
+}
+
+// RechargeBaseAmountIn applies the In predicate on the "recharge_base_amount" field.
+func RechargeBaseAmountIn(vs ...float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIn(FieldRechargeBaseAmount, vs...))
+}
+
+// RechargeBaseAmountNotIn applies the NotIn predicate on the "recharge_base_amount" field.
+func RechargeBaseAmountNotIn(vs ...float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotIn(FieldRechargeBaseAmount, vs...))
+}
+
+// RechargeBaseAmountGT applies the GT predicate on the "recharge_base_amount" field.
+func RechargeBaseAmountGT(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGT(FieldRechargeBaseAmount, v))
+}
+
+// RechargeBaseAmountGTE applies the GTE predicate on the "recharge_base_amount" field.
+func RechargeBaseAmountGTE(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGTE(FieldRechargeBaseAmount, v))
+}
+
+// RechargeBaseAmountLT applies the LT predicate on the "recharge_base_amount" field.
+func RechargeBaseAmountLT(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLT(FieldRechargeBaseAmount, v))
+}
+
+// RechargeBaseAmountLTE applies the LTE predicate on the "recharge_base_amount" field.
+func RechargeBaseAmountLTE(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLTE(FieldRechargeBaseAmount, v))
+}
+
+// RechargeBonusMultiplierEQ applies the EQ predicate on the "recharge_bonus_multiplier" field.
+func RechargeBonusMultiplierEQ(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldRechargeBonusMultiplier, v))
+}
+
+// RechargeBonusMultiplierNEQ applies the NEQ predicate on the "recharge_bonus_multiplier" field.
+func RechargeBonusMultiplierNEQ(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNEQ(FieldRechargeBonusMultiplier, v))
+}
+
+// RechargeBonusMultiplierIn applies the In predicate on the "recharge_bonus_multiplier" field.
+func RechargeBonusMultiplierIn(vs ...float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIn(FieldRechargeBonusMultiplier, vs...))
+}
+
+// RechargeBonusMultiplierNotIn applies the NotIn predicate on the "recharge_bonus_multiplier" field.
+func RechargeBonusMultiplierNotIn(vs ...float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotIn(FieldRechargeBonusMultiplier, vs...))
+}
+
+// RechargeBonusMultiplierGT applies the GT predicate on the "recharge_bonus_multiplier" field.
+func RechargeBonusMultiplierGT(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGT(FieldRechargeBonusMultiplier, v))
+}
+
+// RechargeBonusMultiplierGTE applies the GTE predicate on the "recharge_bonus_multiplier" field.
+func RechargeBonusMultiplierGTE(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGTE(FieldRechargeBonusMultiplier, v))
+}
+
+// RechargeBonusMultiplierLT applies the LT predicate on the "recharge_bonus_multiplier" field.
+func RechargeBonusMultiplierLT(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLT(FieldRechargeBonusMultiplier, v))
+}
+
+// RechargeBonusMultiplierLTE applies the LTE predicate on the "recharge_bonus_multiplier" field.
+func RechargeBonusMultiplierLTE(v float64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLTE(FieldRechargeBonusMultiplier, v))
+}
+
+// FirstRechargeBonusAppliedEQ applies the EQ predicate on the "first_recharge_bonus_applied" field.
+func FirstRechargeBonusAppliedEQ(v bool) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldFirstRechargeBonusApplied, v))
+}
+
+// FirstRechargeBonusAppliedNEQ applies the NEQ predicate on the "first_recharge_bonus_applied" field.
+func FirstRechargeBonusAppliedNEQ(v bool) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNEQ(FieldFirstRechargeBonusApplied, v))
 }
 
 // RechargeCodeEQ applies the EQ predicate on the "recharge_code" field.

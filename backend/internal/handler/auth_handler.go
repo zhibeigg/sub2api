@@ -446,7 +446,7 @@ type ValidatePromoCodeRequest struct {
 type ValidatePromoCodeResponse struct {
 	Valid                   bool    `json:"valid"`
 	BonusAmount             float64 `json:"bonus_amount,omitempty"`
-	RechargeBonusMultiplier float64 `json:"recharge_bonus_multiplier,omitempty"`
+	RechargeBonusMultiplier float64 `json:"recharge_bonus_multiplier,omitempty"` // 首笔成功余额充值到账加成倍率
 	ErrorCode               string  `json:"error_code,omitempty"`
 	Message                 string  `json:"message,omitempty"`
 }

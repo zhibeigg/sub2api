@@ -28,6 +28,12 @@ const (
 	FieldPayAmount = "pay_amount"
 	// FieldFeeRate holds the string denoting the fee_rate field in the database.
 	FieldFeeRate = "fee_rate"
+	// FieldRechargeBaseAmount holds the string denoting the recharge_base_amount field in the database.
+	FieldRechargeBaseAmount = "recharge_base_amount"
+	// FieldRechargeBonusMultiplier holds the string denoting the recharge_bonus_multiplier field in the database.
+	FieldRechargeBonusMultiplier = "recharge_bonus_multiplier"
+	// FieldFirstRechargeBonusApplied holds the string denoting the first_recharge_bonus_applied field in the database.
+	FieldFirstRechargeBonusApplied = "first_recharge_bonus_applied"
 	// FieldRechargeCode holds the string denoting the recharge_code field in the database.
 	FieldRechargeCode = "recharge_code"
 	// FieldOutTradeNo holds the string denoting the out_trade_no field in the database.
@@ -115,6 +121,9 @@ var Columns = []string{
 	FieldAmount,
 	FieldPayAmount,
 	FieldFeeRate,
+	FieldRechargeBaseAmount,
+	FieldRechargeBonusMultiplier,
+	FieldFirstRechargeBonusApplied,
 	FieldRechargeCode,
 	FieldOutTradeNo,
 	FieldPaymentType,
@@ -166,6 +175,12 @@ var (
 	UserNameValidator func(string) error
 	// DefaultFeeRate holds the default value on creation for the "fee_rate" field.
 	DefaultFeeRate float64
+	// DefaultRechargeBaseAmount holds the default value on creation for the "recharge_base_amount" field.
+	DefaultRechargeBaseAmount float64
+	// DefaultRechargeBonusMultiplier holds the default value on creation for the "recharge_bonus_multiplier" field.
+	DefaultRechargeBonusMultiplier float64
+	// DefaultFirstRechargeBonusApplied holds the default value on creation for the "first_recharge_bonus_applied" field.
+	DefaultFirstRechargeBonusApplied bool
 	// RechargeCodeValidator is a validator for the "recharge_code" field. It is called by the builders before save.
 	RechargeCodeValidator func(string) error
 	// DefaultOutTradeNo holds the default value on creation for the "out_trade_no" field.
@@ -247,6 +262,21 @@ func ByPayAmount(opts ...sql.OrderTermOption) OrderOption {
 // ByFeeRate orders the results by the fee_rate field.
 func ByFeeRate(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldFeeRate, opts...).ToFunc()
+}
+
+// ByRechargeBaseAmount orders the results by the recharge_base_amount field.
+func ByRechargeBaseAmount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRechargeBaseAmount, opts...).ToFunc()
+}
+
+// ByRechargeBonusMultiplier orders the results by the recharge_bonus_multiplier field.
+func ByRechargeBonusMultiplier(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRechargeBonusMultiplier, opts...).ToFunc()
+}
+
+// ByFirstRechargeBonusApplied orders the results by the first_recharge_bonus_applied field.
+func ByFirstRechargeBonusApplied(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFirstRechargeBonusApplied, opts...).ToFunc()
 }
 
 // ByRechargeCode orders the results by the recharge_code field.

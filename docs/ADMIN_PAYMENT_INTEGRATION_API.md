@@ -30,6 +30,8 @@
 
 用途：原子完成“创建兑换码 + 兑换到指定用户”。
 
+> 此 Admin API 属于外部系统人工入账，不参与内置支付订单的优惠码首充加成判定，也不会自动应用 `recharge_bonus_multiplier`。首充优惠仅由内置余额充值订单在支付到账时原子判定。
+
 请求头：
 - `x-api-key`
 - `Idempotency-Key`
@@ -149,6 +151,8 @@ Note: Admin JWT can also access admin routes, but Admin API Key is recommended f
 `POST /api/v1/admin/redeem-codes/create-and-redeem`
 
 Use case: atomically create a redeem code and redeem it to a target user.
+
+> This Admin API is an external/manual credit path. It does not participate in the built-in payment order’s first-top-up promo decision and does not automatically apply `recharge_bonus_multiplier`. The first-top-up bonus is determined atomically only when a built-in balance payment order is fulfilled.
 
 Headers:
 - `x-api-key`

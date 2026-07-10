@@ -54,14 +54,17 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	}
 	orderAmount := req.Amount
 	limitAmount := req.Amount
+	rechargeBaseAmount := 0.0
+	rechargeBonusMultiplier := DefaultRechargeBonusMultiplier
 	if plan != nil {
 		orderAmount = plan.Price
 		limitAmount = plan.Price
 	} else if req.OrderType == payment.OrderTypeBalance {
-		// 余额充值到账 = 支付金额 × 全局倍率 × 用户绑定优惠码的加成倍率。
-		// 优惠加成仅作用于到账余额（orderAmount），不影响实付金额（payAmount 基于 limitAmount）。
-		promoMultiplier := s.resolveUserRechargeBonusMultiplier(ctx, user)
-		orderAmount = calculateCreditedBalanceWithPromo(req.Amount, cfg.BalanceRechargeMultiplier, promoMultiplier)
+		// 余额充值先快照不含优惠码的基础到账金额，再计算首充候选到账金额。
+		// 到账时会原子占用用户的首充资格：并发支付时只有一笔订单保留优惠，其余回退到基础到账金额。
+		rechargeBaseAmount = calculateCreditedBalance(req.Amount, cfg.BalanceRechargeMultiplier)
+		rechargeBonusMultiplier = s.resolveUserRechargeBonusMultiplier(ctx, user)
+		orderAmount = calculateCreditedBalanceWithPromo(req.Amount, cfg.BalanceRechargeMultiplier, rechargeBonusMultiplier)
 	}
 	feeRate := cfg.RechargeFeeRate
 	methodCurrency := payment.DefaultPaymentCurrency
@@ -102,7 +105,7 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	if oauthResp != nil {
 		return oauthResp, nil
 	}
-	order, err := s.createOrderInTx(ctx, req, user, plan, cfg, orderAmount, limitAmount, feeRate, payAmount, sel)
+	order, err := s.createOrderInTx(ctx, req, user, plan, cfg, orderAmount, limitAmount, rechargeBaseAmount, rechargeBonusMultiplier, feeRate, payAmount, sel)
 	if err != nil {
 		return nil, err
 	}
@@ -116,10 +119,10 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	return resp, nil
 }
 
-// resolveUserRechargeBonusMultiplier 返回用户绑定优惠码的充值到账加成倍率。
-// 未绑定优惠码、优惠码不存在或查询失败时返回 1（无加成），保证充值主流程 fail-open。
+// resolveUserRechargeBonusMultiplier 返回用户绑定优惠码的首笔余额充值到账加成倍率。
+// 已完成首充、未绑定优惠码、优惠码不存在或查询失败时返回 1（无加成），保证充值主流程 fail-open。
 func (s *PaymentService) resolveUserRechargeBonusMultiplier(ctx context.Context, user *User) float64 {
-	if user == nil || user.PromoCodeID == nil || *user.PromoCodeID <= 0 || s.entClient == nil {
+	if user == nil || user.FirstRechargeBonusUsed || user.PromoCodeID == nil || *user.PromoCodeID <= 0 || s.entClient == nil {
 		return DefaultRechargeBonusMultiplier
 	}
 	pc, err := s.entClient.PromoCode.Get(ctx, *user.PromoCodeID)
@@ -170,7 +173,7 @@ func (s *PaymentService) validateSubOrder(ctx context.Context, req CreateOrderRe
 	return plan, nil
 }
 
-func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderRequest, user *User, plan *dbent.SubscriptionPlan, cfg *PaymentConfig, orderAmount, limitAmount, feeRate, payAmount float64, sel *payment.InstanceSelection) (*dbent.PaymentOrder, error) {
+func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderRequest, user *User, plan *dbent.SubscriptionPlan, cfg *PaymentConfig, orderAmount, limitAmount, rechargeBaseAmount, rechargeBonusMultiplier, feeRate, payAmount float64, sel *payment.InstanceSelection) (*dbent.PaymentOrder, error) {
 	tx, err := s.entClient.Tx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
@@ -206,6 +209,8 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 		SetAmount(orderAmount).
 		SetPayAmount(payAmount).
 		SetFeeRate(feeRate).
+		SetRechargeBaseAmount(rechargeBaseAmount).
+		SetRechargeBonusMultiplier(rechargeBonusMultiplier).
 		SetRechargeCode("").
 		SetOutTradeNo(outTradeNo).
 		SetPaymentType(req.PaymentType).

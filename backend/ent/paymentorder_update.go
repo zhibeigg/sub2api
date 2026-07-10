@@ -154,6 +154,62 @@ func (_u *PaymentOrderUpdate) AddFeeRate(v float64) *PaymentOrderUpdate {
 	return _u
 }
 
+// SetRechargeBaseAmount sets the "recharge_base_amount" field.
+func (_u *PaymentOrderUpdate) SetRechargeBaseAmount(v float64) *PaymentOrderUpdate {
+	_u.mutation.ResetRechargeBaseAmount()
+	_u.mutation.SetRechargeBaseAmount(v)
+	return _u
+}
+
+// SetNillableRechargeBaseAmount sets the "recharge_base_amount" field if the given value is not nil.
+func (_u *PaymentOrderUpdate) SetNillableRechargeBaseAmount(v *float64) *PaymentOrderUpdate {
+	if v != nil {
+		_u.SetRechargeBaseAmount(*v)
+	}
+	return _u
+}
+
+// AddRechargeBaseAmount adds value to the "recharge_base_amount" field.
+func (_u *PaymentOrderUpdate) AddRechargeBaseAmount(v float64) *PaymentOrderUpdate {
+	_u.mutation.AddRechargeBaseAmount(v)
+	return _u
+}
+
+// SetRechargeBonusMultiplier sets the "recharge_bonus_multiplier" field.
+func (_u *PaymentOrderUpdate) SetRechargeBonusMultiplier(v float64) *PaymentOrderUpdate {
+	_u.mutation.ResetRechargeBonusMultiplier()
+	_u.mutation.SetRechargeBonusMultiplier(v)
+	return _u
+}
+
+// SetNillableRechargeBonusMultiplier sets the "recharge_bonus_multiplier" field if the given value is not nil.
+func (_u *PaymentOrderUpdate) SetNillableRechargeBonusMultiplier(v *float64) *PaymentOrderUpdate {
+	if v != nil {
+		_u.SetRechargeBonusMultiplier(*v)
+	}
+	return _u
+}
+
+// AddRechargeBonusMultiplier adds value to the "recharge_bonus_multiplier" field.
+func (_u *PaymentOrderUpdate) AddRechargeBonusMultiplier(v float64) *PaymentOrderUpdate {
+	_u.mutation.AddRechargeBonusMultiplier(v)
+	return _u
+}
+
+// SetFirstRechargeBonusApplied sets the "first_recharge_bonus_applied" field.
+func (_u *PaymentOrderUpdate) SetFirstRechargeBonusApplied(v bool) *PaymentOrderUpdate {
+	_u.mutation.SetFirstRechargeBonusApplied(v)
+	return _u
+}
+
+// SetNillableFirstRechargeBonusApplied sets the "first_recharge_bonus_applied" field if the given value is not nil.
+func (_u *PaymentOrderUpdate) SetNillableFirstRechargeBonusApplied(v *bool) *PaymentOrderUpdate {
+	if v != nil {
+		_u.SetFirstRechargeBonusApplied(*v)
+	}
+	return _u
+}
+
 // SetRechargeCode sets the "recharge_code" field.
 func (_u *PaymentOrderUpdate) SetRechargeCode(v string) *PaymentOrderUpdate {
 	_u.mutation.SetRechargeCode(v)
@@ -881,6 +937,21 @@ func (_u *PaymentOrderUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if value, ok := _u.mutation.AddedFeeRate(); ok {
 		_spec.AddField(paymentorder.FieldFeeRate, field.TypeFloat64, value)
 	}
+	if value, ok := _u.mutation.RechargeBaseAmount(); ok {
+		_spec.SetField(paymentorder.FieldRechargeBaseAmount, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedRechargeBaseAmount(); ok {
+		_spec.AddField(paymentorder.FieldRechargeBaseAmount, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.RechargeBonusMultiplier(); ok {
+		_spec.SetField(paymentorder.FieldRechargeBonusMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedRechargeBonusMultiplier(); ok {
+		_spec.AddField(paymentorder.FieldRechargeBonusMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.FirstRechargeBonusApplied(); ok {
+		_spec.SetField(paymentorder.FieldFirstRechargeBonusApplied, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.RechargeCode(); ok {
 		_spec.SetField(paymentorder.FieldRechargeCode, field.TypeString, value)
 	}
@@ -1214,6 +1285,62 @@ func (_u *PaymentOrderUpdateOne) SetNillableFeeRate(v *float64) *PaymentOrderUpd
 // AddFeeRate adds value to the "fee_rate" field.
 func (_u *PaymentOrderUpdateOne) AddFeeRate(v float64) *PaymentOrderUpdateOne {
 	_u.mutation.AddFeeRate(v)
+	return _u
+}
+
+// SetRechargeBaseAmount sets the "recharge_base_amount" field.
+func (_u *PaymentOrderUpdateOne) SetRechargeBaseAmount(v float64) *PaymentOrderUpdateOne {
+	_u.mutation.ResetRechargeBaseAmount()
+	_u.mutation.SetRechargeBaseAmount(v)
+	return _u
+}
+
+// SetNillableRechargeBaseAmount sets the "recharge_base_amount" field if the given value is not nil.
+func (_u *PaymentOrderUpdateOne) SetNillableRechargeBaseAmount(v *float64) *PaymentOrderUpdateOne {
+	if v != nil {
+		_u.SetRechargeBaseAmount(*v)
+	}
+	return _u
+}
+
+// AddRechargeBaseAmount adds value to the "recharge_base_amount" field.
+func (_u *PaymentOrderUpdateOne) AddRechargeBaseAmount(v float64) *PaymentOrderUpdateOne {
+	_u.mutation.AddRechargeBaseAmount(v)
+	return _u
+}
+
+// SetRechargeBonusMultiplier sets the "recharge_bonus_multiplier" field.
+func (_u *PaymentOrderUpdateOne) SetRechargeBonusMultiplier(v float64) *PaymentOrderUpdateOne {
+	_u.mutation.ResetRechargeBonusMultiplier()
+	_u.mutation.SetRechargeBonusMultiplier(v)
+	return _u
+}
+
+// SetNillableRechargeBonusMultiplier sets the "recharge_bonus_multiplier" field if the given value is not nil.
+func (_u *PaymentOrderUpdateOne) SetNillableRechargeBonusMultiplier(v *float64) *PaymentOrderUpdateOne {
+	if v != nil {
+		_u.SetRechargeBonusMultiplier(*v)
+	}
+	return _u
+}
+
+// AddRechargeBonusMultiplier adds value to the "recharge_bonus_multiplier" field.
+func (_u *PaymentOrderUpdateOne) AddRechargeBonusMultiplier(v float64) *PaymentOrderUpdateOne {
+	_u.mutation.AddRechargeBonusMultiplier(v)
+	return _u
+}
+
+// SetFirstRechargeBonusApplied sets the "first_recharge_bonus_applied" field.
+func (_u *PaymentOrderUpdateOne) SetFirstRechargeBonusApplied(v bool) *PaymentOrderUpdateOne {
+	_u.mutation.SetFirstRechargeBonusApplied(v)
+	return _u
+}
+
+// SetNillableFirstRechargeBonusApplied sets the "first_recharge_bonus_applied" field if the given value is not nil.
+func (_u *PaymentOrderUpdateOne) SetNillableFirstRechargeBonusApplied(v *bool) *PaymentOrderUpdateOne {
+	if v != nil {
+		_u.SetFirstRechargeBonusApplied(*v)
+	}
 	return _u
 }
 
@@ -1973,6 +2100,21 @@ func (_u *PaymentOrderUpdateOne) sqlSave(ctx context.Context) (_node *PaymentOrd
 	}
 	if value, ok := _u.mutation.AddedFeeRate(); ok {
 		_spec.AddField(paymentorder.FieldFeeRate, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.RechargeBaseAmount(); ok {
+		_spec.SetField(paymentorder.FieldRechargeBaseAmount, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedRechargeBaseAmount(); ok {
+		_spec.AddField(paymentorder.FieldRechargeBaseAmount, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.RechargeBonusMultiplier(); ok {
+		_spec.SetField(paymentorder.FieldRechargeBonusMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedRechargeBonusMultiplier(); ok {
+		_spec.AddField(paymentorder.FieldRechargeBonusMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.FirstRechargeBonusApplied(); ok {
+		_spec.SetField(paymentorder.FieldFirstRechargeBonusApplied, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.RechargeCode(); ok {
 		_spec.SetField(paymentorder.FieldRechargeCode, field.TypeString, value)

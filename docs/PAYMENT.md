@@ -215,6 +215,19 @@ When adding a provider, the system auto-generates callback URLs from your site d
 
 ---
 
+## First Top-up Promo Bonus
+
+In **Admin Dashboard → Promo Code Management**, an administrator can set a “first top-up bonus multiplier” for a registration promo code. For example, `1.2` credits 20% extra on the registered user’s first successful balance top-up.
+
+- The bonus applies only to **balance orders created by the built-in payment system**. Subscription orders, manual admin balance adjustments, and external Admin API credits do not participate.
+- Eligibility is claimed atomically per user during paid-order fulfillment. Even if several orders are paid concurrently, only one receives the bonus; the others fall back to their snapshotted base credit amount.
+- Unpaid, cancelled, or expired orders do not consume eligibility. If payment succeeds but credit fulfillment fails, the decision remains attached to that order so an admin retry cannot claim or apply the bonus twice.
+- Refunding a completed top-up does not restore first-top-up eligibility.
+- The global balance recharge multiplier still applies to every top-up as before; the promo-code multiplier is an additional one-time multiplier on the first successful top-up.
+- During upgrade, users with any historical balance payment containing `paid_at` are marked as having used the first-top-up eligibility, preventing an old user from receiving it again.
+
+---
+
 ## Payment Flow
 
 ```

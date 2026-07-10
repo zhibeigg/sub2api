@@ -50,12 +50,13 @@ type User struct {
 	BalanceNotifyThreshold     *float64
 	BalanceNotifyExtraEmails   []NotifyEmailEntry
 	TotalRecharged             float64
+	FirstRechargeBonusUsed     bool // 是否已完成首笔余额充值；首充优惠只能成功占用一次
 
 	// RPMLimit 用户级每分钟请求数上限（0 = 不限制）。仅在所用分组未设置 rpm_limit
 	// 且该 (用户, 分组) 无 rpm_override 时作为全局兜底生效，计数键 rpm:u:{userID}:{min}。
 	RPMLimit int
 
-	// PromoCodeID 注册时绑定的优惠码 ID（可空）。用于第三方支付充值到账加成，
+	// PromoCodeID 注册时绑定的优惠码 ID（可空）。用于第三方支付首笔余额充值到账加成，
 	// 以及按优惠链接筛选用量统计。nil 表示未通过优惠链接注册。
 	PromoCodeID *int64
 

@@ -10,8 +10,8 @@ type PromoCode struct {
 	ID          int64
 	Code        string
 	BonusAmount float64
-	// RechargeBonusMultiplier 通过该优惠码注册的用户充值时的到账加成倍率。
-	// >1 表示加成（如 1.2 = 多到账 20%），=1 表示无加成，<=0 视为无效并回退为 1。
+	// RechargeBonusMultiplier 通过该优惠码注册的用户首笔余额充值时的到账加成倍率。
+	// >1 表示首充加成（如 1.2 = 多到账 20%），=1 表示无加成，<=0 视为无效并回退为 1。
 	RechargeBonusMultiplier float64
 	MaxUses                 int
 	UsedCount               int
@@ -61,7 +61,7 @@ func (p *PromoCode) IsExpired() bool {
 const DefaultRechargeBonusMultiplier = 1.0
 
 // normalizeRechargeBonusMultiplier 归一化充值到账加成倍率。
-// 语义为"到账加成"：充值到账余额 = 实付金额 × 全局倍率 × 优惠倍率。
+// 语义为"首充到账加成"：用户首笔成功余额充值到账 = 实付金额 × 全局倍率 × 优惠倍率。
 // 非法值（NaN/Inf/<1）一律归一为 1.0（无加成），确保优惠只会让用户多得、绝不少得。
 func normalizeRechargeBonusMultiplier(multiplier float64) float64 {
 	if math.IsNaN(multiplier) || math.IsInf(multiplier, 0) || multiplier < DefaultRechargeBonusMultiplier {

@@ -656,7 +656,7 @@ type PromoCode struct {
 	ID          int64   `json:"id"`
 	Code        string  `json:"code"`
 	BonusAmount float64 `json:"bonus_amount"`
-	// RechargeBonusMultiplier 充值到账加成倍率（1=无加成），绑定该优惠码注册的用户充值时按此倍率放大到账余额。
+	// RechargeBonusMultiplier 首笔余额充值到账加成倍率（1=无加成），绑定该优惠码注册的用户仅首笔成功充值按此倍率放大到账余额。
 	RechargeBonusMultiplier float64    `json:"recharge_bonus_multiplier"`
 	MaxUses                 int        `json:"max_uses"`
 	UsedCount               int        `json:"used_count"`

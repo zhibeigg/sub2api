@@ -1951,7 +1951,7 @@ export interface PromoCode {
   id: number
   code: string
   bonus_amount: number
-  /** 充值到账加成倍率（1=无加成），绑定该优惠码注册的用户充值时按此倍率放大到账余额 */
+  /** 首笔余额充值到账加成倍率（1=无加成），绑定该优惠码注册的用户仅首笔成功充值按此倍率放大到账余额 */
   recharge_bonus_multiplier: number
   max_uses: number
   used_count: number
@@ -1974,7 +1974,7 @@ export interface PromoCodeUsage {
 export interface CreatePromoCodeRequest {
   code?: string
   bonus_amount: number
-  /** 充值到账加成倍率（>=1，如 1.2 表示到账多 20%）；留空默认 1 */
+  /** 首笔余额充值到账加成倍率（>=1，如 1.2 表示首充多到账 20%）；留空默认 1 */
   recharge_bonus_multiplier?: number
   max_uses?: number
   expires_at?: number | null

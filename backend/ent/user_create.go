@@ -340,6 +340,20 @@ func (_c *UserCreate) SetNillableTotalRecharged(v *float64) *UserCreate {
 	return _c
 }
 
+// SetFirstRechargeBonusUsed sets the "first_recharge_bonus_used" field.
+func (_c *UserCreate) SetFirstRechargeBonusUsed(v bool) *UserCreate {
+	_c.mutation.SetFirstRechargeBonusUsed(v)
+	return _c
+}
+
+// SetNillableFirstRechargeBonusUsed sets the "first_recharge_bonus_used" field if the given value is not nil.
+func (_c *UserCreate) SetNillableFirstRechargeBonusUsed(v *bool) *UserCreate {
+	if v != nil {
+		_c.SetFirstRechargeBonusUsed(*v)
+	}
+	return _c
+}
+
 // SetRpmLimit sets the "rpm_limit" field.
 func (_c *UserCreate) SetRpmLimit(v int) *UserCreate {
 	_c.mutation.SetRpmLimit(v)
@@ -666,6 +680,10 @@ func (_c *UserCreate) defaults() error {
 		v := user.DefaultTotalRecharged
 		_c.mutation.SetTotalRecharged(v)
 	}
+	if _, ok := _c.mutation.FirstRechargeBonusUsed(); !ok {
+		v := user.DefaultFirstRechargeBonusUsed
+		_c.mutation.SetFirstRechargeBonusUsed(v)
+	}
 	if _, ok := _c.mutation.RpmLimit(); !ok {
 		v := user.DefaultRpmLimit
 		_c.mutation.SetRpmLimit(v)
@@ -755,6 +773,9 @@ func (_c *UserCreate) check() error {
 	}
 	if _, ok := _c.mutation.TotalRecharged(); !ok {
 		return &ValidationError{Name: "total_recharged", err: errors.New(`ent: missing required field "User.total_recharged"`)}
+	}
+	if _, ok := _c.mutation.FirstRechargeBonusUsed(); !ok {
+		return &ValidationError{Name: "first_recharge_bonus_used", err: errors.New(`ent: missing required field "User.first_recharge_bonus_used"`)}
 	}
 	if _, ok := _c.mutation.RpmLimit(); !ok {
 		return &ValidationError{Name: "rpm_limit", err: errors.New(`ent: missing required field "User.rpm_limit"`)}
@@ -877,6 +898,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.TotalRecharged(); ok {
 		_spec.SetField(user.FieldTotalRecharged, field.TypeFloat64, value)
 		_node.TotalRecharged = value
+	}
+	if value, ok := _c.mutation.FirstRechargeBonusUsed(); ok {
+		_spec.SetField(user.FieldFirstRechargeBonusUsed, field.TypeBool, value)
+		_node.FirstRechargeBonusUsed = value
 	}
 	if value, ok := _c.mutation.RpmLimit(); ok {
 		_spec.SetField(user.FieldRpmLimit, field.TypeInt, value)
@@ -1480,6 +1505,18 @@ func (u *UserUpsert) AddTotalRecharged(v float64) *UserUpsert {
 	return u
 }
 
+// SetFirstRechargeBonusUsed sets the "first_recharge_bonus_used" field.
+func (u *UserUpsert) SetFirstRechargeBonusUsed(v bool) *UserUpsert {
+	u.Set(user.FieldFirstRechargeBonusUsed, v)
+	return u
+}
+
+// UpdateFirstRechargeBonusUsed sets the "first_recharge_bonus_used" field to the value that was provided on create.
+func (u *UserUpsert) UpdateFirstRechargeBonusUsed() *UserUpsert {
+	u.SetExcluded(user.FieldFirstRechargeBonusUsed)
+	return u
+}
+
 // SetRpmLimit sets the "rpm_limit" field.
 func (u *UserUpsert) SetRpmLimit(v int) *UserUpsert {
 	u.Set(user.FieldRpmLimit, v)
@@ -1949,6 +1986,20 @@ func (u *UserUpsertOne) AddTotalRecharged(v float64) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateTotalRecharged() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateTotalRecharged()
+	})
+}
+
+// SetFirstRechargeBonusUsed sets the "first_recharge_bonus_used" field.
+func (u *UserUpsertOne) SetFirstRechargeBonusUsed(v bool) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetFirstRechargeBonusUsed(v)
+	})
+}
+
+// UpdateFirstRechargeBonusUsed sets the "first_recharge_bonus_used" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateFirstRechargeBonusUsed() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateFirstRechargeBonusUsed()
 	})
 }
 
@@ -2594,6 +2645,20 @@ func (u *UserUpsertBulk) AddTotalRecharged(v float64) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateTotalRecharged() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateTotalRecharged()
+	})
+}
+
+// SetFirstRechargeBonusUsed sets the "first_recharge_bonus_used" field.
+func (u *UserUpsertBulk) SetFirstRechargeBonusUsed(v bool) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetFirstRechargeBonusUsed(v)
+	})
+}
+
+// UpdateFirstRechargeBonusUsed sets the "first_recharge_bonus_used" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateFirstRechargeBonusUsed() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateFirstRechargeBonusUsed()
 	})
 }
 

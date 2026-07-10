@@ -29,7 +29,7 @@ func NewPromoHandler(promoService *service.PromoService) *PromoHandler {
 type CreatePromoCodeRequest struct {
 	Code                    string   `json:"code"`                                  // 可选，为空则自动生成
 	BonusAmount             float64  `json:"bonus_amount" binding:"required,min=0"` // 赠送余额
-	RechargeBonusMultiplier *float64 `json:"recharge_bonus_multiplier"`             // 充值到账加成倍率（>=1，如 1.2 表示到账多 20%）；留空默认 1
+	RechargeBonusMultiplier *float64 `json:"recharge_bonus_multiplier"`             // 首笔余额充值到账加成倍率（>=1，如 1.2 表示首充多到账 20%）；留空默认 1
 	MaxUses                 int      `json:"max_uses" binding:"min=0"`              // 最大使用次数，0=无限
 	ExpiresAt               *int64   `json:"expires_at"`                            // 过期时间戳（秒）
 	Notes                   string   `json:"notes"`                                 // 备注

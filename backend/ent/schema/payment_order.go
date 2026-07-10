@@ -50,6 +50,17 @@ func (PaymentOrder) Fields() []ent.Field {
 		field.Float("fee_rate").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
 			Default(0),
+		field.Float("recharge_base_amount").
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,2)"}).
+			Default(0).
+			Comment("余额充值未叠加优惠码首充加成时的基础到账金额；0 表示旧版订单"),
+		field.Float("recharge_bonus_multiplier").
+			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
+			Default(1).
+			Comment("创建订单时快照的优惠码首充到账加成倍率；1 表示无加成"),
+		field.Bool("first_recharge_bonus_applied").
+			Default(false).
+			Comment("该订单是否成功占用并应用了用户的首充优惠"),
 		field.String("recharge_code").
 			MaxLen(64),
 

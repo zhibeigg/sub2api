@@ -104,7 +104,7 @@ type UserRepository interface {
 
 	UpdateBalance(ctx context.Context, id int64, amount float64) error
 	DeductBalance(ctx context.Context, id int64, amount float64) error
-	// BindPromoCode 绑定用户注册时使用的优惠码 ID（用于充值加成与用量统计筛选）。
+	// BindPromoCode 绑定用户注册时使用的优惠码 ID（用于首充加成与用量统计筛选）。
 	// 仅当用户当前未绑定时才写入，避免重复注册流程覆盖既有绑定。
 	BindPromoCode(ctx context.Context, userID, promoCodeID int64) error
 	UpdateConcurrency(ctx context.Context, id int64, amount int) error

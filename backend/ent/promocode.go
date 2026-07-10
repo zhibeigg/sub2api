@@ -21,7 +21,7 @@ type PromoCode struct {
 	Code string `json:"code,omitempty"`
 	// 赠送余额金额
 	BonusAmount float64 `json:"bonus_amount,omitempty"`
-	// 充值到账加成倍率，1表示无加成；绑定该优惠码的用户第三方支付充值时按此倍率放大到账余额
+	// 首笔余额充值到账加成倍率，1表示无加成；绑定该优惠码的用户仅首笔成功充值按此倍率放大到账余额
 	RechargeBonusMultiplier float64 `json:"recharge_bonus_multiplier,omitempty"`
 	// 最大使用次数，0表示无限制
 	MaxUses int `json:"max_uses,omitempty"`

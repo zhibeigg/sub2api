@@ -128,7 +128,7 @@ func (s *PromoService) ApplyPromoCode(ctx context.Context, userID int64, code st
 		return fmt.Errorf("update user balance: %w", err)
 	}
 
-	// 绑定优惠码到用户（用于后续充值到账加成与用量统计筛选）。
+	// 绑定优惠码到用户（用于首笔余额充值到账加成与用量统计筛选）。
 	// 仅当用户未绑定时写入，且与余额赠送在同一事务，保证一致性。
 	if err := s.userRepo.BindPromoCode(txCtx, userID, promoCode.ID); err != nil {
 		return fmt.Errorf("bind promo code to user: %w", err)

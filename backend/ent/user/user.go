@@ -61,6 +61,8 @@ const (
 	FieldBalanceNotifyExtraEmails = "balance_notify_extra_emails"
 	// FieldTotalRecharged holds the string denoting the total_recharged field in the database.
 	FieldTotalRecharged = "total_recharged"
+	// FieldFirstRechargeBonusUsed holds the string denoting the first_recharge_bonus_used field in the database.
+	FieldFirstRechargeBonusUsed = "first_recharge_bonus_used"
 	// FieldRpmLimit holds the string denoting the rpm_limit field in the database.
 	FieldRpmLimit = "rpm_limit"
 	// FieldPromoCodeID holds the string denoting the promo_code_id field in the database.
@@ -219,6 +221,7 @@ var Columns = []string{
 	FieldBalanceNotifyThreshold,
 	FieldBalanceNotifyExtraEmails,
 	FieldTotalRecharged,
+	FieldFirstRechargeBonusUsed,
 	FieldRpmLimit,
 	FieldPromoCodeID,
 }
@@ -291,6 +294,8 @@ var (
 	DefaultBalanceNotifyExtraEmails string
 	// DefaultTotalRecharged holds the default value on creation for the "total_recharged" field.
 	DefaultTotalRecharged float64
+	// DefaultFirstRechargeBonusUsed holds the default value on creation for the "first_recharge_bonus_used" field.
+	DefaultFirstRechargeBonusUsed bool
 	// DefaultRpmLimit holds the default value on creation for the "rpm_limit" field.
 	DefaultRpmLimit int
 )
@@ -416,6 +421,11 @@ func ByBalanceNotifyExtraEmails(opts ...sql.OrderTermOption) OrderOption {
 // ByTotalRecharged orders the results by the total_recharged field.
 func ByTotalRecharged(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTotalRecharged, opts...).ToFunc()
+}
+
+// ByFirstRechargeBonusUsed orders the results by the first_recharge_bonus_used field.
+func ByFirstRechargeBonusUsed(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFirstRechargeBonusUsed, opts...).ToFunc()
 }
 
 // ByRpmLimit orders the results by the rpm_limit field.
