@@ -174,9 +174,9 @@ Sub2API is an AI API gateway platform designed to distribute and manage API quot
 ## Features
 
 - **Multi-Account Management** - Support multiple upstream account types (OAuth, API Key, Cookie); native integration for Anthropic, OpenAI, Gemini, Antigravity, Grok, Kiro (AWS CodeWhisperer, serving Claude models), Adobe Firefly, and Cursor documentation chat
-- **Cursor Documentation Chat Integration** - Manual `_vcrcs` Cookie accounts with Anthropic Messages, OpenAI Chat Completions and Responses compatibility, Redis-backed `previous_response_id`, local usage accounting, and explicit non-OAuth capability boundaries ([Integration Guide](docs/CURSOR_INTEGRATION.md))
+- **Cursor Documentation Chat Integration** - Manual `_vcrcs` Cookie accounts with a two-step preflight check before creation, Anthropic Messages, OpenAI Chat Completions and Responses compatibility, Redis-backed `previous_response_id`, local usage accounting, and explicit non-OAuth capability boundaries ([Integration Guide](docs/CURSOR_INTEGRATION.md))
 - **Native Kiro Integration** - Built-in AWS Builder ID device code, IAM Identity Center (PKCE), SSO token import, and credentials-JSON login; automatic token refresh, subscription/usage/overage queries, health checks, dynamic model discovery, and compact daily request/token plus account-billed/user-billed statistics in the usage window
-- **Native Adobe Firefly Integration** - Secure IMS credential lifecycle, automatic access-token renewal, profile and credits visibility, synchronous OpenAI-compatible image generation/editing, Redis-backed asynchronous video tasks, and idempotent media billing ([Integration Guide](docs/ADOBE_INTEGRATION.md))
+- **Native Adobe Firefly Integration** - Two-step credential preflight before account creation, secure IMS credential lifecycle, automatic access-token renewal, profile and credits visibility, synchronous OpenAI-compatible image generation/editing, Redis-backed asynchronous video tasks, and idempotent media billing ([Integration Guide](docs/ADOBE_INTEGRATION.md))
 - **API Key Distribution** - Generate and manage API Keys for users
 - **Precise Billing** - Token-level usage tracking and cost calculation
 - **Smart Scheduling** - Intelligent account selection with sticky sessions
@@ -668,7 +668,7 @@ Simple Mode is designed for individual developers or internal teams who want qui
 
 Sub2API supports Adobe as an independent `adobe` platform. Adobe groups only schedule Adobe accounts and expose Firefly media through the existing OpenAI-compatible media routes.
 
-- Single-step Adobe account creation with `type = oauth`; no browser OAuth second step.
+- Two-step Adobe account creation with `type = oauth`: configure account metadata first, then validate transient IMS credentials before persistence; no browser OAuth redirect is used.
 - Secure keep/replace/clear credential editing for access token, cookie, device token/device ID, password recovery metadata, and expiry.
 - Automatic IMS renewal, profile and credits visibility, account testing, proxy support, model allowlists/mapping, scheduling, rate limits, and platform quotas.
 - Images: `/v1/images/generations` and `/v1/images/edits`, with `url` or `b64_json` results.

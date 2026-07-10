@@ -49,6 +49,64 @@ func NewAdobeTokenProvider(accountRepo adobeTokenAccountRepository, proxyRepo ad
 	}
 }
 
+type AdobeCredentialVerificationSummary struct {
+	DisplayName  string     `json:"display_name,omitempty"`
+	Email        string     `json:"email,omitempty"`
+	Credits      *float64   `json:"credits,omitempty"`
+	CreditsKnown bool       `json:"credits_known"`
+	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
+}
+
+// VerifyCredentials validates transient Adobe credentials without loading or
+// mutating a persisted account. It intentionally never calls persistResult.
+func (p *AdobeTokenProvider) VerifyCredentials(ctx context.Context, account *Account) (*AdobeCredentialVerificationSummary, error) {
+	if p == nil || p.fetchOnly == nil || p.refreshViaDevice == nil || p.refreshViaCookie == nil {
+		return nil, errors.New("Adobe token provider is not configured")
+	}
+	if account == nil || !account.IsAdobeOAuth() {
+		return nil, errors.New("Adobe OAuth account is required")
+	}
+	if err := ValidateAdobeAccountCredentials(account.Type, account.Credentials); err != nil {
+		return nil, err
+	}
+
+	var result *ims.FullResult
+	accessToken := strings.TrimSpace(account.GetCredential("access_token"))
+	if accessToken != "" && !p.tokenNeedsRefresh(account) {
+		result = p.fetchOnly(ctx, accessToken, p.refreshOptions(ctx, account))
+	} else {
+		var err error
+		result, err = p.refresh(ctx, account)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if result == nil || strings.TrimSpace(result.AccessToken) == "" {
+		return nil, errors.New("Adobe credential verification failed")
+	}
+	if strings.TrimSpace(result.DisplayName) == "" &&
+		strings.TrimSpace(result.Email) == "" &&
+		strings.TrimSpace(result.UserID) == "" &&
+		result.Credits < 0 {
+		return nil, errors.New("Adobe credential verification failed")
+	}
+
+	summary := &AdobeCredentialVerificationSummary{
+		DisplayName:  result.DisplayName,
+		Email:        result.Email,
+		CreditsKnown: result.Credits >= 0,
+	}
+	if result.Credits >= 0 {
+		credits := result.Credits
+		summary.Credits = &credits
+	}
+	if result.ExpiresAt > 0 {
+		expiresAt := time.Unix(result.ExpiresAt, 0).UTC()
+		summary.ExpiresAt = &expiresAt
+	}
+	return summary, nil
+}
+
 func (p *AdobeTokenProvider) GetAccessToken(ctx context.Context, account *Account) (string, error) {
 	return p.getAccessToken(ctx, account, false)
 }

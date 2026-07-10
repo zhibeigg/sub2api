@@ -40,6 +40,7 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
       create: createAccountMock,
+      validateCredentials: vi.fn(),
       checkMixedChannelRisk: vi.fn().mockResolvedValue({ needs_warning: false })
     },
     settings: {

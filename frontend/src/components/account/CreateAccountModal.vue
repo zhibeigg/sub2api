@@ -5,8 +5,8 @@
     width="wide"
     @close="handleClose"
   >
-    <!-- Step Indicator for OAuth accounts -->
-    <div v-if="isOAuthFlow" class="mb-6 flex items-center justify-center">
+    <!-- Step Indicator for two-step account creation flows -->
+    <div v-if="isTwoStepFlow" class="mb-6 flex items-center justify-center">
       <div class="flex items-center space-x-4">
         <div class="flex items-center">
           <div
@@ -18,7 +18,7 @@
             1
           </div>
           <span class="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">{{
-            t('admin.accounts.oauth.authMethod')
+            firstStepTitle
           }}</span>
         </div>
         <div class="h-0.5 w-8 bg-gray-300 dark:bg-dark-600" />
@@ -201,68 +201,6 @@
           </button>
         </div>
       </div>
-
-      <!-- Cursor is a single-step Cookie credential import. -->
-      <section v-if="form.platform === 'cursor'" class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600" data-testid="cursor-credentials-form">
-        <div>
-          <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.accounts.cursor.credentialsTitle') }}</h3>
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.credentialsHint') }}</p>
-        </div>
-        <div>
-          <label class="input-label" for="cursor-cookie">{{ t('admin.accounts.cursor.cookie') }}</label>
-          <input id="cursor-cookie" v-model="cursorCredentials.cookie" type="password" autocomplete="new-password" class="input font-mono" :placeholder="t('admin.accounts.cursor.cookiePlaceholder')" data-1p-ignore data-lpignore="true" data-bwignore="true" />
-        </div>
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label class="input-label" for="cursor-cookie-expires-at">{{ t('admin.accounts.cursor.cookieExpiresAt') }}</label>
-            <input id="cursor-cookie-expires-at" v-model="cursorCredentials.cookie_expires_at" type="datetime-local" class="input" />
-          </div>
-          <div>
-            <label class="input-label" for="cursor-upstream-model">{{ t('admin.accounts.cursor.upstreamModel') }}</label>
-            <input id="cursor-upstream-model" v-model="cursorCredentials.cursor_upstream_model" type="text" class="input font-mono" :placeholder="t('admin.accounts.cursor.upstreamModelPlaceholder')" />
-          </div>
-          <div class="sm:col-span-2">
-            <label class="input-label" for="cursor-referer">{{ t('admin.accounts.cursor.referer') }}</label>
-            <input id="cursor-referer" v-model="cursorCredentials.cursor_referer" type="url" class="input font-mono" :placeholder="t('admin.accounts.cursor.refererPlaceholder')" />
-          </div>
-        </div>
-      </section>
-
-      <!-- Adobe uses oauth storage but is a single-step credential import. -->
-      <section v-if="form.platform === 'adobe'" class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600">
-        <div>
-          <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.accounts.adobe.credentialsTitle') }}</h3>
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.adobe.sourceHint') }}</p>
-        </div>
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label class="input-label" for="adobe-access-token">{{ t('admin.accounts.adobe.accessToken') }}</label>
-            <input id="adobe-access-token" v-model="adobeCredentials.access_token" type="password" autocomplete="new-password" class="input font-mono" @blur="adobeTouched.access_token = true" />
-          </div>
-          <div>
-            <label class="input-label" for="adobe-cookie">{{ t('admin.accounts.adobe.cookie') }}</label>
-            <input id="adobe-cookie" v-model="adobeCredentials.cookie" type="password" autocomplete="new-password" class="input font-mono" @blur="adobeTouched.cookie = true" />
-          </div>
-          <div>
-            <label class="input-label" for="adobe-device-token">{{ t('admin.accounts.adobe.deviceToken') }}</label>
-            <input id="adobe-device-token" v-model="adobeCredentials.device_token" type="password" autocomplete="new-password" class="input font-mono" @blur="adobeTouched.device_token = true" />
-          </div>
-          <div>
-            <label class="input-label" for="adobe-device-id">{{ t('admin.accounts.adobe.deviceId') }}</label>
-            <input id="adobe-device-id" v-model="adobeCredentials.device_id" type="password" autocomplete="new-password" class="input font-mono" @blur="adobeTouched.device_id = true" />
-          </div>
-          <div>
-            <label class="input-label" for="adobe-password">{{ t('admin.accounts.adobe.password') }}</label>
-            <input id="adobe-password" v-model="adobeCredentials.password" type="password" autocomplete="new-password" class="input" @blur="adobeTouched.password = true" />
-            <p class="input-hint">{{ t('admin.accounts.adobe.passwordHint') }}</p>
-          </div>
-          <div>
-            <label class="input-label" for="adobe-expires-at">{{ t('admin.accounts.adobe.expiresAt') }}</label>
-            <input id="adobe-expires-at" v-model="adobeCredentials.expires_at" type="datetime-local" class="input" />
-          </div>
-        </div>
-        <p v-if="adobeValidationError" class="text-xs text-red-600 dark:text-red-400" role="alert">{{ adobeValidationError }}</p>
-      </section>
 
       <!-- Account Type Selection (Anthropic) -->
       <div v-if="form.platform === 'anthropic'">
@@ -3166,8 +3104,85 @@
 
     </form>
 
-    <!-- Step 2: OAuth Authorization -->
+    <!-- Step 2: Credential validation or account authorization -->
     <div v-else class="space-y-5">
+      <form
+        v-if="isCredentialValidationFlow"
+        id="credential-validation-form"
+        class="space-y-5"
+        @submit.prevent="handleValidateAndCreate"
+      >
+      <section v-if="form.platform === 'cursor'" class="space-y-4" data-testid="cursor-credentials-form">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.accounts.cursor.credentialsTitle') }}</h3>
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.credentialsHint') }}</p>
+        </div>
+        <div>
+          <label class="input-label" for="cursor-cookie">{{ t('admin.accounts.cursor.cookie') }}</label>
+          <input id="cursor-cookie" v-model="cursorCredentials.cookie" type="password" autocomplete="new-password" class="input font-mono" :placeholder="t('admin.accounts.cursor.cookiePlaceholder')" data-testid="cursor-cookie-input" data-1p-ignore data-lpignore="true" data-bwignore="true" />
+        </div>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label class="input-label" for="cursor-cookie-expires-at">{{ t('admin.accounts.cursor.cookieExpiresAt') }}</label>
+            <input id="cursor-cookie-expires-at" v-model="cursorCredentials.cookie_expires_at" type="datetime-local" class="input" />
+          </div>
+          <div>
+            <label class="input-label" for="cursor-upstream-model">{{ t('admin.accounts.cursor.upstreamModel') }}</label>
+            <input id="cursor-upstream-model" v-model="cursorCredentials.cursor_upstream_model" type="text" class="input font-mono" :placeholder="t('admin.accounts.cursor.upstreamModelPlaceholder')" />
+          </div>
+          <div class="sm:col-span-2">
+            <label class="input-label" for="cursor-referer">{{ t('admin.accounts.cursor.referer') }}</label>
+            <input id="cursor-referer" v-model="cursorCredentials.cursor_referer" type="url" class="input font-mono" :placeholder="t('admin.accounts.cursor.refererPlaceholder')" />
+          </div>
+        </div>
+      </section>
+
+      <section v-else-if="form.platform === 'adobe'" class="space-y-4" data-testid="adobe-credentials-form">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.accounts.adobe.credentialsTitle') }}</h3>
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.adobe.sourceHint') }}</p>
+        </div>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label class="input-label" for="adobe-access-token">{{ t('admin.accounts.adobe.accessToken') }}</label>
+            <input id="adobe-access-token" v-model="adobeCredentials.access_token" type="password" autocomplete="new-password" class="input font-mono" data-testid="adobe-access-token-input" @blur="adobeTouched.access_token = true" />
+          </div>
+          <div>
+            <label class="input-label" for="adobe-cookie">{{ t('admin.accounts.adobe.cookie') }}</label>
+            <input id="adobe-cookie" v-model="adobeCredentials.cookie" type="password" autocomplete="new-password" class="input font-mono" @blur="adobeTouched.cookie = true" />
+          </div>
+          <div>
+            <label class="input-label" for="adobe-device-token">{{ t('admin.accounts.adobe.deviceToken') }}</label>
+            <input id="adobe-device-token" v-model="adobeCredentials.device_token" type="password" autocomplete="new-password" class="input font-mono" @blur="adobeTouched.device_token = true" />
+          </div>
+          <div>
+            <label class="input-label" for="adobe-device-id">{{ t('admin.accounts.adobe.deviceId') }}</label>
+            <input id="adobe-device-id" v-model="adobeCredentials.device_id" type="password" autocomplete="new-password" class="input font-mono" @blur="adobeTouched.device_id = true" />
+          </div>
+          <div>
+            <label class="input-label" for="adobe-password">{{ t('admin.accounts.adobe.password') }}</label>
+            <input id="adobe-password" v-model="adobeCredentials.password" type="password" autocomplete="new-password" class="input" @blur="adobeTouched.password = true" />
+            <p class="input-hint">{{ t('admin.accounts.adobe.passwordHint') }}</p>
+          </div>
+          <div>
+            <label class="input-label" for="adobe-expires-at">{{ t('admin.accounts.adobe.expiresAt') }}</label>
+            <input id="adobe-expires-at" v-model="adobeCredentials.expires_at" type="datetime-local" class="input" />
+          </div>
+        </div>
+        <p v-if="adobeValidationError" class="text-xs text-red-600 dark:text-red-400" role="alert">{{ adobeValidationError }}</p>
+      </section>
+
+        <div v-if="credentialValidationSummary.length" class="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800 dark:border-green-900/40 dark:bg-green-900/20 dark:text-green-200" data-testid="credential-validation-summary">
+          <p class="font-medium">{{ t('admin.accounts.credentialsValidation.success') }}</p>
+          <dl class="mt-2 space-y-1">
+            <div v-for="item in credentialValidationSummary" :key="item.label" class="flex gap-2">
+              <dt class="font-medium">{{ item.label }}:</dt>
+              <dd>{{ item.value }}</dd>
+            </div>
+          </dl>
+        </div>
+      </form>
+
       <!-- Kiro: interactive authorization by method -->
       <div v-if="form.platform === 'kiro'" class="space-y-4">
         <div class="rounded-lg border border-blue-100 bg-blue-50/60 p-4 dark:border-blue-900/30 dark:bg-blue-900/10">
@@ -3241,7 +3256,7 @@
       </div>
 
       <OAuthAuthorizationFlow
-        v-else
+        v-else-if="!isCredentialValidationFlow"
         ref="oauthFlowRef"
         :add-method="form.platform === 'anthropic' ? addMethod : 'oauth'"
         :auth-url="currentAuthUrl"
@@ -3304,7 +3319,7 @@
             ></path>
           </svg>
           {{
-            isOAuthFlow
+            isTwoStepFlow
               ? t('common.next')
               : submitting
                 ? t('admin.accounts.creating')
@@ -3316,9 +3331,32 @@
         <button type="button" class="btn btn-secondary" @click="goBackToBasicInfo">
           {{ t('common.back') }}
         </button>
+        <button
+          v-if="isCredentialValidationFlow"
+          type="submit"
+          form="credential-validation-form"
+          :disabled="verifyingCredentials || submitting"
+          class="btn btn-primary"
+          data-testid="validate-and-create-button"
+        >
+          <svg
+            v-if="verifyingCredentials || submitting"
+            class="-ml-1 mr-2 h-4 w-4 animate-spin"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          {{ verifyingCredentials
+            ? t('admin.accounts.credentialsValidation.verifying')
+            : submitting
+              ? t('admin.accounts.creating')
+              : t('admin.accounts.credentialsValidation.validateAndCreate') }}
+        </button>
         <!-- Kiro: complete authorization (builderid completes via device polling, no button needed) -->
         <button
-          v-if="form.platform === 'kiro' && kiroAddMethod !== 'builderid'"
+          v-else-if="form.platform === 'kiro' && kiroAddMethod !== 'builderid'"
           type="button"
           :disabled="submitting || kiroOAuth.loading.value"
           class="btn btn-primary"
@@ -3635,6 +3673,7 @@ import type {
   AccountType,
   CheckMixedChannelResponse,
   CreateAccountRequest,
+  ValidateAccountCredentialsResponse,
   CodexSessionImportMessage,
   OpenAICompactMode,
   OpenAIResponsesMode,
@@ -3695,6 +3734,8 @@ const { t } = useI18n()
 const authStore = useAuthStore()
 
 const oauthStepTitle = computed(() => {
+  if (form.platform === 'adobe') return t('admin.accounts.credentialsValidation.adobeStepTitle')
+  if (form.platform === 'cursor') return t('admin.accounts.credentialsValidation.cursorStepTitle')
   if (form.platform === 'openai') return t('admin.accounts.oauth.openai.title')
   if (form.platform === 'gemini') return t('admin.accounts.oauth.gemini.title')
   if (form.platform === 'antigravity') return t('admin.accounts.oauth.antigravity.title')
@@ -3702,6 +3743,12 @@ const oauthStepTitle = computed(() => {
   if (form.platform === 'kiro') return t('admin.accounts.oauth.kiro.title')
   return t('admin.accounts.oauth.title')
 })
+
+const firstStepTitle = computed(() =>
+  form.platform === 'adobe' || form.platform === 'cursor'
+    ? t('admin.accounts.credentialsValidation.basicConfiguration')
+    : t('admin.accounts.oauth.authMethod')
+)
 
 // Platform-specific hints for API Key type
 const baseUrlHint = computed(() => {
@@ -3792,6 +3839,8 @@ interface TempUnschedRuleForm {
 // State
 const step = ref(1)
 const submitting = ref(false)
+const verifyingCredentials = ref(false)
+const credentialValidationResult = ref<ValidateAccountCredentialsResponse | null>(null)
 const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_account'>('oauth-based') // UI selection for account category
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
@@ -3812,6 +3861,21 @@ const adobeValidationError = computed(() => {
   if (!error) return ''
   if (error === 'device_pair') return t('admin.accounts.adobe.devicePairRequired')
   return t('admin.accounts.adobe.sourceRequired')
+})
+
+const credentialValidationSummary = computed(() => {
+  const result = credentialValidationResult.value
+  if (!result?.success) return []
+
+  const items: Array<{ label: string; value: string }> = []
+  if (result.display_name) items.push({ label: t('admin.accounts.credentialsValidation.displayName'), value: result.display_name })
+  if (result.email) items.push({ label: t('admin.accounts.credentialsValidation.email'), value: result.email })
+  if (result.credits_known && typeof result.credits === 'number') {
+    items.push({ label: t('admin.accounts.credentialsValidation.credits'), value: String(result.credits) })
+  }
+  if (result.expires_at) items.push({ label: t('admin.accounts.credentialsValidation.expiresAt'), value: result.expires_at })
+  if (result.summary) items.push({ label: t('admin.accounts.credentialsValidation.summary'), value: result.summary })
+  return items
 })
 
 const syncPreviewCredentials = computed(() => {
@@ -4188,8 +4252,12 @@ const form = reactive({
 })
 
 // Helper to check if current type needs OAuth flow
+const isCredentialValidationFlow = computed(() =>
+  form.platform === 'adobe' || form.platform === 'cursor'
+)
+
 const isOAuthFlow = computed(() => {
-  if (form.platform === 'adobe' || form.platform === 'cursor') return false
+  if (isCredentialValidationFlow.value) return false
   // Antigravity upstream 类型不需要 OAuth 流程
   if (form.platform === 'antigravity' && antigravityAccountType.value === 'upstream') {
     return false
@@ -4205,10 +4273,13 @@ const isOAuthFlow = computed(() => {
   return accountCategory.value === 'oauth-based'
 })
 
+const isTwoStepFlow = computed(() => isCredentialValidationFlow.value || isOAuthFlow.value)
+
 const selectPlatform = (platform: AccountPlatform) => {
   if (form.platform === platform) return
 
   step.value = 1
+  credentialValidationResult.value = null
   form.platform = platform
 
   if (platform === 'cursor') {
@@ -4767,6 +4838,8 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
 // Methods
 const resetForm = () => {
   step.value = 1
+  verifyingCredentials.value = false
+  credentialValidationResult.value = null
   form.name = ''
   form.notes = ''
   form.platform = 'anthropic'
@@ -4875,6 +4948,8 @@ const handleClose = () => {
   Object.assign(cursorCredentials, { cookie: '', cookie_expires_at: '', cursor_upstream_model: '', cursor_referer: '' })
   Object.assign(adobeCredentials, { access_token: '', cookie: '', device_token: '', device_id: '', password: '', expires_at: '' })
   adobeValidationAttempted.value = false
+  verifyingCredentials.value = false
+  credentialValidationResult.value = null
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
   emit('close')
@@ -5181,52 +5256,86 @@ const handleKiroComplete = async () => {
   await createAccountAndFinish('kiro', 'oauth' as AccountType, credentials, buildAntigravityExtra())
 }
 
-const handleSubmit = async () => {
+const buildCredentialValidationCreatePayload = (): CreateAccountRequest | null => {
   if (form.platform === 'cursor') {
-    if (!form.name.trim()) {
-      appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
-      return
-    }
     if (!cursorCredentials.cookie.trim()) {
       appStore.showError(t('admin.accounts.cursor.cookieRequired'))
-      return
+      return null
     }
     const credentials: Record<string, unknown> = buildCursorCreateCredentials(cursorCredentials)
     const modelMapping = buildModelMappingObject('whitelist', allowedModels.value, [])
     if (modelMapping) credentials.model_mapping = modelMapping
-    await doCreateAccount({
+    return {
       ...form,
       type: 'cookie',
       concurrency: 1,
       credentials,
       auto_pause_on_expired: autoPauseOnExpired.value
-    })
-    return
+    }
   }
 
   if (form.platform === 'adobe') {
-    if (!form.name.trim()) {
-      appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
-      return
-    }
     adobeValidationAttempted.value = true
     const validationError = validateAdobeCredentialSource(adobeCredentials)
     if (validationError) {
       appStore.showError(validationError === 'device_pair'
         ? t('admin.accounts.adobe.devicePairRequired')
         : t('admin.accounts.adobe.sourceRequired'))
-      return
+      return null
     }
     const credentials: Record<string, unknown> = buildAdobeCreateCredentials(adobeCredentials)
     const modelMapping = buildModelMappingObject('whitelist', allowedModels.value, [])
     if (modelMapping) credentials.model_mapping = modelMapping
-    await doCreateAccount({
+    return {
       ...form,
       type: 'oauth',
       concurrency: form.concurrency || 1,
       credentials,
       auto_pause_on_expired: autoPauseOnExpired.value
+    }
+  }
+
+  return null
+}
+
+const handleValidateAndCreate = async () => {
+  if (verifyingCredentials.value || submitting.value) return
+
+  const payload = buildCredentialValidationCreatePayload()
+  if (!payload || (payload.platform !== 'adobe' && payload.platform !== 'cursor')) return
+
+  credentialValidationResult.value = null
+  verifyingCredentials.value = true
+  try {
+    const result = await adminAPI.accounts.validateCredentials({
+      platform: payload.platform,
+      type: payload.type as 'oauth' | 'cookie',
+      credentials: payload.credentials,
+      proxy_id: payload.proxy_id
     })
+    if (!result.success) {
+      appStore.showError(t('admin.accounts.credentialsValidation.failed'))
+      return
+    }
+    credentialValidationResult.value = result
+  } catch {
+    appStore.showError(t('admin.accounts.credentialsValidation.failed'))
+    return
+  } finally {
+    verifyingCredentials.value = false
+  }
+
+  await doCreateAccount(payload)
+}
+
+const handleSubmit = async () => {
+  if (isCredentialValidationFlow.value) {
+    if (!form.name.trim()) {
+      appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
+      return
+    }
+    credentialValidationResult.value = null
+    step.value = 2
     return
   }
 
@@ -5457,6 +5566,7 @@ const handleSubmit = async () => {
 
 const goBackToBasicInfo = () => {
   step.value = 1
+  credentialValidationResult.value = null
   oauth.resetState()
   openaiOAuth.resetState()
   geminiOAuth.resetState()

@@ -178,9 +178,9 @@ Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的
 ## 核心功能
 
 - **多账号管理** - 支持多种上游账号类型（OAuth、API Key、Cookie），原生集成 Anthropic、OpenAI、Gemini、Antigravity、Grok、Kiro（AWS CodeWhisperer，提供 Claude 模型）、Adobe Firefly 与 Cursor 文档聊天
-- **Cursor 文档聊天接入** - 支持手动 `_vcrcs` Cookie 账号、Anthropic Messages/OpenAI Chat Completions/Responses 兼容、Redis `previous_response_id`、本地用量计费，并明确不虚构 OAuth 与订阅额度能力（[接入文档](docs/CURSOR_INTEGRATION.md)）
+- **Cursor 文档聊天接入** - 支持手动 `_vcrcs` Cookie 账号、创建前两步凭据预检、Anthropic Messages/OpenAI Chat Completions/Responses 兼容、Redis `previous_response_id`、本地用量计费，并明确不虚构 OAuth 与订阅额度能力（[接入文档](docs/CURSOR_INTEGRATION.md)）
 - **Kiro 原生接入** - 内建 AWS Builder ID 设备码、IAM Identity Center（PKCE）、SSO Token 导入与凭证 JSON 四种登录方式，支持 token 自动刷新、订阅/用量/超额查询、健康检查与动态模型发现
-- **Adobe Firefly 原生接入** - 支持 IMS 凭据安全管理与自动续期、profile/credits 展示、OpenAI Images 兼容图片生成与编辑、Redis 异步视频任务和成功轮询幂等媒体结算（[接入文档](docs/ADOBE_INTEGRATION.md)）
+- **Adobe Firefly 原生接入** - 支持 IMS 凭据创建前两步预检、安全管理与自动续期、profile/credits 展示、OpenAI Images 兼容图片生成与编辑、Redis 异步视频任务和成功轮询幂等媒体结算（[接入文档](docs/ADOBE_INTEGRATION.md)）
 - **API Key 分发** - 为用户生成和管理 API Key
 - **精确计费** - Token 级别的用量追踪和成本计算
 - **智能调度** - 智能账号选择，支持粘性会话
@@ -736,7 +736,7 @@ go generate ./cmd/server
 
 Sub2API 将 Adobe 作为独立的 `adobe` 平台接入。Adobe 分组只调度 Adobe 账号，并通过现有 OpenAI 兼容媒体路由提供 Firefly 能力。
 
-- Adobe 账号固定复用 `oauth` 类型，但采用单步凭据录入，不进入浏览器 OAuth 第二步。
+- Adobe 账号固定复用 `oauth` 类型：第一步配置账号信息，第二步使用临时 IMS 凭据完成真实预检，成功后才落库；整个流程不跳转浏览器 OAuth。
 - access token、cookie、device token/device ID、password 恢复元数据与过期时间支持安全的保留、替换、清除三态编辑。
 - 支持 IMS 自动续期、profile/credits 展示、账号测试、代理、模型白名单/映射、调度、限流与 Adobe 平台配额。
 - 图片：`/v1/images/generations` 与 `/v1/images/edits`，支持 `url` 或 `b64_json` 返回。

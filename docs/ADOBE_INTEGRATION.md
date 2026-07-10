@@ -20,7 +20,7 @@ Adobe 分组只会调度 Adobe 账号，不参与 OpenAI、Anthropic、Gemini、
 
 ## 账号凭据
 
-后台进入“账户管理 → 新增账户”，选择 Adobe。Adobe 账号复用现有 `oauth` 类型，但创建流程为单步凭据录入，不会进入浏览器 OAuth 第二步。
+后台进入“账户管理 → 新增账户”，选择 Adobe。Adobe 账号复用现有 `oauth` 类型，并采用两步创建流程：第一步配置名称、代理、模型、配额、调度和分组；第二步录入 IMS 凭据并执行真实 profile/credits 预检。只有预检成功后才会创建账号，失败不会写入账号、Redis 或凭据缓存。
 
 至少提供以下一种可用来源：
 
@@ -30,7 +30,30 @@ Adobe 分组只会调度 Adobe 账号，不参与 OpenAI、Anthropic、Gemini、
 
 `password` 只作为恢复元数据保存，不能单独构成可用登录来源。
 
-通用管理 API：
+创建页第二步使用无落库预检 API：
+
+```http
+POST /api/v1/admin/accounts/validate-credentials
+Content-Type: application/json
+Authorization: Bearer <admin-token>
+```
+
+```json
+{
+  "platform": "adobe",
+  "type": "oauth",
+  "proxy_id": 12,
+  "credentials": {
+    "device_token": "<device-token>",
+    "device_id": "<device-id>",
+    "cookie": "<optional-fallback-cookie>"
+  }
+}
+```
+
+预检会直接验证 access token，或使用 Device Token / Cookie 临时换取 token 后查询 profile/credits。响应只包含 `message`、`display_name`、`email`、`credits`、`credits_known`、`expires_at` 等非敏感摘要，不回显任何 token、Cookie、密码或设备凭据。预检过程不调用账号仓库更新方法。
+
+预检成功后再调用通用创建 API：
 
 ```http
 POST /api/v1/admin/accounts
@@ -228,7 +251,7 @@ adobe:
 - `token_refresh_skew_seconds`：access token 提前续期窗口，默认 5 分钟；
 - `credits_cache_ttl_seconds`：profile / credits 快照缓存时间。
 
-账号级代理仍通过现有 Proxy 管理功能配置，不在 Adobe 段保存代理凭据。
+账号级代理仍通过现有 Proxy 管理功能配置，不在 Adobe 段保存代理凭据。两步预检复用现有 Adobe 请求超时和账号代理设置，不新增默认配置或示例配置项。
 
 ## 错误与故障切换
 

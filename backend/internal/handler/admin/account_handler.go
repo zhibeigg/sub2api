@@ -101,7 +101,7 @@ type CreateAccountRequest struct {
 	Name                    string         `json:"name" binding:"required"`
 	Notes                   *string        `json:"notes"`
 	Platform                string         `json:"platform" binding:"required"`
-	Type                    string         `json:"type" binding:"required,oneof=oauth setup-token apikey upstream bedrock service_account"`
+	Type                    string         `json:"type" binding:"required,oneof=oauth setup-token apikey upstream bedrock service_account cookie"`
 	Credentials             map[string]any `json:"credentials" binding:"required"`
 	Extra                   map[string]any `json:"extra"`
 	ProxyID                 *int64         `json:"proxy_id"`
@@ -120,7 +120,7 @@ type CreateAccountRequest struct {
 type UpdateAccountRequest struct {
 	Name                    string         `json:"name"`
 	Notes                   *string        `json:"notes"`
-	Type                    string         `json:"type" binding:"omitempty,oneof=oauth setup-token apikey upstream bedrock service_account"`
+	Type                    string         `json:"type" binding:"omitempty,oneof=oauth setup-token apikey upstream bedrock service_account cookie"`
 	Credentials             map[string]any `json:"credentials"`
 	ClearCredentials        []string       `json:"clear_credentials"`
 	Extra                   map[string]any `json:"extra"`
@@ -967,6 +967,64 @@ func (h *AccountHandler) Delete(c *gin.Context) {
 	}
 
 	response.Success(c, gin.H{"message": "Account deleted successfully"})
+}
+
+type ValidateCredentialsRequest struct {
+	Platform    string         `json:"platform" binding:"required"`
+	Type        string         `json:"type" binding:"required"`
+	Credentials map[string]any `json:"credentials" binding:"required"`
+	ProxyID     *int64         `json:"proxy_id"`
+	ModelID     string         `json:"model_id"`
+	Prompt      string         `json:"prompt"`
+}
+
+// ValidateCredentials verifies supported credentials before account creation.
+// POST /api/v1/admin/accounts/validate-credentials
+func (h *AccountHandler) ValidateCredentials(c *gin.Context) {
+	var req ValidateCredentialsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request")
+		return
+	}
+
+	platform := service.NormalizePlatform(req.Platform)
+	accountType := strings.ToLower(strings.TrimSpace(req.Type))
+	if !((platform == service.PlatformAdobe && accountType == service.AccountTypeOAuth) ||
+		(platform == service.PlatformCursor && accountType == service.AccountTypeCookie)) {
+		response.BadRequest(c, "Unsupported platform or account type")
+		return
+	}
+	if platform == service.PlatformAdobe {
+		if err := service.ValidateAdobeAccountCredentials(accountType, req.Credentials); err != nil {
+			response.BadRequest(c, "Invalid Adobe credentials")
+			return
+		}
+	} else if err := service.ValidateCursorAccountCredentials(accountType, req.Credentials); err != nil {
+		response.BadRequest(c, "Invalid Cursor credentials")
+		return
+	}
+	if h == nil || h.accountTestService == nil {
+		response.Error(c, http.StatusServiceUnavailable, "Credential validation unavailable")
+		return
+	}
+
+	result, err := h.accountTestService.ValidateTransientCredentials(c.Request.Context(), service.TransientCredentialValidationInput{
+		Platform:    platform,
+		Type:        accountType,
+		Credentials: req.Credentials,
+		ProxyID:     req.ProxyID,
+		ModelID:     req.ModelID,
+		Prompt:      req.Prompt,
+	})
+	if err != nil {
+		if errors.Is(err, service.ErrTransientCredentialValidationUnavailable) {
+			response.Error(c, http.StatusServiceUnavailable, "Credential validation unavailable")
+			return
+		}
+		response.BadRequest(c, "Credential validation failed")
+		return
+	}
+	response.Success(c, result)
 }
 
 // TestAccountRequest represents the request body for testing an account

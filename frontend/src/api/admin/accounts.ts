@@ -20,7 +20,9 @@ import type {
   CodexSessionImportResult,
   OpenAICodexPATCreateRequest,
   CheckMixedChannelRequest,
-  CheckMixedChannelResponse
+  CheckMixedChannelResponse,
+  ValidateAccountCredentialsRequest,
+  ValidateAccountCredentialsResponse
 } from '@/types'
 
 /**
@@ -135,6 +137,19 @@ export async function getById(id: number): Promise<Account> {
  */
 export async function create(accountData: CreateAccountRequest): Promise<Account> {
   const { data } = await apiClient.post<Account>('/admin/accounts', accountData)
+  return data
+}
+
+/**
+ * Validate Adobe/Cursor credentials before account creation.
+ */
+export async function validateCredentials(
+  payload: ValidateAccountCredentialsRequest
+): Promise<ValidateAccountCredentialsResponse> {
+  const { data } = await apiClient.post<ValidateAccountCredentialsResponse>(
+    '/admin/accounts/validate-credentials',
+    payload
+  )
   return data
 }
 
@@ -809,6 +824,7 @@ export const accountsAPI = {
   listWithEtag,
   getById,
   create,
+  validateCredentials,
   update,
   checkMixedChannelRisk,
   delete: deleteAccount,

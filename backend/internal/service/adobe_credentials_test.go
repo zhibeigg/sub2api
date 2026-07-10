@@ -231,6 +231,131 @@ func TestAdobeTokenProviderForceRefreshWithoutSourceIsExplicit(t *testing.T) {
 	require.ErrorContains(t, err, "no refresh source")
 }
 
+func TestAdobeTokenProviderVerifyCredentialsDoesNotPersist(t *testing.T) {
+	t.Parallel()
+
+	t.Run("access token fetch only", func(t *testing.T) {
+		account := &Account{ID: 0, Platform: PlatformAdobe, Type: AccountTypeOAuth, Credentials: map[string]any{
+			"access_token": "transient-token",
+			"expires_at":   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+		}}
+		repo := newAdobeTokenTestRepo(account)
+		provider := NewAdobeTokenProvider(repo, nil, &config.Config{})
+		provider.fetchOnly = func(_ context.Context, token string, _ ims.RefreshOptions) *ims.FullResult {
+			require.Equal(t, "transient-token", token)
+			return &ims.FullResult{AccessToken: token, DisplayName: "Transient User", Email: "user@example.com", Credits: 12.5, ExpiresAt: time.Now().Add(time.Hour).Unix()}
+		}
+
+		summary, err := provider.VerifyCredentials(context.Background(), account)
+		require.NoError(t, err)
+		require.Equal(t, "Transient User", summary.DisplayName)
+		require.Equal(t, "user@example.com", summary.Email)
+		require.True(t, summary.CreditsKnown)
+		require.NotNil(t, summary.Credits)
+		require.Equal(t, 12.5, *summary.Credits)
+		require.Zero(t, repo.getCalls.Load())
+		require.Zero(t, repo.updateCalls.Load())
+		require.Zero(t, repo.extraCalls.Load())
+	})
+
+	t.Run("access token without trusted evidence fails safely", func(t *testing.T) {
+		const token = "invalid-transient-token"
+		account := &Account{ID: 0, Platform: PlatformAdobe, Type: AccountTypeOAuth, Credentials: map[string]any{
+			"access_token": token,
+			"expires_at":   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+		}}
+		repo := newAdobeTokenTestRepo(account)
+		provider := NewAdobeTokenProvider(repo, nil, &config.Config{})
+		provider.fetchOnly = func(_ context.Context, receivedToken string, _ ims.RefreshOptions) *ims.FullResult {
+			require.Equal(t, token, receivedToken)
+			return &ims.FullResult{AccessToken: receivedToken, Credits: -1}
+		}
+
+		summary, err := provider.VerifyCredentials(context.Background(), account)
+		require.Nil(t, summary)
+		require.EqualError(t, err, "Adobe credential verification failed")
+		require.NotContains(t, err.Error(), token)
+		require.Zero(t, repo.getCalls.Load())
+		require.Zero(t, repo.updateCalls.Load())
+		require.Zero(t, repo.extraCalls.Load())
+	})
+
+	t.Run("cookie refresh full result", func(t *testing.T) {
+		account := &Account{ID: 0, Platform: PlatformAdobe, Type: AccountTypeOAuth, Credentials: map[string]any{"cookie": "transient-cookie"}}
+		repo := newAdobeTokenTestRepo(account)
+		provider := NewAdobeTokenProvider(repo, nil, &config.Config{})
+		provider.refreshViaCookie = func(_ context.Context, cookie string, _ ims.RefreshOptions) (*ims.FullResult, error) {
+			require.Equal(t, "transient-cookie", cookie)
+			return &ims.FullResult{AccessToken: "refreshed-token", DisplayName: "Cookie User", Credits: -1}, nil
+		}
+
+		summary, err := provider.VerifyCredentials(context.Background(), account)
+		require.NoError(t, err)
+		require.Equal(t, "Cookie User", summary.DisplayName)
+		require.False(t, summary.CreditsKnown)
+		require.Nil(t, summary.Credits)
+		require.Zero(t, repo.getCalls.Load())
+		require.Zero(t, repo.updateCalls.Load())
+		require.Zero(t, repo.extraCalls.Load())
+	})
+}
+
+func TestAdobeTokenProviderVerifyCredentialsHandlesNilProvider(t *testing.T) {
+	t.Parallel()
+	var provider *AdobeTokenProvider
+	_, err := provider.VerifyCredentials(context.Background(), &Account{Platform: PlatformAdobe, Type: AccountTypeOAuth, Credentials: map[string]any{"access_token": "token"}})
+	require.ErrorContains(t, err, "not configured")
+}
+
+func TestAccountTestServiceValidateTransientAdobeCredentialsReturnsFlatResult(t *testing.T) {
+	t.Parallel()
+	expiresAt := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+	account := &Account{ID: 0, Platform: PlatformAdobe, Type: AccountTypeOAuth}
+	repo := newAdobeTokenTestRepo(account)
+	provider := NewAdobeTokenProvider(repo, nil, &config.Config{})
+	provider.fetchOnly = func(_ context.Context, token string, _ ims.RefreshOptions) *ims.FullResult {
+		require.Equal(t, "transient-token", token)
+		return &ims.FullResult{
+			AccessToken: "transient-token",
+			DisplayName: "Adobe User",
+			Email:       "adobe@example.com",
+			Credits:     9.5,
+			ExpiresAt:   expiresAt.Unix(),
+		}
+	}
+	svc := NewAccountTestService(nil, nil, nil, nil, nil, nil, &config.Config{}, nil)
+	svc.SetAdobeTokenProvider(provider)
+
+	result, err := svc.ValidateTransientCredentials(context.Background(), TransientCredentialValidationInput{
+		Platform: PlatformAdobe,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token": "transient-token",
+			"expires_at":   expiresAt.Format(time.RFC3339),
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	require.Equal(t, PlatformAdobe, result.Platform)
+	require.Equal(t, "Adobe User", result.DisplayName)
+	require.Equal(t, "adobe@example.com", result.Email)
+	require.NotNil(t, result.Credits)
+	require.Equal(t, 9.5, *result.Credits)
+	require.NotNil(t, result.CreditsKnown)
+	require.True(t, *result.CreditsKnown)
+	require.Equal(t, expiresAt, *result.ExpiresAt)
+	require.Empty(t, result.Summary)
+
+	encoded, err := json.Marshal(result)
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"display_name":"Adobe User"`)
+	require.Contains(t, string(encoded), `"credits_known":true`)
+	require.NotContains(t, string(encoded), `"summary":{`)
+	require.Zero(t, repo.getCalls.Load())
+	require.Zero(t, repo.updateCalls.Load())
+	require.Zero(t, repo.extraCalls.Load())
+}
+
 func TestAdobeTokenProviderInvalidationReloadsAccessOnlyCredential(t *testing.T) {
 	t.Parallel()
 	stale := &Account{ID: 951, Platform: PlatformAdobe, Type: AccountTypeOAuth, Credentials: map[string]any{"access_token": "stale-token"}}

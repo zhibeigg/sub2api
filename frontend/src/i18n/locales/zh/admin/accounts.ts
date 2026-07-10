@@ -49,6 +49,20 @@ export default {
         credentialInvalid: '凭据缺失或已过期',
         cookieExpiryDisplay: 'Cookie {time}到期'
       },
+      credentialsValidation: {
+        basicConfiguration: '基础配置',
+        adobeStepTitle: 'Adobe 凭据验证',
+        cursorStepTitle: 'Cursor 凭据验证',
+        validateAndCreate: '验证并创建',
+        verifying: '验证中...',
+        failed: '凭据验证失败，请检查后重试。',
+        success: '凭据验证成功',
+        displayName: '显示名称',
+        email: '邮箱',
+        credits: '可用额度',
+        expiresAt: '到期时间',
+        summary: '摘要'
+      },
       createAccount: '添加账号',
       autoRefresh: '自动刷新',
       enableAutoRefresh: '启用自动刷新',

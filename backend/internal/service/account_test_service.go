@@ -51,6 +51,29 @@ type TestEvent struct {
 	Error    string `json:"error,omitempty"`
 }
 
+var ErrTransientCredentialValidationUnavailable = errors.New("transient credential validation is unavailable")
+
+type TransientCredentialValidationInput struct {
+	Platform    string
+	Type        string
+	Credentials map[string]any
+	ProxyID     *int64
+	ModelID     string
+	Prompt      string
+}
+
+type TransientCredentialValidationResult struct {
+	Success      bool       `json:"success"`
+	Platform     string     `json:"platform"`
+	Message      string     `json:"message"`
+	DisplayName  string     `json:"display_name,omitempty"`
+	Email        string     `json:"email,omitempty"`
+	Credits      *float64   `json:"credits,omitempty"`
+	CreditsKnown *bool      `json:"credits_known,omitempty"`
+	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
+	Summary      string     `json:"summary,omitempty"`
+}
+
 const (
 	defaultGeminiTextTestPrompt  = "hi"
 	defaultGeminiImageTestPrompt = "Generate a cute orange cat astronaut sticker on a clean pastel background."
@@ -124,6 +147,76 @@ func NewAccountTestService(
 		httpUpstream:              httpUpstream,
 		cfg:                       cfg,
 		tlsFPProfileService:       tlsFPProfileService,
+	}
+}
+
+// ValidateTransientCredentials verifies credentials against their upstream
+// without creating an account or touching account/Redis persistence.
+func (s *AccountTestService) ValidateTransientCredentials(ctx context.Context, input TransientCredentialValidationInput) (*TransientCredentialValidationResult, error) {
+	if s == nil {
+		return nil, ErrTransientCredentialValidationUnavailable
+	}
+	platform := NormalizePlatform(input.Platform)
+	accountType := strings.ToLower(strings.TrimSpace(input.Type))
+	account := &Account{
+		ID:          0,
+		Platform:    platform,
+		Type:        accountType,
+		Credentials: shallowCopyMap(input.Credentials),
+		ProxyID:     input.ProxyID,
+		Concurrency: 1,
+		Status:      StatusActive,
+		Schedulable: true,
+	}
+
+	switch {
+	case platform == PlatformAdobe && accountType == AccountTypeOAuth:
+		NormalizeAdobeCredentialExpiry(account.Credentials)
+		if s.adobeTokenProvider == nil {
+			return nil, ErrTransientCredentialValidationUnavailable
+		}
+		summary, err := s.adobeTokenProvider.VerifyCredentials(ctx, account)
+		if err != nil {
+			return nil, err
+		}
+		creditsKnown := summary.CreditsKnown
+		return &TransientCredentialValidationResult{
+			Success:      true,
+			Platform:     PlatformAdobe,
+			Message:      "Adobe credentials verified",
+			DisplayName:  summary.DisplayName,
+			Email:        summary.Email,
+			Credits:      summary.Credits,
+			CreditsKnown: &creditsKnown,
+			ExpiresAt:    summary.ExpiresAt,
+		}, nil
+
+	case platform == PlatformCursor && accountType == AccountTypeCookie:
+		if s.cursorGatewayService == nil {
+			return nil, ErrTransientCredentialValidationUnavailable
+		}
+		if err := ValidateCursorAccountCredentials(accountType, account.Credentials); err != nil {
+			return nil, err
+		}
+		model := strings.TrimSpace(input.ModelID)
+		if model == "" {
+			model = "cursor-chat"
+		}
+		prompt := strings.TrimSpace(input.Prompt)
+		if prompt == "" {
+			prompt = "Reply with OK."
+		}
+		if _, err := s.cursorGatewayService.Probe(ctx, account, model, prompt); err != nil {
+			return nil, err
+		}
+		return &TransientCredentialValidationResult{
+			Success:  true,
+			Platform: PlatformCursor,
+			Message:  "Cursor credentials verified",
+			Summary:  model,
+		}, nil
+	default:
+		return nil, errors.New("unsupported transient credential platform or account type")
 	}
 }
 

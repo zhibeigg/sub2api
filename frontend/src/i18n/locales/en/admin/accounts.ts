@@ -49,6 +49,20 @@ export default {
         credentialInvalid: 'Credentials missing or expired',
         cookieExpiryDisplay: 'Cookie expires {time}'
       },
+      credentialsValidation: {
+        basicConfiguration: 'Basic Configuration',
+        adobeStepTitle: 'Adobe Credential Validation',
+        cursorStepTitle: 'Cursor Credential Validation',
+        validateAndCreate: 'Validate and Create',
+        verifying: 'Validating...',
+        failed: 'Credential validation failed. Check the credentials and try again.',
+        success: 'Credentials validated',
+        displayName: 'Display name',
+        email: 'Email',
+        credits: 'Credits',
+        expiresAt: 'Expires at',
+        summary: 'Summary'
+      },
       createAccount: 'Create Account',
       autoRefresh: 'Auto Refresh',
       enableAutoRefresh: 'Enable auto refresh',

@@ -1161,6 +1161,27 @@ export interface OpenAIResponsesState {
   openai_responses_supported?: boolean
 }
 
+export interface ValidateAccountCredentialsRequest {
+  platform: 'adobe' | 'cursor'
+  type: 'oauth' | 'cookie'
+  credentials: Record<string, unknown>
+  proxy_id?: number | null
+  model_id?: string
+  prompt?: string
+}
+
+export interface ValidateAccountCredentialsResponse {
+  success: boolean
+  platform: string
+  message: string
+  display_name?: string
+  email?: string
+  credits?: number
+  credits_known?: boolean
+  expires_at?: string
+  summary?: string
+}
+
 export interface CreateAccountRequest {
   name: string
   notes?: string | null

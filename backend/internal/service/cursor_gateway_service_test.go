@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,22 +19,26 @@ import (
 )
 
 type cursorGatewayUpstreamStub struct {
-	mu       sync.Mutex
-	requests []*http.Request
-	bodies   []string
-	outputs  []string
+	mu            sync.Mutex
+	requests      []*http.Request
+	bodies        []string
+	outputs       []string
+	accountIDs    []int64
+	concurrencies []int
 }
 
 func (s *cursorGatewayUpstreamStub) Do(req *http.Request, proxyURL string, accountID int64, accountConcurrency int) (*http.Response, error) {
 	return s.DoWithTLS(req, proxyURL, accountID, accountConcurrency, nil)
 }
 
-func (s *cursorGatewayUpstreamStub) DoWithTLS(req *http.Request, _ string, _ int64, _ int, _ *tlsfingerprint.Profile) (*http.Response, error) {
+func (s *cursorGatewayUpstreamStub) DoWithTLS(req *http.Request, _ string, accountID int64, accountConcurrency int, _ *tlsfingerprint.Profile) (*http.Response, error) {
 	body, _ := io.ReadAll(req.Body)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.requests = append(s.requests, req)
 	s.bodies = append(s.bodies, string(body))
+	s.accountIDs = append(s.accountIDs, accountID)
+	s.concurrencies = append(s.concurrencies, accountConcurrency)
 	output := "hello"
 	if len(s.outputs) > 0 {
 		output = s.outputs[0]
@@ -105,4 +110,37 @@ func TestCursorResponsesPreviousResponseIsOwnerBound(t *testing.T) {
 func TestCursorEndpointRejectsUntrustedHost(t *testing.T) {
 	_, err := cursorEndpoint("https://example.com")
 	require.ErrorContains(t, err, "cursor.com")
+}
+
+func TestAccountTestServiceValidateTransientCursorCredentials(t *testing.T) {
+	upstream := &cursorGatewayUpstreamStub{outputs: []string{"OK"}}
+	gateway := NewCursorGatewayService(upstream, nil, nil, nil, &config.Config{Cursor: config.CursorConfig{
+		BaseURL:                  "https://cursor.com",
+		DefaultModel:             "google/gemini-3-flash",
+		RequestTimeoutSeconds:    10,
+		StreamIdleTimeoutSeconds: 10,
+	}})
+	svc := NewAccountTestService(nil, nil, nil, nil, nil, nil, &config.Config{}, nil)
+	svc.SetCursorGatewayService(gateway)
+
+	result, err := svc.ValidateTransientCredentials(context.Background(), TransientCredentialValidationInput{
+		Platform:    PlatformCursor,
+		Type:        AccountTypeCookie,
+		Credentials: map[string]any{"cookie": "foo=bar; _vcrcs=transient-secret"},
+	})
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	require.Equal(t, PlatformCursor, result.Platform)
+	require.Equal(t, "cursor-chat", result.Summary)
+	require.Empty(t, result.DisplayName)
+	require.Nil(t, result.CreditsKnown)
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, int64(0), upstream.accountIDs[0])
+	require.Equal(t, 1, upstream.concurrencies[0])
+	require.Equal(t, "foo=bar; _vcrcs=transient-secret", upstream.requests[0].Header.Get("Cookie"))
+	require.Contains(t, upstream.bodies[0], "Reply with OK.")
+
+	encoded, err := json.Marshal(result)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "transient-secret")
 }
