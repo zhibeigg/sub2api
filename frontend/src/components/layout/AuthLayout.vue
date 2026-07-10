@@ -5,8 +5,10 @@
     <header class="auth-header">
       <div class="public-shell auth-header-inner">
         <router-link to="/home" class="auth-brand" :aria-label="siteName">
-          <img :src="siteLogo || '/logo.png'" :alt="siteName" class="auth-logo" />
-          <span>{{ siteName }}</span>
+          <span class="auth-logo-lockup" aria-hidden="true">
+            <img :src="siteLogo || '/logo.png'" alt="" class="auth-logo" />
+          </span>
+          <LetterSwapText :text="siteName" />
         </router-link>
 
         <div class="auth-header-actions">
@@ -17,7 +19,7 @@
             rel="noopener noreferrer"
             class="auth-docs-link"
           >
-            {{ t('auth.brand.navDocs') }}
+            <LetterSwapText :text="t('auth.brand.navDocs')" />
             <Icon name="externalLink" size="xs" :stroke-width="1.5" />
           </a>
           <LocaleSwitcher />
@@ -37,16 +39,35 @@
 
     <div class="public-shell auth-main">
       <aside class="auth-context">
-        <div>
+        <SignalTrail :labels="trailLabels" bounded />
+        <div class="auth-context-rails" aria-hidden="true"></div>
+
+        <div class="auth-poster">
           <p class="public-kicker auth-eyebrow">
-            <span aria-hidden="true"></span>
+            <span class="auth-live-dot" aria-hidden="true"></span>
             {{ t('auth.brand.eyebrow') }}
+            <b>{{ chapterCode }}</b>
           </p>
-          <h1>
-            <span>{{ t('auth.brand.titleLine1') }}</span>
-            <span>{{ t('auth.brand.titleLine2') }}</span>
-          </h1>
-          <p class="auth-subtitle">{{ t('auth.brand.subtitle') }}</p>
+
+          <div class="auth-poster-stage">
+            <div class="auth-poster-copy">
+              <p class="auth-chapter-label">{{ chapterLabel }}</p>
+              <h1 :key="authMode">
+                <span>{{ titleLine1 }}</span>
+                <span>{{ titleLine2 }}</span>
+              </h1>
+              <p class="auth-subtitle">{{ subtitle }}</p>
+            </div>
+
+            <ProtocolOrbit
+              class="auth-protocol-orbit"
+              :scene="sceneIndex"
+              :label="t('auth.brand.orbitLabel')"
+              :status="t('auth.brand.orbitStatus')"
+              core-label="AUTH"
+              compact
+            />
+          </div>
         </div>
 
         <dl class="auth-facts">
@@ -80,7 +101,7 @@
         </div>
 
         <div class="auth-meta">
-          <router-link to="/home">{{ t('auth.brand.navHome') }}</router-link>
+          <router-link to="/home"><LetterSwapText :text="t('auth.brand.navHome')" /></router-link>
           <span>&copy; {{ currentYear }} {{ siteName }}</span>
         </div>
       </main>
@@ -91,14 +112,31 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 
 import LocaleSwitcher from '@/components/common/LocaleSwitcher.vue'
 import Icon from '@/components/icons/Icon.vue'
+import LetterSwapText from '@/components/public/LetterSwapText.vue'
+import ProtocolOrbit from '@/components/public/ProtocolOrbit.vue'
+import SignalTrail from '@/components/public/SignalTrail.vue'
 import { useAppStore } from '@/stores'
 import { PUBLIC_DOCS_URL, sanitizeUrl } from '@/utils/url'
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const route = useRoute()
+
+const authMode = computed(() => {
+  const path = route.path.toLowerCase()
+  return path.includes('register') || path.includes('email-verify') ? 'register' : 'login'
+})
+const sceneIndex = computed(() => (authMode.value === 'register' ? 1 : 0))
+const chapterCode = computed(() => (authMode.value === 'register' ? '02 / CREATE' : '01 / RETURN'))
+const chapterLabel = computed(() => t(`auth.brand.${authMode.value}Chapter`))
+const titleLine1 = computed(() => t(`auth.brand.${authMode.value}TitleLine1`))
+const titleLine2 = computed(() => t(`auth.brand.${authMode.value}TitleLine2`))
+const subtitle = computed(() => t(`auth.brand.${authMode.value}Subtitle`))
+const trailLabels = ['AUTH', 'KEY', '/v1', 'SECURE', 'ROUTE', '200 OK']
 
 const siteName = computed(
   () => appStore.siteName || appStore.cachedPublicSettings?.site_name || 'Sub2API'
@@ -160,10 +198,30 @@ onMounted(() => {
   text-decoration: none;
 }
 
+.auth-logo-lockup {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  aspect-ratio: 1;
+  border: 1px solid var(--public-line);
+  border-radius: 50%;
+  transition: transform 420ms var(--public-ease), border-color 180ms var(--public-ease);
+}
+
 .auth-logo {
-  width: 30px;
-  height: 30px;
+  width: 1.65rem;
+  height: 1.65rem;
   object-fit: contain;
+  transition: transform 420ms var(--public-ease);
+}
+
+.auth-brand:hover .auth-logo-lockup {
+  border-color: var(--public-accent);
+  transform: rotate(18deg);
+}
+
+.auth-brand:hover .auth-logo {
+  transform: rotate(-18deg) scale(0.88);
 }
 
 .auth-header-actions {
@@ -206,7 +264,7 @@ onMounted(() => {
 
 .auth-main {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(460px, 0.85fr);
+  grid-template-columns: minmax(0, 1.22fr) minmax(460px, 0.78fr);
   min-height: calc(100svh - 73px);
   padding-inline: 0;
   border-left: 1px solid var(--public-line);
@@ -214,11 +272,42 @@ onMounted(() => {
 }
 
 .auth-context {
+  position: relative;
   display: grid;
-  grid-template-rows: 1fr auto auto;
-  gap: 52px;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: 44px;
   min-width: 0;
-  padding: clamp(64px, 9vh, 112px) clamp(34px, 6vw, 96px) 44px;
+  overflow: hidden;
+  padding: clamp(50px, 7vh, 88px) clamp(34px, 5vw, 78px) 36px;
+  isolation: isolate;
+}
+
+.auth-context-rails {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background:
+    linear-gradient(90deg, transparent 0 31%, var(--public-line) 31% calc(31% + 1px), transparent calc(31% + 1px) 68%, var(--public-line) 68% calc(68% + 1px), transparent calc(68% + 1px)),
+    linear-gradient(180deg, transparent 0 57%, var(--public-line) 57% calc(57% + 1px), transparent calc(57% + 1px));
+  opacity: 0.42;
+  pointer-events: none;
+}
+
+.auth-context-rails::after {
+  content: '';
+  position: absolute;
+  width: min(38vw, 34rem);
+  aspect-ratio: 1;
+  right: -17%;
+  bottom: -24%;
+  border: 1px solid var(--public-line);
+  border-radius: 50%;
+  box-shadow: 0 0 0 3.25rem var(--public-bg), 0 0 0 calc(3.25rem + 1px) var(--public-line);
+  opacity: 0.55;
+}
+
+.auth-poster {
+  min-height: 0;
 }
 
 .auth-eyebrow {
@@ -227,35 +316,90 @@ onMounted(() => {
   gap: 10px;
 }
 
-.auth-eyebrow span {
+.auth-eyebrow b {
+  margin-left: auto;
+  color: var(--public-soft);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.auth-live-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--public-accent);
+  box-shadow: 0 0 0 0.35rem var(--public-accent-soft);
+}
+
+.auth-poster-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 0.55fr);
+  gap: clamp(24px, 4vw, 68px);
+  align-items: center;
+  min-height: clamp(24rem, 58vh, 38rem);
+}
+
+.auth-poster-copy {
+  position: relative;
+  z-index: 2;
+}
+
+.auth-chapter-label {
+  margin: 0 0 1.125rem;
+  color: var(--public-soft);
+  font-family: var(--public-font-mono);
+  font-size: 0.625rem;
+  text-transform: uppercase;
 }
 
 .auth-context h1 {
   display: grid;
   gap: 0.125rem;
-  max-width: 9ch;
-  margin: 1.875rem 0 0;
+  max-width: 10ch;
+  margin: 0;
   color: var(--public-ink);
-  font-size: clamp(3.5rem, 6.5vw, 5.25rem);
+  font-size: clamp(3.75rem, 7vw, 6.75rem);
+  font-style: oblique 10deg;
   font-weight: 500;
-  letter-spacing: -0.035em;
-  line-height: 0.96;
+  letter-spacing: -0.055em;
+  line-height: 0.84;
+  transform: skewX(-3deg);
+  animation: auth-title-enter 680ms var(--public-ease) both;
+}
+
+.auth-context h1 span {
+  white-space: nowrap;
 }
 
 .auth-context h1 span:last-child {
+  margin-left: clamp(1.75rem, 6vw, 6rem);
   color: var(--public-muted);
 }
 
 .auth-subtitle {
-  max-width: 36rem;
-  margin: 1.875rem 0 0;
+  max-width: 32rem;
+  margin: 2rem 0 0;
   color: var(--public-muted);
   font-size: 1rem;
   line-height: 1.75;
+}
+
+.auth-protocol-orbit {
+  justify-self: end;
+  margin-right: -34%;
+  opacity: 0.82;
+}
+
+@keyframes auth-title-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 2rem, 0) skewX(-3deg);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) skewX(-3deg);
+  }
 }
 
 .auth-facts {
@@ -324,6 +468,18 @@ onMounted(() => {
   padding: clamp(58px, 8vh, 96px) clamp(28px, 5vw, 76px) 32px;
   border-left: 1px solid var(--public-line);
   background: var(--public-surface);
+  animation: auth-form-enter 620ms 100ms var(--public-ease) both;
+}
+
+@keyframes auth-form-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(1.25rem, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
 }
 
 .auth-form {
@@ -416,6 +572,13 @@ onMounted(() => {
 
 .auth-form :deep(.input-error) {
   border-color: var(--public-danger);
+  animation: auth-field-error 260ms var(--public-ease);
+}
+
+@keyframes auth-field-error {
+  0%, 100% { transform: translateX(0); }
+  35% { transform: translateX(-0.25rem); }
+  70% { transform: translateX(0.2rem); }
 }
 
 .auth-form :deep(.input-hint),
@@ -445,6 +608,11 @@ onMounted(() => {
   border-color: var(--public-ink);
   background: var(--public-ink);
   color: var(--public-bg);
+}
+
+.auth-form :deep(.btn:active:not(:disabled)) {
+  transform: translateY(0.125rem) scale(0.992);
+  transition-duration: 90ms;
 }
 
 .auth-form :deep(.btn-primary svg) {
@@ -524,9 +692,20 @@ onMounted(() => {
     border-top: 1px solid var(--public-line);
   }
 
+  .auth-poster-stage {
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: auto;
+    padding-top: 2.5rem;
+  }
+
   .auth-context h1 {
     max-width: 12ch;
-    font-size: 3.25rem;
+    font-size: clamp(3.25rem, 9vw, 5rem);
+  }
+
+  .auth-protocol-orbit {
+    width: 13rem;
+    margin-right: -30%;
   }
 
   .auth-facts {
@@ -558,10 +737,27 @@ onMounted(() => {
     padding-top: 38px;
   }
 
+  .auth-poster-stage {
+    display: block;
+    padding-top: 2rem;
+  }
+
   .auth-context h1 {
-    margin-top: 22px;
-    font-size: 2.625rem;
-    line-height: 1.04;
+    font-size: clamp(2.75rem, 16vw, 4rem);
+    line-height: 0.9;
+  }
+
+  .auth-context h1 span:last-child {
+    margin-left: 1.25rem;
+  }
+
+  .auth-protocol-orbit {
+    position: absolute;
+    right: -5rem;
+    bottom: 5.5rem;
+    width: 12rem;
+    margin: 0;
+    opacity: 0.28;
   }
 
   .auth-subtitle {

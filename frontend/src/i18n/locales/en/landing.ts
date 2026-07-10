@@ -31,6 +31,37 @@ export default {
       models: 'Models',
       pricing: 'Pricing'
     },
+    story: {
+      status: 'POKE ROUTING / LIVE',
+      scroll: 'Scroll to sequence',
+      previous: 'Previous scene',
+      next: 'Next scene',
+      orbitLabel: 'Poke API protocol and model routing orbit',
+      orbitStatus: 'Route online',
+      scenes: {
+        real: {
+          label: 'Genuine models',
+          titleLine1: 'Full models.',
+          titleLine2: 'No dilution.',
+          subtitle: 'Models, protocols, and prices stay in plain sight.',
+          description: 'Provider-compatible protocols and model capabilities remain intact, while multi-channel routing reduces single-point instability.'
+        },
+        protocol: {
+          label: 'Unified access',
+          titleLine1: 'One key.',
+          titleLine2: 'Many protocols.',
+          subtitle: 'Switch the Base URL, not your development habits.',
+          description: 'Keep OpenAI- and Anthropic-compatible SDKs and CLIs while reaching leading models from one account.'
+        },
+        billing: {
+          label: 'Traceable billing',
+          titleLine1: 'Every call.',
+          titleLine2: 'Every detail.',
+          subtitle: 'Review price, tokens, status, and cost request by request.',
+          description: 'Check model pricing before a call and itemized usage after it, then pay only for what was actually used.'
+        }
+      }
+    },
     hero: {
       badge: 'Stable · Genuine · Fair',
       posterStatement: 'Full models.\nNo dilution.',

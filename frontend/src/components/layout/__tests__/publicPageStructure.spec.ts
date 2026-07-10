@@ -10,6 +10,10 @@ const loginViewSource = readFileSync(resolve(dir, '../../../views/auth/LoginView
 const registerViewSource = readFileSync(resolve(dir, '../../../views/auth/RegisterView.vue'), 'utf8')
 const authLayoutSource = readFileSync(resolve(dir, '../AuthLayout.vue'), 'utf8')
 const monologStylesSource = readFileSync(resolve(dir, '../../../styles/monolog.css'), 'utf8')
+const chapterDialSource = readFileSync(resolve(dir, '../../public/ChapterDial.vue'), 'utf8')
+const protocolOrbitSource = readFileSync(resolve(dir, '../../public/ProtocolOrbit.vue'), 'utf8')
+const signalTrailSource = readFileSync(resolve(dir, '../../public/SignalTrail.vue'), 'utf8')
+const publicMotionSource = readFileSync(resolve(dir, '../../public/publicMotion.ts'), 'utf8')
 const routerSource = readFileSync(resolve(dir, '../../../router/index.ts'), 'utf8')
 const indexHtmlSource = readFileSync(resolve(dir, '../../../../index.html'), 'utf8')
 const robotsSource = readFileSync(resolve(dir, '../../../../public/robots.txt'), 'utf8')
@@ -58,15 +62,33 @@ describe('public page structure', () => {
     }
   })
 
-  it('does not bring back decorative public-page artwork', () => {
-    for (const source of [homeViewSource, authLayoutSource]) {
+  it('ships the editorial motion system without copying reference artwork', () => {
+    expect(homeViewSource).toContain('<ChapterDial')
+    expect(homeViewSource).toContain('<ProtocolOrbit')
+    expect(homeViewSource).toContain('<SignalTrail')
+    expect(homeViewSource).toContain('resolveStoryIndex')
+    expect(authLayoutSource).toContain('<ProtocolOrbit')
+    expect(authLayoutSource).toContain('<SignalTrail')
+
+    for (const source of [homeViewSource, authLayoutSource, protocolOrbitSource, signalTrailSource]) {
+      expect(source).not.toContain('noise-portfilo')
       expect(source).not.toContain('grain.svg')
       expect(source).not.toContain('gateway-plate.svg')
       expect(source).not.toContain('auth-plate.svg')
       expect(source).not.toContain('<canvas')
+      expect(source).not.toContain('three.js')
     }
+  })
 
-    expect(homeViewSource).not.toContain('mono-cursor')
+  it('keeps story navigation accessible and motion adaptive', () => {
+    expect(chapterDialSource).toContain('<button')
+    expect(chapterDialSource).toContain(':aria-label="previousLabel"')
+    expect(chapterDialSource).toContain(':aria-label="nextLabel"')
+    expect(homeViewSource).not.toContain('preventDefault()')
+    expect(homeViewSource).toContain("window.addEventListener('scroll', scheduleStoryUpdate, { passive: true })")
+    expect(signalTrailSource).toContain("window.matchMedia('(prefers-reduced-motion: reduce)')")
+    expect(publicMotionSource).toContain('shouldReducePublicMotion')
+    expect(monologStylesSource).toContain('@media (prefers-reduced-motion: reduce)')
   })
 
   it('ships crawlable homepage metadata and structured data', () => {

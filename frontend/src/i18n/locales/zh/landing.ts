@@ -31,6 +31,37 @@ export default {
       models: '模型',
       pricing: '定价'
     },
+    story: {
+      status: 'POKE ROUTING / LIVE',
+      scroll: '滚动切换',
+      previous: '上一幕',
+      next: '下一幕',
+      orbitLabel: 'Poke API 协议与模型路由轨道',
+      orbitStatus: '路由在线',
+      scenes: {
+        real: {
+          label: '真实模型',
+          titleLine1: '满血模型',
+          titleLine2: '不掺水',
+          subtitle: '模型、协议、价格都摊开说。',
+          description: '保留主流官方协议与模型能力，多通道路由降低单点波动；不靠模糊套餐隐藏实际调用。'
+        },
+        protocol: {
+          label: '统一协议',
+          titleLine1: '一个密钥',
+          titleLine2: '多种协议',
+          subtitle: '替换 Base URL，不改变开发习惯。',
+          description: '沿用 OpenAI、Anthropic 兼容 SDK 与 CLI，在同一账户中切换主流模型。'
+        },
+        billing: {
+          label: '透明账单',
+          titleLine1: '每次调用',
+          titleLine2: '都有据可查',
+          subtitle: '价格、Token、状态与费用逐笔核对。',
+          description: '调用前查看模型价格，调用后核对用量明细，只为实际使用付费。'
+        }
+      }
+    },
     hero: {
       badge: '稳定 · 真实 · 平价',
       posterStatement: '满血模型\n不掺水。',
