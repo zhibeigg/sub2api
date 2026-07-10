@@ -12,19 +12,22 @@
       <!-- Plans Table -->
       <DataTable :columns="planColumns" :data="plans" :loading="plansLoading">
         <template #cell-name="{ value, row }">
-          <span class="text-sm font-medium" :class="getPlanNameClass(row.group_id)">{{ value }}</span>
+          <span class="text-sm font-medium" :class="getPlanNameClass(row)">{{ value }}</span>
         </template>
-        <template #cell-group_id="{ value }">
-          <span v-if="isGroupMissing(value)" class="text-sm">
-            <span class="text-gray-400">#{{ value }}</span>
+        <template #cell-group_id="{ row }">
+          <div v-if="getPlanGroups(row).length" class="flex max-w-sm flex-wrap gap-1.5">
+            <GroupBadge
+              v-for="group in getPlanGroups(row)"
+              :key="group.id"
+              :name="group.name"
+              :platform="asGroupPlatform(group.platform)"
+              :rate-multiplier="group.rate_multiplier"
+            />
+          </div>
+          <span v-else-if="getMissingGroupIds(row).length" class="text-sm">
+            <span class="text-gray-400">#{{ getMissingGroupIds(row).join(', #') }}</span>
             <span class="ml-1 badge badge-danger">{{ t('payment.admin.groupMissing') }}</span>
           </span>
-          <GroupBadge
-            v-else-if="getGroup(value)"
-            :name="getGroup(value)!.name"
-            :platform="getGroup(value)!.platform"
-            :rate-multiplier="getGroup(value)!.rate_multiplier"
-          />
           <span v-else class="text-sm text-gray-400">-</span>
         </template>
         <template #cell-price="{ value, row }">
@@ -117,12 +120,28 @@ function getGroup(id: number): AdminGroup | undefined {
   return groups.value.find(g => g.id === id)
 }
 
-function isGroupMissing(id: number): boolean {
-  return id > 0 && !groups.value.find(g => g.id === id)
+function asGroupPlatform(platform: string): AdminGroup['platform'] {
+  return platform as AdminGroup['platform']
 }
 
-function getPlanNameClass(groupId: number): string {
-  const group = getGroup(groupId)
+function getPlanGroupIds(plan: SubscriptionPlan): number[] {
+  return plan.group_ids?.length ? plan.group_ids : [plan.group_id].filter(id => id > 0)
+}
+
+function getPlanGroups(plan: SubscriptionPlan): SubscriptionPlan['groups'] {
+  if (plan.groups?.length) return plan.groups
+  return getPlanGroupIds(plan)
+    .map(id => getGroup(id))
+    .filter((group): group is AdminGroup => Boolean(group))
+}
+
+function getMissingGroupIds(plan: SubscriptionPlan): number[] {
+  const knownIds = new Set(getPlanGroups(plan).map(group => group.id))
+  return getPlanGroupIds(plan).filter(id => !knownIds.has(id))
+}
+
+function getPlanNameClass(plan: SubscriptionPlan): string {
+  const group = getPlanGroups(plan)[0]
   return group ? platformTextClass(group.platform) : 'text-gray-900 dark:text-white'
 }
 

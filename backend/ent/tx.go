@@ -74,6 +74,8 @@ type Tx struct {
 	Setting *SettingClient
 	// SubscriptionPlan is the client for interacting with the SubscriptionPlan builders.
 	SubscriptionPlan *SubscriptionPlanClient
+	// SubscriptionPlanGroup is the client for interacting with the SubscriptionPlanGroup builders.
+	SubscriptionPlanGroup *SubscriptionPlanGroupClient
 	// TLSFingerprintProfile is the client for interacting with the TLSFingerprintProfile builders.
 	TLSFingerprintProfile *TLSFingerprintProfileClient
 	// UsageCleanupTask is the client for interacting with the UsageCleanupTask builders.
@@ -92,6 +94,8 @@ type Tx struct {
 	UserPlatformQuota *UserPlatformQuotaClient
 	// UserSubscription is the client for interacting with the UserSubscription builders.
 	UserSubscription *UserSubscriptionClient
+	// UserSubscriptionGroup is the client for interacting with the UserSubscriptionGroup builders.
+	UserSubscriptionGroup *UserSubscriptionGroupClient
 
 	// lazily loaded.
 	client     *Client
@@ -253,6 +257,7 @@ func (tx *Tx) init() {
 	tx.SecuritySecret = NewSecuritySecretClient(tx.config)
 	tx.Setting = NewSettingClient(tx.config)
 	tx.SubscriptionPlan = NewSubscriptionPlanClient(tx.config)
+	tx.SubscriptionPlanGroup = NewSubscriptionPlanGroupClient(tx.config)
 	tx.TLSFingerprintProfile = NewTLSFingerprintProfileClient(tx.config)
 	tx.UsageCleanupTask = NewUsageCleanupTaskClient(tx.config)
 	tx.UsageLog = NewUsageLogClient(tx.config)
@@ -262,6 +267,7 @@ func (tx *Tx) init() {
 	tx.UserAttributeValue = NewUserAttributeValueClient(tx.config)
 	tx.UserPlatformQuota = NewUserPlatformQuotaClient(tx.config)
 	tx.UserSubscription = NewUserSubscriptionClient(tx.config)
+	tx.UserSubscriptionGroup = NewUserSubscriptionGroupClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.

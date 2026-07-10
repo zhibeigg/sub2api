@@ -411,6 +411,7 @@ const baseSettingsResponse = {
   payment_max_pending_orders: 3,
   payment_enabled_types: [],
   payment_balance_disabled: false,
+  payment_subscription_disabled: false,
   payment_balance_recharge_multiplier: 1,
   payment_subscription_usd_to_cny_rate: 0,
   payment_recharge_fee_rate: 0,
@@ -644,6 +645,27 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(payload).not.toHaveProperty("payment_visible_method_wxpay_source");
     expect(payload).not.toHaveProperty("payment_visible_method_alipay_enabled");
     expect(payload).not.toHaveProperty("payment_visible_method_wxpay_enabled");
+  });
+
+  it("loads and saves balance and subscription availability independently", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      payment_balance_disabled: true,
+      payment_subscription_disabled: false,
+    });
+
+    const wrapper = mountView();
+    await flushPromises();
+    await openPaymentTab(wrapper);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment_balance_disabled: true,
+        payment_subscription_disabled: false,
+      }),
+    );
   });
 
   it("submits Anthropic cache TTL injection gateway setting", async () => {

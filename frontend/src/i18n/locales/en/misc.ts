@@ -377,6 +377,10 @@ export default {
   // Payment System
   payment: {
     title: 'Recharge / Subscription',
+    rechargeTitle: 'Balance Recharge',
+    subscriptionTitle: 'Subscription Plans',
+    allDisabled: 'Purchases are currently unavailable',
+    allDisabledHint: 'Balance recharge and subscription purchases are both disabled. Please try again later.',
     amountLabel: 'Amount',
     paymentAmount: 'Payment Amount',
     creditedBalance: 'Credited Balance',
@@ -546,6 +550,7 @@ export default {
       weeklyLimit: 'Weekly',
       monthlyLimit: 'Monthly',
       quota: 'Quota',
+      sharedQuota: 'Shared quota across included groups',
       unlimited: 'Unlimited',
       models: 'Models',
     },
@@ -646,6 +651,9 @@ export default {
       offSale: 'Off Sale',
       group: 'Group',
       groupId: 'Group ID',
+      selectedGroupsHint: 'Subscription groups included in this plan',
+      sharedQuotaLimits: 'Shared Plan Quota',
+      sharedQuotaHint: 'All selected groups share these plan limits. Leave a period empty for unlimited usage.',
       features: 'Features',
       featuresHint: 'One feature per line',
       featuresPlaceholder: 'Enter plan features...',

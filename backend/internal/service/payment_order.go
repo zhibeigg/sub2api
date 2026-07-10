@@ -143,6 +143,9 @@ func (s *PaymentService) validateOrderInput(ctx context.Context, req CreateOrder
 		return nil, infraerrors.Forbidden("BALANCE_PAYMENT_DISABLED", "balance recharge has been disabled")
 	}
 	if req.OrderType == payment.OrderTypeSubscription {
+		if cfg.SubscriptionDisabled {
+			return nil, infraerrors.Forbidden("SUBSCRIPTION_PAYMENT_DISABLED", "subscription purchase has been disabled")
+		}
 		return s.validateSubOrder(ctx, req)
 	}
 	if math.IsNaN(req.Amount) || math.IsInf(req.Amount, 0) || req.Amount <= 0 {
@@ -163,12 +166,18 @@ func (s *PaymentService) validateSubOrder(ctx context.Context, req CreateOrderRe
 	if err != nil || !plan.ForSale {
 		return nil, infraerrors.NotFound("PLAN_NOT_AVAILABLE", "plan not found or not for sale")
 	}
-	group, err := s.groupRepo.GetByID(ctx, plan.GroupID)
-	if err != nil || group.Status != payment.EntityStatusActive {
-		return nil, infraerrors.NotFound("GROUP_NOT_FOUND", "subscription group is no longer available")
+	snapshot, err := s.buildSubscriptionSnapshot(ctx, plan)
+	if err != nil {
+		return nil, err
 	}
-	if !group.IsSubscriptionType() {
-		return nil, infraerrors.BadRequest("GROUP_TYPE_MISMATCH", "group is not a subscription type")
+	for _, groupID := range snapshot.GroupIDs {
+		item, groupErr := s.groupRepo.GetByID(ctx, groupID)
+		if groupErr != nil || item.Status != payment.EntityStatusActive {
+			return nil, infraerrors.NotFound("GROUP_NOT_FOUND", "subscription group is no longer available")
+		}
+		if !item.IsSubscriptionType() {
+			return nil, infraerrors.BadRequest("GROUP_TYPE_MISMATCH", "group is not a subscription type")
+		}
 	}
 	return plan, nil
 }
@@ -195,6 +204,13 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 		return nil, err
 	}
 	providerSnapshot := buildPaymentOrderProviderSnapshot(sel, req)
+	var subscriptionSnapshot *paymentSubscriptionSnapshot
+	if plan != nil {
+		subscriptionSnapshot, err = s.buildSubscriptionSnapshot(ctx, plan)
+		if err != nil {
+			return nil, err
+		}
+	}
 	selectedInstanceID := ""
 	selectedProviderKey := ""
 	if sel != nil {
@@ -232,8 +248,11 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 	if providerSnapshot != nil {
 		b.SetProviderSnapshot(providerSnapshot)
 	}
-	if plan != nil {
-		b.SetPlanID(plan.ID).SetSubscriptionGroupID(plan.GroupID).SetSubscriptionDays(psComputeValidityDays(plan.ValidityDays, plan.ValidityUnit))
+	if plan != nil && subscriptionSnapshot != nil {
+		b.SetPlanID(plan.ID).
+			SetSubscriptionGroupID(subscriptionSnapshot.GroupIDs[0]).
+			SetSubscriptionDays(subscriptionSnapshot.ValidityDays).
+			SetSubscriptionSnapshot(subscriptionSnapshotMap(subscriptionSnapshot))
 	}
 	order, err := b.Save(ctx)
 	if err != nil {

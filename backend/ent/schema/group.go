@@ -228,6 +228,12 @@ func (Group) Edges() []ent.Edge {
 		edge.From("allowed_users", User.Type).
 			Ref("allowed_groups").
 			Through("user_allowed_groups", UserAllowedGroup.Type),
+		edge.From("subscription_plans", SubscriptionPlan.Type).
+			Ref("groups").
+			Through("subscription_plan_groups", SubscriptionPlanGroup.Type),
+		edge.From("authorized_subscriptions", UserSubscription.Type).
+			Ref("authorized_groups").
+			Through("user_subscription_groups", UserSubscriptionGroup.Type),
 		// 注意：fallback_group_id 直接作为字段使用，不定义 edge
 		// 这样允许多个分组指向同一个降级分组（M2O 关系）
 	}

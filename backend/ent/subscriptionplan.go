@@ -27,6 +27,12 @@ type SubscriptionPlan struct {
 	Price float64 `json:"price,omitempty"`
 	// OriginalPrice holds the value of the "original_price" field.
 	OriginalPrice *float64 `json:"original_price,omitempty"`
+	// DailyLimitUsd holds the value of the "daily_limit_usd" field.
+	DailyLimitUsd *float64 `json:"daily_limit_usd,omitempty"`
+	// WeeklyLimitUsd holds the value of the "weekly_limit_usd" field.
+	WeeklyLimitUsd *float64 `json:"weekly_limit_usd,omitempty"`
+	// MonthlyLimitUsd holds the value of the "monthly_limit_usd" field.
+	MonthlyLimitUsd *float64 `json:"monthly_limit_usd,omitempty"`
 	// ValidityDays holds the value of the "validity_days" field.
 	ValidityDays int `json:"validity_days,omitempty"`
 	// ValidityUnit holds the value of the "validity_unit" field.
@@ -42,8 +48,51 @@ type SubscriptionPlan struct {
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
-	UpdatedAt    time.Time `json:"updated_at,omitempty"`
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// Edges holds the relations/edges for other nodes in the graph.
+	// The values are being populated by the SubscriptionPlanQuery when eager-loading is set.
+	Edges        SubscriptionPlanEdges `json:"edges"`
 	selectValues sql.SelectValues
+}
+
+// SubscriptionPlanEdges holds the relations/edges for other nodes in the graph.
+type SubscriptionPlanEdges struct {
+	// Groups holds the value of the groups edge.
+	Groups []*Group `json:"groups,omitempty"`
+	// Subscriptions holds the value of the subscriptions edge.
+	Subscriptions []*UserSubscription `json:"subscriptions,omitempty"`
+	// GroupBindings holds the value of the group_bindings edge.
+	GroupBindings []*SubscriptionPlanGroup `json:"group_bindings,omitempty"`
+	// loadedTypes holds the information for reporting if a
+	// type was loaded (or requested) in eager-loading or not.
+	loadedTypes [3]bool
+}
+
+// GroupsOrErr returns the Groups value or an error if the edge
+// was not loaded in eager-loading.
+func (e SubscriptionPlanEdges) GroupsOrErr() ([]*Group, error) {
+	if e.loadedTypes[0] {
+		return e.Groups, nil
+	}
+	return nil, &NotLoadedError{edge: "groups"}
+}
+
+// SubscriptionsOrErr returns the Subscriptions value or an error if the edge
+// was not loaded in eager-loading.
+func (e SubscriptionPlanEdges) SubscriptionsOrErr() ([]*UserSubscription, error) {
+	if e.loadedTypes[1] {
+		return e.Subscriptions, nil
+	}
+	return nil, &NotLoadedError{edge: "subscriptions"}
+}
+
+// GroupBindingsOrErr returns the GroupBindings value or an error if the edge
+// was not loaded in eager-loading.
+func (e SubscriptionPlanEdges) GroupBindingsOrErr() ([]*SubscriptionPlanGroup, error) {
+	if e.loadedTypes[2] {
+		return e.GroupBindings, nil
+	}
+	return nil, &NotLoadedError{edge: "group_bindings"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -53,7 +102,7 @@ func (*SubscriptionPlan) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case subscriptionplan.FieldForSale:
 			values[i] = new(sql.NullBool)
-		case subscriptionplan.FieldPrice, subscriptionplan.FieldOriginalPrice:
+		case subscriptionplan.FieldPrice, subscriptionplan.FieldOriginalPrice, subscriptionplan.FieldDailyLimitUsd, subscriptionplan.FieldWeeklyLimitUsd, subscriptionplan.FieldMonthlyLimitUsd:
 			values[i] = new(sql.NullFloat64)
 		case subscriptionplan.FieldID, subscriptionplan.FieldGroupID, subscriptionplan.FieldValidityDays, subscriptionplan.FieldSortOrder:
 			values[i] = new(sql.NullInt64)
@@ -112,6 +161,27 @@ func (_m *SubscriptionPlan) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.OriginalPrice = new(float64)
 				*_m.OriginalPrice = value.Float64
+			}
+		case subscriptionplan.FieldDailyLimitUsd:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field daily_limit_usd", values[i])
+			} else if value.Valid {
+				_m.DailyLimitUsd = new(float64)
+				*_m.DailyLimitUsd = value.Float64
+			}
+		case subscriptionplan.FieldWeeklyLimitUsd:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field weekly_limit_usd", values[i])
+			} else if value.Valid {
+				_m.WeeklyLimitUsd = new(float64)
+				*_m.WeeklyLimitUsd = value.Float64
+			}
+		case subscriptionplan.FieldMonthlyLimitUsd:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field monthly_limit_usd", values[i])
+			} else if value.Valid {
+				_m.MonthlyLimitUsd = new(float64)
+				*_m.MonthlyLimitUsd = value.Float64
 			}
 		case subscriptionplan.FieldValidityDays:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -174,6 +244,21 @@ func (_m *SubscriptionPlan) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
 }
 
+// QueryGroups queries the "groups" edge of the SubscriptionPlan entity.
+func (_m *SubscriptionPlan) QueryGroups() *GroupQuery {
+	return NewSubscriptionPlanClient(_m.config).QueryGroups(_m)
+}
+
+// QuerySubscriptions queries the "subscriptions" edge of the SubscriptionPlan entity.
+func (_m *SubscriptionPlan) QuerySubscriptions() *UserSubscriptionQuery {
+	return NewSubscriptionPlanClient(_m.config).QuerySubscriptions(_m)
+}
+
+// QueryGroupBindings queries the "group_bindings" edge of the SubscriptionPlan entity.
+func (_m *SubscriptionPlan) QueryGroupBindings() *SubscriptionPlanGroupQuery {
+	return NewSubscriptionPlanClient(_m.config).QueryGroupBindings(_m)
+}
+
 // Update returns a builder for updating this SubscriptionPlan.
 // Note that you need to call SubscriptionPlan.Unwrap() before calling this method if this SubscriptionPlan
 // was returned from a transaction, and the transaction was committed or rolled back.
@@ -211,6 +296,21 @@ func (_m *SubscriptionPlan) String() string {
 	builder.WriteString(", ")
 	if v := _m.OriginalPrice; v != nil {
 		builder.WriteString("original_price=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.DailyLimitUsd; v != nil {
+		builder.WriteString("daily_limit_usd=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.WeeklyLimitUsd; v != nil {
+		builder.WriteString("weekly_limit_usd=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.MonthlyLimitUsd; v != nil {
+		builder.WriteString("monthly_limit_usd=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")

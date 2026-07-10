@@ -25,6 +25,16 @@ const (
 	FieldUserID = "user_id"
 	// FieldGroupID holds the string denoting the group_id field in the database.
 	FieldGroupID = "group_id"
+	// FieldSourcePlanID holds the string denoting the source_plan_id field in the database.
+	FieldSourcePlanID = "source_plan_id"
+	// FieldQuotaSnapshotted holds the string denoting the quota_snapshotted field in the database.
+	FieldQuotaSnapshotted = "quota_snapshotted"
+	// FieldDailyLimitUsd holds the string denoting the daily_limit_usd field in the database.
+	FieldDailyLimitUsd = "daily_limit_usd"
+	// FieldWeeklyLimitUsd holds the string denoting the weekly_limit_usd field in the database.
+	FieldWeeklyLimitUsd = "weekly_limit_usd"
+	// FieldMonthlyLimitUsd holds the string denoting the monthly_limit_usd field in the database.
+	FieldMonthlyLimitUsd = "monthly_limit_usd"
 	// FieldStartsAt holds the string denoting the starts_at field in the database.
 	FieldStartsAt = "starts_at"
 	// FieldExpiresAt holds the string denoting the expires_at field in the database.
@@ -55,8 +65,14 @@ const (
 	EdgeGroup = "group"
 	// EdgeAssignedByUser holds the string denoting the assigned_by_user edge name in mutations.
 	EdgeAssignedByUser = "assigned_by_user"
+	// EdgeSourcePlan holds the string denoting the source_plan edge name in mutations.
+	EdgeSourcePlan = "source_plan"
+	// EdgeAuthorizedGroups holds the string denoting the authorized_groups edge name in mutations.
+	EdgeAuthorizedGroups = "authorized_groups"
 	// EdgeUsageLogs holds the string denoting the usage_logs edge name in mutations.
 	EdgeUsageLogs = "usage_logs"
+	// EdgeGroupBindings holds the string denoting the group_bindings edge name in mutations.
+	EdgeGroupBindings = "group_bindings"
 	// Table holds the table name of the usersubscription in the database.
 	Table = "user_subscriptions"
 	// UserTable is the table that holds the user relation/edge.
@@ -80,6 +96,18 @@ const (
 	AssignedByUserInverseTable = "users"
 	// AssignedByUserColumn is the table column denoting the assigned_by_user relation/edge.
 	AssignedByUserColumn = "assigned_by"
+	// SourcePlanTable is the table that holds the source_plan relation/edge.
+	SourcePlanTable = "user_subscriptions"
+	// SourcePlanInverseTable is the table name for the SubscriptionPlan entity.
+	// It exists in this package in order to avoid circular dependency with the "subscriptionplan" package.
+	SourcePlanInverseTable = "subscription_plans"
+	// SourcePlanColumn is the table column denoting the source_plan relation/edge.
+	SourcePlanColumn = "source_plan_id"
+	// AuthorizedGroupsTable is the table that holds the authorized_groups relation/edge. The primary key declared below.
+	AuthorizedGroupsTable = "user_subscription_groups"
+	// AuthorizedGroupsInverseTable is the table name for the Group entity.
+	// It exists in this package in order to avoid circular dependency with the "group" package.
+	AuthorizedGroupsInverseTable = "groups"
 	// UsageLogsTable is the table that holds the usage_logs relation/edge.
 	UsageLogsTable = "usage_logs"
 	// UsageLogsInverseTable is the table name for the UsageLog entity.
@@ -87,6 +115,13 @@ const (
 	UsageLogsInverseTable = "usage_logs"
 	// UsageLogsColumn is the table column denoting the usage_logs relation/edge.
 	UsageLogsColumn = "subscription_id"
+	// GroupBindingsTable is the table that holds the group_bindings relation/edge.
+	GroupBindingsTable = "user_subscription_groups"
+	// GroupBindingsInverseTable is the table name for the UserSubscriptionGroup entity.
+	// It exists in this package in order to avoid circular dependency with the "usersubscriptiongroup" package.
+	GroupBindingsInverseTable = "user_subscription_groups"
+	// GroupBindingsColumn is the table column denoting the group_bindings relation/edge.
+	GroupBindingsColumn = "subscription_id"
 )
 
 // Columns holds all SQL columns for usersubscription fields.
@@ -97,6 +132,11 @@ var Columns = []string{
 	FieldDeletedAt,
 	FieldUserID,
 	FieldGroupID,
+	FieldSourcePlanID,
+	FieldQuotaSnapshotted,
+	FieldDailyLimitUsd,
+	FieldWeeklyLimitUsd,
+	FieldMonthlyLimitUsd,
 	FieldStartsAt,
 	FieldExpiresAt,
 	FieldStatus,
@@ -110,6 +150,12 @@ var Columns = []string{
 	FieldAssignedAt,
 	FieldNotes,
 }
+
+var (
+	// AuthorizedGroupsPrimaryKey and AuthorizedGroupsColumn2 are the table columns denoting the
+	// primary key for the authorized_groups relation (M2M).
+	AuthorizedGroupsPrimaryKey = []string{"subscription_id", "group_id"}
+)
 
 // ValidColumn reports if the column name is valid (part of the table columns).
 func ValidColumn(column string) bool {
@@ -135,6 +181,8 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// DefaultQuotaSnapshotted holds the default value on creation for the "quota_snapshotted" field.
+	DefaultQuotaSnapshotted bool
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -180,6 +228,31 @@ func ByUserID(opts ...sql.OrderTermOption) OrderOption {
 // ByGroupID orders the results by the group_id field.
 func ByGroupID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldGroupID, opts...).ToFunc()
+}
+
+// BySourcePlanID orders the results by the source_plan_id field.
+func BySourcePlanID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSourcePlanID, opts...).ToFunc()
+}
+
+// ByQuotaSnapshotted orders the results by the quota_snapshotted field.
+func ByQuotaSnapshotted(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldQuotaSnapshotted, opts...).ToFunc()
+}
+
+// ByDailyLimitUsd orders the results by the daily_limit_usd field.
+func ByDailyLimitUsd(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDailyLimitUsd, opts...).ToFunc()
+}
+
+// ByWeeklyLimitUsd orders the results by the weekly_limit_usd field.
+func ByWeeklyLimitUsd(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWeeklyLimitUsd, opts...).ToFunc()
+}
+
+// ByMonthlyLimitUsd orders the results by the monthly_limit_usd field.
+func ByMonthlyLimitUsd(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMonthlyLimitUsd, opts...).ToFunc()
 }
 
 // ByStartsAt orders the results by the starts_at field.
@@ -263,6 +336,27 @@ func ByAssignedByUserField(field string, opts ...sql.OrderTermOption) OrderOptio
 	}
 }
 
+// BySourcePlanField orders the results by source_plan field.
+func BySourcePlanField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newSourcePlanStep(), sql.OrderByField(field, opts...))
+	}
+}
+
+// ByAuthorizedGroupsCount orders the results by authorized_groups count.
+func ByAuthorizedGroupsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newAuthorizedGroupsStep(), opts...)
+	}
+}
+
+// ByAuthorizedGroups orders the results by authorized_groups terms.
+func ByAuthorizedGroups(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newAuthorizedGroupsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
 // ByUsageLogsCount orders the results by usage_logs count.
 func ByUsageLogsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -274,6 +368,20 @@ func ByUsageLogsCount(opts ...sql.OrderTermOption) OrderOption {
 func ByUsageLogs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
 		sqlgraph.OrderByNeighborTerms(s, newUsageLogsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByGroupBindingsCount orders the results by group_bindings count.
+func ByGroupBindingsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newGroupBindingsStep(), opts...)
+	}
+}
+
+// ByGroupBindings orders the results by group_bindings terms.
+func ByGroupBindings(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newGroupBindingsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 func newUserStep() *sqlgraph.Step {
@@ -297,10 +405,31 @@ func newAssignedByUserStep() *sqlgraph.Step {
 		sqlgraph.Edge(sqlgraph.M2O, true, AssignedByUserTable, AssignedByUserColumn),
 	)
 }
+func newSourcePlanStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(SourcePlanInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, SourcePlanTable, SourcePlanColumn),
+	)
+}
+func newAuthorizedGroupsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(AuthorizedGroupsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2M, false, AuthorizedGroupsTable, AuthorizedGroupsPrimaryKey...),
+	)
+}
 func newUsageLogsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(UsageLogsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, UsageLogsTable, UsageLogsColumn),
+	)
+}
+func newGroupBindingsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(GroupBindingsInverseTable, GroupBindingsColumn),
+		sqlgraph.Edge(sqlgraph.O2M, true, GroupBindingsTable, GroupBindingsColumn),
 	)
 }

@@ -2,14 +2,17 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"math"
 	"math/rand/v2"
 	"strconv"
 	"strings"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/ent/subscriptionplangroup"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
@@ -171,34 +174,190 @@ func (s *SubscriptionService) StartSubCacheInvalidationSubscriber(ctx context.Co
 }
 
 func (s *SubscriptionService) invalidateSubscriptionCaches(userID, groupID int64) error {
-	s.InvalidateSubCacheSync(userID, groupID)
+	return s.invalidateSubscriptionGroupCaches(userID, []int64{groupID})
+}
+
+func (s *SubscriptionService) invalidateSubscriptionGroupCaches(userID int64, groupIDs []int64) error {
+	groupIDs = uniqueSubscriptionGroupIDs(groupIDs)
+	for _, groupID := range groupIDs {
+		s.InvalidateSubCacheSync(userID, groupID)
+	}
 	if s.billingCacheService == nil {
 		return nil
 	}
-
 	cacheCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := s.billingCacheService.InvalidateSubscription(cacheCtx, userID, groupID); err != nil {
-		return fmt.Errorf("invalidate billing subscription cache: %w", err)
-	}
-	if err := s.billingCacheService.PublishSubscriptionCacheInvalidation(cacheCtx, subCacheKey(userID, groupID)); err != nil {
-		return fmt.Errorf("publish subscription cache invalidation: %w", err)
+	for _, groupID := range groupIDs {
+		if err := s.billingCacheService.InvalidateSubscription(cacheCtx, userID, groupID); err != nil {
+			return fmt.Errorf("invalidate billing subscription cache: %w", err)
+		}
+		if err := s.billingCacheService.PublishSubscriptionCacheInvalidation(cacheCtx, subCacheKey(userID, groupID)); err != nil {
+			return fmt.Errorf("publish subscription cache invalidation: %w", err)
+		}
 	}
 	return nil
 }
 
+func uniqueSubscriptionGroupIDs(groupIDs []int64) []int64 {
+	seen := make(map[int64]struct{}, len(groupIDs))
+	out := make([]int64, 0, len(groupIDs))
+	for _, groupID := range groupIDs {
+		if groupID <= 0 {
+			continue
+		}
+		if _, ok := seen[groupID]; ok {
+			continue
+		}
+		seen[groupID] = struct{}{}
+		out = append(out, groupID)
+	}
+	return out
+}
+
 // AssignSubscriptionInput 分配订阅输入
 type AssignSubscriptionInput struct {
-	UserID       int64
-	GroupID      int64
-	ValidityDays int
-	AssignedBy   int64
-	Notes        string
+	UserID           int64
+	GroupID          int64
+	GroupIDs         []int64
+	SourcePlanID     *int64
+	QuotaSnapshotted bool
+	DailyLimitUSD    *float64
+	WeeklyLimitUSD   *float64
+	MonthlyLimitUSD  *float64
+	ValidityDays     int
+	AssignedBy       int64
+	Notes            string
+}
+
+func (s *SubscriptionService) BuildPlanAssignmentInput(ctx context.Context, userID, planID int64, validityDays int, assignedBy int64, notes string) (*AssignSubscriptionInput, error) {
+	if s.entClient == nil || planID <= 0 {
+		return nil, infraerrors.BadRequest("PLAN_REQUIRED", "subscription plan is required")
+	}
+	plan, err := s.entClient.SubscriptionPlan.Get(ctx, planID)
+	if err != nil {
+		return nil, infraerrors.NotFound("PLAN_NOT_FOUND", "subscription plan not found")
+	}
+	bindings, err := s.entClient.SubscriptionPlanGroup.Query().
+		Where(subscriptionplangroup.PlanIDEQ(planID)).
+		Order(subscriptionplangroup.ByPriority(), subscriptionplangroup.ByGroupID()).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load subscription plan groups: %w", err)
+	}
+	groupIDs := make([]int64, 0, len(bindings))
+	for _, binding := range bindings {
+		groupIDs = append(groupIDs, binding.GroupID)
+	}
+	if len(groupIDs) == 0 {
+		groupIDs = []int64{plan.GroupID}
+	}
+	if validityDays <= 0 {
+		validityDays = psComputeValidityDays(plan.ValidityDays, plan.ValidityUnit)
+	}
+	return &AssignSubscriptionInput{
+		UserID: userID, GroupID: groupIDs[0], GroupIDs: groupIDs, SourcePlanID: &plan.ID,
+		QuotaSnapshotted: true, DailyLimitUSD: plan.DailyLimitUsd,
+		WeeklyLimitUSD: plan.WeeklyLimitUsd, MonthlyLimitUSD: plan.MonthlyLimitUsd,
+		ValidityDays: validityDays, AssignedBy: assignedBy, Notes: notes,
+	}, nil
+}
+
+func (s *SubscriptionService) AssignPlanSubscription(ctx context.Context, userID, planID int64, validityDays int, assignedBy int64, notes string) (*UserSubscription, error) {
+	input, err := s.BuildPlanAssignmentInput(ctx, userID, planID, validityDays, assignedBy, notes)
+	if err != nil {
+		return nil, err
+	}
+	return s.AssignSubscription(ctx, input)
+}
+
+func (s *SubscriptionService) prepareAssignmentInput(ctx context.Context, input *AssignSubscriptionInput) (*AssignSubscriptionInput, error) {
+	if input == nil || input.UserID <= 0 {
+		return nil, ErrSubscriptionNilInput
+	}
+	prepared := *input
+	prepared.GroupIDs = uniqueSubscriptionGroupIDs(input.GroupIDs)
+	if len(prepared.GroupIDs) == 0 && input.GroupID > 0 {
+		prepared.GroupIDs = []int64{input.GroupID}
+	}
+	if len(prepared.GroupIDs) == 0 {
+		return nil, infraerrors.BadRequest("SUBSCRIPTION_GROUP_REQUIRED", "at least one subscription group is required")
+	}
+	prepared.GroupID = prepared.GroupIDs[0]
+	for _, groupID := range prepared.GroupIDs {
+		item, err := s.groupRepo.GetByID(ctx, groupID)
+		if err != nil {
+			return nil, fmt.Errorf("group %d not found: %w", groupID, err)
+		}
+		if !item.IsSubscriptionType() {
+			return nil, ErrGroupNotSubscriptionType
+		}
+	}
+	return &prepared, nil
+}
+
+func (s *SubscriptionService) findExistingAssignment(ctx context.Context, userID int64, groupIDs []int64) (*UserSubscription, error) {
+	var existing *UserSubscription
+	for _, groupID := range groupIDs {
+		sub, err := s.userSubRepo.GetByUserIDAndGroupID(ctx, userID, groupID)
+		if err != nil {
+			if errors.Is(err, ErrSubscriptionNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		if existing != nil && existing.ID != sub.ID {
+			return nil, ErrSubscriptionAssignConflict.WithMetadata(map[string]string{"conflict_reason": "groups_overlap_multiple_subscriptions"})
+		}
+		existing = sub
+	}
+	return existing, nil
+}
+
+func subscriptionGroupIDs(sub *UserSubscription) []int64 {
+	if sub == nil {
+		return nil
+	}
+	if len(sub.GroupIDs) > 0 {
+		return sub.GroupIDs
+	}
+	if sub.GroupID > 0 {
+		return []int64{sub.GroupID}
+	}
+	return nil
+}
+
+func equalSubscriptionGroupIDs(left, right []int64) bool {
+	left = uniqueSubscriptionGroupIDs(left)
+	right = uniqueSubscriptionGroupIDs(right)
+	if len(left) != len(right) {
+		return false
+	}
+	seen := make(map[int64]struct{}, len(left))
+	for _, id := range left {
+		seen[id] = struct{}{}
+	}
+	for _, id := range right {
+		if _, ok := seen[id]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func equalOptionalFloat(left, right *float64) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return math.Abs(*left-*right) < 1e-9
 }
 
 // AssignSubscription 分配订阅给用户（不允许重复分配）
 func (s *SubscriptionService) AssignSubscription(ctx context.Context, input *AssignSubscriptionInput) (*UserSubscription, error) {
-	sub, _, err := s.assignSubscriptionWithReuse(ctx, input)
+	prepared, err := s.prepareAssignmentInput(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	sub, _, err := s.assignSubscriptionWithReuse(ctx, prepared)
 	if err != nil {
 		return nil, err
 	}
@@ -212,24 +371,22 @@ func (s *SubscriptionService) AssignSubscription(ctx context.Context, input *Ass
 //
 // 如果没有订阅：创建新订阅
 func (s *SubscriptionService) AssignOrExtendSubscription(ctx context.Context, input *AssignSubscriptionInput) (*UserSubscription, bool, error) {
-	return s.assignOrExtendSubscription(ctx, input, false)
+	prepared, err := s.prepareAssignmentInput(ctx, input)
+	if err != nil {
+		return nil, false, err
+	}
+	return s.assignOrExtendSubscription(ctx, prepared, false)
 }
 
 func (s *SubscriptionService) assignOrExtendSubscription(ctx context.Context, input *AssignSubscriptionInput, deferCacheInvalidation bool) (*UserSubscription, bool, error) {
-	// 检查分组是否存在且为订阅类型
-	group, err := s.groupRepo.GetByID(ctx, input.GroupID)
+	prepared, err := s.prepareAssignmentInput(ctx, input)
 	if err != nil {
-		return nil, false, fmt.Errorf("group not found: %w", err)
+		return nil, false, err
 	}
-	if !group.IsSubscriptionType() {
-		return nil, false, ErrGroupNotSubscriptionType
-	}
-
-	// 查询是否已有订阅
-	existingSub, err := s.userSubRepo.GetByUserIDAndGroupID(ctx, input.UserID, input.GroupID)
+	input = prepared
+	existingSub, err := s.findExistingAssignment(ctx, input.UserID, input.GroupIDs)
 	if err != nil {
-		// 不存在记录是正常情况，其他错误需要返回
-		existingSub = nil
+		return nil, false, err
 	}
 
 	validityDays := input.ValidityDays
@@ -259,12 +416,12 @@ func (s *SubscriptionService) assignOrExtendSubscription(ctx context.Context, in
 			newExpiresAt = MaxExpiresAt
 		}
 
-		if err := s.updateExistingSubscriptionTerm(ctx, existingSub, input.Notes, now, newExpiresAt, isExpired); err != nil {
+		if err := s.updateExistingSubscriptionTerm(ctx, existingSub, input, now, newExpiresAt, isExpired); err != nil {
 			return nil, false, err
 		}
 
 		// 失效订阅缓存
-		s.maybeInvalidateAssignmentCaches(input.UserID, input.GroupID, deferCacheInvalidation)
+		s.maybeInvalidateAssignmentGroupCaches(input.UserID, input.GroupIDs, deferCacheInvalidation)
 
 		// 返回更新后的订阅
 		sub, err := s.userSubRepo.GetByID(ctx, existingSub.ID)
@@ -278,65 +435,63 @@ func (s *SubscriptionService) assignOrExtendSubscription(ctx context.Context, in
 	}
 
 	// 失效订阅缓存
-	s.maybeInvalidateAssignmentCaches(input.UserID, input.GroupID, deferCacheInvalidation)
+	s.maybeInvalidateAssignmentGroupCaches(input.UserID, input.GroupIDs, deferCacheInvalidation)
 
 	return sub, false, nil // false 表示是新建
 }
 
 func (s *SubscriptionService) maybeInvalidateAssignmentCaches(userID, groupID int64, deferred bool) {
-	// Payment fulfillment owns an outer transaction and performs a synchronous
-	// invalidation after commit. Invalidating inside that transaction can reload
-	// the pre-commit subscription into cache.
+	s.maybeInvalidateAssignmentGroupCaches(userID, []int64{groupID}, deferred)
+}
+
+func (s *SubscriptionService) maybeInvalidateAssignmentGroupCaches(userID int64, groupIDs []int64, deferred bool) {
 	if deferred {
 		return
 	}
-
-	s.InvalidateSubCache(userID, groupID)
+	groupIDs = uniqueSubscriptionGroupIDs(groupIDs)
+	for _, groupID := range groupIDs {
+		s.InvalidateSubCache(userID, groupID)
+	}
 	if s.billingCacheService != nil {
-		go func() {
+		go func(ids []int64) {
 			cacheCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			_ = s.billingCacheService.InvalidateSubscription(cacheCtx, userID, groupID)
-		}()
+			for _, groupID := range ids {
+				_ = s.billingCacheService.InvalidateSubscription(cacheCtx, userID, groupID)
+			}
+		}(append([]int64(nil), groupIDs...))
 	}
 }
 
 func (s *SubscriptionService) updateExistingSubscriptionTerm(
 	ctx context.Context,
 	existingSub *UserSubscription,
-	notes string,
+	input *AssignSubscriptionInput,
 	startsAt time.Time,
 	newExpiresAt time.Time,
 	isExpired bool,
 ) error {
 	return s.withSubscriptionUpdateTx(ctx, func(txCtx context.Context) error {
+		updated := *existingSub
 		if isExpired {
-			renewed := renewedSubscriptionTerm(existingSub, notes, startsAt, newExpiresAt)
-			if err := s.userSubRepo.Update(txCtx, renewed); err != nil {
-				return fmt.Errorf("renew expired subscription: %w", err)
-			}
-			return nil
+			updated = *renewedSubscriptionTerm(existingSub, input.Notes, startsAt, newExpiresAt)
+		} else {
+			updated.ExpiresAt = newExpiresAt
+			updated.Status = SubscriptionStatusActive
+			updated.Notes = appendSubscriptionNotes(existingSub.Notes, input.Notes)
 		}
-
-		// 更新过期时间
-		if err := s.userSubRepo.ExtendExpiry(txCtx, existingSub.ID, newExpiresAt); err != nil {
-			return fmt.Errorf("extend subscription: %w", err)
+		if input.QuotaSnapshotted {
+			updated.GroupID = input.GroupID
+			updated.GroupIDs = append([]int64(nil), input.GroupIDs...)
+			updated.SourcePlanID = input.SourcePlanID
+			updated.QuotaSnapshotted = true
+			updated.DailyLimitUSD = input.DailyLimitUSD
+			updated.WeeklyLimitUSD = input.WeeklyLimitUSD
+			updated.MonthlyLimitUSD = input.MonthlyLimitUSD
 		}
-
-		// 如果订阅被暂停，恢复为 active 状态
-		if existingSub.Status != SubscriptionStatusActive {
-			if err := s.userSubRepo.UpdateStatus(txCtx, existingSub.ID, SubscriptionStatusActive); err != nil {
-				return fmt.Errorf("update subscription status: %w", err)
-			}
+		if err := s.userSubRepo.Update(txCtx, &updated); err != nil {
+			return fmt.Errorf("update subscription term: %w", err)
 		}
-
-		// 追加备注
-		if notes != "" {
-			if err := s.userSubRepo.UpdateNotes(txCtx, existingSub.ID, appendSubscriptionNotes(existingSub.Notes, notes)); err != nil {
-				return fmt.Errorf("update subscription notes: %w", err)
-			}
-		}
-
 		return nil
 	})
 }
@@ -409,32 +564,35 @@ func (s *SubscriptionService) createSubscription(ctx context.Context, input *Ass
 	}
 
 	sub := &UserSubscription{
-		UserID:     input.UserID,
-		GroupID:    input.GroupID,
-		StartsAt:   now,
-		ExpiresAt:  expiresAt,
-		Status:     SubscriptionStatusActive,
-		AssignedAt: now,
-		Notes:      input.Notes,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		UserID: input.UserID, GroupID: input.GroupID, GroupIDs: append([]int64(nil), input.GroupIDs...),
+		SourcePlanID: input.SourcePlanID, QuotaSnapshotted: input.QuotaSnapshotted,
+		DailyLimitUSD: input.DailyLimitUSD, WeeklyLimitUSD: input.WeeklyLimitUSD, MonthlyLimitUSD: input.MonthlyLimitUSD,
+		StartsAt: now, ExpiresAt: expiresAt, Status: SubscriptionStatusActive,
+		AssignedAt: now, Notes: input.Notes, CreatedAt: now, UpdatedAt: now,
 	}
 	// 只有当 AssignedBy > 0 时才设置（0 表示系统分配，如兑换码）
 	if input.AssignedBy > 0 {
 		sub.AssignedBy = &input.AssignedBy
 	}
 
-	if err := s.userSubRepo.Create(ctx, sub); err != nil {
+	var created *UserSubscription
+	if err := s.withSubscriptionUpdateTx(ctx, func(txCtx context.Context) error {
+		if err := s.userSubRepo.Create(txCtx, sub); err != nil {
+			return err
+		}
+		var err error
+		created, err = s.userSubRepo.GetByID(txCtx, sub.ID)
+		return err
+	}); err != nil {
 		return nil, err
 	}
-
-	// 重新获取完整订阅信息（包含关联）
-	return s.userSubRepo.GetByID(ctx, sub.ID)
+	return created, nil
 }
 
 // BulkAssignSubscriptionInput 批量分配订阅输入
 type BulkAssignSubscriptionInput struct {
 	UserIDs      []int64
+	PlanID       int64
 	GroupID      int64
 	ValidityDays int
 	AssignedBy   int64
@@ -461,13 +619,21 @@ func (s *SubscriptionService) BulkAssignSubscription(ctx context.Context, input 
 	}
 
 	for _, userID := range input.UserIDs {
-		sub, reused, err := s.assignSubscriptionWithReuse(ctx, &AssignSubscriptionInput{
-			UserID:       userID,
-			GroupID:      input.GroupID,
-			ValidityDays: input.ValidityDays,
-			AssignedBy:   input.AssignedBy,
-			Notes:        input.Notes,
-		})
+		assignment := &AssignSubscriptionInput{
+			UserID: userID, GroupID: input.GroupID, ValidityDays: input.ValidityDays,
+			AssignedBy: input.AssignedBy, Notes: input.Notes,
+		}
+		if input.PlanID > 0 {
+			var buildErr error
+			assignment, buildErr = s.BuildPlanAssignmentInput(ctx, userID, input.PlanID, input.ValidityDays, input.AssignedBy, input.Notes)
+			if buildErr != nil {
+				result.FailedCount++
+				result.Errors = append(result.Errors, fmt.Sprintf("user %d: %v", userID, buildErr))
+				result.Statuses[userID] = "failed"
+				continue
+			}
+		}
+		sub, reused, err := s.assignSubscriptionWithReuse(ctx, assignment)
 		if err != nil {
 			result.FailedCount++
 			result.Errors = append(result.Errors, fmt.Sprintf("user %d: %v", userID, err))
@@ -489,55 +655,64 @@ func (s *SubscriptionService) BulkAssignSubscription(ctx context.Context, input 
 }
 
 func (s *SubscriptionService) assignSubscriptionWithReuse(ctx context.Context, input *AssignSubscriptionInput) (*UserSubscription, bool, error) {
-	// 检查分组是否存在且为订阅类型
-	group, err := s.groupRepo.GetByID(ctx, input.GroupID)
-	if err != nil {
-		return nil, false, fmt.Errorf("group not found: %w", err)
-	}
-	if !group.IsSubscriptionType() {
-		return nil, false, ErrGroupNotSubscriptionType
-	}
-
-	// 检查是否已存在订阅；若已存在，则按幂等成功返回现有订阅
-	exists, err := s.userSubRepo.ExistsByUserIDAndGroupID(ctx, input.UserID, input.GroupID)
+	prepared, err := s.prepareAssignmentInput(ctx, input)
 	if err != nil {
 		return nil, false, err
 	}
-	if exists {
-		sub, getErr := s.userSubRepo.GetByUserIDAndGroupID(ctx, input.UserID, input.GroupID)
-		if getErr != nil {
-			return nil, false, getErr
-		}
-		if conflictReason, conflict := detectAssignSemanticConflict(sub, input); conflict {
-			return nil, false, ErrSubscriptionAssignConflict.WithMetadata(map[string]string{
-				"conflict_reason": conflictReason,
-			})
-		}
-		return sub, true, nil
+	input = prepared
+	existing, err := s.findExistingAssignment(ctx, input.UserID, input.GroupIDs)
+	if err != nil {
+		return nil, false, err
 	}
-
+	if existing != nil {
+		if conflictReason, conflict := detectAssignSemanticConflict(existing, input); conflict {
+			return nil, false, ErrSubscriptionAssignConflict.WithMetadata(map[string]string{"conflict_reason": conflictReason})
+		}
+		return existing, true, nil
+	}
 	sub, err := s.createSubscription(ctx, input)
 	if err != nil {
+		if errors.Is(err, ErrSubscriptionAlreadyExists) || errors.Is(err, ErrSubscriptionAssignConflict) {
+			existing, lookupErr := s.findExistingAssignment(ctx, input.UserID, input.GroupIDs)
+			if lookupErr == nil && existing != nil {
+				if conflictReason, conflict := detectAssignSemanticConflict(existing, input); !conflict {
+					return existing, true, nil
+				} else {
+					return nil, false, ErrSubscriptionAssignConflict.WithMetadata(map[string]string{"conflict_reason": conflictReason})
+				}
+			}
+		}
 		return nil, false, err
 	}
-
-	// 失效订阅缓存
-	s.InvalidateSubCache(input.UserID, input.GroupID)
-	if s.billingCacheService != nil {
-		userID, groupID := input.UserID, input.GroupID
-		go func() {
-			cacheCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_ = s.billingCacheService.InvalidateSubscription(cacheCtx, userID, groupID)
-		}()
-	}
-
+	s.maybeInvalidateAssignmentGroupCaches(input.UserID, input.GroupIDs, false)
 	return sub, false, nil
 }
 
 func detectAssignSemanticConflict(existing *UserSubscription, input *AssignSubscriptionInput) (string, bool) {
 	if existing == nil || input == nil {
 		return "", false
+	}
+
+	if existing.QuotaSnapshotted != input.QuotaSnapshotted {
+		return "quota_mode_mismatch", true
+	}
+	inputGroupIDs := input.GroupIDs
+	if len(inputGroupIDs) == 0 && input.GroupID > 0 {
+		inputGroupIDs = []int64{input.GroupID}
+	}
+	if !equalSubscriptionGroupIDs(subscriptionGroupIDs(existing), inputGroupIDs) {
+		return "group_ids_mismatch", true
+	}
+	if input.QuotaSnapshotted {
+		if (existing.SourcePlanID == nil) != (input.SourcePlanID == nil) ||
+			(existing.SourcePlanID != nil && input.SourcePlanID != nil && *existing.SourcePlanID != *input.SourcePlanID) {
+			return "source_plan_mismatch", true
+		}
+		if !equalOptionalFloat(existing.DailyLimitUSD, input.DailyLimitUSD) ||
+			!equalOptionalFloat(existing.WeeklyLimitUSD, input.WeeklyLimitUSD) ||
+			!equalOptionalFloat(existing.MonthlyLimitUSD, input.MonthlyLimitUSD) {
+			return "quota_limits_mismatch", true
+		}
 	}
 
 	normalizedDays := normalizeAssignValidityDays(input.ValidityDays)
@@ -578,11 +753,13 @@ func (s *SubscriptionService) RevokeSubscription(ctx context.Context, subscripti
 		return err
 	}
 
-	if err := s.userSubRepo.Delete(ctx, subscriptionID); err != nil {
+	if err := s.withSubscriptionUpdateTx(ctx, func(txCtx context.Context) error {
+		return s.userSubRepo.Delete(txCtx, subscriptionID)
+	}); err != nil {
 		return err
 	}
 
-	if err := s.invalidateSubscriptionCaches(sub.UserID, sub.GroupID); err != nil {
+	if err := s.invalidateSubscriptionGroupCaches(sub.UserID, sub.GroupIDs); err != nil {
 		return err
 	}
 
@@ -599,12 +776,14 @@ func (s *SubscriptionService) RestoreSubscription(ctx context.Context, subscript
 		return nil, ErrSubscriptionNotRevoked
 	}
 
-	exists, err := s.userSubRepo.ExistsActiveByUserIDAndGroupID(ctx, sub.UserID, sub.GroupID)
-	if err != nil {
-		return nil, err
-	}
-	if exists {
-		return nil, ErrSubscriptionRestoreConflict
+	for _, groupID := range sub.GroupIDs {
+		exists, err := s.userSubRepo.ExistsActiveByUserIDAndGroupID(ctx, sub.UserID, groupID)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			return nil, ErrSubscriptionRestoreConflict
+		}
 	}
 
 	restoredStatus := sub.Status
@@ -613,12 +792,16 @@ func (s *SubscriptionService) RestoreSubscription(ctx context.Context, subscript
 		restoredStatus = SubscriptionStatusExpired
 	}
 
-	restored, err := s.userSubRepo.Restore(ctx, subscriptionID, restoredStatus)
-	if err != nil {
+	var restored *UserSubscription
+	if err := s.withSubscriptionUpdateTx(ctx, func(txCtx context.Context) error {
+		var restoreErr error
+		restored, restoreErr = s.userSubRepo.Restore(txCtx, subscriptionID, restoredStatus)
+		return restoreErr
+	}); err != nil {
 		return nil, err
 	}
 
-	if err := s.invalidateSubscriptionCaches(restored.UserID, restored.GroupID); err != nil {
+	if err := s.invalidateSubscriptionGroupCaches(restored.UserID, restored.GroupIDs); err != nil {
 		return nil, err
 	}
 	return restored, nil
@@ -677,16 +860,8 @@ func (s *SubscriptionService) ExtendSubscription(ctx context.Context, subscripti
 		}
 	}
 
-	// 失效订阅缓存
-	s.InvalidateSubCache(sub.UserID, sub.GroupID)
-	if s.billingCacheService != nil {
-		userID, groupID := sub.UserID, sub.GroupID
-		go func() {
-			cacheCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_ = s.billingCacheService.InvalidateSubscription(cacheCtx, userID, groupID)
-		}()
-	}
+	// 失效该共享订阅的全部分组缓存。
+	s.maybeInvalidateAssignmentGroupCaches(sub.UserID, sub.GroupIDs, false)
 
 	return s.userSubRepo.GetByID(ctx, subscriptionID)
 }
@@ -849,9 +1024,11 @@ func (s *SubscriptionService) AdminResetQuota(ctx context.Context, subscriptionI
 	// Invalidate L1 ristretto cache. Ristretto's Del() is asynchronous by design,
 	// so call Wait() immediately after to flush pending operations and guarantee
 	// the deleted key is not returned on the very next Get() call.
-	s.InvalidateSubCacheSync(sub.UserID, sub.GroupID)
-	if s.billingCacheService != nil {
-		_ = s.billingCacheService.InvalidateSubscription(ctx, sub.UserID, sub.GroupID)
+	for _, groupID := range uniqueSubscriptionGroupIDs(sub.GroupIDs) {
+		s.InvalidateSubCacheSync(sub.UserID, groupID)
+		if s.billingCacheService != nil {
+			_ = s.billingCacheService.InvalidateSubscription(ctx, sub.UserID, groupID)
+		}
 	}
 	// Return the refreshed subscription from DB
 	return s.userSubRepo.GetByID(ctx, subscriptionID)
@@ -898,9 +1075,11 @@ func (s *SubscriptionService) CheckAndResetWindows(ctx context.Context, sub *Use
 
 	// 如果有窗口被重置，失效缓存以保持一致性
 	if needsInvalidateCache {
-		s.InvalidateSubCache(sub.UserID, sub.GroupID)
-		if s.billingCacheService != nil {
-			_ = s.billingCacheService.InvalidateSubscription(ctx, sub.UserID, sub.GroupID)
+		for _, groupID := range uniqueSubscriptionGroupIDs(sub.GroupIDs) {
+			s.InvalidateSubCache(sub.UserID, groupID)
+			if s.billingCacheService != nil {
+				_ = s.billingCacheService.InvalidateSubscription(ctx, sub.UserID, groupID)
+			}
 		}
 	}
 
@@ -929,7 +1108,9 @@ func (s *SubscriptionService) EnsureWindowMaintenance(ctx context.Context, sub *
 	if err != nil {
 		return nil, err
 	}
-	s.InvalidateSubCacheSync(sub.UserID, sub.GroupID)
+	for _, groupID := range uniqueSubscriptionGroupIDs(sub.GroupIDs) {
+		s.InvalidateSubCacheSync(sub.UserID, groupID)
+	}
 	return refreshed, nil
 }
 
@@ -1033,8 +1214,10 @@ func (s *SubscriptionService) doWindowMaintenance(sub *UserSubscription) {
 		log.Printf("Failed to reset subscription windows: %v", err)
 	}
 
-	// 失效 L1 缓存，确保后续请求拿到更新后的数据
-	s.InvalidateSubCache(sub.UserID, sub.GroupID)
+	// 失效 L1 缓存，确保全部白名单分组拿到更新后的数据。
+	for _, groupID := range uniqueSubscriptionGroupIDs(sub.GroupIDs) {
+		s.InvalidateSubCache(sub.UserID, groupID)
+	}
 }
 
 // RecordUsage 记录使用量到订阅
@@ -1092,8 +1275,8 @@ func (s *SubscriptionService) calculateProgress(sub *UserSubscription, group *Gr
 	}
 
 	// 日进度
-	if group.HasDailyLimit() && sub.DailyWindowStart != nil {
-		limit := *group.DailyLimitUSD
+	if dailyLimit := sub.EffectiveDailyLimit(group); dailyLimit != nil && sub.DailyWindowStart != nil {
+		limit := *dailyLimit
 		resetsAt := sub.DailyWindowStart.Add(24 * time.Hour)
 		if dailyResetTime := sub.DailyResetTime(); dailyResetTime != nil {
 			resetsAt = *dailyResetTime
@@ -1119,8 +1302,8 @@ func (s *SubscriptionService) calculateProgress(sub *UserSubscription, group *Gr
 	}
 
 	// 周进度
-	if group.HasWeeklyLimit() && sub.WeeklyWindowStart != nil {
-		limit := *group.WeeklyLimitUSD
+	if weeklyLimit := sub.EffectiveWeeklyLimit(group); weeklyLimit != nil && sub.WeeklyWindowStart != nil {
+		limit := *weeklyLimit
 		resetsAt := sub.WeeklyWindowStart.Add(7 * 24 * time.Hour)
 		progress.Weekly = &UsageWindowProgress{
 			LimitUSD:        limit,
@@ -1143,8 +1326,8 @@ func (s *SubscriptionService) calculateProgress(sub *UserSubscription, group *Gr
 	}
 
 	// 月进度
-	if group.HasMonthlyLimit() && sub.MonthlyWindowStart != nil {
-		limit := *group.MonthlyLimitUSD
+	if monthlyLimit := sub.EffectiveMonthlyLimit(group); monthlyLimit != nil && sub.MonthlyWindowStart != nil {
+		limit := *monthlyLimit
 		resetsAt := sub.MonthlyWindowStart.Add(30 * 24 * time.Hour)
 		progress.Monthly = &UsageWindowProgress{
 			LimitUSD:        limit,

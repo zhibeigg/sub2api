@@ -40,12 +40,16 @@ var (
 
 // subscriptionCacheData 订阅缓存数据结构（内部使用）
 type subscriptionCacheData struct {
-	Status       string
-	ExpiresAt    time.Time
-	DailyUsage   float64
-	WeeklyUsage  float64
-	MonthlyUsage float64
-	Version      int64
+	SubscriptionID  int64
+	Status          string
+	ExpiresAt       time.Time
+	DailyUsage      float64
+	WeeklyUsage     float64
+	MonthlyUsage    float64
+	DailyLimitUSD   *float64
+	WeeklyLimitUSD  *float64
+	MonthlyLimitUSD *float64
+	Version         int64
 }
 
 // 缓存写入任务类型
@@ -442,23 +446,19 @@ func (s *BillingCacheService) GetSubscriptionStatus(ctx context.Context, userID,
 
 func (s *BillingCacheService) convertFromPortsData(data *SubscriptionCacheData) *subscriptionCacheData {
 	return &subscriptionCacheData{
-		Status:       data.Status,
-		ExpiresAt:    data.ExpiresAt,
-		DailyUsage:   data.DailyUsage,
-		WeeklyUsage:  data.WeeklyUsage,
-		MonthlyUsage: data.MonthlyUsage,
-		Version:      data.Version,
+		SubscriptionID: data.SubscriptionID, Status: data.Status, ExpiresAt: data.ExpiresAt,
+		DailyUsage: data.DailyUsage, WeeklyUsage: data.WeeklyUsage, MonthlyUsage: data.MonthlyUsage,
+		DailyLimitUSD: data.DailyLimitUSD, WeeklyLimitUSD: data.WeeklyLimitUSD, MonthlyLimitUSD: data.MonthlyLimitUSD,
+		Version: data.Version,
 	}
 }
 
 func (s *BillingCacheService) convertToPortsData(data *subscriptionCacheData) *SubscriptionCacheData {
 	return &SubscriptionCacheData{
-		Status:       data.Status,
-		ExpiresAt:    data.ExpiresAt,
-		DailyUsage:   data.DailyUsage,
-		WeeklyUsage:  data.WeeklyUsage,
-		MonthlyUsage: data.MonthlyUsage,
-		Version:      data.Version,
+		SubscriptionID: data.SubscriptionID, Status: data.Status, ExpiresAt: data.ExpiresAt,
+		DailyUsage: data.DailyUsage, WeeklyUsage: data.WeeklyUsage, MonthlyUsage: data.MonthlyUsage,
+		DailyLimitUSD: data.DailyLimitUSD, WeeklyLimitUSD: data.WeeklyLimitUSD, MonthlyLimitUSD: data.MonthlyLimitUSD,
+		Version: data.Version,
 	}
 }
 
@@ -470,12 +470,10 @@ func (s *BillingCacheService) getSubscriptionFromDB(ctx context.Context, userID,
 	}
 
 	return &subscriptionCacheData{
-		Status:       sub.Status,
-		ExpiresAt:    sub.ExpiresAt,
-		DailyUsage:   sub.DailyUsageUSD,
-		WeeklyUsage:  sub.WeeklyUsageUSD,
-		MonthlyUsage: sub.MonthlyUsageUSD,
-		Version:      sub.UpdatedAt.Unix(),
+		SubscriptionID: sub.ID, Status: sub.Status, ExpiresAt: sub.ExpiresAt,
+		DailyUsage: sub.DailyUsageUSD, WeeklyUsage: sub.WeeklyUsageUSD, MonthlyUsage: sub.MonthlyUsageUSD,
+		DailyLimitUSD: sub.EffectiveDailyLimit(sub.Group), WeeklyLimitUSD: sub.EffectiveWeeklyLimit(sub.Group),
+		MonthlyLimitUSD: sub.EffectiveMonthlyLimit(sub.Group), Version: sub.UpdatedAt.Unix(),
 	}, nil
 }
 
@@ -498,6 +496,20 @@ func (s *BillingCacheService) UpdateSubscriptionUsage(ctx context.Context, userI
 }
 
 // QueueUpdateSubscriptionUsage 异步更新订阅用量缓存
+func (s *BillingCacheService) QueueUpdateSubscriptionUsageForGroups(userID int64, groupIDs []int64, costUSD float64) {
+	seen := make(map[int64]struct{}, len(groupIDs))
+	for _, groupID := range groupIDs {
+		if groupID <= 0 {
+			continue
+		}
+		if _, ok := seen[groupID]; ok {
+			continue
+		}
+		seen[groupID] = struct{}{}
+		s.QueueUpdateSubscriptionUsage(userID, groupID, costUSD)
+	}
+}
+
 func (s *BillingCacheService) QueueUpdateSubscriptionUsage(userID, groupID int64, costUSD float64) {
 	if s.cache == nil {
 		return
@@ -921,16 +933,14 @@ func (s *BillingCacheService) checkSubscriptionEligibility(ctx context.Context, 
 		return ErrSubscriptionInvalid
 	}
 
-	// 检查限额（使用传入的Group限额配置）
-	if group.HasDailyLimit() && subData.DailyUsage >= *group.DailyLimitUSD {
+	// 检查共享订阅实例的有效额度；缓存未命中时已兼容计算旧分组额度。
+	if subData.DailyLimitUSD != nil && subData.DailyUsage >= *subData.DailyLimitUSD {
 		return ErrDailyLimitExceeded
 	}
-
-	if group.HasWeeklyLimit() && subData.WeeklyUsage >= *group.WeeklyLimitUSD {
+	if subData.WeeklyLimitUSD != nil && subData.WeeklyUsage >= *subData.WeeklyLimitUSD {
 		return ErrWeeklyLimitExceeded
 	}
-
-	if group.HasMonthlyLimit() && subData.MonthlyUsage >= *group.MonthlyLimitUSD {
+	if subData.MonthlyLimitUSD != nil && subData.MonthlyUsage >= *subData.MonthlyLimitUSD {
 		return ErrMonthlyLimitExceeded
 	}
 

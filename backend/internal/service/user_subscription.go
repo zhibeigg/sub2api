@@ -3,9 +3,16 @@ package service
 import "time"
 
 type UserSubscription struct {
-	ID      int64
-	UserID  int64
-	GroupID int64
+	ID           int64
+	UserID       int64
+	GroupID      int64
+	SourcePlanID *int64
+	GroupIDs     []int64
+
+	QuotaSnapshotted bool
+	DailyLimitUSD    *float64
+	WeeklyLimitUSD   *float64
+	MonthlyLimitUSD  *float64
 
 	StartsAt  time.Time
 	ExpiresAt time.Time
@@ -29,6 +36,7 @@ type UserSubscription struct {
 
 	User           *User
 	Group          *Group
+	Groups         []*Group
 	AssignedByUser *User
 }
 
@@ -114,25 +122,49 @@ func (s *UserSubscription) MonthlyResetTime() *time.Time {
 	return &t
 }
 
-func (s *UserSubscription) CheckDailyLimit(group *Group, additionalCost float64) bool {
-	if !group.HasDailyLimit() {
-		return true
+func (s *UserSubscription) EffectiveDailyLimit(group *Group) *float64 {
+	if s != nil && s.QuotaSnapshotted {
+		return s.DailyLimitUSD
 	}
-	return s.DailyUsageUSD+additionalCost <= *group.DailyLimitUSD
+	if group == nil {
+		return nil
+	}
+	return group.DailyLimitUSD
+}
+
+func (s *UserSubscription) EffectiveWeeklyLimit(group *Group) *float64 {
+	if s != nil && s.QuotaSnapshotted {
+		return s.WeeklyLimitUSD
+	}
+	if group == nil {
+		return nil
+	}
+	return group.WeeklyLimitUSD
+}
+
+func (s *UserSubscription) EffectiveMonthlyLimit(group *Group) *float64 {
+	if s != nil && s.QuotaSnapshotted {
+		return s.MonthlyLimitUSD
+	}
+	if group == nil {
+		return nil
+	}
+	return group.MonthlyLimitUSD
+}
+
+func (s *UserSubscription) CheckDailyLimit(group *Group, additionalCost float64) bool {
+	limit := s.EffectiveDailyLimit(group)
+	return limit == nil || s.DailyUsageUSD+additionalCost <= *limit
 }
 
 func (s *UserSubscription) CheckWeeklyLimit(group *Group, additionalCost float64) bool {
-	if !group.HasWeeklyLimit() {
-		return true
-	}
-	return s.WeeklyUsageUSD+additionalCost <= *group.WeeklyLimitUSD
+	limit := s.EffectiveWeeklyLimit(group)
+	return limit == nil || s.WeeklyUsageUSD+additionalCost <= *limit
 }
 
 func (s *UserSubscription) CheckMonthlyLimit(group *Group, additionalCost float64) bool {
-	if !group.HasMonthlyLimit() {
-		return true
-	}
-	return s.MonthlyUsageUSD+additionalCost <= *group.MonthlyLimitUSD
+	limit := s.EffectiveMonthlyLimit(group)
+	return limit == nil || s.MonthlyUsageUSD+additionalCost <= *limit
 }
 
 func (s *UserSubscription) CheckAllLimits(group *Group, additionalCost float64) (daily, weekly, monthly bool) {

@@ -421,6 +421,18 @@ func (_u *PaymentOrderUpdate) ClearSubscriptionDays() *PaymentOrderUpdate {
 	return _u
 }
 
+// SetSubscriptionSnapshot sets the "subscription_snapshot" field.
+func (_u *PaymentOrderUpdate) SetSubscriptionSnapshot(v map[string]interface{}) *PaymentOrderUpdate {
+	_u.mutation.SetSubscriptionSnapshot(v)
+	return _u
+}
+
+// ClearSubscriptionSnapshot clears the value of the "subscription_snapshot" field.
+func (_u *PaymentOrderUpdate) ClearSubscriptionSnapshot() *PaymentOrderUpdate {
+	_u.mutation.ClearSubscriptionSnapshot()
+	return _u
+}
+
 // SetProviderInstanceID sets the "provider_instance_id" field.
 func (_u *PaymentOrderUpdate) SetProviderInstanceID(v string) *PaymentOrderUpdate {
 	_u.mutation.SetProviderInstanceID(v)
@@ -1012,6 +1024,12 @@ func (_u *PaymentOrderUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if _u.mutation.SubscriptionDaysCleared() {
 		_spec.ClearField(paymentorder.FieldSubscriptionDays, field.TypeInt)
 	}
+	if value, ok := _u.mutation.SubscriptionSnapshot(); ok {
+		_spec.SetField(paymentorder.FieldSubscriptionSnapshot, field.TypeJSON, value)
+	}
+	if _u.mutation.SubscriptionSnapshotCleared() {
+		_spec.ClearField(paymentorder.FieldSubscriptionSnapshot, field.TypeJSON)
+	}
 	if value, ok := _u.mutation.ProviderInstanceID(); ok {
 		_spec.SetField(paymentorder.FieldProviderInstanceID, field.TypeString, value)
 	}
@@ -1552,6 +1570,18 @@ func (_u *PaymentOrderUpdateOne) AddSubscriptionDays(v int) *PaymentOrderUpdateO
 // ClearSubscriptionDays clears the value of the "subscription_days" field.
 func (_u *PaymentOrderUpdateOne) ClearSubscriptionDays() *PaymentOrderUpdateOne {
 	_u.mutation.ClearSubscriptionDays()
+	return _u
+}
+
+// SetSubscriptionSnapshot sets the "subscription_snapshot" field.
+func (_u *PaymentOrderUpdateOne) SetSubscriptionSnapshot(v map[string]interface{}) *PaymentOrderUpdateOne {
+	_u.mutation.SetSubscriptionSnapshot(v)
+	return _u
+}
+
+// ClearSubscriptionSnapshot clears the value of the "subscription_snapshot" field.
+func (_u *PaymentOrderUpdateOne) ClearSubscriptionSnapshot() *PaymentOrderUpdateOne {
+	_u.mutation.ClearSubscriptionSnapshot()
 	return _u
 }
 
@@ -2175,6 +2205,12 @@ func (_u *PaymentOrderUpdateOne) sqlSave(ctx context.Context) (_node *PaymentOrd
 	}
 	if _u.mutation.SubscriptionDaysCleared() {
 		_spec.ClearField(paymentorder.FieldSubscriptionDays, field.TypeInt)
+	}
+	if value, ok := _u.mutation.SubscriptionSnapshot(); ok {
+		_spec.SetField(paymentorder.FieldSubscriptionSnapshot, field.TypeJSON, value)
+	}
+	if _u.mutation.SubscriptionSnapshotCleared() {
+		_spec.ClearField(paymentorder.FieldSubscriptionSnapshot, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.ProviderInstanceID(); ok {
 		_spec.SetField(paymentorder.FieldProviderInstanceID, field.TypeString, value)

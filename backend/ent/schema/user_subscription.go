@@ -37,6 +37,23 @@ func (UserSubscription) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int64("user_id"),
 		field.Int64("group_id"),
+		field.Int64("source_plan_id").
+			Optional().
+			Nillable(),
+		field.Bool("quota_snapshotted").
+			Default(false),
+		field.Float("daily_limit_usd").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}),
+		field.Float("weekly_limit_usd").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}),
+		field.Float("monthly_limit_usd").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}),
 
 		field.Time("starts_at").
 			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
@@ -98,6 +115,12 @@ func (UserSubscription) Edges() []ent.Edge {
 			Ref("assigned_subscriptions").
 			Field("assigned_by").
 			Unique(),
+		edge.From("source_plan", SubscriptionPlan.Type).
+			Ref("subscriptions").
+			Field("source_plan_id").
+			Unique(),
+		edge.To("authorized_groups", Group.Type).
+			Through("group_bindings", UserSubscriptionGroup.Type),
 		edge.To("usage_logs", UsageLog.Type),
 	}
 }
@@ -111,6 +134,7 @@ func (UserSubscription) Indexes() []ent.Index {
 		// 活跃订阅查询复合索引（线上由 SQL 迁移创建部分索引，schema 仅用于模型可读性对齐）
 		index.Fields("user_id", "status", "expires_at"),
 		index.Fields("assigned_by"),
+		index.Fields("source_plan_id"),
 		// 唯一约束通过部分索引实现（WHERE deleted_at IS NULL），支持软删除后重新订阅
 		// 见迁移文件 016_soft_delete_partial_unique_indexes.sql
 		index.Fields("user_id", "group_id"),

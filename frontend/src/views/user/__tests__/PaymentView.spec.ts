@@ -104,6 +104,7 @@ function checkoutInfoFixture(overrides: Partial<CheckoutInfoResponse> = {}) {
     global_max: 0,
     plans: [],
     balance_disabled: false,
+    subscription_disabled: false,
     balance_recharge_multiplier: 1,
     subscription_usd_to_cny_rate: 0,
     recharge_fee_rate: 0,
@@ -126,6 +127,8 @@ function checkoutInfoWithPlansFixture(options: {
   const plan: SubscriptionPlan = {
     id: 7,
     group_id: 3,
+    group_ids: [3],
+    groups: [{ id: 3, name: 'OpenAI', platform: 'openai', rate_multiplier: 1 }],
     name: 'Starter',
     description: '',
     price: 128,
@@ -323,6 +326,43 @@ describe('PaymentView subscription confirmation amounts', () => {
     expect(text).toContain(fee)
     expect(text).toContain(total)
     expect(wrapper.findAll('button').some(button => button.text().includes(total))).toBe(true)
+  })
+})
+
+describe('PaymentView purchase availability', () => {
+  beforeEach(() => {
+    vi.useRealTimers()
+    routeState.path = '/purchase'
+    routeState.query = {}
+    routerReplace.mockReset().mockResolvedValue(undefined)
+    routerPush.mockReset().mockResolvedValue(undefined)
+    createOrder.mockReset()
+    fetchActiveSubscriptions.mockReset().mockResolvedValue(undefined)
+    showError.mockReset()
+    getCheckoutInfo.mockReset()
+    window.localStorage.clear()
+  })
+
+  it('shows a dedicated empty state when recharge and subscriptions are both disabled', async () => {
+    getCheckoutInfo.mockResolvedValue(checkoutInfoFixture({
+      balance_disabled: true,
+      subscription_disabled: true,
+    }))
+
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          Teleport: true,
+          Transition: false,
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('payment.allDisabled')
+    expect(wrapper.text()).toContain('payment.allDisabledHint')
+    expect(wrapper.text()).not.toContain('payment.rechargeAccount')
   })
 })
 

@@ -50,12 +50,16 @@ func billingSubKey(userID, groupID int64) string {
 }
 
 const (
-	subFieldStatus       = "status"
-	subFieldExpiresAt    = "expires_at"
-	subFieldDailyUsage   = "daily_usage"
-	subFieldWeeklyUsage  = "weekly_usage"
-	subFieldMonthlyUsage = "monthly_usage"
-	subFieldVersion      = "version"
+	subFieldSubscriptionID = "subscription_id"
+	subFieldStatus         = "status"
+	subFieldExpiresAt      = "expires_at"
+	subFieldDailyUsage     = "daily_usage"
+	subFieldWeeklyUsage    = "weekly_usage"
+	subFieldMonthlyUsage   = "monthly_usage"
+	subFieldDailyLimit     = "daily_limit"
+	subFieldWeeklyLimit    = "weekly_limit"
+	subFieldMonthlyLimit   = "monthly_limit"
+	subFieldVersion        = "version"
 )
 
 // billingRateLimitKey generates the Redis key for API key rate limit cache.
@@ -188,6 +192,9 @@ func (c *billingCache) GetSubscriptionCache(ctx context.Context, userID, groupID
 func (c *billingCache) parseSubscriptionCache(data map[string]string) (*service.SubscriptionCacheData, error) {
 	result := &service.SubscriptionCacheData{}
 
+	if subscriptionID, ok := data[subFieldSubscriptionID]; ok {
+		result.SubscriptionID, _ = strconv.ParseInt(subscriptionID, 10, 64)
+	}
 	result.Status = data[subFieldStatus]
 	if result.Status == "" {
 		return nil, errors.New("invalid cache: missing status")
@@ -212,11 +219,33 @@ func (c *billingCache) parseSubscriptionCache(data map[string]string) (*service.
 		result.MonthlyUsage, _ = strconv.ParseFloat(monthlyStr, 64)
 	}
 
+	if raw := data[subFieldDailyLimit]; raw != "" {
+		if value, err := strconv.ParseFloat(raw, 64); err == nil {
+			result.DailyLimitUSD = &value
+		}
+	}
+	if raw := data[subFieldWeeklyLimit]; raw != "" {
+		if value, err := strconv.ParseFloat(raw, 64); err == nil {
+			result.WeeklyLimitUSD = &value
+		}
+	}
+	if raw := data[subFieldMonthlyLimit]; raw != "" {
+		if value, err := strconv.ParseFloat(raw, 64); err == nil {
+			result.MonthlyLimitUSD = &value
+		}
+	}
 	if versionStr, ok := data[subFieldVersion]; ok {
 		result.Version, _ = strconv.ParseInt(versionStr, 10, 64)
 	}
 
 	return result, nil
+}
+
+func nullableCacheFloat(value *float64) string {
+	if value == nil {
+		return ""
+	}
+	return strconv.FormatFloat(*value, 'f', -1, 64)
 }
 
 func (c *billingCache) SetSubscriptionCache(ctx context.Context, userID, groupID int64, data *service.SubscriptionCacheData) error {
@@ -227,11 +256,13 @@ func (c *billingCache) SetSubscriptionCache(ctx context.Context, userID, groupID
 	key := billingSubKey(userID, groupID)
 
 	fields := map[string]any{
-		subFieldStatus:       data.Status,
-		subFieldExpiresAt:    data.ExpiresAt.Unix(),
-		subFieldDailyUsage:   data.DailyUsage,
-		subFieldWeeklyUsage:  data.WeeklyUsage,
+		subFieldSubscriptionID: data.SubscriptionID,
+		subFieldStatus:         data.Status, subFieldExpiresAt: data.ExpiresAt.Unix(),
+		subFieldDailyUsage: data.DailyUsage, subFieldWeeklyUsage: data.WeeklyUsage,
 		subFieldMonthlyUsage: data.MonthlyUsage,
+		subFieldDailyLimit:   nullableCacheFloat(data.DailyLimitUSD),
+		subFieldWeeklyLimit:  nullableCacheFloat(data.WeeklyLimitUSD),
+		subFieldMonthlyLimit: nullableCacheFloat(data.MonthlyLimitUSD),
 		subFieldVersion:      data.Version,
 	}
 

@@ -14,16 +14,17 @@ import (
 )
 
 const (
-	SettingPaymentEnabled      = "payment_enabled"
-	SettingMinRechargeAmount   = "MIN_RECHARGE_AMOUNT"
-	SettingMaxRechargeAmount   = "MAX_RECHARGE_AMOUNT"
-	SettingDailyRechargeLimit  = "DAILY_RECHARGE_LIMIT"
-	SettingOrderTimeoutMinutes = "ORDER_TIMEOUT_MINUTES"
-	SettingMaxPendingOrders    = "MAX_PENDING_ORDERS"
-	SettingEnabledPaymentTypes = "ENABLED_PAYMENT_TYPES"
-	SettingLoadBalanceStrategy = "LOAD_BALANCE_STRATEGY"
-	SettingBalancePayDisabled  = "BALANCE_PAYMENT_DISABLED"
-	SettingBalanceRechargeMult = "BALANCE_RECHARGE_MULTIPLIER"
+	SettingPaymentEnabled          = "payment_enabled"
+	SettingMinRechargeAmount       = "MIN_RECHARGE_AMOUNT"
+	SettingMaxRechargeAmount       = "MAX_RECHARGE_AMOUNT"
+	SettingDailyRechargeLimit      = "DAILY_RECHARGE_LIMIT"
+	SettingOrderTimeoutMinutes     = "ORDER_TIMEOUT_MINUTES"
+	SettingMaxPendingOrders        = "MAX_PENDING_ORDERS"
+	SettingEnabledPaymentTypes     = "ENABLED_PAYMENT_TYPES"
+	SettingLoadBalanceStrategy     = "LOAD_BALANCE_STRATEGY"
+	SettingBalancePayDisabled      = "BALANCE_PAYMENT_DISABLED"
+	SettingSubscriptionPayDisabled = "SUBSCRIPTION_PAYMENT_DISABLED"
+	SettingBalanceRechargeMult     = "BALANCE_RECHARGE_MULTIPLIER"
 	// SettingSubscriptionUSDToCNYRate 是订阅 CNY 换算汇率（1 USD = X CNY）。
 	// 0/未配置 = 关闭换算（订阅按 price 数值直付），显式配置后 CNY 通道订阅按 price × rate 收款。
 	SettingSubscriptionUSDToCNYRate = "SUBSCRIPTION_USD_TO_CNY_RATE"
@@ -56,6 +57,7 @@ type PaymentConfig struct {
 	MaxPendingOrders          int      `json:"max_pending_orders"`
 	EnabledTypes              []string `json:"enabled_payment_types"`
 	BalanceDisabled           bool     `json:"balance_disabled"`
+	SubscriptionDisabled      bool     `json:"subscription_disabled"`
 	BalanceRechargeMultiplier float64  `json:"balance_recharge_multiplier"`
 	// SubscriptionUSDToCNYRate 为 0 时订阅换算关闭（兼容存量行为）。
 	SubscriptionUSDToCNYRate float64 `json:"subscription_usd_to_cny_rate"`
@@ -88,6 +90,7 @@ type UpdatePaymentConfigRequest struct {
 	MaxPendingOrders          *int     `json:"max_pending_orders"`
 	EnabledTypes              []string `json:"enabled_payment_types"`
 	BalanceDisabled           *bool    `json:"balance_disabled"`
+	SubscriptionDisabled      *bool    `json:"subscription_disabled"`
 	BalanceRechargeMultiplier *float64 `json:"balance_recharge_multiplier"`
 	SubscriptionUSDToCNYRate  *float64 `json:"subscription_usd_to_cny_rate"`
 	RechargeFeeRate           *float64 `json:"recharge_fee_rate"`
@@ -157,31 +160,40 @@ type UpdateProviderInstanceRequest struct {
 	AllowUserRefund *bool             `json:"allow_user_refund"`
 }
 type CreatePlanRequest struct {
-	GroupID       int64    `json:"group_id"`
-	Name          string   `json:"name"`
-	Description   string   `json:"description"`
-	Price         float64  `json:"price"`
-	OriginalPrice *float64 `json:"original_price"`
-	ValidityDays  int      `json:"validity_days"`
-	ValidityUnit  string   `json:"validity_unit"`
-	Features      string   `json:"features"`
-	ProductName   string   `json:"product_name"`
-	ForSale       bool     `json:"for_sale"`
-	SortOrder     int      `json:"sort_order"`
+	GroupID         int64    `json:"group_id"`
+	GroupIDs        []int64  `json:"group_ids"`
+	Name            string   `json:"name"`
+	Description     string   `json:"description"`
+	Price           float64  `json:"price"`
+	OriginalPrice   *float64 `json:"original_price"`
+	DailyLimitUSD   *float64 `json:"daily_limit_usd"`
+	WeeklyLimitUSD  *float64 `json:"weekly_limit_usd"`
+	MonthlyLimitUSD *float64 `json:"monthly_limit_usd"`
+	ValidityDays    int      `json:"validity_days"`
+	ValidityUnit    string   `json:"validity_unit"`
+	Features        string   `json:"features"`
+	ProductName     string   `json:"product_name"`
+	ForSale         bool     `json:"for_sale"`
+	SortOrder       int      `json:"sort_order"`
 }
 
 type UpdatePlanRequest struct {
-	GroupID       *int64   `json:"group_id"`
-	Name          *string  `json:"name"`
-	Description   *string  `json:"description"`
-	Price         *float64 `json:"price"`
-	OriginalPrice *float64 `json:"original_price"`
-	ValidityDays  *int     `json:"validity_days"`
-	ValidityUnit  *string  `json:"validity_unit"`
-	Features      *string  `json:"features"`
-	ProductName   *string  `json:"product_name"`
-	ForSale       *bool    `json:"for_sale"`
-	SortOrder     *int     `json:"sort_order"`
+	GroupID         *int64   `json:"group_id"`
+	GroupIDs        []int64  `json:"group_ids"`
+	QuotaLimitsSet  bool     `json:"quota_limits_set"`
+	Name            *string  `json:"name"`
+	Description     *string  `json:"description"`
+	Price           *float64 `json:"price"`
+	OriginalPrice   *float64 `json:"original_price"`
+	DailyLimitUSD   *float64 `json:"daily_limit_usd"`
+	WeeklyLimitUSD  *float64 `json:"weekly_limit_usd"`
+	MonthlyLimitUSD *float64 `json:"monthly_limit_usd"`
+	ValidityDays    *int     `json:"validity_days"`
+	ValidityUnit    *string  `json:"validity_unit"`
+	Features        *string  `json:"features"`
+	ProductName     *string  `json:"product_name"`
+	ForSale         *bool    `json:"for_sale"`
+	SortOrder       *int     `json:"sort_order"`
 }
 
 // PaymentConfigService manages payment configuration and CRUD for
@@ -211,7 +223,7 @@ func (s *PaymentConfigService) GetPaymentConfig(ctx context.Context) (*PaymentCo
 	keys := []string{
 		SettingPaymentEnabled, SettingMinRechargeAmount, SettingMaxRechargeAmount,
 		SettingDailyRechargeLimit, SettingOrderTimeoutMinutes, SettingMaxPendingOrders,
-		SettingEnabledPaymentTypes, SettingBalancePayDisabled, SettingBalanceRechargeMult, SettingSubscriptionUSDToCNYRate, SettingRechargeFeeRate, SettingLoadBalanceStrategy,
+		SettingEnabledPaymentTypes, SettingBalancePayDisabled, SettingSubscriptionPayDisabled, SettingBalanceRechargeMult, SettingSubscriptionUSDToCNYRate, SettingRechargeFeeRate, SettingLoadBalanceStrategy,
 		SettingProductNamePrefix, SettingProductNameSuffix,
 		SettingHelpImageURL, SettingHelpText,
 		SettingCancelRateLimitOn, SettingCancelRateLimitMax,
@@ -239,6 +251,7 @@ func (s *PaymentConfigService) parsePaymentConfig(vals map[string]string) *Payme
 		OrderTimeoutMin:           pcParseInt(vals[SettingOrderTimeoutMinutes], defaultOrderTimeoutMin),
 		MaxPendingOrders:          pcParseInt(vals[SettingMaxPendingOrders], defaultMaxPendingOrders),
 		BalanceDisabled:           vals[SettingBalancePayDisabled] == "true",
+		SubscriptionDisabled:      vals[SettingSubscriptionPayDisabled] == "true",
 		BalanceRechargeMultiplier: normalizeBalanceRechargeMultiplier(pcParseFloat(vals[SettingBalanceRechargeMult], defaultBalanceRechargeMultiplier)),
 		SubscriptionUSDToCNYRate:  normalizeSubscriptionUSDToCNYRate(pcParseFloat(vals[SettingSubscriptionUSDToCNYRate], 0)),
 		RechargeFeeRate:           pcParseFloat(vals[SettingRechargeFeeRate], 0),
@@ -326,6 +339,7 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 		SettingOrderTimeoutMinutes:               formatPositiveInt(req.OrderTimeoutMin),
 		SettingMaxPendingOrders:                  formatPositiveInt(req.MaxPendingOrders),
 		SettingBalancePayDisabled:                formatBoolOrEmpty(req.BalanceDisabled),
+		SettingSubscriptionPayDisabled:           formatBoolOrEmpty(req.SubscriptionDisabled),
 		SettingBalanceRechargeMult:               formatPositiveFloat(req.BalanceRechargeMultiplier),
 		SettingSubscriptionUSDToCNYRate:          formatPositiveFloatExact(req.SubscriptionUSDToCNYRate),
 		SettingRechargeFeeRate:                   formatNonNegativeFloat(req.RechargeFeeRate),

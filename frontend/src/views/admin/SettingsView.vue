@@ -6442,6 +6442,22 @@
                 <Toggle v-model="form.payment_enabled" />
               </div>
               <template v-if="form.payment_enabled">
+                <div class="grid gap-3 sm:grid-cols-2">
+                  <div class="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3 dark:border-dark-600">
+                    <div class="pr-4">
+                      <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t("admin.settings.payment.balancePaymentDisabled") }}</p>
+                      <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ t("admin.settings.payment.balancePaymentDisabledHint") }}</p>
+                    </div>
+                    <Toggle v-model="form.payment_balance_disabled" />
+                  </div>
+                  <div class="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3 dark:border-dark-600">
+                    <div class="pr-4">
+                      <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t("admin.settings.payment.subscriptionPaymentDisabled") }}</p>
+                      <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{{ t("admin.settings.payment.subscriptionPaymentDisabledHint") }}</p>
+                    </div>
+                    <Toggle v-model="form.payment_subscription_disabled" />
+                  </div>
+                </div>
                 <!-- Row 1: Product name -->
                 <div class="grid grid-cols-3 gap-3">
                   <div>
@@ -8162,6 +8178,7 @@ const form = reactive<SettingsForm>({
   payment_max_pending_orders: 3,
   payment_order_timeout_minutes: 30,
   payment_balance_disabled: false,
+  payment_subscription_disabled: false,
   payment_balance_recharge_multiplier: 1,
   payment_subscription_usd_to_cny_rate: 0,
   payment_recharge_fee_rate: 0,
@@ -9667,6 +9684,7 @@ async function saveSettings() {
       payment_order_timeout_minutes:
         Number(form.payment_order_timeout_minutes) || 0,
       payment_balance_disabled: form.payment_balance_disabled,
+      payment_subscription_disabled: form.payment_subscription_disabled,
       payment_balance_recharge_multiplier:
         Number(form.payment_balance_recharge_multiplier) || 1,
       payment_subscription_usd_to_cny_rate:

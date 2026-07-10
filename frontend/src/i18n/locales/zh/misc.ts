@@ -401,6 +401,10 @@ export default {
   // Payment System
   payment: {
     title: '充值/订阅',
+    rechargeTitle: '余额充值',
+    subscriptionTitle: '订阅套餐',
+    allDisabled: '购买功能暂未开放',
+    allDisabledHint: '余额充值和订阅购买当前均已关闭，请稍后再试。',
     amountLabel: '充值金额',
     paymentAmount: '支付金额',
     creditedBalance: '到账余额',
@@ -570,6 +574,7 @@ export default {
       weeklyLimit: '周限额',
       monthlyLimit: '月限额',
       quota: '配额',
+      sharedQuota: '套餐内分组共享额度',
       unlimited: '无限制',
       models: '模型',
     },
@@ -669,6 +674,9 @@ export default {
       offSale: '下架',
       group: '分组',
       groupId: '分组 ID',
+      selectedGroupsHint: '套餐包含的订阅分组',
+      sharedQuotaLimits: '套餐共享额度',
+      sharedQuotaHint: '所选分组共同消耗此套餐额度；留空表示该周期不限额。',
       features: '功能特性',
       featuresHint: '每行一个特性',
       featuresPlaceholder: '输入套餐特性...',

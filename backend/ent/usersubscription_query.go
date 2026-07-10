@@ -15,23 +15,28 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
+	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
+	"github.com/Wei-Shaw/sub2api/ent/usersubscriptiongroup"
 )
 
 // UserSubscriptionQuery is the builder for querying UserSubscription entities.
 type UserSubscriptionQuery struct {
 	config
-	ctx                *QueryContext
-	order              []usersubscription.OrderOption
-	inters             []Interceptor
-	predicates         []predicate.UserSubscription
-	withUser           *UserQuery
-	withGroup          *GroupQuery
-	withAssignedByUser *UserQuery
-	withUsageLogs      *UsageLogQuery
-	modifiers          []func(*sql.Selector)
+	ctx                  *QueryContext
+	order                []usersubscription.OrderOption
+	inters               []Interceptor
+	predicates           []predicate.UserSubscription
+	withUser             *UserQuery
+	withGroup            *GroupQuery
+	withAssignedByUser   *UserQuery
+	withSourcePlan       *SubscriptionPlanQuery
+	withAuthorizedGroups *GroupQuery
+	withUsageLogs        *UsageLogQuery
+	withGroupBindings    *UserSubscriptionGroupQuery
+	modifiers            []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -134,6 +139,50 @@ func (_q *UserSubscriptionQuery) QueryAssignedByUser() *UserQuery {
 	return query
 }
 
+// QuerySourcePlan chains the current query on the "source_plan" edge.
+func (_q *UserSubscriptionQuery) QuerySourcePlan() *SubscriptionPlanQuery {
+	query := (&SubscriptionPlanClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(usersubscription.Table, usersubscription.FieldID, selector),
+			sqlgraph.To(subscriptionplan.Table, subscriptionplan.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, usersubscription.SourcePlanTable, usersubscription.SourcePlanColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryAuthorizedGroups chains the current query on the "authorized_groups" edge.
+func (_q *UserSubscriptionQuery) QueryAuthorizedGroups() *GroupQuery {
+	query := (&GroupClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(usersubscription.Table, usersubscription.FieldID, selector),
+			sqlgraph.To(group.Table, group.FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, false, usersubscription.AuthorizedGroupsTable, usersubscription.AuthorizedGroupsPrimaryKey...),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
 // QueryUsageLogs chains the current query on the "usage_logs" edge.
 func (_q *UserSubscriptionQuery) QueryUsageLogs() *UsageLogQuery {
 	query := (&UsageLogClient{config: _q.config}).Query()
@@ -149,6 +198,28 @@ func (_q *UserSubscriptionQuery) QueryUsageLogs() *UsageLogQuery {
 			sqlgraph.From(usersubscription.Table, usersubscription.FieldID, selector),
 			sqlgraph.To(usagelog.Table, usagelog.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, usersubscription.UsageLogsTable, usersubscription.UsageLogsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryGroupBindings chains the current query on the "group_bindings" edge.
+func (_q *UserSubscriptionQuery) QueryGroupBindings() *UserSubscriptionGroupQuery {
+	query := (&UserSubscriptionGroupClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(usersubscription.Table, usersubscription.FieldID, selector),
+			sqlgraph.To(usersubscriptiongroup.Table, usersubscriptiongroup.SubscriptionColumn),
+			sqlgraph.Edge(sqlgraph.O2M, true, usersubscription.GroupBindingsTable, usersubscription.GroupBindingsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -343,15 +414,18 @@ func (_q *UserSubscriptionQuery) Clone() *UserSubscriptionQuery {
 		return nil
 	}
 	return &UserSubscriptionQuery{
-		config:             _q.config,
-		ctx:                _q.ctx.Clone(),
-		order:              append([]usersubscription.OrderOption{}, _q.order...),
-		inters:             append([]Interceptor{}, _q.inters...),
-		predicates:         append([]predicate.UserSubscription{}, _q.predicates...),
-		withUser:           _q.withUser.Clone(),
-		withGroup:          _q.withGroup.Clone(),
-		withAssignedByUser: _q.withAssignedByUser.Clone(),
-		withUsageLogs:      _q.withUsageLogs.Clone(),
+		config:               _q.config,
+		ctx:                  _q.ctx.Clone(),
+		order:                append([]usersubscription.OrderOption{}, _q.order...),
+		inters:               append([]Interceptor{}, _q.inters...),
+		predicates:           append([]predicate.UserSubscription{}, _q.predicates...),
+		withUser:             _q.withUser.Clone(),
+		withGroup:            _q.withGroup.Clone(),
+		withAssignedByUser:   _q.withAssignedByUser.Clone(),
+		withSourcePlan:       _q.withSourcePlan.Clone(),
+		withAuthorizedGroups: _q.withAuthorizedGroups.Clone(),
+		withUsageLogs:        _q.withUsageLogs.Clone(),
+		withGroupBindings:    _q.withGroupBindings.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -391,6 +465,28 @@ func (_q *UserSubscriptionQuery) WithAssignedByUser(opts ...func(*UserQuery)) *U
 	return _q
 }
 
+// WithSourcePlan tells the query-builder to eager-load the nodes that are connected to
+// the "source_plan" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserSubscriptionQuery) WithSourcePlan(opts ...func(*SubscriptionPlanQuery)) *UserSubscriptionQuery {
+	query := (&SubscriptionPlanClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withSourcePlan = query
+	return _q
+}
+
+// WithAuthorizedGroups tells the query-builder to eager-load the nodes that are connected to
+// the "authorized_groups" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserSubscriptionQuery) WithAuthorizedGroups(opts ...func(*GroupQuery)) *UserSubscriptionQuery {
+	query := (&GroupClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withAuthorizedGroups = query
+	return _q
+}
+
 // WithUsageLogs tells the query-builder to eager-load the nodes that are connected to
 // the "usage_logs" edge. The optional arguments are used to configure the query builder of the edge.
 func (_q *UserSubscriptionQuery) WithUsageLogs(opts ...func(*UsageLogQuery)) *UserSubscriptionQuery {
@@ -399,6 +495,17 @@ func (_q *UserSubscriptionQuery) WithUsageLogs(opts ...func(*UsageLogQuery)) *Us
 		opt(query)
 	}
 	_q.withUsageLogs = query
+	return _q
+}
+
+// WithGroupBindings tells the query-builder to eager-load the nodes that are connected to
+// the "group_bindings" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserSubscriptionQuery) WithGroupBindings(opts ...func(*UserSubscriptionGroupQuery)) *UserSubscriptionQuery {
+	query := (&UserSubscriptionGroupClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withGroupBindings = query
 	return _q
 }
 
@@ -480,11 +587,14 @@ func (_q *UserSubscriptionQuery) sqlAll(ctx context.Context, hooks ...queryHook)
 	var (
 		nodes       = []*UserSubscription{}
 		_spec       = _q.querySpec()
-		loadedTypes = [4]bool{
+		loadedTypes = [7]bool{
 			_q.withUser != nil,
 			_q.withGroup != nil,
 			_q.withAssignedByUser != nil,
+			_q.withSourcePlan != nil,
+			_q.withAuthorizedGroups != nil,
 			_q.withUsageLogs != nil,
+			_q.withGroupBindings != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -526,10 +636,32 @@ func (_q *UserSubscriptionQuery) sqlAll(ctx context.Context, hooks ...queryHook)
 			return nil, err
 		}
 	}
+	if query := _q.withSourcePlan; query != nil {
+		if err := _q.loadSourcePlan(ctx, query, nodes, nil,
+			func(n *UserSubscription, e *SubscriptionPlan) { n.Edges.SourcePlan = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withAuthorizedGroups; query != nil {
+		if err := _q.loadAuthorizedGroups(ctx, query, nodes,
+			func(n *UserSubscription) { n.Edges.AuthorizedGroups = []*Group{} },
+			func(n *UserSubscription, e *Group) { n.Edges.AuthorizedGroups = append(n.Edges.AuthorizedGroups, e) }); err != nil {
+			return nil, err
+		}
+	}
 	if query := _q.withUsageLogs; query != nil {
 		if err := _q.loadUsageLogs(ctx, query, nodes,
 			func(n *UserSubscription) { n.Edges.UsageLogs = []*UsageLog{} },
 			func(n *UserSubscription, e *UsageLog) { n.Edges.UsageLogs = append(n.Edges.UsageLogs, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withGroupBindings; query != nil {
+		if err := _q.loadGroupBindings(ctx, query, nodes,
+			func(n *UserSubscription) { n.Edges.GroupBindings = []*UserSubscriptionGroup{} },
+			func(n *UserSubscription, e *UserSubscriptionGroup) {
+				n.Edges.GroupBindings = append(n.Edges.GroupBindings, e)
+			}); err != nil {
 			return nil, err
 		}
 	}
@@ -626,6 +758,99 @@ func (_q *UserSubscriptionQuery) loadAssignedByUser(ctx context.Context, query *
 	}
 	return nil
 }
+func (_q *UserSubscriptionQuery) loadSourcePlan(ctx context.Context, query *SubscriptionPlanQuery, nodes []*UserSubscription, init func(*UserSubscription), assign func(*UserSubscription, *SubscriptionPlan)) error {
+	ids := make([]int64, 0, len(nodes))
+	nodeids := make(map[int64][]*UserSubscription)
+	for i := range nodes {
+		if nodes[i].SourcePlanID == nil {
+			continue
+		}
+		fk := *nodes[i].SourcePlanID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(subscriptionplan.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "source_plan_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
+func (_q *UserSubscriptionQuery) loadAuthorizedGroups(ctx context.Context, query *GroupQuery, nodes []*UserSubscription, init func(*UserSubscription), assign func(*UserSubscription, *Group)) error {
+	edgeIDs := make([]driver.Value, len(nodes))
+	byID := make(map[int64]*UserSubscription)
+	nids := make(map[int64]map[*UserSubscription]struct{})
+	for i, node := range nodes {
+		edgeIDs[i] = node.ID
+		byID[node.ID] = node
+		if init != nil {
+			init(node)
+		}
+	}
+	query.Where(func(s *sql.Selector) {
+		joinT := sql.Table(usersubscription.AuthorizedGroupsTable)
+		s.Join(joinT).On(s.C(group.FieldID), joinT.C(usersubscription.AuthorizedGroupsPrimaryKey[1]))
+		s.Where(sql.InValues(joinT.C(usersubscription.AuthorizedGroupsPrimaryKey[0]), edgeIDs...))
+		columns := s.SelectedColumns()
+		s.Select(joinT.C(usersubscription.AuthorizedGroupsPrimaryKey[0]))
+		s.AppendSelect(columns...)
+		s.SetDistinct(false)
+	})
+	if err := query.prepareQuery(ctx); err != nil {
+		return err
+	}
+	qr := QuerierFunc(func(ctx context.Context, q Query) (Value, error) {
+		return query.sqlAll(ctx, func(_ context.Context, spec *sqlgraph.QuerySpec) {
+			assign := spec.Assign
+			values := spec.ScanValues
+			spec.ScanValues = func(columns []string) ([]any, error) {
+				values, err := values(columns[1:])
+				if err != nil {
+					return nil, err
+				}
+				return append([]any{new(sql.NullInt64)}, values...), nil
+			}
+			spec.Assign = func(columns []string, values []any) error {
+				outValue := values[0].(*sql.NullInt64).Int64
+				inValue := values[1].(*sql.NullInt64).Int64
+				if nids[inValue] == nil {
+					nids[inValue] = map[*UserSubscription]struct{}{byID[outValue]: {}}
+					return assign(columns[1:], values[1:])
+				}
+				nids[inValue][byID[outValue]] = struct{}{}
+				return nil
+			}
+		})
+	})
+	neighbors, err := withInterceptors[[]*Group](ctx, query, qr, query.inters)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected "authorized_groups" node returned %v`, n.ID)
+		}
+		for kn := range nodes {
+			assign(kn, n)
+		}
+	}
+	return nil
+}
 func (_q *UserSubscriptionQuery) loadUsageLogs(ctx context.Context, query *UsageLogQuery, nodes []*UserSubscription, init func(*UserSubscription), assign func(*UserSubscription, *UsageLog)) error {
 	fks := make([]driver.Value, 0, len(nodes))
 	nodeids := make(map[int64]*UserSubscription)
@@ -654,6 +879,36 @@ func (_q *UserSubscriptionQuery) loadUsageLogs(ctx context.Context, query *Usage
 		node, ok := nodeids[*fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "subscription_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserSubscriptionQuery) loadGroupBindings(ctx context.Context, query *UserSubscriptionGroupQuery, nodes []*UserSubscription, init func(*UserSubscription), assign func(*UserSubscription, *UserSubscriptionGroup)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int64]*UserSubscription)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(usersubscriptiongroup.FieldSubscriptionID)
+	}
+	query.Where(predicate.UserSubscriptionGroup(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(usersubscription.GroupBindingsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.SubscriptionID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "subscription_id" returned %v for node %v`, fk, n)
 		}
 		assign(node, n)
 	}
@@ -696,6 +951,9 @@ func (_q *UserSubscriptionQuery) querySpec() *sqlgraph.QuerySpec {
 		}
 		if _q.withAssignedByUser != nil {
 			_spec.Node.AddColumnOnce(usersubscription.FieldAssignedBy)
+		}
+		if _q.withSourcePlan != nil {
+			_spec.Node.AddColumnOnce(usersubscription.FieldSourcePlanID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

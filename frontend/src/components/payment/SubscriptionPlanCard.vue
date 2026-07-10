@@ -39,9 +39,17 @@
 
       <!-- Group quota info (compact) -->
       <div class="mb-3 grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg bg-gray-50 px-3 py-2 text-xs dark:bg-dark-700/50">
-        <div class="flex items-center justify-between">
-          <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.rate') }}</span>
-          <span class="font-medium text-gray-700 dark:text-gray-300">{{ rateDisplay }}</span>
+        <div class="col-span-2 flex flex-wrap gap-1">
+          <span
+            v-for="group in planGroups"
+            :key="group.id"
+            :class="['rounded px-1.5 py-0.5 text-[10px] font-medium', platformBadgeLightClass(group.platform)]"
+          >
+            {{ group.name }} · ×{{ group.rate_multiplier }}
+          </span>
+        </div>
+        <div class="col-span-2 mt-1 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-dark-500">
+          {{ t('payment.planCard.sharedQuota') }}
         </div>
         <div v-if="hasPeakRate" class="col-span-2 flex items-center justify-between gap-2">
           <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.peakRate') }}</span>
@@ -120,9 +128,23 @@ const props = defineProps<{ plan: SubscriptionPlan; activeSubscriptions?: UserSu
 const emit = defineEmits<{ select: [plan: SubscriptionPlan] }>()
 const { t } = useI18n()
 
-const platform = computed(() => props.plan.group_platform || '')
+const planGroups = computed<SubscriptionPlan['groups']>(() => {
+  if (props.plan.groups?.length) return props.plan.groups
+  return [{
+    id: props.plan.group_id,
+    name: props.plan.group_name || t('payment.groupFallback', { id: props.plan.group_id }),
+    platform: props.plan.group_platform || '',
+    rate_multiplier: props.plan.rate_multiplier ?? 1,
+  }]
+})
+const planGroupIds = computed(() => props.plan.group_ids?.length ? props.plan.group_ids : planGroups.value.map(group => group.id))
+const platform = computed(() => planGroups.value[0]?.platform || '')
 const isRenewal = computed(() =>
-  props.activeSubscriptions?.some(s => s.group_id === props.plan.group_id && s.status === 'active') ?? false
+  props.activeSubscriptions?.some(s => {
+    if (s.status !== 'active') return false
+    const subscriptionGroupIds = s.group_ids?.length ? s.group_ids : [s.group_id]
+    return subscriptionGroupIds.some(id => planGroupIds.value.includes(id))
+  }) ?? false
 )
 
 // Derived color classes from central config
@@ -141,17 +163,16 @@ const discountText = computed(() => {
   return pct > 0 ? `-${pct}%` : ''
 })
 
-const rateDisplay = computed(() => {
-  const rate = props.plan.rate_multiplier ?? 1
-  return `×${Number(rate.toPrecision(10))}`
-})
-
 const appStore = useAppStore()
 
-const hasPeakRate = computed(() => groupHasPeakRate(props.plan))
+const hasPeakRate = computed(() => planGroups.value.some(group => groupHasPeakRate(group)))
 
 const peakRateDisplay = computed(() => {
-  return formatPeakRateWindow(props.plan, serverTimezoneLabel(appStore.cachedPublicSettings?.server_utc_offset))
+  const timezone = serverTimezoneLabel(appStore.cachedPublicSettings?.server_utc_offset)
+  return planGroups.value
+    .filter(group => groupHasPeakRate(group))
+    .map(group => `${group.name}: ${formatPeakRateWindow(group, timezone)}`)
+    .join(' · ')
 })
 
 const MODEL_SCOPE_LABELS: Record<string, string> = {

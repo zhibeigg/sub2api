@@ -33,6 +33,7 @@ export interface PaymentConfig {
   max_pending_orders: number
   order_timeout_minutes: number
   balance_disabled: boolean
+  subscription_disabled: boolean
   balance_recharge_multiplier: number
   subscription_usd_to_cny_rate: number
   enabled_payment_types: PaymentType[]
@@ -67,6 +68,7 @@ export interface CheckoutInfoResponse {
   global_max: number
   plans: SubscriptionPlan[]
   balance_disabled: boolean
+  subscription_disabled: boolean
   balance_recharge_multiplier: number
   /** Subscription CNY conversion rate (1 USD = X CNY); 0 = disabled, plan price is charged as-is */
   subscription_usd_to_cny_rate: number
@@ -106,9 +108,28 @@ export interface PaymentOrder {
 
 // ==================== Plans & Channels ====================
 
+export interface SubscriptionPlanGroup {
+  id: number
+  name: string
+  platform: string
+  rate_multiplier: number
+  description?: string | null
+  subscription_type?: string
+  daily_limit_usd?: number | null
+  weekly_limit_usd?: number | null
+  monthly_limit_usd?: number | null
+  peak_rate_enabled?: boolean
+  peak_start?: string
+  peak_end?: string
+  peak_rate_multiplier?: number
+  supported_model_scopes?: string[]
+}
+
 export interface SubscriptionPlan {
   id: number
   group_id: number
+  group_ids: number[]
+  groups: SubscriptionPlanGroup[]
   group_platform?: string
   group_name?: string
   rate_multiplier?: number

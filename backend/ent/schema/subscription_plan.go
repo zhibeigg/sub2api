@@ -7,6 +7,7 @@ import (
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema"
+	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 )
@@ -43,6 +44,18 @@ func (SubscriptionPlan) Fields() []ent.Field {
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,2)"}).
 			Optional().
 			Nillable(),
+		field.Float("daily_limit_usd").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}),
+		field.Float("weekly_limit_usd").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}),
+		field.Float("monthly_limit_usd").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}),
 		field.Int("validity_days").
 			Default(30),
 		field.String("validity_unit").
@@ -66,6 +79,14 @@ func (SubscriptionPlan) Fields() []ent.Field {
 			Default(time.Now).
 			UpdateDefault(time.Now).
 			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}),
+	}
+}
+
+func (SubscriptionPlan) Edges() []ent.Edge {
+	return []ent.Edge{
+		edge.To("groups", Group.Type).
+			Through("group_bindings", SubscriptionPlanGroup.Type),
+		edge.To("subscriptions", UserSubscription.Type),
 	}
 }
 

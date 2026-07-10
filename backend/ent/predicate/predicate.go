@@ -96,6 +96,9 @@ type Setting func(*sql.Selector)
 // SubscriptionPlan is the predicate function for subscriptionplan builders.
 type SubscriptionPlan func(*sql.Selector)
 
+// SubscriptionPlanGroup is the predicate function for subscriptionplangroup builders.
+type SubscriptionPlanGroup func(*sql.Selector)
+
 // TLSFingerprintProfile is the predicate function for tlsfingerprintprofile builders.
 type TLSFingerprintProfile func(*sql.Selector)
 
@@ -122,3 +125,6 @@ type UserPlatformQuota func(*sql.Selector)
 
 // UserSubscription is the predicate function for usersubscription builders.
 type UserSubscription func(*sql.Selector)
+
+// UserSubscriptionGroup is the predicate function for usersubscriptiongroup builders.
+type UserSubscriptionGroup func(*sql.Selector)

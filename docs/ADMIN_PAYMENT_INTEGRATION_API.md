@@ -1,4 +1,4 @@
-﻿# ADMIN_PAYMENT_INTEGRATION_API
+# ADMIN_PAYMENT_INTEGRATION_API
 
 > 单文件中英双语文档 / Single-file bilingual documentation (Chinese + English)
 
@@ -12,6 +12,9 @@
 - 用户查询
 - 人工余额修正
 - 前端购买页参数透传
+- 多分组共享额度订阅：套餐使用 `group_ids`（兼容 `group_id`），并支持 `daily_limit_usd`、`weekly_limit_usd`、`monthly_limit_usd`
+- 管理员订阅分配：`POST /api/v1/admin/subscriptions/assign` 可传 `plan_id`，旧 `group_id` 格式继续兼容
+- 独立禁购设置：`balance_disabled` 与 `subscription_disabled`；被禁用类型的新订单会由后端拒绝
 
 ### 基础地址
 - 生产：`https://<your-domain>`

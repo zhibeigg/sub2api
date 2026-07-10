@@ -1,43 +1,51 @@
 <template>
   <BaseDialog :show="show" :title="plan ? t('payment.admin.editPlan') : t('payment.admin.createPlan')" width="wide" @close="emit('close')">
     <form id="plan-form" @submit.prevent="handleSavePlan" class="space-y-4">
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <label class="input-label">{{ t('payment.admin.planName') }} <span class="text-red-500">*</span></label>
-          <input v-model="planForm.name" type="text" class="input" required />
-        </div>
-        <div>
-          <label class="input-label">{{ t('payment.admin.group') }} <span class="text-red-500">*</span></label>
-          <Select v-model="planForm.group_id" :options="groupOptions" :placeholder="t('payment.admin.selectGroup')" class="w-full">
-            <template #selected="{ option }">
-              <span v-if="option?.platform" :class="platformTextClass(String(option.platform))">{{ option.label }}</span>
-              <span v-else>{{ option?.label || t('payment.admin.selectGroup') }}</span>
-            </template>
-            <template #option="{ option, selected }">
-              <span class="flex-1 truncate text-left" :class="option.platform ? platformTextClass(String(option.platform)) : ''">{{ option.label }}</span>
-              <Icon v-if="selected" name="check" size="sm" class="text-primary-500" :stroke-width="2" />
-            </template>
-          </Select>
+      <div>
+        <label class="input-label">{{ t('payment.admin.planName') }} <span class="text-red-500">*</span></label>
+        <input v-model="planForm.name" type="text" class="input" required />
+      </div>
+
+      <GroupSelector v-model="planForm.group_ids" :groups="subscriptionGroups" searchable />
+
+      <!-- Group Info Preview -->
+      <div v-if="selectedGroupInfos.length" class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-dark-600 dark:bg-dark-800">
+        <p class="mb-2 text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('payment.admin.selectedGroupsHint') }}</p>
+        <div class="flex flex-wrap gap-2">
+          <GroupBadge
+            v-for="group in selectedGroupInfos"
+            :key="group.id"
+            :name="group.name"
+            :platform="group.platform"
+            :rate-multiplier="group.rate_multiplier"
+          />
         </div>
       </div>
 
-      <!-- Group Info Preview -->
-      <div v-if="selectedGroupInfo" class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-dark-600 dark:bg-dark-800">
-        <div class="mb-2 flex items-center gap-2">
-          <GroupBadge :name="selectedGroupInfo.name" :platform="selectedGroupInfo.platform" :rate-multiplier="selectedGroupInfo.rate_multiplier" />
+      <div>
+        <label class="input-label">{{ t('payment.admin.sharedQuotaLimits') }}</label>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div>
+            <label class="mb-1 block text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.dailyLimit') }}</label>
+            <input v-model.number="planForm.daily_limit_usd" data-test="daily-limit" type="number" step="0.01" min="0" class="input" :placeholder="t('payment.admin.unlimited')" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.weeklyLimit') }}</label>
+            <input v-model.number="planForm.weekly_limit_usd" data-test="weekly-limit" type="number" step="0.01" min="0" class="input" :placeholder="t('payment.admin.unlimited')" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.monthlyLimit') }}</label>
+            <input v-model.number="planForm.monthly_limit_usd" data-test="monthly-limit" type="number" step="0.01" min="0" class="input" :placeholder="t('payment.admin.unlimited')" />
+          </div>
         </div>
-        <div class="grid grid-cols-2 gap-2 text-xs">
-          <div><span class="text-gray-500">{{ t('payment.admin.dailyLimit') }}:</span> <span class="ml-1 font-medium text-gray-700 dark:text-gray-300">{{ selectedGroupInfo.daily_limit_usd != null ? '$' + selectedGroupInfo.daily_limit_usd : t('payment.admin.unlimited') }}</span></div>
-          <div><span class="text-gray-500">{{ t('payment.admin.weeklyLimit') }}:</span> <span class="ml-1 font-medium text-gray-700 dark:text-gray-300">{{ selectedGroupInfo.weekly_limit_usd != null ? '$' + selectedGroupInfo.weekly_limit_usd : t('payment.admin.unlimited') }}</span></div>
-          <div><span class="text-gray-500">{{ t('payment.admin.monthlyLimit') }}:</span> <span class="ml-1 font-medium text-gray-700 dark:text-gray-300">{{ selectedGroupInfo.monthly_limit_usd != null ? '$' + selectedGroupInfo.monthly_limit_usd : t('payment.admin.unlimited') }}</span></div>
-        </div>
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.sharedQuotaHint') }}</p>
       </div>
 
       <div><label class="input-label">{{ t('payment.admin.planDescription') }} <span class="text-red-500">*</span></label><textarea v-model="planForm.description" rows="2" class="input" required></textarea></div>
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label class="input-label">{{ t('payment.admin.price') }} <span class="text-red-500">*</span></label>
-          <input v-model.number="planForm.price" type="number" step="0.01" min="0.01" class="input" required />
+          <input v-model.number="planForm.price" data-test="plan-price" type="number" step="0.01" min="0.01" class="input" required />
           <p v-if="subscriptionCnyPreview" class="mt-1 text-xs font-medium text-primary-600 dark:text-primary-400">
             {{ t('payment.admin.subscriptionCnyPayPreview', { amount: subscriptionCnyPreview.amount }) }}
             <span v-if="subscriptionCnyPreview.feeRate > 0">
@@ -97,9 +105,8 @@ import type { SubscriptionPlan } from '@/types/payment'
 import type { AdminGroup } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
-import Icon from '@/components/icons/Icon.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
-import { platformTextClass } from '@/utils/platformColors'
+import GroupSelector from '@/components/common/GroupSelector.vue'
 
 const props = defineProps<{
   show: boolean
@@ -117,7 +124,21 @@ const { t } = useI18n()
 const appStore = useAppStore()
 
 const saving = ref(false)
-const planForm = reactive({ name: '', group_id: null as number | null, description: '', price: 0, original_price: 0, validity_days: 30, validity_unit: 'days', sort_order: 0, for_sale: true })
+type QuotaInput = number | null | ''
+const planForm = reactive({
+  name: '',
+  group_ids: [] as number[],
+  daily_limit_usd: null as QuotaInput,
+  weekly_limit_usd: null as QuotaInput,
+  monthly_limit_usd: null as QuotaInput,
+  description: '',
+  price: 0,
+  original_price: 0,
+  validity_days: 30,
+  validity_unit: 'days',
+  sort_order: 0,
+  for_sale: true,
+})
 const planFeaturesText = ref('')
 
 const validityUnitOptions = computed(() => [
@@ -126,19 +147,13 @@ const validityUnitOptions = computed(() => [
   { value: 'months', label: t('payment.admin.months') },
 ])
 
-const groupOptions = computed(() =>
-  props.groups
-    .filter(g => g.subscription_type === 'subscription')
-    .map(g => ({
-      value: g.id,
-      label: `${g.name} — ${g.platform} (${g.rate_multiplier}x)`,
-      platform: g.platform,
-    })),
+const subscriptionGroups = computed(() =>
+  props.groups.filter(g => g.subscription_type === 'subscription'),
 )
 
-const selectedGroupInfo = computed(() => {
-  if (!planForm.group_id) return null
-  return props.groups.find(g => g.id === planForm.group_id) || null
+const selectedGroupInfos = computed(() => {
+  const selected = new Set(planForm.group_ids)
+  return props.groups.filter(g => selected.has(g.id))
 })
 
 function roundCnyAmount(value: number): number {
@@ -170,20 +185,59 @@ const subscriptionCnyPreview = computed(() => {
 watch(() => props.show, (visible) => {
   if (!visible) return
   if (props.plan) {
-    Object.assign(planForm, { name: props.plan.name, group_id: props.plan.group_id, description: props.plan.description, price: props.plan.price, original_price: props.plan.original_price || 0, validity_days: props.plan.validity_days, validity_unit: props.plan.validity_unit || 'days', sort_order: props.plan.sort_order || 0, for_sale: props.plan.for_sale })
+    const groupIds = props.plan.group_ids?.length ? props.plan.group_ids : [props.plan.group_id].filter(id => id > 0)
+    Object.assign(planForm, {
+      name: props.plan.name,
+      group_ids: [...groupIds],
+      daily_limit_usd: props.plan.daily_limit_usd ?? null,
+      weekly_limit_usd: props.plan.weekly_limit_usd ?? null,
+      monthly_limit_usd: props.plan.monthly_limit_usd ?? null,
+      description: props.plan.description,
+      price: props.plan.price,
+      original_price: props.plan.original_price || 0,
+      validity_days: props.plan.validity_days,
+      validity_unit: props.plan.validity_unit || 'days',
+      sort_order: props.plan.sort_order || 0,
+      for_sale: props.plan.for_sale,
+    })
     planFeaturesText.value = (props.plan.features || []).join('\n')
   } else {
-    Object.assign(planForm, { name: '', group_id: null, description: '', price: 0, original_price: 0, validity_days: 30, validity_unit: 'days', sort_order: 0, for_sale: true })
+    Object.assign(planForm, {
+      name: '',
+      group_ids: [],
+      daily_limit_usd: null,
+      weekly_limit_usd: null,
+      monthly_limit_usd: null,
+      description: '',
+      price: 0,
+      original_price: 0,
+      validity_days: 30,
+      validity_unit: 'days',
+      sort_order: 0,
+      for_sale: true,
+    })
     planFeaturesText.value = ''
   }
 })
 
+function normalizeQuota(value: QuotaInput): number | null {
+  if (value === '' || value == null) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 /** Build request payload with snake_case keys matching backend JSON tags */
 function buildPlanPayload() {
   const features = planFeaturesText.value.split('\n').map(f => f.trim()).filter(Boolean).join('\n')
+  const groupIds = [...planForm.group_ids]
   return {
     name: planForm.name,
-    group_id: planForm.group_id,
+    group_id: groupIds[0] ?? null,
+    group_ids: groupIds,
+    daily_limit_usd: normalizeQuota(planForm.daily_limit_usd),
+    weekly_limit_usd: normalizeQuota(planForm.weekly_limit_usd),
+    monthly_limit_usd: normalizeQuota(planForm.monthly_limit_usd),
+    ...(props.plan ? { quota_limits_set: true } : {}),
     description: planForm.description,
     price: planForm.price,
     original_price: planForm.original_price || 0,
@@ -196,7 +250,7 @@ function buildPlanPayload() {
 }
 
 async function handleSavePlan() {
-  if (!planForm.group_id) {
+  if (planForm.group_ids.length === 0) {
     appStore.showError(t('payment.admin.groupRequired'))
     return
   }

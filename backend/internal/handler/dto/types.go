@@ -605,9 +605,16 @@ type Setting struct {
 }
 
 type UserSubscription struct {
-	ID      int64 `json:"id"`
-	UserID  int64 `json:"user_id"`
-	GroupID int64 `json:"group_id"`
+	ID           int64   `json:"id"`
+	UserID       int64   `json:"user_id"`
+	GroupID      int64   `json:"group_id"`
+	GroupIDs     []int64 `json:"group_ids"`
+	SourcePlanID *int64  `json:"source_plan_id,omitempty"`
+
+	QuotaSnapshotted bool     `json:"quota_snapshotted"`
+	DailyLimitUSD    *float64 `json:"daily_limit_usd"`
+	WeeklyLimitUSD   *float64 `json:"weekly_limit_usd"`
+	MonthlyLimitUSD  *float64 `json:"monthly_limit_usd"`
 
 	StartsAt  time.Time `json:"starts_at"`
 	ExpiresAt time.Time `json:"expires_at"`
@@ -625,8 +632,9 @@ type UserSubscription struct {
 	UpdatedAt time.Time  `json:"updated_at"`
 	RevokedAt *time.Time `json:"revoked_at,omitempty"`
 
-	User  *User  `json:"user,omitempty"`
-	Group *Group `json:"group,omitempty"`
+	User   *User    `json:"user,omitempty"`
+	Group  *Group   `json:"group,omitempty"`
+	Groups []*Group `json:"groups,omitempty"`
 }
 
 // AdminUserSubscription 是管理员接口使用的订阅 DTO（包含分配信息/备注等字段）。

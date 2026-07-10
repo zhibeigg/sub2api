@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import PlanEditDialog from '../PlanEditDialog.vue'
+import { adminPaymentAPI } from '@/api/admin/payment'
+import type { AdminGroup } from '@/types'
+import type { SubscriptionPlan } from '@/types/payment'
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
@@ -26,12 +29,15 @@ vi.mock('@/api/admin/payment', () => ({
   },
 }))
 
-function mountDialog(paymentConfig: Record<string, unknown> | null) {
+function mountDialog(
+  paymentConfig: Record<string, unknown> | null,
+  options: { plan?: SubscriptionPlan | null; groups?: AdminGroup[] } = {},
+) {
   return mount(PlanEditDialog, {
     props: {
       show: true,
-      plan: null,
-      groups: [],
+      plan: options.plan ?? null,
+      groups: options.groups ?? [],
       paymentConfig,
     },
     global: {
@@ -55,7 +61,7 @@ describe('PlanEditDialog subscription CNY payment preview', () => {
       recharge_fee_rate: 2.5,
     })
 
-    await wrapper.find('input[type="number"]').setValue('9.99')
+    await wrapper.find('[data-test="plan-price"]').setValue('9.99')
 
     expect(wrapper.text()).toContain('preview')
     expect(wrapper.text()).toContain('¥71.43')
@@ -69,9 +75,56 @@ describe('PlanEditDialog subscription CNY payment preview', () => {
       recharge_fee_rate: 2.5,
     })
 
-    await wrapper.find('input[type="number"]').setValue('9.99')
+    await wrapper.find('[data-test="plan-price"]').setValue('9.99')
 
     expect(wrapper.text()).not.toContain('preview')
     expect(wrapper.text()).not.toContain('¥71.43')
+  })
+})
+
+describe('PlanEditDialog shared quota payload', () => {
+  it('updates group ids, keeps the first legacy group id, and explicitly snapshots empty quotas', async () => {
+    const groups = [
+      { id: 11, name: 'OpenAI A', platform: 'openai', rate_multiplier: 1, subscription_type: 'subscription', status: 'active' },
+      { id: 12, name: 'Claude B', platform: 'anthropic', rate_multiplier: 1.2, subscription_type: 'subscription', status: 'active' },
+    ] as unknown as AdminGroup[]
+    const plan = {
+      id: 7,
+      group_id: 11,
+      group_ids: [11, 12],
+      groups: [
+        { id: 11, name: 'OpenAI A', platform: 'openai', rate_multiplier: 1 },
+        { id: 12, name: 'Claude B', platform: 'anthropic', rate_multiplier: 1.2 },
+      ],
+      name: 'Shared Plan',
+      description: 'Shared quota',
+      price: 20,
+      original_price: 0,
+      validity_days: 30,
+      validity_unit: 'days',
+      features: [],
+      for_sale: true,
+      sort_order: 0,
+      daily_limit_usd: 5,
+      weekly_limit_usd: null,
+      monthly_limit_usd: 50,
+    } satisfies SubscriptionPlan
+    vi.mocked(adminPaymentAPI.updatePlan).mockReset().mockResolvedValue({} as never)
+
+    const wrapper = mountDialog(null, { plan, groups })
+    await wrapper.setProps({ show: false })
+    await wrapper.setProps({ show: true })
+    await wrapper.find('[data-test="daily-limit"]').setValue('')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(adminPaymentAPI.updatePlan).toHaveBeenCalledWith(7, expect.objectContaining({
+      group_id: 11,
+      group_ids: [11, 12],
+      daily_limit_usd: null,
+      weekly_limit_usd: null,
+      monthly_limit_usd: 50,
+      quota_limits_set: true,
+    }))
   })
 })

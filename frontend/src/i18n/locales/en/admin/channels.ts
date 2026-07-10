@@ -637,12 +637,15 @@ export default {
       form: {
         user: 'User',
         group: 'Subscription Group',
+        plan: 'Subscription Plan',
         validityDays: 'Validity (Days)',
         adjustDays: 'Adjust by (Days)'
       },
       selectUser: 'Select a user',
       selectGroup: 'Select a subscription group',
+      selectPlan: 'Select a subscription plan',
       groupHint: 'Only groups with subscription billing type are shown',
+      planHint: 'The plan defines included groups and shared quotas. You may adjust validity for this assignment.',
       validityHint: 'Number of days the subscription will be valid',
       adjustingFor: 'Adjusting subscription for',
       currentExpiration: 'Current expiration',
@@ -666,6 +669,7 @@ export default {
       subscriptionRevoked: 'Subscription revoked successfully',
       subscriptionRestored: 'Subscription restored successfully',
       failedToLoad: 'Failed to load subscriptions',
+      failedToLoadPlans: 'Failed to load subscription plans',
       failedToAssign: 'Failed to assign subscription',
       failedToAdjust: 'Failed to adjust subscription',
       failedToRevoke: 'Failed to revoke subscription',
@@ -674,6 +678,7 @@ export default {
       adjustOutOfRange: 'Adjustment days must be between -36500 and 36500',
       pleaseSelectUser: 'Please select a user',
       pleaseSelectGroup: 'Please select a group',
+      pleaseSelectPlan: 'Please select a subscription plan',
       validityDaysRequired: 'Please enter a valid number of days (at least 1)',
       revokeConfirm:
         "Are you sure you want to revoke the subscription for '{user}'? You can restore it later from the revoked list.",

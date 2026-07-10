@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
+	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
@@ -82,6 +83,121 @@ func (_u *UserSubscriptionUpdate) SetNillableGroupID(v *int64) *UserSubscription
 	if v != nil {
 		_u.SetGroupID(*v)
 	}
+	return _u
+}
+
+// SetSourcePlanID sets the "source_plan_id" field.
+func (_u *UserSubscriptionUpdate) SetSourcePlanID(v int64) *UserSubscriptionUpdate {
+	_u.mutation.SetSourcePlanID(v)
+	return _u
+}
+
+// SetNillableSourcePlanID sets the "source_plan_id" field if the given value is not nil.
+func (_u *UserSubscriptionUpdate) SetNillableSourcePlanID(v *int64) *UserSubscriptionUpdate {
+	if v != nil {
+		_u.SetSourcePlanID(*v)
+	}
+	return _u
+}
+
+// ClearSourcePlanID clears the value of the "source_plan_id" field.
+func (_u *UserSubscriptionUpdate) ClearSourcePlanID() *UserSubscriptionUpdate {
+	_u.mutation.ClearSourcePlanID()
+	return _u
+}
+
+// SetQuotaSnapshotted sets the "quota_snapshotted" field.
+func (_u *UserSubscriptionUpdate) SetQuotaSnapshotted(v bool) *UserSubscriptionUpdate {
+	_u.mutation.SetQuotaSnapshotted(v)
+	return _u
+}
+
+// SetNillableQuotaSnapshotted sets the "quota_snapshotted" field if the given value is not nil.
+func (_u *UserSubscriptionUpdate) SetNillableQuotaSnapshotted(v *bool) *UserSubscriptionUpdate {
+	if v != nil {
+		_u.SetQuotaSnapshotted(*v)
+	}
+	return _u
+}
+
+// SetDailyLimitUsd sets the "daily_limit_usd" field.
+func (_u *UserSubscriptionUpdate) SetDailyLimitUsd(v float64) *UserSubscriptionUpdate {
+	_u.mutation.ResetDailyLimitUsd()
+	_u.mutation.SetDailyLimitUsd(v)
+	return _u
+}
+
+// SetNillableDailyLimitUsd sets the "daily_limit_usd" field if the given value is not nil.
+func (_u *UserSubscriptionUpdate) SetNillableDailyLimitUsd(v *float64) *UserSubscriptionUpdate {
+	if v != nil {
+		_u.SetDailyLimitUsd(*v)
+	}
+	return _u
+}
+
+// AddDailyLimitUsd adds value to the "daily_limit_usd" field.
+func (_u *UserSubscriptionUpdate) AddDailyLimitUsd(v float64) *UserSubscriptionUpdate {
+	_u.mutation.AddDailyLimitUsd(v)
+	return _u
+}
+
+// ClearDailyLimitUsd clears the value of the "daily_limit_usd" field.
+func (_u *UserSubscriptionUpdate) ClearDailyLimitUsd() *UserSubscriptionUpdate {
+	_u.mutation.ClearDailyLimitUsd()
+	return _u
+}
+
+// SetWeeklyLimitUsd sets the "weekly_limit_usd" field.
+func (_u *UserSubscriptionUpdate) SetWeeklyLimitUsd(v float64) *UserSubscriptionUpdate {
+	_u.mutation.ResetWeeklyLimitUsd()
+	_u.mutation.SetWeeklyLimitUsd(v)
+	return _u
+}
+
+// SetNillableWeeklyLimitUsd sets the "weekly_limit_usd" field if the given value is not nil.
+func (_u *UserSubscriptionUpdate) SetNillableWeeklyLimitUsd(v *float64) *UserSubscriptionUpdate {
+	if v != nil {
+		_u.SetWeeklyLimitUsd(*v)
+	}
+	return _u
+}
+
+// AddWeeklyLimitUsd adds value to the "weekly_limit_usd" field.
+func (_u *UserSubscriptionUpdate) AddWeeklyLimitUsd(v float64) *UserSubscriptionUpdate {
+	_u.mutation.AddWeeklyLimitUsd(v)
+	return _u
+}
+
+// ClearWeeklyLimitUsd clears the value of the "weekly_limit_usd" field.
+func (_u *UserSubscriptionUpdate) ClearWeeklyLimitUsd() *UserSubscriptionUpdate {
+	_u.mutation.ClearWeeklyLimitUsd()
+	return _u
+}
+
+// SetMonthlyLimitUsd sets the "monthly_limit_usd" field.
+func (_u *UserSubscriptionUpdate) SetMonthlyLimitUsd(v float64) *UserSubscriptionUpdate {
+	_u.mutation.ResetMonthlyLimitUsd()
+	_u.mutation.SetMonthlyLimitUsd(v)
+	return _u
+}
+
+// SetNillableMonthlyLimitUsd sets the "monthly_limit_usd" field if the given value is not nil.
+func (_u *UserSubscriptionUpdate) SetNillableMonthlyLimitUsd(v *float64) *UserSubscriptionUpdate {
+	if v != nil {
+		_u.SetMonthlyLimitUsd(*v)
+	}
+	return _u
+}
+
+// AddMonthlyLimitUsd adds value to the "monthly_limit_usd" field.
+func (_u *UserSubscriptionUpdate) AddMonthlyLimitUsd(v float64) *UserSubscriptionUpdate {
+	_u.mutation.AddMonthlyLimitUsd(v)
+	return _u
+}
+
+// ClearMonthlyLimitUsd clears the value of the "monthly_limit_usd" field.
+func (_u *UserSubscriptionUpdate) ClearMonthlyLimitUsd() *UserSubscriptionUpdate {
+	_u.mutation.ClearMonthlyLimitUsd()
 	return _u
 }
 
@@ -333,6 +449,26 @@ func (_u *UserSubscriptionUpdate) SetAssignedByUser(v *User) *UserSubscriptionUp
 	return _u.SetAssignedByUserID(v.ID)
 }
 
+// SetSourcePlan sets the "source_plan" edge to the SubscriptionPlan entity.
+func (_u *UserSubscriptionUpdate) SetSourcePlan(v *SubscriptionPlan) *UserSubscriptionUpdate {
+	return _u.SetSourcePlanID(v.ID)
+}
+
+// AddAuthorizedGroupIDs adds the "authorized_groups" edge to the Group entity by IDs.
+func (_u *UserSubscriptionUpdate) AddAuthorizedGroupIDs(ids ...int64) *UserSubscriptionUpdate {
+	_u.mutation.AddAuthorizedGroupIDs(ids...)
+	return _u
+}
+
+// AddAuthorizedGroups adds the "authorized_groups" edges to the Group entity.
+func (_u *UserSubscriptionUpdate) AddAuthorizedGroups(v ...*Group) *UserSubscriptionUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddAuthorizedGroupIDs(ids...)
+}
+
 // AddUsageLogIDs adds the "usage_logs" edge to the UsageLog entity by IDs.
 func (_u *UserSubscriptionUpdate) AddUsageLogIDs(ids ...int64) *UserSubscriptionUpdate {
 	_u.mutation.AddUsageLogIDs(ids...)
@@ -369,6 +505,33 @@ func (_u *UserSubscriptionUpdate) ClearGroup() *UserSubscriptionUpdate {
 func (_u *UserSubscriptionUpdate) ClearAssignedByUser() *UserSubscriptionUpdate {
 	_u.mutation.ClearAssignedByUser()
 	return _u
+}
+
+// ClearSourcePlan clears the "source_plan" edge to the SubscriptionPlan entity.
+func (_u *UserSubscriptionUpdate) ClearSourcePlan() *UserSubscriptionUpdate {
+	_u.mutation.ClearSourcePlan()
+	return _u
+}
+
+// ClearAuthorizedGroups clears all "authorized_groups" edges to the Group entity.
+func (_u *UserSubscriptionUpdate) ClearAuthorizedGroups() *UserSubscriptionUpdate {
+	_u.mutation.ClearAuthorizedGroups()
+	return _u
+}
+
+// RemoveAuthorizedGroupIDs removes the "authorized_groups" edge to Group entities by IDs.
+func (_u *UserSubscriptionUpdate) RemoveAuthorizedGroupIDs(ids ...int64) *UserSubscriptionUpdate {
+	_u.mutation.RemoveAuthorizedGroupIDs(ids...)
+	return _u
+}
+
+// RemoveAuthorizedGroups removes "authorized_groups" edges to Group entities.
+func (_u *UserSubscriptionUpdate) RemoveAuthorizedGroups(v ...*Group) *UserSubscriptionUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveAuthorizedGroupIDs(ids...)
 }
 
 // ClearUsageLogs clears all "usage_logs" edges to the UsageLog entity.
@@ -470,6 +633,36 @@ func (_u *UserSubscriptionUpdate) sqlSave(ctx context.Context) (_node int, err e
 	}
 	if _u.mutation.DeletedAtCleared() {
 		_spec.ClearField(usersubscription.FieldDeletedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.QuotaSnapshotted(); ok {
+		_spec.SetField(usersubscription.FieldQuotaSnapshotted, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.DailyLimitUsd(); ok {
+		_spec.SetField(usersubscription.FieldDailyLimitUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedDailyLimitUsd(); ok {
+		_spec.AddField(usersubscription.FieldDailyLimitUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.DailyLimitUsdCleared() {
+		_spec.ClearField(usersubscription.FieldDailyLimitUsd, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.WeeklyLimitUsd(); ok {
+		_spec.SetField(usersubscription.FieldWeeklyLimitUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedWeeklyLimitUsd(); ok {
+		_spec.AddField(usersubscription.FieldWeeklyLimitUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.WeeklyLimitUsdCleared() {
+		_spec.ClearField(usersubscription.FieldWeeklyLimitUsd, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.MonthlyLimitUsd(); ok {
+		_spec.SetField(usersubscription.FieldMonthlyLimitUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedMonthlyLimitUsd(); ok {
+		_spec.AddField(usersubscription.FieldMonthlyLimitUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.MonthlyLimitUsdCleared() {
+		_spec.ClearField(usersubscription.FieldMonthlyLimitUsd, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.StartsAt(); ok {
 		_spec.SetField(usersubscription.FieldStartsAt, field.TypeTime, value)
@@ -612,6 +805,92 @@ func (_u *UserSubscriptionUpdate) sqlSave(ctx context.Context) (_node int, err e
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.SourcePlanCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   usersubscription.SourcePlanTable,
+			Columns: []string{usersubscription.SourcePlanColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(subscriptionplan.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SourcePlanIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   usersubscription.SourcePlanTable,
+			Columns: []string{usersubscription.SourcePlanColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(subscriptionplan.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.AuthorizedGroupsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   usersubscription.AuthorizedGroupsTable,
+			Columns: usersubscription.AuthorizedGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeInt64),
+			},
+		}
+		createE := &UserSubscriptionGroupCreate{config: _u.config, mutation: newUserSubscriptionGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedAuthorizedGroupsIDs(); len(nodes) > 0 && !_u.mutation.AuthorizedGroupsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   usersubscription.AuthorizedGroupsTable,
+			Columns: usersubscription.AuthorizedGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		createE := &UserSubscriptionGroupCreate{config: _u.config, mutation: newUserSubscriptionGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.AuthorizedGroupsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   usersubscription.AuthorizedGroupsTable,
+			Columns: usersubscription.AuthorizedGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		createE := &UserSubscriptionGroupCreate{config: _u.config, mutation: newUserSubscriptionGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _u.mutation.UsageLogsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -728,6 +1007,121 @@ func (_u *UserSubscriptionUpdateOne) SetNillableGroupID(v *int64) *UserSubscript
 	if v != nil {
 		_u.SetGroupID(*v)
 	}
+	return _u
+}
+
+// SetSourcePlanID sets the "source_plan_id" field.
+func (_u *UserSubscriptionUpdateOne) SetSourcePlanID(v int64) *UserSubscriptionUpdateOne {
+	_u.mutation.SetSourcePlanID(v)
+	return _u
+}
+
+// SetNillableSourcePlanID sets the "source_plan_id" field if the given value is not nil.
+func (_u *UserSubscriptionUpdateOne) SetNillableSourcePlanID(v *int64) *UserSubscriptionUpdateOne {
+	if v != nil {
+		_u.SetSourcePlanID(*v)
+	}
+	return _u
+}
+
+// ClearSourcePlanID clears the value of the "source_plan_id" field.
+func (_u *UserSubscriptionUpdateOne) ClearSourcePlanID() *UserSubscriptionUpdateOne {
+	_u.mutation.ClearSourcePlanID()
+	return _u
+}
+
+// SetQuotaSnapshotted sets the "quota_snapshotted" field.
+func (_u *UserSubscriptionUpdateOne) SetQuotaSnapshotted(v bool) *UserSubscriptionUpdateOne {
+	_u.mutation.SetQuotaSnapshotted(v)
+	return _u
+}
+
+// SetNillableQuotaSnapshotted sets the "quota_snapshotted" field if the given value is not nil.
+func (_u *UserSubscriptionUpdateOne) SetNillableQuotaSnapshotted(v *bool) *UserSubscriptionUpdateOne {
+	if v != nil {
+		_u.SetQuotaSnapshotted(*v)
+	}
+	return _u
+}
+
+// SetDailyLimitUsd sets the "daily_limit_usd" field.
+func (_u *UserSubscriptionUpdateOne) SetDailyLimitUsd(v float64) *UserSubscriptionUpdateOne {
+	_u.mutation.ResetDailyLimitUsd()
+	_u.mutation.SetDailyLimitUsd(v)
+	return _u
+}
+
+// SetNillableDailyLimitUsd sets the "daily_limit_usd" field if the given value is not nil.
+func (_u *UserSubscriptionUpdateOne) SetNillableDailyLimitUsd(v *float64) *UserSubscriptionUpdateOne {
+	if v != nil {
+		_u.SetDailyLimitUsd(*v)
+	}
+	return _u
+}
+
+// AddDailyLimitUsd adds value to the "daily_limit_usd" field.
+func (_u *UserSubscriptionUpdateOne) AddDailyLimitUsd(v float64) *UserSubscriptionUpdateOne {
+	_u.mutation.AddDailyLimitUsd(v)
+	return _u
+}
+
+// ClearDailyLimitUsd clears the value of the "daily_limit_usd" field.
+func (_u *UserSubscriptionUpdateOne) ClearDailyLimitUsd() *UserSubscriptionUpdateOne {
+	_u.mutation.ClearDailyLimitUsd()
+	return _u
+}
+
+// SetWeeklyLimitUsd sets the "weekly_limit_usd" field.
+func (_u *UserSubscriptionUpdateOne) SetWeeklyLimitUsd(v float64) *UserSubscriptionUpdateOne {
+	_u.mutation.ResetWeeklyLimitUsd()
+	_u.mutation.SetWeeklyLimitUsd(v)
+	return _u
+}
+
+// SetNillableWeeklyLimitUsd sets the "weekly_limit_usd" field if the given value is not nil.
+func (_u *UserSubscriptionUpdateOne) SetNillableWeeklyLimitUsd(v *float64) *UserSubscriptionUpdateOne {
+	if v != nil {
+		_u.SetWeeklyLimitUsd(*v)
+	}
+	return _u
+}
+
+// AddWeeklyLimitUsd adds value to the "weekly_limit_usd" field.
+func (_u *UserSubscriptionUpdateOne) AddWeeklyLimitUsd(v float64) *UserSubscriptionUpdateOne {
+	_u.mutation.AddWeeklyLimitUsd(v)
+	return _u
+}
+
+// ClearWeeklyLimitUsd clears the value of the "weekly_limit_usd" field.
+func (_u *UserSubscriptionUpdateOne) ClearWeeklyLimitUsd() *UserSubscriptionUpdateOne {
+	_u.mutation.ClearWeeklyLimitUsd()
+	return _u
+}
+
+// SetMonthlyLimitUsd sets the "monthly_limit_usd" field.
+func (_u *UserSubscriptionUpdateOne) SetMonthlyLimitUsd(v float64) *UserSubscriptionUpdateOne {
+	_u.mutation.ResetMonthlyLimitUsd()
+	_u.mutation.SetMonthlyLimitUsd(v)
+	return _u
+}
+
+// SetNillableMonthlyLimitUsd sets the "monthly_limit_usd" field if the given value is not nil.
+func (_u *UserSubscriptionUpdateOne) SetNillableMonthlyLimitUsd(v *float64) *UserSubscriptionUpdateOne {
+	if v != nil {
+		_u.SetMonthlyLimitUsd(*v)
+	}
+	return _u
+}
+
+// AddMonthlyLimitUsd adds value to the "monthly_limit_usd" field.
+func (_u *UserSubscriptionUpdateOne) AddMonthlyLimitUsd(v float64) *UserSubscriptionUpdateOne {
+	_u.mutation.AddMonthlyLimitUsd(v)
+	return _u
+}
+
+// ClearMonthlyLimitUsd clears the value of the "monthly_limit_usd" field.
+func (_u *UserSubscriptionUpdateOne) ClearMonthlyLimitUsd() *UserSubscriptionUpdateOne {
+	_u.mutation.ClearMonthlyLimitUsd()
 	return _u
 }
 
@@ -979,6 +1373,26 @@ func (_u *UserSubscriptionUpdateOne) SetAssignedByUser(v *User) *UserSubscriptio
 	return _u.SetAssignedByUserID(v.ID)
 }
 
+// SetSourcePlan sets the "source_plan" edge to the SubscriptionPlan entity.
+func (_u *UserSubscriptionUpdateOne) SetSourcePlan(v *SubscriptionPlan) *UserSubscriptionUpdateOne {
+	return _u.SetSourcePlanID(v.ID)
+}
+
+// AddAuthorizedGroupIDs adds the "authorized_groups" edge to the Group entity by IDs.
+func (_u *UserSubscriptionUpdateOne) AddAuthorizedGroupIDs(ids ...int64) *UserSubscriptionUpdateOne {
+	_u.mutation.AddAuthorizedGroupIDs(ids...)
+	return _u
+}
+
+// AddAuthorizedGroups adds the "authorized_groups" edges to the Group entity.
+func (_u *UserSubscriptionUpdateOne) AddAuthorizedGroups(v ...*Group) *UserSubscriptionUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddAuthorizedGroupIDs(ids...)
+}
+
 // AddUsageLogIDs adds the "usage_logs" edge to the UsageLog entity by IDs.
 func (_u *UserSubscriptionUpdateOne) AddUsageLogIDs(ids ...int64) *UserSubscriptionUpdateOne {
 	_u.mutation.AddUsageLogIDs(ids...)
@@ -1015,6 +1429,33 @@ func (_u *UserSubscriptionUpdateOne) ClearGroup() *UserSubscriptionUpdateOne {
 func (_u *UserSubscriptionUpdateOne) ClearAssignedByUser() *UserSubscriptionUpdateOne {
 	_u.mutation.ClearAssignedByUser()
 	return _u
+}
+
+// ClearSourcePlan clears the "source_plan" edge to the SubscriptionPlan entity.
+func (_u *UserSubscriptionUpdateOne) ClearSourcePlan() *UserSubscriptionUpdateOne {
+	_u.mutation.ClearSourcePlan()
+	return _u
+}
+
+// ClearAuthorizedGroups clears all "authorized_groups" edges to the Group entity.
+func (_u *UserSubscriptionUpdateOne) ClearAuthorizedGroups() *UserSubscriptionUpdateOne {
+	_u.mutation.ClearAuthorizedGroups()
+	return _u
+}
+
+// RemoveAuthorizedGroupIDs removes the "authorized_groups" edge to Group entities by IDs.
+func (_u *UserSubscriptionUpdateOne) RemoveAuthorizedGroupIDs(ids ...int64) *UserSubscriptionUpdateOne {
+	_u.mutation.RemoveAuthorizedGroupIDs(ids...)
+	return _u
+}
+
+// RemoveAuthorizedGroups removes "authorized_groups" edges to Group entities.
+func (_u *UserSubscriptionUpdateOne) RemoveAuthorizedGroups(v ...*Group) *UserSubscriptionUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveAuthorizedGroupIDs(ids...)
 }
 
 // ClearUsageLogs clears all "usage_logs" edges to the UsageLog entity.
@@ -1146,6 +1587,36 @@ func (_u *UserSubscriptionUpdateOne) sqlSave(ctx context.Context) (_node *UserSu
 	}
 	if _u.mutation.DeletedAtCleared() {
 		_spec.ClearField(usersubscription.FieldDeletedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.QuotaSnapshotted(); ok {
+		_spec.SetField(usersubscription.FieldQuotaSnapshotted, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.DailyLimitUsd(); ok {
+		_spec.SetField(usersubscription.FieldDailyLimitUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedDailyLimitUsd(); ok {
+		_spec.AddField(usersubscription.FieldDailyLimitUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.DailyLimitUsdCleared() {
+		_spec.ClearField(usersubscription.FieldDailyLimitUsd, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.WeeklyLimitUsd(); ok {
+		_spec.SetField(usersubscription.FieldWeeklyLimitUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedWeeklyLimitUsd(); ok {
+		_spec.AddField(usersubscription.FieldWeeklyLimitUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.WeeklyLimitUsdCleared() {
+		_spec.ClearField(usersubscription.FieldWeeklyLimitUsd, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.MonthlyLimitUsd(); ok {
+		_spec.SetField(usersubscription.FieldMonthlyLimitUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedMonthlyLimitUsd(); ok {
+		_spec.AddField(usersubscription.FieldMonthlyLimitUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.MonthlyLimitUsdCleared() {
+		_spec.ClearField(usersubscription.FieldMonthlyLimitUsd, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.StartsAt(); ok {
 		_spec.SetField(usersubscription.FieldStartsAt, field.TypeTime, value)
@@ -1286,6 +1757,92 @@ func (_u *UserSubscriptionUpdateOne) sqlSave(ctx context.Context) (_node *UserSu
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.SourcePlanCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   usersubscription.SourcePlanTable,
+			Columns: []string{usersubscription.SourcePlanColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(subscriptionplan.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SourcePlanIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   usersubscription.SourcePlanTable,
+			Columns: []string{usersubscription.SourcePlanColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(subscriptionplan.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.AuthorizedGroupsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   usersubscription.AuthorizedGroupsTable,
+			Columns: usersubscription.AuthorizedGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeInt64),
+			},
+		}
+		createE := &UserSubscriptionGroupCreate{config: _u.config, mutation: newUserSubscriptionGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedAuthorizedGroupsIDs(); len(nodes) > 0 && !_u.mutation.AuthorizedGroupsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   usersubscription.AuthorizedGroupsTable,
+			Columns: usersubscription.AuthorizedGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		createE := &UserSubscriptionGroupCreate{config: _u.config, mutation: newUserSubscriptionGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.AuthorizedGroupsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   usersubscription.AuthorizedGroupsTable,
+			Columns: usersubscription.AuthorizedGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		createE := &UserSubscriptionGroupCreate{config: _u.config, mutation: newUserSubscriptionGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if _u.mutation.UsageLogsCleared() {

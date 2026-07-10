@@ -2,6 +2,8 @@
 
 Sub2API has a built-in payment system that enables user self-service top-up without deploying a separate payment service.
 
+Quota subscription plans can whitelist multiple groups that share one daily, weekly, and monthly USD quota. Group access, limits, and validity are snapshotted when purchased or assigned, so later plan edits do not retroactively change existing subscriptions. Administrators can also hide balance recharge and subscription purchase independently; the backend rejects new orders of the disabled type.
+
 ---
 
 ## Table of Contents

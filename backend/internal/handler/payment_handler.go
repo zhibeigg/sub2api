@@ -125,18 +125,33 @@ func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 	// Fetch plans with group info
 	plans, _ := h.configService.ListPlansForSale(ctx)
 	groupInfo := h.configService.GetGroupInfoMap(ctx, plans)
+	planGroups := h.configService.GetPlanGroupsMap(ctx, plans)
 	planList := make([]checkoutPlan, 0, len(plans))
 	for _, p := range plans {
 		gi := groupInfo[p.GroupID]
+		groups := planGroups[p.ID]
+		groupIDs := make([]int64, 0, len(groups))
+		modelScopes := make([]string, 0)
+		seenScopes := make(map[string]struct{})
+		for _, item := range groups {
+			groupIDs = append(groupIDs, item.ID)
+			for _, scope := range item.ModelScopes {
+				if _, exists := seenScopes[scope]; exists {
+					continue
+				}
+				seenScopes[scope] = struct{}{}
+				modelScopes = append(modelScopes, scope)
+			}
+		}
 		planList = append(planList, checkoutPlan{
-			ID: int64(p.ID), GroupID: p.GroupID,
+			ID: int64(p.ID), GroupID: p.GroupID, GroupIDs: groupIDs, Groups: groups,
 			GroupPlatform: gi.Platform, GroupName: gi.Name,
 			RateMultiplier:  gi.RateMultiplier,
 			PeakRateEnabled: gi.PeakRateEnabled, PeakStart: gi.PeakStart,
 			PeakEnd: gi.PeakEnd, PeakRateMultiplier: gi.PeakRateMultiplier,
-			DailyLimitUSD:  gi.DailyLimitUSD,
-			WeeklyLimitUSD: gi.WeeklyLimitUSD, MonthlyLimitUSD: gi.MonthlyLimitUSD,
-			ModelScopes: gi.ModelScopes,
+			DailyLimitUSD:  p.DailyLimitUsd,
+			WeeklyLimitUSD: p.WeeklyLimitUsd, MonthlyLimitUSD: p.MonthlyLimitUsd,
+			ModelScopes: modelScopes,
 			Name:        p.Name, Description: p.Description, Price: p.Price, OriginalPrice: p.OriginalPrice,
 			ValidityDays: p.ValidityDays, ValidityUnit: p.ValidityUnit, Features: parseFeatures(p.Features),
 			ProductName: p.ProductName,
@@ -149,6 +164,7 @@ func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 		GlobalMax:                 limitsResp.GlobalMax,
 		Plans:                     planList,
 		BalanceDisabled:           cfg.BalanceDisabled,
+		SubscriptionDisabled:      cfg.SubscriptionDisabled,
 		BalanceRechargeMultiplier: cfg.BalanceRechargeMultiplier,
 		SubscriptionUSDToCNYRate:  cfg.SubscriptionUSDToCNYRate,
 		RechargeFeeRate:           cfg.RechargeFeeRate,
@@ -165,6 +181,7 @@ type checkoutInfoResponse struct {
 	GlobalMax                 float64                         `json:"global_max"`
 	Plans                     []checkoutPlan                  `json:"plans"`
 	BalanceDisabled           bool                            `json:"balance_disabled"`
+	SubscriptionDisabled      bool                            `json:"subscription_disabled"`
 	BalanceRechargeMultiplier float64                         `json:"balance_recharge_multiplier"`
 	SubscriptionUSDToCNYRate  float64                         `json:"subscription_usd_to_cny_rate"`
 	RechargeFeeRate           float64                         `json:"recharge_fee_rate"`
@@ -175,27 +192,29 @@ type checkoutInfoResponse struct {
 }
 
 type checkoutPlan struct {
-	ID                 int64    `json:"id"`
-	GroupID            int64    `json:"group_id"`
-	GroupPlatform      string   `json:"group_platform"`
-	GroupName          string   `json:"group_name"`
-	RateMultiplier     float64  `json:"rate_multiplier"`
-	PeakRateEnabled    bool     `json:"peak_rate_enabled"`
-	PeakStart          string   `json:"peak_start"`
-	PeakEnd            string   `json:"peak_end"`
-	PeakRateMultiplier float64  `json:"peak_rate_multiplier"`
-	DailyLimitUSD      *float64 `json:"daily_limit_usd"`
-	WeeklyLimitUSD     *float64 `json:"weekly_limit_usd"`
-	MonthlyLimitUSD    *float64 `json:"monthly_limit_usd"`
-	ModelScopes        []string `json:"supported_model_scopes"`
-	Name               string   `json:"name"`
-	Description        string   `json:"description"`
-	Price              float64  `json:"price"`
-	OriginalPrice      *float64 `json:"original_price,omitempty"`
-	ValidityDays       int      `json:"validity_days"`
-	ValidityUnit       string   `json:"validity_unit"`
-	Features           []string `json:"features"`
-	ProductName        string   `json:"product_name"`
+	ID                 int64                   `json:"id"`
+	GroupID            int64                   `json:"group_id"`
+	GroupIDs           []int64                 `json:"group_ids"`
+	Groups             []service.PlanGroupInfo `json:"groups"`
+	GroupPlatform      string                  `json:"group_platform"`
+	GroupName          string                  `json:"group_name"`
+	RateMultiplier     float64                 `json:"rate_multiplier"`
+	PeakRateEnabled    bool                    `json:"peak_rate_enabled"`
+	PeakStart          string                  `json:"peak_start"`
+	PeakEnd            string                  `json:"peak_end"`
+	PeakRateMultiplier float64                 `json:"peak_rate_multiplier"`
+	DailyLimitUSD      *float64                `json:"daily_limit_usd"`
+	WeeklyLimitUSD     *float64                `json:"weekly_limit_usd"`
+	MonthlyLimitUSD    *float64                `json:"monthly_limit_usd"`
+	ModelScopes        []string                `json:"supported_model_scopes"`
+	Name               string                  `json:"name"`
+	Description        string                  `json:"description"`
+	Price              float64                 `json:"price"`
+	OriginalPrice      *float64                `json:"original_price,omitempty"`
+	ValidityDays       int                     `json:"validity_days"`
+	ValidityUnit       string                  `json:"validity_unit"`
+	Features           []string                `json:"features"`
+	ProductName        string                  `json:"product_name"`
 }
 
 // parseFeatures splits a newline-separated features string into a string slice.

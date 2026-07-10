@@ -80,6 +80,31 @@ func GroupID(v int64) predicate.UserSubscription {
 	return predicate.UserSubscription(sql.FieldEQ(FieldGroupID, v))
 }
 
+// SourcePlanID applies equality check predicate on the "source_plan_id" field. It's identical to SourcePlanIDEQ.
+func SourcePlanID(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldSourcePlanID, v))
+}
+
+// QuotaSnapshotted applies equality check predicate on the "quota_snapshotted" field. It's identical to QuotaSnapshottedEQ.
+func QuotaSnapshotted(v bool) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldQuotaSnapshotted, v))
+}
+
+// DailyLimitUsd applies equality check predicate on the "daily_limit_usd" field. It's identical to DailyLimitUsdEQ.
+func DailyLimitUsd(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldDailyLimitUsd, v))
+}
+
+// WeeklyLimitUsd applies equality check predicate on the "weekly_limit_usd" field. It's identical to WeeklyLimitUsdEQ.
+func WeeklyLimitUsd(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldWeeklyLimitUsd, v))
+}
+
+// MonthlyLimitUsd applies equality check predicate on the "monthly_limit_usd" field. It's identical to MonthlyLimitUsdEQ.
+func MonthlyLimitUsd(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldMonthlyLimitUsd, v))
+}
+
 // StartsAt applies equality check predicate on the "starts_at" field. It's identical to StartsAtEQ.
 func StartsAt(v time.Time) predicate.UserSubscription {
 	return predicate.UserSubscription(sql.FieldEQ(FieldStartsAt, v))
@@ -308,6 +333,196 @@ func GroupIDIn(vs ...int64) predicate.UserSubscription {
 // GroupIDNotIn applies the NotIn predicate on the "group_id" field.
 func GroupIDNotIn(vs ...int64) predicate.UserSubscription {
 	return predicate.UserSubscription(sql.FieldNotIn(FieldGroupID, vs...))
+}
+
+// SourcePlanIDEQ applies the EQ predicate on the "source_plan_id" field.
+func SourcePlanIDEQ(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldSourcePlanID, v))
+}
+
+// SourcePlanIDNEQ applies the NEQ predicate on the "source_plan_id" field.
+func SourcePlanIDNEQ(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNEQ(FieldSourcePlanID, v))
+}
+
+// SourcePlanIDIn applies the In predicate on the "source_plan_id" field.
+func SourcePlanIDIn(vs ...int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldIn(FieldSourcePlanID, vs...))
+}
+
+// SourcePlanIDNotIn applies the NotIn predicate on the "source_plan_id" field.
+func SourcePlanIDNotIn(vs ...int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNotIn(FieldSourcePlanID, vs...))
+}
+
+// SourcePlanIDIsNil applies the IsNil predicate on the "source_plan_id" field.
+func SourcePlanIDIsNil() predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldIsNull(FieldSourcePlanID))
+}
+
+// SourcePlanIDNotNil applies the NotNil predicate on the "source_plan_id" field.
+func SourcePlanIDNotNil() predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNotNull(FieldSourcePlanID))
+}
+
+// QuotaSnapshottedEQ applies the EQ predicate on the "quota_snapshotted" field.
+func QuotaSnapshottedEQ(v bool) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldQuotaSnapshotted, v))
+}
+
+// QuotaSnapshottedNEQ applies the NEQ predicate on the "quota_snapshotted" field.
+func QuotaSnapshottedNEQ(v bool) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNEQ(FieldQuotaSnapshotted, v))
+}
+
+// DailyLimitUsdEQ applies the EQ predicate on the "daily_limit_usd" field.
+func DailyLimitUsdEQ(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldDailyLimitUsd, v))
+}
+
+// DailyLimitUsdNEQ applies the NEQ predicate on the "daily_limit_usd" field.
+func DailyLimitUsdNEQ(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNEQ(FieldDailyLimitUsd, v))
+}
+
+// DailyLimitUsdIn applies the In predicate on the "daily_limit_usd" field.
+func DailyLimitUsdIn(vs ...float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldIn(FieldDailyLimitUsd, vs...))
+}
+
+// DailyLimitUsdNotIn applies the NotIn predicate on the "daily_limit_usd" field.
+func DailyLimitUsdNotIn(vs ...float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNotIn(FieldDailyLimitUsd, vs...))
+}
+
+// DailyLimitUsdGT applies the GT predicate on the "daily_limit_usd" field.
+func DailyLimitUsdGT(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGT(FieldDailyLimitUsd, v))
+}
+
+// DailyLimitUsdGTE applies the GTE predicate on the "daily_limit_usd" field.
+func DailyLimitUsdGTE(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGTE(FieldDailyLimitUsd, v))
+}
+
+// DailyLimitUsdLT applies the LT predicate on the "daily_limit_usd" field.
+func DailyLimitUsdLT(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLT(FieldDailyLimitUsd, v))
+}
+
+// DailyLimitUsdLTE applies the LTE predicate on the "daily_limit_usd" field.
+func DailyLimitUsdLTE(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLTE(FieldDailyLimitUsd, v))
+}
+
+// DailyLimitUsdIsNil applies the IsNil predicate on the "daily_limit_usd" field.
+func DailyLimitUsdIsNil() predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldIsNull(FieldDailyLimitUsd))
+}
+
+// DailyLimitUsdNotNil applies the NotNil predicate on the "daily_limit_usd" field.
+func DailyLimitUsdNotNil() predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNotNull(FieldDailyLimitUsd))
+}
+
+// WeeklyLimitUsdEQ applies the EQ predicate on the "weekly_limit_usd" field.
+func WeeklyLimitUsdEQ(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldWeeklyLimitUsd, v))
+}
+
+// WeeklyLimitUsdNEQ applies the NEQ predicate on the "weekly_limit_usd" field.
+func WeeklyLimitUsdNEQ(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNEQ(FieldWeeklyLimitUsd, v))
+}
+
+// WeeklyLimitUsdIn applies the In predicate on the "weekly_limit_usd" field.
+func WeeklyLimitUsdIn(vs ...float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldIn(FieldWeeklyLimitUsd, vs...))
+}
+
+// WeeklyLimitUsdNotIn applies the NotIn predicate on the "weekly_limit_usd" field.
+func WeeklyLimitUsdNotIn(vs ...float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNotIn(FieldWeeklyLimitUsd, vs...))
+}
+
+// WeeklyLimitUsdGT applies the GT predicate on the "weekly_limit_usd" field.
+func WeeklyLimitUsdGT(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGT(FieldWeeklyLimitUsd, v))
+}
+
+// WeeklyLimitUsdGTE applies the GTE predicate on the "weekly_limit_usd" field.
+func WeeklyLimitUsdGTE(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGTE(FieldWeeklyLimitUsd, v))
+}
+
+// WeeklyLimitUsdLT applies the LT predicate on the "weekly_limit_usd" field.
+func WeeklyLimitUsdLT(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLT(FieldWeeklyLimitUsd, v))
+}
+
+// WeeklyLimitUsdLTE applies the LTE predicate on the "weekly_limit_usd" field.
+func WeeklyLimitUsdLTE(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLTE(FieldWeeklyLimitUsd, v))
+}
+
+// WeeklyLimitUsdIsNil applies the IsNil predicate on the "weekly_limit_usd" field.
+func WeeklyLimitUsdIsNil() predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldIsNull(FieldWeeklyLimitUsd))
+}
+
+// WeeklyLimitUsdNotNil applies the NotNil predicate on the "weekly_limit_usd" field.
+func WeeklyLimitUsdNotNil() predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNotNull(FieldWeeklyLimitUsd))
+}
+
+// MonthlyLimitUsdEQ applies the EQ predicate on the "monthly_limit_usd" field.
+func MonthlyLimitUsdEQ(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldMonthlyLimitUsd, v))
+}
+
+// MonthlyLimitUsdNEQ applies the NEQ predicate on the "monthly_limit_usd" field.
+func MonthlyLimitUsdNEQ(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNEQ(FieldMonthlyLimitUsd, v))
+}
+
+// MonthlyLimitUsdIn applies the In predicate on the "monthly_limit_usd" field.
+func MonthlyLimitUsdIn(vs ...float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldIn(FieldMonthlyLimitUsd, vs...))
+}
+
+// MonthlyLimitUsdNotIn applies the NotIn predicate on the "monthly_limit_usd" field.
+func MonthlyLimitUsdNotIn(vs ...float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNotIn(FieldMonthlyLimitUsd, vs...))
+}
+
+// MonthlyLimitUsdGT applies the GT predicate on the "monthly_limit_usd" field.
+func MonthlyLimitUsdGT(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGT(FieldMonthlyLimitUsd, v))
+}
+
+// MonthlyLimitUsdGTE applies the GTE predicate on the "monthly_limit_usd" field.
+func MonthlyLimitUsdGTE(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGTE(FieldMonthlyLimitUsd, v))
+}
+
+// MonthlyLimitUsdLT applies the LT predicate on the "monthly_limit_usd" field.
+func MonthlyLimitUsdLT(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLT(FieldMonthlyLimitUsd, v))
+}
+
+// MonthlyLimitUsdLTE applies the LTE predicate on the "monthly_limit_usd" field.
+func MonthlyLimitUsdLTE(v float64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLTE(FieldMonthlyLimitUsd, v))
+}
+
+// MonthlyLimitUsdIsNil applies the IsNil predicate on the "monthly_limit_usd" field.
+func MonthlyLimitUsdIsNil() predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldIsNull(FieldMonthlyLimitUsd))
+}
+
+// MonthlyLimitUsdNotNil applies the NotNil predicate on the "monthly_limit_usd" field.
+func MonthlyLimitUsdNotNil() predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNotNull(FieldMonthlyLimitUsd))
 }
 
 // StartsAtEQ applies the EQ predicate on the "starts_at" field.
@@ -939,6 +1154,52 @@ func HasAssignedByUserWith(preds ...predicate.User) predicate.UserSubscription {
 	})
 }
 
+// HasSourcePlan applies the HasEdge predicate on the "source_plan" edge.
+func HasSourcePlan() predicate.UserSubscription {
+	return predicate.UserSubscription(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, SourcePlanTable, SourcePlanColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasSourcePlanWith applies the HasEdge predicate on the "source_plan" edge with a given conditions (other predicates).
+func HasSourcePlanWith(preds ...predicate.SubscriptionPlan) predicate.UserSubscription {
+	return predicate.UserSubscription(func(s *sql.Selector) {
+		step := newSourcePlanStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasAuthorizedGroups applies the HasEdge predicate on the "authorized_groups" edge.
+func HasAuthorizedGroups() predicate.UserSubscription {
+	return predicate.UserSubscription(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, false, AuthorizedGroupsTable, AuthorizedGroupsPrimaryKey...),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasAuthorizedGroupsWith applies the HasEdge predicate on the "authorized_groups" edge with a given conditions (other predicates).
+func HasAuthorizedGroupsWith(preds ...predicate.Group) predicate.UserSubscription {
+	return predicate.UserSubscription(func(s *sql.Selector) {
+		step := newAuthorizedGroupsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // HasUsageLogs applies the HasEdge predicate on the "usage_logs" edge.
 func HasUsageLogs() predicate.UserSubscription {
 	return predicate.UserSubscription(func(s *sql.Selector) {
@@ -954,6 +1215,29 @@ func HasUsageLogs() predicate.UserSubscription {
 func HasUsageLogsWith(preds ...predicate.UsageLog) predicate.UserSubscription {
 	return predicate.UserSubscription(func(s *sql.Selector) {
 		step := newUsageLogsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasGroupBindings applies the HasEdge predicate on the "group_bindings" edge.
+func HasGroupBindings() predicate.UserSubscription {
+	return predicate.UserSubscription(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, true, GroupBindingsTable, GroupBindingsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasGroupBindingsWith applies the HasEdge predicate on the "group_bindings" edge with a given conditions (other predicates).
+func HasGroupBindingsWith(preds ...predicate.UserSubscriptionGroup) predicate.UserSubscription {
+	return predicate.UserSubscription(func(s *sql.Selector) {
+		step := newGroupBindingsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

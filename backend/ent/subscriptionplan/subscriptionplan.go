@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 )
 
 const (
@@ -23,6 +24,12 @@ const (
 	FieldPrice = "price"
 	// FieldOriginalPrice holds the string denoting the original_price field in the database.
 	FieldOriginalPrice = "original_price"
+	// FieldDailyLimitUsd holds the string denoting the daily_limit_usd field in the database.
+	FieldDailyLimitUsd = "daily_limit_usd"
+	// FieldWeeklyLimitUsd holds the string denoting the weekly_limit_usd field in the database.
+	FieldWeeklyLimitUsd = "weekly_limit_usd"
+	// FieldMonthlyLimitUsd holds the string denoting the monthly_limit_usd field in the database.
+	FieldMonthlyLimitUsd = "monthly_limit_usd"
 	// FieldValidityDays holds the string denoting the validity_days field in the database.
 	FieldValidityDays = "validity_days"
 	// FieldValidityUnit holds the string denoting the validity_unit field in the database.
@@ -39,8 +46,33 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// EdgeGroups holds the string denoting the groups edge name in mutations.
+	EdgeGroups = "groups"
+	// EdgeSubscriptions holds the string denoting the subscriptions edge name in mutations.
+	EdgeSubscriptions = "subscriptions"
+	// EdgeGroupBindings holds the string denoting the group_bindings edge name in mutations.
+	EdgeGroupBindings = "group_bindings"
 	// Table holds the table name of the subscriptionplan in the database.
 	Table = "subscription_plans"
+	// GroupsTable is the table that holds the groups relation/edge. The primary key declared below.
+	GroupsTable = "subscription_plan_groups"
+	// GroupsInverseTable is the table name for the Group entity.
+	// It exists in this package in order to avoid circular dependency with the "group" package.
+	GroupsInverseTable = "groups"
+	// SubscriptionsTable is the table that holds the subscriptions relation/edge.
+	SubscriptionsTable = "user_subscriptions"
+	// SubscriptionsInverseTable is the table name for the UserSubscription entity.
+	// It exists in this package in order to avoid circular dependency with the "usersubscription" package.
+	SubscriptionsInverseTable = "user_subscriptions"
+	// SubscriptionsColumn is the table column denoting the subscriptions relation/edge.
+	SubscriptionsColumn = "source_plan_id"
+	// GroupBindingsTable is the table that holds the group_bindings relation/edge.
+	GroupBindingsTable = "subscription_plan_groups"
+	// GroupBindingsInverseTable is the table name for the SubscriptionPlanGroup entity.
+	// It exists in this package in order to avoid circular dependency with the "subscriptionplangroup" package.
+	GroupBindingsInverseTable = "subscription_plan_groups"
+	// GroupBindingsColumn is the table column denoting the group_bindings relation/edge.
+	GroupBindingsColumn = "plan_id"
 )
 
 // Columns holds all SQL columns for subscriptionplan fields.
@@ -51,6 +83,9 @@ var Columns = []string{
 	FieldDescription,
 	FieldPrice,
 	FieldOriginalPrice,
+	FieldDailyLimitUsd,
+	FieldWeeklyLimitUsd,
+	FieldMonthlyLimitUsd,
 	FieldValidityDays,
 	FieldValidityUnit,
 	FieldFeatures,
@@ -60,6 +95,12 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldUpdatedAt,
 }
+
+var (
+	// GroupsPrimaryKey and GroupsColumn2 are the table columns denoting the
+	// primary key for the groups relation (M2M).
+	GroupsPrimaryKey = []string{"plan_id", "group_id"}
+)
 
 // ValidColumn reports if the column name is valid (part of the table columns).
 func ValidColumn(column string) bool {
@@ -133,6 +174,21 @@ func ByOriginalPrice(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOriginalPrice, opts...).ToFunc()
 }
 
+// ByDailyLimitUsd orders the results by the daily_limit_usd field.
+func ByDailyLimitUsd(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldDailyLimitUsd, opts...).ToFunc()
+}
+
+// ByWeeklyLimitUsd orders the results by the weekly_limit_usd field.
+func ByWeeklyLimitUsd(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWeeklyLimitUsd, opts...).ToFunc()
+}
+
+// ByMonthlyLimitUsd orders the results by the monthly_limit_usd field.
+func ByMonthlyLimitUsd(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMonthlyLimitUsd, opts...).ToFunc()
+}
+
 // ByValidityDays orders the results by the validity_days field.
 func ByValidityDays(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldValidityDays, opts...).ToFunc()
@@ -171,4 +227,67 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByGroupsCount orders the results by groups count.
+func ByGroupsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newGroupsStep(), opts...)
+	}
+}
+
+// ByGroups orders the results by groups terms.
+func ByGroups(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newGroupsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// BySubscriptionsCount orders the results by subscriptions count.
+func BySubscriptionsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newSubscriptionsStep(), opts...)
+	}
+}
+
+// BySubscriptions orders the results by subscriptions terms.
+func BySubscriptions(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newSubscriptionsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByGroupBindingsCount orders the results by group_bindings count.
+func ByGroupBindingsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newGroupBindingsStep(), opts...)
+	}
+}
+
+// ByGroupBindings orders the results by group_bindings terms.
+func ByGroupBindings(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newGroupBindingsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+func newGroupsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(GroupsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2M, false, GroupsTable, GroupsPrimaryKey...),
+	)
+}
+func newSubscriptionsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(SubscriptionsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, SubscriptionsTable, SubscriptionsColumn),
+	)
+}
+func newGroupBindingsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(GroupBindingsInverseTable, GroupBindingsColumn),
+		sqlgraph.Edge(sqlgraph.O2M, true, GroupBindingsTable, GroupBindingsColumn),
+	)
 }

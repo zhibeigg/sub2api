@@ -1700,6 +1700,13 @@ export interface UserSubscription {
   id: number
   user_id: number
   group_id: number
+  group_ids: number[]
+  groups: Group[]
+  source_plan_id: number | null
+  quota_snapshotted: boolean
+  daily_limit_usd?: number | null
+  weekly_limit_usd?: number | null
+  monthly_limit_usd?: number | null
   status: 'active' | 'expired' | 'revoked' | 'suspended'
   starts_at: string
   daily_usage_usd: number
@@ -1742,13 +1749,15 @@ export interface SubscriptionProgress {
 
 export interface AssignSubscriptionRequest {
   user_id: number
-  group_id: number
+  plan_id?: number
+  group_id?: number
   validity_days?: number
 }
 
 export interface BulkAssignSubscriptionRequest {
   user_ids: number[]
-  group_id: number
+  plan_id?: number
+  group_id?: number
   validity_days?: number
 }
 
@@ -2086,7 +2095,7 @@ export interface UpdateScheduledTestPlanRequest {
 }
 
 // Payment types
-export type { SubscriptionPlan, PaymentOrder, CheckoutInfoResponse } from './payment'
+export type { SubscriptionPlan, SubscriptionPlanGroup, PaymentOrder, CheckoutInfoResponse } from './payment'
 
 export type {
   PlatformQuotaItem,

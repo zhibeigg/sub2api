@@ -766,24 +766,23 @@ func UserSubscriptionFromServiceAdmin(sub *service.UserSubscription) *AdminUserS
 }
 
 func userSubscriptionFromServiceBase(sub *service.UserSubscription) UserSubscription {
+	groups := make([]*Group, 0, len(sub.Groups))
+	for _, item := range sub.Groups {
+		if mapped := GroupFromServiceShallow(item); mapped != nil {
+			groups = append(groups, mapped)
+		}
+	}
 	return UserSubscription{
-		ID:                 sub.ID,
-		UserID:             sub.UserID,
-		GroupID:            sub.GroupID,
-		StartsAt:           sub.StartsAt,
-		ExpiresAt:          sub.ExpiresAt,
-		Status:             sub.Status,
-		DailyWindowStart:   sub.DailyWindowStart,
-		WeeklyWindowStart:  sub.WeeklyWindowStart,
-		MonthlyWindowStart: sub.MonthlyWindowStart,
-		DailyUsageUSD:      sub.DailyUsageUSD,
-		WeeklyUsageUSD:     sub.WeeklyUsageUSD,
-		MonthlyUsageUSD:    sub.MonthlyUsageUSD,
-		CreatedAt:          sub.CreatedAt,
-		UpdatedAt:          sub.UpdatedAt,
-		RevokedAt:          sub.DeletedAt,
-		User:               UserFromServiceShallow(sub.User),
-		Group:              GroupFromServiceShallow(sub.Group),
+		ID: sub.ID, UserID: sub.UserID, GroupID: sub.GroupID,
+		GroupIDs: append([]int64(nil), sub.GroupIDs...), SourcePlanID: sub.SourcePlanID,
+		QuotaSnapshotted: sub.QuotaSnapshotted, DailyLimitUSD: sub.DailyLimitUSD,
+		WeeklyLimitUSD: sub.WeeklyLimitUSD, MonthlyLimitUSD: sub.MonthlyLimitUSD,
+		StartsAt: sub.StartsAt, ExpiresAt: sub.ExpiresAt, Status: sub.Status,
+		DailyWindowStart: sub.DailyWindowStart, WeeklyWindowStart: sub.WeeklyWindowStart,
+		MonthlyWindowStart: sub.MonthlyWindowStart, DailyUsageUSD: sub.DailyUsageUSD,
+		WeeklyUsageUSD: sub.WeeklyUsageUSD, MonthlyUsageUSD: sub.MonthlyUsageUSD,
+		CreatedAt: sub.CreatedAt, UpdatedAt: sub.UpdatedAt, RevokedAt: sub.DeletedAt,
+		User: UserFromServiceShallow(sub.User), Group: GroupFromServiceShallow(sub.Group), Groups: groups,
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
+	"github.com/Wei-Shaw/sub2api/ent/usersubscriptiongroup"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
@@ -31,6 +32,11 @@ func (r *userSubscriptionRepository) Create(ctx context.Context, sub *service.Us
 	builder := client.UserSubscription.Create().
 		SetUserID(sub.UserID).
 		SetGroupID(sub.GroupID).
+		SetNillableSourcePlanID(sub.SourcePlanID).
+		SetQuotaSnapshotted(sub.QuotaSnapshotted).
+		SetNillableDailyLimitUsd(sub.DailyLimitUSD).
+		SetNillableWeeklyLimitUsd(sub.WeeklyLimitUSD).
+		SetNillableMonthlyLimitUsd(sub.MonthlyLimitUSD).
 		SetExpiresAt(sub.ExpiresAt).
 		SetNillableDailyWindowStart(sub.DailyWindowStart).
 		SetNillableWeeklyWindowStart(sub.WeeklyWindowStart).
@@ -55,10 +61,36 @@ func (r *userSubscriptionRepository) Create(ctx context.Context, sub *service.Us
 	builder.SetNotes(sub.Notes)
 
 	created, err := builder.Save(ctx)
-	if err == nil {
-		applyUserSubscriptionEntityToService(sub, created)
+	if err != nil {
+		return translatePersistenceError(err, nil, service.ErrSubscriptionAlreadyExists)
 	}
-	return translatePersistenceError(err, nil, service.ErrSubscriptionAlreadyExists)
+	applyUserSubscriptionEntityToService(sub, created)
+	if err := r.syncGroupBindings(ctx, client, sub); err != nil {
+		return translatePersistenceError(err, nil, service.ErrSubscriptionAlreadyExists)
+	}
+	return nil
+}
+
+func (r *userSubscriptionRepository) syncGroupBindings(ctx context.Context, client *dbent.Client, sub *service.UserSubscription) error {
+	groupIDs := sub.GroupIDs
+	if len(groupIDs) == 0 && sub.GroupID > 0 {
+		groupIDs = []int64{sub.GroupID}
+	}
+	if _, err := client.UserSubscriptionGroup.Delete().Where(usersubscriptiongroup.SubscriptionIDEQ(sub.ID)).Exec(ctx); err != nil {
+		return err
+	}
+	builders := make([]*dbent.UserSubscriptionGroupCreate, 0, len(groupIDs))
+	for _, groupID := range uniqueInt64s(groupIDs) {
+		builders = append(builders, client.UserSubscriptionGroup.Create().
+			SetSubscriptionID(sub.ID).
+			SetUserID(sub.UserID).
+			SetGroupID(groupID).
+			SetEnabled(sub.DeletedAt == nil))
+	}
+	if len(builders) == 0 {
+		return nil
+	}
+	return client.UserSubscriptionGroup.CreateBulk(builders...).Exec(ctx)
 }
 
 func (r *userSubscriptionRepository) GetByID(ctx context.Context, id int64) (*service.UserSubscription, error) {
@@ -67,6 +99,7 @@ func (r *userSubscriptionRepository) GetByID(ctx context.Context, id int64) (*se
 		Where(usersubscription.IDEQ(id)).
 		WithUser().
 		WithGroup().
+		WithAuthorizedGroups().
 		WithAssignedByUser().
 		Only(ctx)
 	if err != nil {
@@ -82,6 +115,7 @@ func (r *userSubscriptionRepository) GetByIDIncludeDeleted(ctx context.Context, 
 		Where(usersubscription.IDEQ(id)).
 		WithUser().
 		WithGroup().
+		WithAuthorizedGroups().
 		WithAssignedByUser().
 		Only(queryCtx)
 	if err != nil {
@@ -93,8 +127,16 @@ func (r *userSubscriptionRepository) GetByIDIncludeDeleted(ctx context.Context, 
 func (r *userSubscriptionRepository) GetByUserIDAndGroupID(ctx context.Context, userID, groupID int64) (*service.UserSubscription, error) {
 	client := clientFromContext(ctx, r.client)
 	m, err := client.UserSubscription.Query().
-		Where(usersubscription.UserIDEQ(userID), usersubscription.GroupIDEQ(groupID)).
+		Where(
+			usersubscription.UserIDEQ(userID),
+			usersubscription.HasGroupBindingsWith(
+				usersubscriptiongroup.UserIDEQ(userID),
+				usersubscriptiongroup.GroupIDEQ(groupID),
+				usersubscriptiongroup.EnabledEQ(true),
+			),
+		).
 		WithGroup().
+		WithAuthorizedGroups().
 		Only(ctx)
 	if err != nil {
 		return nil, translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
@@ -107,11 +149,16 @@ func (r *userSubscriptionRepository) GetActiveByUserIDAndGroupID(ctx context.Con
 	m, err := client.UserSubscription.Query().
 		Where(
 			usersubscription.UserIDEQ(userID),
-			usersubscription.GroupIDEQ(groupID),
+			usersubscription.HasGroupBindingsWith(
+				usersubscriptiongroup.UserIDEQ(userID),
+				usersubscriptiongroup.GroupIDEQ(groupID),
+				usersubscriptiongroup.EnabledEQ(true),
+			),
 			usersubscription.StatusEQ(service.SubscriptionStatusActive),
 			usersubscription.ExpiresAtGT(time.Now()),
 		).
 		WithGroup().
+		WithAuthorizedGroups().
 		Only(ctx)
 	if err != nil {
 		return nil, translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
@@ -123,11 +170,15 @@ func (r *userSubscriptionRepository) Update(ctx context.Context, sub *service.Us
 	if sub == nil {
 		return service.ErrSubscriptionNilInput
 	}
-
 	client := clientFromContext(ctx, r.client)
 	builder := client.UserSubscription.UpdateOneID(sub.ID).
 		SetUserID(sub.UserID).
 		SetGroupID(sub.GroupID).
+		SetNillableSourcePlanID(sub.SourcePlanID).
+		SetQuotaSnapshotted(sub.QuotaSnapshotted).
+		SetNillableDailyLimitUsd(sub.DailyLimitUSD).
+		SetNillableWeeklyLimitUsd(sub.WeeklyLimitUSD).
+		SetNillableMonthlyLimitUsd(sub.MonthlyLimitUSD).
 		SetStartsAt(sub.StartsAt).
 		SetExpiresAt(sub.ExpiresAt).
 		SetStatus(sub.Status).
@@ -140,18 +191,27 @@ func (r *userSubscriptionRepository) Update(ctx context.Context, sub *service.Us
 		SetNillableAssignedBy(sub.AssignedBy).
 		SetAssignedAt(sub.AssignedAt).
 		SetNotes(sub.Notes)
-
 	updated, err := builder.Save(ctx)
-	if err == nil {
-		applyUserSubscriptionEntityToService(sub, updated)
-		return nil
+	if err != nil {
+		return translatePersistenceError(err, service.ErrSubscriptionNotFound, service.ErrSubscriptionAlreadyExists)
 	}
-	return translatePersistenceError(err, service.ErrSubscriptionNotFound, service.ErrSubscriptionAlreadyExists)
+	applyUserSubscriptionEntityToService(sub, updated)
+	if len(sub.GroupIDs) > 0 {
+		if err := r.syncGroupBindings(ctx, client, sub); err != nil {
+			return translatePersistenceError(err, nil, service.ErrSubscriptionAlreadyExists)
+		}
+	}
+	return nil
 }
 
 func (r *userSubscriptionRepository) Delete(ctx context.Context, id int64) error {
-	// Match GORM semantics: deleting a missing row is not an error.
 	client := clientFromContext(ctx, r.client)
+	if _, err := client.UserSubscriptionGroup.Update().
+		Where(usersubscriptiongroup.SubscriptionIDEQ(id)).
+		SetEnabled(false).
+		Save(ctx); err != nil {
+		return err
+	}
 	_, err := client.UserSubscription.Delete().Where(usersubscription.IDEQ(id)).Exec(ctx)
 	return err
 }
@@ -159,6 +219,12 @@ func (r *userSubscriptionRepository) Delete(ctx context.Context, id int64) error
 func (r *userSubscriptionRepository) Restore(ctx context.Context, subscriptionID int64, restoredStatus string) (*service.UserSubscription, error) {
 	client := clientFromContext(ctx, r.client)
 	queryCtx := mixins.SkipSoftDelete(ctx)
+	if _, err := client.UserSubscriptionGroup.Update().
+		Where(usersubscriptiongroup.SubscriptionIDEQ(subscriptionID)).
+		SetEnabled(true).
+		Save(queryCtx); err != nil {
+		return nil, translatePersistenceError(err, service.ErrSubscriptionNotFound, service.ErrSubscriptionRestoreConflict)
+	}
 	_, err := client.UserSubscription.UpdateOneID(subscriptionID).
 		SetStatus(restoredStatus).
 		ClearDeletedAt().
@@ -175,6 +241,7 @@ func (r *userSubscriptionRepository) ListByUserID(ctx context.Context, userID in
 	subs, err := client.UserSubscription.Query().
 		Where(usersubscription.UserIDEQ(userID)).
 		WithGroup().
+		WithAuthorizedGroups().
 		Order(dbent.Desc(usersubscription.FieldCreatedAt)).
 		All(ctx)
 	if err != nil {
@@ -192,6 +259,7 @@ func (r *userSubscriptionRepository) ListActiveByUserID(ctx context.Context, use
 			usersubscription.ExpiresAtGT(time.Now()),
 		).
 		WithGroup().
+		WithAuthorizedGroups().
 		Order(dbent.Desc(usersubscription.FieldCreatedAt)).
 		All(ctx)
 	if err != nil {
@@ -202,7 +270,7 @@ func (r *userSubscriptionRepository) ListActiveByUserID(ctx context.Context, use
 
 func (r *userSubscriptionRepository) ListByGroupID(ctx context.Context, groupID int64, params pagination.PaginationParams) ([]service.UserSubscription, *pagination.PaginationResult, error) {
 	client := clientFromContext(ctx, r.client)
-	q := client.UserSubscription.Query().Where(usersubscription.GroupIDEQ(groupID))
+	q := client.UserSubscription.Query().Where(usersubscription.HasGroupBindingsWith(usersubscriptiongroup.GroupIDEQ(groupID)))
 
 	total, err := q.Clone().Count(ctx)
 	if err != nil {
@@ -212,6 +280,7 @@ func (r *userSubscriptionRepository) ListByGroupID(ctx context.Context, groupID 
 	subs, err := q.
 		WithUser().
 		WithGroup().
+		WithAuthorizedGroups().
 		Order(dbent.Desc(usersubscription.FieldCreatedAt)).
 		Offset(params.Offset()).
 		Limit(params.Limit()).
@@ -231,14 +300,14 @@ func (r *userSubscriptionRepository) List(ctx context.Context, params pagination
 		q = q.Where(usersubscription.UserIDEQ(*userID))
 	}
 	if groupID != nil {
-		q = q.Where(usersubscription.GroupIDEQ(*groupID))
+		q = q.Where(usersubscription.HasGroupBindingsWith(usersubscriptiongroup.GroupIDEQ(*groupID)))
 	}
 	if platform != "" {
 		groupPredicates := []predicate.Group{group.PlatformEQ(platform)}
 		if includeSoftDeleted {
 			groupPredicates = append(groupPredicates, group.DeletedAtIsNil())
 		}
-		q = q.Where(usersubscription.HasGroupWith(groupPredicates...))
+		q = q.Where(usersubscription.HasAuthorizedGroupsWith(groupPredicates...))
 	}
 
 	// Status filtering with real-time expiration check
@@ -282,7 +351,7 @@ func (r *userSubscriptionRepository) List(ctx context.Context, params pagination
 	}
 
 	if !includeSoftDeleted {
-		q = q.WithUser().WithGroup().WithAssignedByUser()
+		q = q.WithUser().WithGroup().WithAuthorizedGroups().WithAssignedByUser()
 	}
 
 	// Determine sort field
@@ -324,7 +393,14 @@ func (r *userSubscriptionRepository) List(ctx context.Context, params pagination
 func (r *userSubscriptionRepository) ExistsByUserIDAndGroupID(ctx context.Context, userID, groupID int64) (bool, error) {
 	client := clientFromContext(ctx, r.client)
 	return client.UserSubscription.Query().
-		Where(usersubscription.UserIDEQ(userID), usersubscription.GroupIDEQ(groupID)).
+		Where(
+			usersubscription.UserIDEQ(userID),
+			usersubscription.HasGroupBindingsWith(
+				usersubscriptiongroup.UserIDEQ(userID),
+				usersubscriptiongroup.GroupIDEQ(groupID),
+				usersubscriptiongroup.EnabledEQ(true),
+			),
+		).
 		Exist(ctx)
 }
 
@@ -514,7 +590,7 @@ func (r *userSubscriptionRepository) ListExpired(ctx context.Context) ([]service
 
 func (r *userSubscriptionRepository) CountByGroupID(ctx context.Context, groupID int64) (int64, error) {
 	client := clientFromContext(ctx, r.client)
-	count, err := client.UserSubscription.Query().Where(usersubscription.GroupIDEQ(groupID)).Count(ctx)
+	count, err := client.UserSubscription.Query().Where(usersubscription.HasGroupBindingsWith(usersubscriptiongroup.GroupIDEQ(groupID))).Count(ctx)
 	return int64(count), err
 }
 
@@ -522,7 +598,7 @@ func (r *userSubscriptionRepository) CountActiveByGroupID(ctx context.Context, g
 	client := clientFromContext(ctx, r.client)
 	count, err := client.UserSubscription.Query().
 		Where(
-			usersubscription.GroupIDEQ(groupID),
+			usersubscription.HasGroupBindingsWith(usersubscriptiongroup.GroupIDEQ(groupID), usersubscriptiongroup.EnabledEQ(true)),
 			usersubscription.StatusEQ(service.SubscriptionStatusActive),
 			usersubscription.ExpiresAtGT(time.Now()),
 		).
@@ -532,7 +608,7 @@ func (r *userSubscriptionRepository) CountActiveByGroupID(ctx context.Context, g
 
 func (r *userSubscriptionRepository) DeleteByGroupID(ctx context.Context, groupID int64) (int64, error) {
 	client := clientFromContext(ctx, r.client)
-	n, err := client.UserSubscription.Delete().Where(usersubscription.GroupIDEQ(groupID)).Exec(ctx)
+	n, err := client.UserSubscription.Delete().Where(usersubscription.HasGroupBindingsWith(usersubscriptiongroup.GroupIDEQ(groupID))).Exec(ctx)
 	return int64(n), err
 }
 
@@ -543,10 +619,12 @@ func (r *userSubscriptionRepository) attachUserSubscriptionRelations(ctx context
 
 	userIDs := make([]int64, 0, len(subs))
 	groupIDs := make([]int64, 0, len(subs))
+	subscriptionIDs := make([]int64, 0, len(subs))
 	assignedByIDs := make([]int64, 0, len(subs))
 	for i := range subs {
 		userIDs = append(userIDs, subs[i].UserID)
 		groupIDs = append(groupIDs, subs[i].GroupID)
+		subscriptionIDs = append(subscriptionIDs, subs[i].ID)
 		if subs[i].AssignedBy != nil {
 			assignedByIDs = append(assignedByIDs, *subs[i].AssignedBy)
 		}
@@ -583,9 +661,40 @@ func (r *userSubscriptionRepository) attachUserSubscriptionRelations(ctx context
 		}
 	}
 
+	authorizedBySubscription := make(map[int64][]*service.Group, len(subs))
+	bindings, err := client.UserSubscriptionGroup.Query().
+		Where(usersubscriptiongroup.SubscriptionIDIn(subscriptionIDs...)).
+		WithGroup().
+		All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, binding := range bindings {
+		if binding.Edges.Group != nil {
+			authorizedBySubscription[binding.SubscriptionID] = append(authorizedBySubscription[binding.SubscriptionID], groupEntityToService(binding.Edges.Group))
+		}
+	}
+
 	for i := range subs {
 		subs[i].User = userByID[subs[i].UserID]
 		subs[i].Group = groupByID[subs[i].GroupID]
+		seen := make(map[int64]struct{})
+		if subs[i].Group != nil {
+			subs[i].Groups = append(subs[i].Groups, subs[i].Group)
+			subs[i].GroupIDs = append(subs[i].GroupIDs, subs[i].Group.ID)
+			seen[subs[i].Group.ID] = struct{}{}
+		}
+		for _, authorized := range authorizedBySubscription[subs[i].ID] {
+			if authorized == nil {
+				continue
+			}
+			if _, ok := seen[authorized.ID]; ok {
+				continue
+			}
+			subs[i].Groups = append(subs[i].Groups, authorized)
+			subs[i].GroupIDs = append(subs[i].GroupIDs, authorized.ID)
+			seen[authorized.ID] = struct{}{}
+		}
 		if subs[i].AssignedBy != nil {
 			subs[i].AssignedByUser = assignedByID[*subs[i].AssignedBy]
 		}
@@ -626,6 +735,11 @@ func userSubscriptionEntityToServiceWithStatusMapping(m *dbent.UserSubscription,
 		ID:                 m.ID,
 		UserID:             m.UserID,
 		GroupID:            m.GroupID,
+		SourcePlanID:       m.SourcePlanID,
+		QuotaSnapshotted:   m.QuotaSnapshotted,
+		DailyLimitUSD:      m.DailyLimitUsd,
+		WeeklyLimitUSD:     m.WeeklyLimitUsd,
+		MonthlyLimitUSD:    m.MonthlyLimitUsd,
 		StartsAt:           m.StartsAt,
 		ExpiresAt:          m.ExpiresAt,
 		Status:             status,
@@ -647,6 +761,27 @@ func userSubscriptionEntityToServiceWithStatusMapping(m *dbent.UserSubscription,
 	}
 	if m.Edges.Group != nil {
 		out.Group = groupEntityToService(m.Edges.Group)
+	}
+	seenGroups := make(map[int64]struct{})
+	if out.Group != nil {
+		out.Groups = append(out.Groups, out.Group)
+		out.GroupIDs = append(out.GroupIDs, out.Group.ID)
+		seenGroups[out.Group.ID] = struct{}{}
+	}
+	for _, authorized := range m.Edges.AuthorizedGroups {
+		if authorized == nil {
+			continue
+		}
+		if _, exists := seenGroups[authorized.ID]; exists {
+			continue
+		}
+		mapped := groupEntityToService(authorized)
+		out.Groups = append(out.Groups, mapped)
+		out.GroupIDs = append(out.GroupIDs, authorized.ID)
+		seenGroups[authorized.ID] = struct{}{}
+	}
+	if len(out.GroupIDs) == 0 && out.GroupID > 0 {
+		out.GroupIDs = []int64{out.GroupID}
 	}
 	if m.Edges.AssignedByUser != nil {
 		out.AssignedByUser = userEntityToService(m.Edges.AssignedByUser)

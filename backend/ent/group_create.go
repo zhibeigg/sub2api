@@ -15,6 +15,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
 	"github.com/Wei-Shaw/sub2api/ent/group"
 	"github.com/Wei-Shaw/sub2api/ent/redeemcode"
+	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
@@ -768,6 +769,36 @@ func (_c *GroupCreate) AddAllowedUsers(v ...*User) *GroupCreate {
 	return _c.AddAllowedUserIDs(ids...)
 }
 
+// AddSubscriptionPlanIDs adds the "subscription_plans" edge to the SubscriptionPlan entity by IDs.
+func (_c *GroupCreate) AddSubscriptionPlanIDs(ids ...int64) *GroupCreate {
+	_c.mutation.AddSubscriptionPlanIDs(ids...)
+	return _c
+}
+
+// AddSubscriptionPlans adds the "subscription_plans" edges to the SubscriptionPlan entity.
+func (_c *GroupCreate) AddSubscriptionPlans(v ...*SubscriptionPlan) *GroupCreate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddSubscriptionPlanIDs(ids...)
+}
+
+// AddAuthorizedSubscriptionIDs adds the "authorized_subscriptions" edge to the UserSubscription entity by IDs.
+func (_c *GroupCreate) AddAuthorizedSubscriptionIDs(ids ...int64) *GroupCreate {
+	_c.mutation.AddAuthorizedSubscriptionIDs(ids...)
+	return _c
+}
+
+// AddAuthorizedSubscriptions adds the "authorized_subscriptions" edges to the UserSubscription entity.
+func (_c *GroupCreate) AddAuthorizedSubscriptions(v ...*UserSubscription) *GroupCreate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddAuthorizedSubscriptionIDs(ids...)
+}
+
 // Mutation returns the GroupMutation object of the builder.
 func (_c *GroupCreate) Mutation() *GroupMutation {
 	return _c.mutation
@@ -1412,6 +1443,46 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		createE := &UserAllowedGroupCreate{config: _c.config, mutation: newUserAllowedGroupMutation(_c.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.SubscriptionPlansIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   group.SubscriptionPlansTable,
+			Columns: group.SubscriptionPlansPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(subscriptionplan.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		createE := &SubscriptionPlanGroupCreate{config: _c.config, mutation: newSubscriptionPlanGroupMutation(_c.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.AuthorizedSubscriptionsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   group.AuthorizedSubscriptionsTable,
+			Columns: group.AuthorizedSubscriptionsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usersubscription.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		createE := &UserSubscriptionGroupCreate{config: _c.config, mutation: newUserSubscriptionGroupMutation(_c.config, OpCreate)}
 		createE.defaults()
 		_, specE := createE.createSpec()
 		edge.Target.Fields = specE.Fields

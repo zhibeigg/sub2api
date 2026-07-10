@@ -23,6 +23,7 @@ export interface AdminPaymentConfig {
   max_pending_orders: number
   enabled_payment_types: string[]
   balance_disabled: boolean
+  subscription_disabled: boolean
   balance_recharge_multiplier: number
   subscription_usd_to_cny_rate: number
   recharge_fee_rate: number
@@ -43,6 +44,7 @@ export interface UpdatePaymentConfigRequest {
   max_pending_orders?: number
   enabled_payment_types?: string[]
   balance_disabled?: boolean
+  subscription_disabled?: boolean
   balance_recharge_multiplier?: number
   subscription_usd_to_cny_rate?: number
   recharge_fee_rate?: number
@@ -51,6 +53,27 @@ export interface UpdatePaymentConfigRequest {
   product_name_suffix?: string
   help_image_url?: string
   help_text?: string
+}
+
+export interface CreateSubscriptionPlanRequest {
+  name: string
+  group_id: number | null
+  group_ids: number[]
+  daily_limit_usd: number | null
+  weekly_limit_usd: number | null
+  monthly_limit_usd: number | null
+  description: string
+  price: number
+  original_price?: number
+  validity_days: number
+  validity_unit: string
+  features?: string | string[]
+  for_sale?: boolean
+  sort_order?: number
+}
+
+export interface UpdateSubscriptionPlanRequest extends Partial<CreateSubscriptionPlanRequest> {
+  quota_limits_set?: boolean
 }
 
 export interface RefundResult {
@@ -155,12 +178,12 @@ export const adminPaymentAPI = {
   },
 
   /** Create a subscription plan */
-  createPlan(data: Record<string, unknown>) {
+  createPlan(data: CreateSubscriptionPlanRequest) {
     return apiClient.post<SubscriptionPlan>('/admin/payment/plans', data)
   },
 
   /** Update a subscription plan */
-  updatePlan(id: number, data: Record<string, unknown>) {
+  updatePlan(id: number, data: UpdateSubscriptionPlanRequest) {
     return apiClient.put<SubscriptionPlan>(`/admin/payment/plans/${id}`, data)
   },
 

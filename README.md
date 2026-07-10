@@ -12,6 +12,8 @@
 
 **AI API Gateway Platform for Subscription Quota Distribution**
 
+Supports multi-group quota subscriptions with shared daily/weekly/monthly limits, administrator assignment, and independent visibility controls for recharge and subscription purchases.
+
 English | [中文](README_CN.md) | [日本語](README_JA.md)
 
 </div>
