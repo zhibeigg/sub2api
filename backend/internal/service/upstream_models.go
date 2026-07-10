@@ -88,6 +88,9 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 	if account.Platform == PlatformKiro {
 		return s.fetchKiroUpstreamModels(ctx, account)
 	}
+	if account.Platform == PlatformAdobe {
+		return nil, newUpstreamModelSyncUnsupportedError("Adobe Firefly does not expose a dynamic upstream model list; use the local Firefly catalog", nil)
+	}
 
 	if s.httpUpstream == nil {
 		return nil, newUpstreamModelSyncConfigError("Upstream HTTP client is not configured", nil)

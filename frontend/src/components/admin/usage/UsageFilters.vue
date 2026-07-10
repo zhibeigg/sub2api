@@ -78,6 +78,12 @@
           </div>
         </div>
 
+        <!-- Platform Filter -->
+        <div class="w-full sm:w-auto sm:min-w-[180px]">
+          <label class="input-label">{{ t('admin.usage.platform') }}</label>
+          <Select v-model="filters.platform" :options="platformOptions" @change="emitChange" />
+        </div>
+
         <!-- Model Filter -->
         <div class="w-full sm:w-auto sm:min-w-[220px]">
           <label class="input-label">{{ t('usage.model') }}</label>
@@ -200,6 +206,7 @@ import { adminAPI } from '@/api/admin'
 import Select, { type SelectOption } from '@/components/common/Select.vue'
 import { COMMON_ERROR_STATUS_CODES } from '@/utils/errorBadges'
 import type { SimpleApiKey, SimpleUser } from '@/api/admin/usage'
+import { PLATFORM_ORDER, PLATFORM_REGISTRY } from '@/constants/platforms'
 
 type ModelValue = Record<string, any>
 
@@ -265,6 +272,14 @@ const modelOptions = computed<SelectOption[]>(() => [
 ])
 const groupOptions = ref<SelectOption[]>([{ value: null, label: t('admin.usage.allGroups') }])
 const promoCodeOptions = ref<SelectOption[]>([{ value: null, label: t('admin.usage.allPromoCodes') }])
+
+const platformOptions = computed<SelectOption[]>(() => [
+  { value: null, label: t('admin.usage.allPlatforms') },
+  ...PLATFORM_ORDER.filter((platform) => platform !== 'kiro').map((platform) => ({
+    value: platform,
+    label: PLATFORM_REGISTRY[platform].label
+  }))
+])
 
 const requestTypeOptions = ref<SelectOption[]>([
   { value: null, label: t('admin.usage.allTypes') },

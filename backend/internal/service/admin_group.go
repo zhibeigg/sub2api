@@ -16,6 +16,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
+	"github.com/Wei-Shaw/sub2api/internal/provider/adobe/firefly"
 )
 
 // Group management implementations
@@ -114,6 +115,8 @@ func defaultModelsListCandidateIDs(platform string) []string {
 		return ids
 	case PlatformGrok:
 		return xai.DefaultModelIDs()
+	case PlatformAdobe:
+		return firefly.PublicModelIDs()
 	default:
 		ids := make([]string, 0, len(claude.DefaultModels))
 		for _, model := range claude.DefaultModels {
@@ -126,7 +129,7 @@ func defaultModelsListCandidateIDs(platform string) []string {
 func defaultAllowImageGenerationForPlatform(platform string) bool {
 	// Grok image and video generation routes share the legacy image-generation gate.
 	// Older clients send the false zero value, so Grok groups must default enabled.
-	return platform == PlatformGrok
+	return platform == PlatformGrok || platform == PlatformAdobe
 }
 
 func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupInput) (*Group, error) {
@@ -134,9 +137,12 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		return nil, errors.New("rate_multiplier must be > 0")
 	}
 
-	platform := input.Platform
+	platform := NormalizePlatform(input.Platform)
 	if platform == "" {
 		platform = PlatformAnthropic
+	}
+	if err := ValidatePlatform(platform); err != nil {
+		return nil, err
 	}
 
 	subscriptionType := input.SubscriptionType
@@ -202,7 +208,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 
 	// 校验降级分组
 	if input.FallbackGroupID != nil {
-		if err := s.validateFallbackGroup(ctx, 0, *input.FallbackGroupID); err != nil {
+		if err := s.validateFallbackGroup(ctx, 0, *input.FallbackGroupID, platform); err != nil {
 			return nil, err
 		}
 	}
@@ -224,7 +230,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	}
 
 	allowImageGeneration := input.AllowImageGeneration || defaultAllowImageGenerationForPlatform(platform)
-	allowBatchImageGeneration := input.AllowBatchImageGeneration && allowImageGeneration && platform == PlatformGemini
+	allowBatchImageGeneration := input.AllowBatchImageGeneration && allowImageGeneration && PlatformSupportsBatchImageGeneration(platform)
 
 	// 如果指定了复制账号的源分组，先获取账号 ID 列表
 	var accountIDsToCopy []int64
@@ -357,7 +363,12 @@ func normalizePrice(price *float64) *float64 {
 // validateFallbackGroup 校验降级分组的有效性
 // currentGroupID: 当前分组 ID（新建时为 0）
 // fallbackGroupID: 降级分组 ID
-func (s *adminServiceImpl) validateFallbackGroup(ctx context.Context, currentGroupID, fallbackGroupID int64) error {
+func (s *adminServiceImpl) validateFallbackGroup(ctx context.Context, currentGroupID, fallbackGroupID int64, currentPlatform ...string) error {
+	requiredPlatform := ""
+	if len(currentPlatform) > 0 {
+		requiredPlatform = NormalizePlatform(currentPlatform[0])
+	}
+
 	// 不能将自己设置为降级分组
 	if currentGroupID > 0 && currentGroupID == fallbackGroupID {
 		return fmt.Errorf("cannot set self as fallback group")
@@ -378,6 +389,11 @@ func (s *adminServiceImpl) validateFallbackGroup(ctx context.Context, currentGro
 		fallbackGroup, err := s.groupRepo.GetByIDLite(ctx, nextID)
 		if err != nil {
 			return fmt.Errorf("fallback group not found: %w", err)
+		}
+
+		// Adobe 是独立平台，整个降级链都必须保持在 Adobe 内部，不能跨平台调度。
+		if requiredPlatform == PlatformAdobe && fallbackGroup.Platform != PlatformAdobe {
+			return fmt.Errorf("adobe fallback group must use adobe platform")
 		}
 
 		// 降级分组不能启用 claude_code_only，否则会造成死循环
@@ -436,7 +452,11 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 		group.Description = *input.Description
 	}
 	if input.Platform != "" {
-		group.Platform = input.Platform
+		platform := NormalizePlatform(input.Platform)
+		if err := ValidatePlatform(platform); err != nil {
+			return nil, err
+		}
+		group.Platform = platform
 	}
 	if input.RateMultiplier != nil {
 		if *input.RateMultiplier <= 0 {
@@ -467,7 +487,7 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if input.AllowBatchImageGeneration != nil {
 		group.AllowBatchImageGeneration = *input.AllowBatchImageGeneration
 	}
-	if !group.AllowImageGeneration || group.Platform != PlatformGemini {
+	if !group.AllowImageGeneration || !PlatformSupportsBatchImageGeneration(group.Platform) {
 		group.AllowBatchImageGeneration = false
 	}
 	if input.ImageRateIndependent != nil {
@@ -551,13 +571,18 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if input.FallbackGroupID != nil {
 		// 校验降级分组
 		if *input.FallbackGroupID > 0 {
-			if err := s.validateFallbackGroup(ctx, id, *input.FallbackGroupID); err != nil {
+			if err := s.validateFallbackGroup(ctx, id, *input.FallbackGroupID, group.Platform); err != nil {
 				return nil, err
 			}
 			group.FallbackGroupID = input.FallbackGroupID
 		} else {
 			// 传入 0 或负数表示清除降级分组
 			group.FallbackGroupID = nil
+		}
+	}
+	if input.FallbackGroupID == nil && group.Platform == PlatformAdobe && group.FallbackGroupID != nil {
+		if err := s.validateFallbackGroup(ctx, id, *group.FallbackGroupID, group.Platform); err != nil {
+			return nil, err
 		}
 	}
 	fallbackOnInvalidRequest := group.FallbackGroupIDOnInvalidRequest

@@ -3,13 +3,17 @@ export const imagePricingPlatforms = new Set([
   "gemini",
   "grok",
   "openai",
+  "adobe",
 ]);
 
 export const supportsImagePricingPlatform = (platform: string): boolean =>
   imagePricingPlatforms.has(platform);
 
 export const supportsVideoPricingPlatform = (platform: string): boolean =>
-  platform === "grok";
+  platform === "grok" || platform === "adobe";
+
+export const supportsVideo480pTier = (platform: string): boolean => platform !== "adobe";
+export const supportsBatchImagePlatform = (platform: string): boolean => platform === "gemini";
 
 export const imagePricingI18nKey = (_platform: string, key: string): string =>
   `admin.groups.imagePricing.${key}`;
@@ -32,6 +36,11 @@ const defaultImagePricePlaceholders: Record<
     image_price_2k: "0.201",
     image_price_4k: "0.268",
   },
+  adobe: {
+    image_price_1k: "",
+    image_price_2k: "",
+    image_price_4k: "",
+  },
   grok: {
     image_price_1k: "0.02",
     image_price_2k: "0.02",
@@ -45,6 +54,11 @@ const defaultVideoPricePlaceholders: Record<
   string,
   Record<VideoPricingTierKey, string>
 > = {
+  adobe: {
+    video_price_480p: "",
+    video_price_720p: "",
+    video_price_1080p: "",
+  },
   grok: {
     video_price_480p: "0.05",
     video_price_720p: "0.07",

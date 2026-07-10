@@ -494,7 +494,7 @@ export interface PaginationConfig {
 
 // ==================== API Key & Group Types ====================
 
-export type GroupPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'kiro'
+export type GroupPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'adobe' | 'kiro'
 
 export type SubscriptionType = 'standard' | 'subscription'
 
@@ -752,7 +752,7 @@ export interface UpdateGroupRequest {
 
 // ==================== Account & Proxy Types ====================
 
-export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'kiro'
+export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'adobe' | 'kiro'
 export type AccountType = 'oauth' | 'setup-token' | 'apikey' | 'upstream' | 'bedrock' | 'service_account'
 export type OAuthAddMethod = 'oauth' | 'setup-token'
 export type ProxyProtocol = 'http' | 'https' | 'socks5' | 'socks5h'
@@ -1040,6 +1040,19 @@ export interface GrokQuotaWindow {
   reset_at?: string
 }
 
+export interface AdobeCreditsInfo {
+  state?: 'unknown' | 'zero' | 'available' | 'error'
+  known?: boolean
+  unknown?: boolean
+  available?: number | null
+  checked_at?: string | null
+  updated_at?: string | null
+  expiry?: string | null
+  profile?: Record<string, unknown> | null
+  metadata?: Record<string, unknown> | null
+  error?: string | null
+}
+
 export interface AccountUsageInfo {
   source?: 'passive' | 'active'
   updated_at: string | null
@@ -1083,6 +1096,7 @@ export interface AccountUsageInfo {
     amount?: number
     minimum_balance?: number
   }> | null
+  adobe_credits?: AdobeCreditsInfo | null
   // Antigravity 403 forbidden 状态
   is_forbidden?: boolean
   forbidden_reason?: string
@@ -1165,6 +1179,7 @@ export interface UpdateAccountRequest {
   notes?: string | null
   type?: AccountType
   credentials?: Record<string, unknown>
+  clear_credentials?: string[]
   extra?: Record<string, unknown>
   proxy_id?: number | null
   concurrency?: number
@@ -1817,6 +1832,7 @@ export interface UsageQueryParams {
   stream?: boolean
   billing_type?: number | null
   billing_mode?: string | null
+  platform?: AccountPlatform | null
   start_date?: string
   end_date?: string
   timezone?: string

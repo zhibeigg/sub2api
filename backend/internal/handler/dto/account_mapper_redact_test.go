@@ -58,6 +58,34 @@ func TestAccountFromServiceShallow_RedactsSensitiveCredentials(t *testing.T) {
 	require.Equal(t, "rt-secret", src.Credentials["refresh_token"])
 }
 
+func TestAccountFromServiceShallow_RedactsAdobeCredentials(t *testing.T) {
+	src := &service.Account{
+		ID:       99,
+		Name:     "adobe",
+		Platform: service.PlatformAdobe,
+		Type:     service.AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token": "access-secret",
+			"cookie":       "cookie-secret",
+			"device_token": "device-token-secret",
+			"device_id":    "device-id-secret",
+			"password":     "password-secret",
+			"expires_at":   "2030-01-01T00:00:00Z",
+		},
+	}
+	got := AccountFromServiceShallow(src)
+	for _, key := range []string{"access_token", "cookie", "device_token", "device_id", "password"} {
+		require.NotContains(t, got.Credentials, key)
+		require.True(t, got.CredentialsStatus["has_"+key])
+	}
+	require.Equal(t, "2030-01-01T00:00:00Z", got.Credentials["expires_at"])
+	raw, err := json.Marshal(got)
+	require.NoError(t, err)
+	for _, secret := range []string{"access-secret", "cookie-secret", "device-token-secret", "device-id-secret", "password-secret"} {
+		require.NotContains(t, string(raw), secret)
+	}
+}
+
 func TestAccountFromServiceShallow_NilCredentialsOmitsStatus(t *testing.T) {
 	src := &service.Account{ID: 1, Name: "n", Platform: "anthropic", Type: "oauth"}
 	got := AccountFromServiceShallow(src)

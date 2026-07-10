@@ -75,6 +75,7 @@ type postUsageBillingParams struct {
 	AccountRateMultiplier float64
 	APIKeyService         APIKeyQuotaUpdater
 	Platform              string // 来自 APIKey 关联 Group 的平台标识
+	StrictFunds           bool   // 媒体快照结算：余额/订阅/API key 配额不足时事务回滚并允许重试
 }
 
 // PlatformFromAPIKey 从 APIKey 关联的 Group 推导 platform 名称。
@@ -229,9 +230,13 @@ func buildUsageBillingCommand(requestID string, usageLog *UsageLog, p *postUsage
 		AccountID:          p.Account.ID,
 		AccountType:        p.Account.Type,
 		RequestPayloadHash: strings.TrimSpace(p.RequestPayloadHash),
+		StrictFunds:        p.StrictFunds,
 	}
 	if usageLog != nil {
 		cmd.Model = usageLog.Model
+		if usageLog.GroupID != nil {
+			cmd.GroupID = *usageLog.GroupID
+		}
 		cmd.BillingType = usageLog.BillingType
 		cmd.InputTokens = usageLog.InputTokens
 		cmd.OutputTokens = usageLog.OutputTokens

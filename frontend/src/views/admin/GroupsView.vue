@@ -1030,8 +1030,9 @@
           </div>
           <div class="grid grid-cols-3 gap-3">
             <div>
-              <label class="input-label">480p ($/s)</label>
+              <label v-if="createForm.platform !== 'adobe'" class="input-label">480p ($/s)</label>
               <input
+                v-if="createForm.platform !== 'adobe'"
                 v-model.number="createForm.video_price_480p"
                 type="number"
                 step="0.001"
@@ -2509,8 +2510,9 @@
           </div>
           <div class="grid grid-cols-3 gap-3">
             <div>
-              <label class="input-label">480p ($/s)</label>
+              <label v-if="editForm.platform !== 'adobe'" class="input-label">480p ($/s)</label>
               <input
+                v-if="editForm.platform !== 'adobe'"
                 v-model.number="editForm.video_price_480p"
                 type="number"
                 step="0.001"
@@ -3693,6 +3695,7 @@ const platformOptions = computed(() => [
   { value: "gemini", label: "Gemini" },
   { value: "antigravity", label: "Antigravity" },
   { value: "grok", label: "Grok" },
+  { value: "adobe", label: "Adobe" },
 ]);
 
 const platformFilterOptions = computed(() => [
@@ -3702,6 +3705,7 @@ const platformFilterOptions = computed(() => [
   { value: "gemini", label: "Gemini" },
   { value: "antigravity", label: "Antigravity" },
   { value: "grok", label: "Grok" },
+  { value: "adobe", label: "Adobe" },
 ]);
 
 const editStatusOptions = computed(() => [
@@ -4385,7 +4389,7 @@ const buildVideoFinalPricePreview = (form: VideoPricingFormState) => {
   const multiplier = form.video_rate_independent
     ? normalizePreviewNumber(form.video_rate_multiplier, 1)
     : normalizePreviewNumber(form.rate_multiplier, 1);
-  return videoPricingTiers.map((tier) => {
+  return videoPricingTiers.filter((tier) => form.platform !== "adobe" || tier.key !== "video_price_480p").map((tier) => {
     const basePrice =
       parsePreviewPrice(form[tier.key]) ??
       getDefaultVideoPreviewPrice(form.platform, tier.key);
@@ -5075,6 +5079,11 @@ watch(
       createForm.require_oauth_only = false;
       createForm.require_privacy_set = false;
     }
+    if (newVal === "adobe") {
+      createForm.allow_image_generation = true;
+      createForm.allow_batch_image_generation = false;
+      createForm.video_price_480p = null;
+    }
     resetDisabledBatchImagePricing(createForm);
     resetModelsListState(createModelsListState);
     loadModelsListCandidates("create", 0, newVal);
@@ -5107,6 +5116,10 @@ watch(
     if (!["openai", "antigravity", "anthropic", "gemini"].includes(newVal)) {
       editForm.require_oauth_only = false;
       editForm.require_privacy_set = false;
+    }
+    if (newVal === "adobe") {
+      editForm.allow_batch_image_generation = false;
+      editForm.video_price_480p = null;
     }
     resetDisabledBatchImagePricing(editForm);
     if (editingGroup.value) {

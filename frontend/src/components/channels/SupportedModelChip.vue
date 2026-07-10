@@ -111,13 +111,18 @@
             />
 
             <PricingRow
-              v-if="
-                model.pricing.billing_mode === BILLING_MODE_IMAGE &&
-                model.pricing.image_output_price != null
-              "
+              v-if="model.pricing.billing_mode === BILLING_MODE_IMAGE && mediaDefaultPrice != null"
               :label="t(prefixKey('imageOutputPrice'))"
-              :value="model.pricing.image_output_price"
-              :unit="t(prefixKey('unitPerRequest'))"
+              :value="mediaDefaultPrice"
+              unit="/image"
+              :scale="1"
+            />
+
+            <PricingRow
+              v-if="model.pricing.billing_mode === BILLING_MODE_VIDEO && mediaDefaultPrice != null"
+              :label="t(prefixKey('perSecondPrice'))"
+              :value="mediaDefaultPrice"
+              unit="/second"
               :scale="1"
             />
 
@@ -159,6 +164,7 @@ import {
   BILLING_MODE_TOKEN,
   BILLING_MODE_PER_REQUEST,
   BILLING_MODE_IMAGE,
+  BILLING_MODE_VIDEO,
   type BillingMode
 } from '@/constants/channel'
 // 复用 api/channels.ts 的用户侧最小形态 DTO。
@@ -213,6 +219,12 @@ function prefixKey(k: string): string {
   return `${props.pricingKeyPrefix}.${k}`
 }
 
+const mediaDefaultPrice = computed(() => {
+  const pricing = props.model.pricing
+  if (!pricing) return null
+  return pricing.per_request_price ?? pricing.image_output_price ?? null
+})
+
 const billingModeLabel = computed(() => {
   const mode = props.model.pricing?.billing_mode
   switch (mode) {
@@ -222,6 +234,8 @@ const billingModeLabel = computed(() => {
       return t(prefixKey('billingModePerRequest'))
     case BILLING_MODE_IMAGE:
       return t(prefixKey('billingModeImage'))
+    case BILLING_MODE_VIDEO:
+      return t(prefixKey('billingModeVideo'))
     default:
       return '-'
   }
@@ -233,8 +247,9 @@ function formatRange(min: number, max: number | null): string {
 }
 
 function formatInterval(iv: UserPricingInterval, mode: BillingMode): string {
-  if (mode === BILLING_MODE_PER_REQUEST || mode === BILLING_MODE_IMAGE) {
-    return formatScaled(iv.per_request_price, 1)
+  if (mode === BILLING_MODE_PER_REQUEST || mode === BILLING_MODE_IMAGE || mode === BILLING_MODE_VIDEO) {
+    const unit = mode === BILLING_MODE_VIDEO ? '/second' : mode === BILLING_MODE_IMAGE ? '/image' : ''
+    return `${formatScaled(iv.per_request_price, 1)}${unit}`
   }
   const input = formatScaled(iv.input_price, perMillionScale)
   const output = formatScaled(iv.output_price, perMillionScale)

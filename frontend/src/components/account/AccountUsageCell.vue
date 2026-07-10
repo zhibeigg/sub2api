@@ -1,8 +1,34 @@
 <template>
   <div ref="rootRef" v-if="showUsageWindows">
+    <template v-if="account.platform === 'adobe' && account.type === 'oauth'">
+      <div v-if="loading" class="space-y-1.5">
+        <div class="h-4 w-24 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+        <div class="h-3 w-32 animate-pulse rounded bg-gray-100 dark:bg-gray-800"></div>
+      </div>
+      <div v-else-if="error || adobeCreditsState === 'error'" class="text-xs text-red-600 dark:text-red-400" data-testid="adobe-credits-error">
+        {{ adobeCreditsError || error || t('admin.accounts.adobe.creditsError') }}
+      </div>
+      <div v-else class="space-y-1" data-testid="adobe-credits">
+        <div class="flex items-baseline gap-1.5">
+          <span class="text-[10px] font-medium uppercase tracking-wide text-red-700 dark:text-red-400">{{ t('admin.accounts.adobe.credits') }}</span>
+          <span v-if="adobeCreditsAvailable !== null" class="font-mono text-sm font-semibold text-gray-900 dark:text-white">{{ adobeCreditsAvailable }}</span>
+          <span v-else class="text-xs text-gray-400">{{ t('admin.accounts.adobe.creditsUnknown') }}</span>
+        </div>
+        <div v-if="adobeCreditsCheckedAt" class="text-[9px] text-gray-400 dark:text-gray-500">
+          {{ t('admin.accounts.adobe.checkedAt', { time: formatRelativeTime(adobeCreditsCheckedAt) }) }}
+        </div>
+        <div v-if="adobeCreditsExpiry" class="text-[9px] text-gray-400 dark:text-gray-500">
+          {{ t('admin.accounts.adobe.expiry', { time: adobeCreditsExpiry }) }}
+        </div>
+        <button type="button" class="inline-flex min-h-11 items-center rounded px-2 text-[10px] font-medium text-red-700 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-red-400 dark:hover:bg-red-900/20" :disabled="activeQueryLoading" @click="loadActiveUsage">
+          {{ t('admin.accounts.usageWindow.activeQuery') }}
+        </button>
+      </div>
+    </template>
+
     <!-- Anthropic OAuth and Setup Token accounts: fetch real usage data -->
     <template
-      v-if="
+      v-else-if="
         account.platform === 'anthropic' &&
         (account.type === 'oauth' || account.type === 'setup-token')
       "
@@ -805,7 +831,7 @@ let visibilityObserver: IntersectionObserver | null = null
 // Show usage windows for OAuth and Setup Token accounts
 const showUsageWindows = computed(() => {
   // Gemini: we can always compute local usage windows from DB logs (simulated quotas).
-  if (props.account.platform === 'gemini') return true
+  if (props.account.platform === 'gemini' || props.account.platform === 'adobe') return true
   return props.account.type === 'oauth' || props.account.type === 'setup-token'
 })
 
@@ -823,6 +849,9 @@ const shouldFetchUsage = computed(() => {
     return props.account.type === 'oauth'
   }
   if (props.account.platform === 'openai') {
+    return props.account.type === 'oauth'
+  }
+  if (props.account.platform === 'adobe') {
     return props.account.type === 'oauth'
   }
   if (props.account.platform === 'kiro') {
@@ -932,6 +961,21 @@ const antigravityClaudeUsageFromAPI = computed(() =>
     'claude-opus-4-7', 'claude-opus-4-8',
   ])
 )
+
+const adobeCredits = computed(() => usageInfo.value?.adobe_credits || null)
+const adobeCreditsState = computed(() => {
+  if (adobeCredits.value?.state) return adobeCredits.value.state
+  if (adobeCredits.value?.error) return 'error'
+  if (adobeCredits.value?.known === false || adobeCredits.value?.unknown === true || adobeCredits.value?.available == null) return 'unknown'
+  return 'available'
+})
+const adobeCreditsAvailable = computed(() => {
+  const value = adobeCredits.value?.available
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+})
+const adobeCreditsCheckedAt = computed(() => adobeCredits.value?.checked_at || adobeCredits.value?.updated_at || usageInfo.value?.updated_at || null)
+const adobeCreditsExpiry = computed(() => adobeCredits.value?.expiry || null)
+const adobeCreditsError = computed(() => adobeCredits.value?.error || usageInfo.value?.error || '')
 
 const aiCreditsDisplay = computed(() => {
   const credits = usageInfo.value?.ai_credits

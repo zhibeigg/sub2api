@@ -680,6 +680,7 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 		conditions = append(conditions, fmt.Sprintf("user_id IN (SELECT id FROM users WHERE promo_code_id = $%d)", len(args)+1))
 		args = append(args, filters.PromoCodeID)
 	}
+	conditions, args = appendUsageLogPlatformWhereCondition(conditions, args, filters.Platform, "usage_logs")
 	conditions, args = appendUsageLogModelWhereCondition(conditions, args, filters.Model, filters.ModelFilterSource)
 	conditions, args = appendRequestTypeOrStreamWhereCondition(conditions, args, filters.RequestType, filters.Stream)
 	if filters.BillingType != nil {

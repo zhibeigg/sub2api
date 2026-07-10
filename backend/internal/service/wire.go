@@ -49,6 +49,69 @@ func ProvideBatchImageModelPricingResolver(resolver *ModelPricingResolver) *Batc
 	return &BatchImageModelPricingResolver{Resolver: resolver}
 }
 
+// ProvideAdobeVideoTaskStore applies the configured absolute active/terminal TTLs.
+func ProvideAdobeVideoTaskStore(client *redis.Client, cfg *config.Config) AdobeVideoTaskStore {
+	activeTTL := 72 * time.Hour
+	terminalTTL := 24 * time.Hour
+	if cfg != nil {
+		if cfg.Adobe.VideoTaskTTLSeconds > 0 {
+			activeTTL = time.Duration(cfg.Adobe.VideoTaskTTLSeconds) * time.Second
+		}
+		if cfg.Adobe.VideoTerminalTTLSeconds > 0 {
+			terminalTTL = time.Duration(cfg.Adobe.VideoTerminalTTLSeconds) * time.Second
+		}
+	}
+	return NewAdobeVideoTaskStore(client, activeTTL, terminalTTL)
+}
+
+// ProvideAdobeTokenProvider bridges the concrete repositories supplied by Wire
+// to the provider's deliberately narrow persistence interfaces.
+func ProvideAdobeTokenProvider(accountRepo AccountRepository, proxyRepo ProxyRepository, cfg *config.Config) *AdobeTokenProvider {
+	return NewAdobeTokenProvider(accountRepo, proxyRepo, cfg)
+}
+
+// ProvideCompositeTokenCacheInvalidator adds Adobe's reload marker to the
+// existing shared token-cache invalidator without exposing Adobe secrets.
+func ProvideCompositeTokenCacheInvalidator(cache GeminiTokenCache, adobeTokenProvider *AdobeTokenProvider) *CompositeTokenCacheInvalidator {
+	invalidator := NewCompositeTokenCacheInvalidator(cache)
+	invalidator.SetAdobeTokenProvider(adobeTokenProvider)
+	return invalidator
+}
+
+func ProvideAccountUsageService(
+	accountRepo AccountRepository,
+	usageLogRepo UsageLogRepository,
+	usageFetcher ClaudeUsageFetcher,
+	geminiQuotaService *GeminiQuotaService,
+	antigravityQuotaFetcher *AntigravityQuotaFetcher,
+	grokQuotaFetcher *GrokQuotaFetcher,
+	openAIQuotaService *OpenAIQuotaService,
+	cache *UsageCache,
+	identityCache IdentityCache,
+	tlsFPProfileService *TLSFingerprintProfileService,
+	adobeTokenProvider *AdobeTokenProvider,
+) *AccountUsageService {
+	service := NewAccountUsageService(accountRepo, usageLogRepo, usageFetcher, geminiQuotaService, antigravityQuotaFetcher, grokQuotaFetcher, openAIQuotaService, cache, identityCache, tlsFPProfileService)
+	service.SetAdobeTokenProvider(adobeTokenProvider)
+	return service
+}
+
+func ProvideAccountTestService(
+	accountRepo AccountRepository,
+	geminiTokenProvider *GeminiTokenProvider,
+	claudeTokenProvider *ClaudeTokenProvider,
+	grokTokenProvider *GrokTokenProvider,
+	antigravityGatewayService *AntigravityGatewayService,
+	httpUpstream HTTPUpstream,
+	cfg *config.Config,
+	tlsFPProfileService *TLSFingerprintProfileService,
+	adobeTokenProvider *AdobeTokenProvider,
+) *AccountTestService {
+	service := NewAccountTestService(accountRepo, geminiTokenProvider, claudeTokenProvider, grokTokenProvider, antigravityGatewayService, httpUpstream, cfg, tlsFPProfileService)
+	service.SetAdobeTokenProvider(adobeTokenProvider)
+	return service
+}
+
 func ProvideBatchImageCleanupService(repo BatchImageRepository, accountRepo AccountRepository, cfg *config.Config) *BatchImageCleanupService {
 	svc := NewBatchImageCleanupService(repo, accountRepo, cfg)
 	svc.Start()
@@ -605,6 +668,12 @@ var ProviderSet = wire.NewSet(
 	NewAdminService,
 	NewGatewayService,
 	NewOpenAIGatewayService,
+	ProvideAdobeVideoTaskStore,
+	ProvideAdobeTokenProvider,
+	NewAdobeFireflyClientFactory,
+	NewAdobeFireflyAdapter,
+	wire.Bind(new(AdobeVideoUpstream), new(*AdobeFireflyAdapter)),
+	NewAdobeVideoService,
 	ProvideBatchImageModelPricingResolver,
 	NewBatchImagePublicService,
 	NewBatchImageDownloadService,
@@ -616,7 +685,7 @@ var ProviderSet = wire.NewSet(
 	NewGrokOAuthService,
 	NewGeminiOAuthService,
 	NewGeminiQuotaService,
-	NewCompositeTokenCacheInvalidator,
+	ProvideCompositeTokenCacheInvalidator,
 	wire.Bind(new(TokenCacheInvalidator), new(*CompositeTokenCacheInvalidator)),
 	NewAntigravityOAuthService,
 	ProvideOAuthRefreshAPI,
@@ -626,6 +695,7 @@ var ProviderSet = wire.NewSet(
 	ProvideGrokTokenProvider,
 	ProvideKiroTokenProvider,
 	ProvideKiroOAuthService,
+	ProvideKiroUsageService,
 	ProvideOpenAITokenProvider,
 	ProvideOpenAIQuotaService,
 	ProvideGrokQuotaService,
@@ -633,8 +703,8 @@ var ProviderSet = wire.NewSet(
 	NewAntigravityGatewayService,
 	NewKiroGatewayService,
 	ProvideRateLimitService,
-	NewAccountUsageService,
-	NewAccountTestService,
+	ProvideAccountUsageService,
+	ProvideAccountTestService,
 	ProvideSettingService,
 	NewDataManagementService,
 	ProvideBackupService,

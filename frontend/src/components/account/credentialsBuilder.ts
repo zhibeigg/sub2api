@@ -1,3 +1,91 @@
+export const ADOBE_SENSITIVE_CREDENTIAL_KEYS = [
+  'access_token',
+  'cookie',
+  'device_token',
+  'device_id',
+  'password',
+] as const
+
+export type AdobeSensitiveCredentialKey = typeof ADOBE_SENSITIVE_CREDENTIAL_KEYS[number]
+export type AdobeCredentialAction = 'keep' | 'replace' | 'clear'
+
+export interface AdobeCredentialInput {
+  access_token?: string
+  cookie?: string
+  device_token?: string
+  device_id?: string
+  password?: string
+  expires_at?: string
+}
+
+export interface AdobeCredentialEditField {
+  action: AdobeCredentialAction
+  value: string
+}
+
+export type AdobeCredentialEditState = Record<AdobeSensitiveCredentialKey, AdobeCredentialEditField>
+
+export function buildAdobeCreateCredentials(input: AdobeCredentialInput): Record<string, string> {
+  const credentials: Record<string, string> = {}
+  for (const key of ADOBE_SENSITIVE_CREDENTIAL_KEYS) {
+    const value = input[key]?.trim()
+    if (value) credentials[key] = value
+  }
+  const expiresAt = input.expires_at?.trim()
+  if (expiresAt) credentials.expires_at = expiresAt
+  return credentials
+}
+
+export function validateAdobeCredentialSource(input: AdobeCredentialInput): 'device_pair' | 'missing_source' | null {
+  const hasDeviceToken = Boolean(input.device_token?.trim())
+  const hasDeviceId = Boolean(input.device_id?.trim())
+  if (hasDeviceToken !== hasDeviceId) return 'device_pair'
+  if (!input.access_token?.trim() && !input.cookie?.trim() && !(hasDeviceToken && hasDeviceId)) {
+    return 'missing_source'
+  }
+  return null
+}
+
+export function createAdobeCredentialEditState(): AdobeCredentialEditState {
+  return Object.fromEntries(
+    ADOBE_SENSITIVE_CREDENTIAL_KEYS.map((key) => [key, { action: 'keep', value: '' }])
+  ) as AdobeCredentialEditState
+}
+
+export function buildAdobeCredentialUpdate(state: AdobeCredentialEditState): {
+  credentials?: Record<string, unknown>
+  clear_credentials?: string[]
+} {
+  const normalized = { ...state }
+  if (state.device_token.action === 'clear' || state.device_id.action === 'clear') {
+    normalized.device_token = { action: 'clear', value: '' }
+    normalized.device_id = { action: 'clear', value: '' }
+  }
+
+  const credentials: Record<string, string> = {}
+  const clearCredentials: string[] = []
+  for (const key of ADOBE_SENSITIVE_CREDENTIAL_KEYS) {
+    const field = normalized[key]
+    if (field.action === 'replace') {
+      const value = field.value.trim()
+      if (value) credentials[key] = value
+    } else if (field.action === 'clear') {
+      clearCredentials.push(key)
+    }
+  }
+  return {
+    ...(Object.keys(credentials).length > 0 ? { credentials } : {}),
+    ...(clearCredentials.length > 0 ? { clear_credentials: clearCredentials } : {}),
+  }
+}
+
+export function resetAdobeCredentialEditState(state: AdobeCredentialEditState): void {
+  for (const key of ADOBE_SENSITIVE_CREDENTIAL_KEYS) {
+    state[key].action = 'keep'
+    state[key].value = ''
+  }
+}
+
 export function applyInterceptWarmup(
   credentials: Record<string, unknown>,
   enabled: boolean,

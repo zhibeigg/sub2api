@@ -42,12 +42,20 @@ func RegisterGatewayRoutes(
 	isOpenAIGatewayPlatform := func(c *gin.Context) bool {
 		return getGroupPlatform(c) == service.PlatformOpenAI
 	}
+	isAdobeGatewayPlatform := func(c *gin.Context) bool {
+		return getGroupPlatform(c) == service.PlatformAdobe
+	}
+	adobeUnsupported := func(c *gin.Context) {
+		h.AdobeMedia.Unsupported(c)
+	}
 	imagesHandler := func(c *gin.Context) {
 		switch getGroupPlatform(c) {
 		case service.PlatformOpenAI:
 			h.OpenAIGateway.Images(c)
 		case service.PlatformGrok:
 			h.OpenAIGateway.GrokImages(c)
+		case service.PlatformAdobe:
+			h.AdobeMedia.Images(c)
 		default:
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
 			c.JSON(http.StatusNotFound, gin.H{
@@ -67,6 +75,9 @@ func RegisterGatewayRoutes(
 			// 火山方舟 Seedance 等 OpenAI 平台账号：异步视频任务
 			h.OpenAIGateway.ArkVideoGeneration(c)
 			return
+		case service.PlatformAdobe:
+			h.AdobeMedia.VideoGeneration(c)
+			return
 		}
 		service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
 		c.JSON(http.StatusNotFound, gin.H{
@@ -76,6 +87,15 @@ func RegisterGatewayRoutes(
 			},
 		})
 	}
+	batchImageHandler := func(next gin.HandlerFunc) gin.HandlerFunc {
+		return func(c *gin.Context) {
+			if isAdobeGatewayPlatform(c) {
+				adobeUnsupported(c)
+				return
+			}
+			next(c)
+		}
+	}
 	videoStatusHandler := func(c *gin.Context) {
 		switch getGroupPlatform(c) {
 		case service.PlatformGrok:
@@ -83,6 +103,9 @@ func RegisterGatewayRoutes(
 			return
 		case service.PlatformOpenAI:
 			h.OpenAIGateway.ArkVideoStatus(c)
+			return
+		case service.PlatformAdobe:
+			h.AdobeMedia.VideoStatus(c)
 			return
 		}
 		service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
@@ -104,6 +127,10 @@ func RegisterGatewayRoutes(
 	{
 		// /v1/messages: auto-route based on group platform
 		gateway.POST("/messages", func(c *gin.Context) {
+			if isAdobeGatewayPlatform(c) {
+				adobeUnsupported(c)
+				return
+			}
 			if isOpenAIResponsesCompatibleGatewayPlatform(c) {
 				h.OpenAIGateway.Messages(c)
 				return
@@ -113,6 +140,10 @@ func RegisterGatewayRoutes(
 		// /v1/messages/count_tokens: OpenAI uses Anthropic-compat bridge; other
 		// OpenAI-compatible platforms keep the prior unsupported response.
 		gateway.POST("/messages/count_tokens", func(c *gin.Context) {
+			if isAdobeGatewayPlatform(c) {
+				adobeUnsupported(c)
+				return
+			}
 			if isOpenAIGatewayPlatform(c) {
 				h.OpenAIGateway.CountTokens(c)
 				return
@@ -134,6 +165,10 @@ func RegisterGatewayRoutes(
 		// /models endpoint with a client_version query and expect the ChatGPT
 		// Codex manifest format; other clients keep the OpenAI-style list.
 		gateway.GET("/models", func(c *gin.Context) {
+			if isAdobeGatewayPlatform(c) {
+				h.AdobeMedia.Models(c)
+				return
+			}
 			if isOpenAIGatewayPlatform(c) && c.Query("client_version") != "" {
 				h.OpenAIGateway.CodexModels(c)
 				return
@@ -143,6 +178,10 @@ func RegisterGatewayRoutes(
 		gateway.GET("/usage", h.Gateway.Usage)
 		// OpenAI Responses API: auto-route based on group platform
 		gateway.POST("/responses", func(c *gin.Context) {
+			if isAdobeGatewayPlatform(c) {
+				adobeUnsupported(c)
+				return
+			}
 			if isOpenAIResponsesCompatibleGatewayPlatform(c) {
 				h.OpenAIGateway.Responses(c)
 				return
@@ -150,6 +189,10 @@ func RegisterGatewayRoutes(
 			h.Gateway.Responses(c)
 		})
 		gateway.POST("/responses/*subpath", func(c *gin.Context) {
+			if isAdobeGatewayPlatform(c) {
+				adobeUnsupported(c)
+				return
+			}
 			if isOpenAIResponsesCompatibleGatewayPlatform(c) {
 				h.OpenAIGateway.Responses(c)
 				return
@@ -157,10 +200,18 @@ func RegisterGatewayRoutes(
 			h.Gateway.Responses(c)
 		})
 		gateway.GET("/responses", func(c *gin.Context) {
+			if isAdobeGatewayPlatform(c) {
+				adobeUnsupported(c)
+				return
+			}
 			h.OpenAIGateway.ResponsesWebSocket(c)
 		})
 		// OpenAI Chat Completions API: auto-route based on group platform
 		gateway.POST("/chat/completions", func(c *gin.Context) {
+			if isAdobeGatewayPlatform(c) {
+				adobeUnsupported(c)
+				return
+			}
 			if isOpenAIResponsesCompatibleGatewayPlatform(c) {
 				h.OpenAIGateway.ChatCompletions(c)
 				return
@@ -182,16 +233,16 @@ func RegisterGatewayRoutes(
 		})
 		gateway.POST("/images/generations", imagesHandler)
 		gateway.POST("/images/edits", imagesHandler)
-		gateway.POST("/images/batches", h.BatchImage.Submit)
-		gateway.GET("/images/batches", h.BatchImage.List)
-		gateway.GET("/images/batches/models", h.BatchImage.Models)
-		gateway.GET("/images/batches/:id", h.BatchImage.Get)
-		gateway.GET("/images/batches/:id/items", h.BatchImage.Items)
-		gateway.GET("/images/batches/:id/items/:custom_id/content", h.BatchImage.ItemContent)
-		gateway.GET("/images/batches/:id/download", h.BatchImage.Download)
-		gateway.POST("/images/batches/:id/cancel", h.BatchImage.Cancel)
-		gateway.DELETE("/images/batches/:id", h.BatchImage.DeleteRecord)
-		gateway.DELETE("/images/batches/:id/outputs", h.BatchImage.DeleteOutputs)
+		gateway.POST("/images/batches", batchImageHandler(h.BatchImage.Submit))
+		gateway.GET("/images/batches", batchImageHandler(h.BatchImage.List))
+		gateway.GET("/images/batches/models", batchImageHandler(h.BatchImage.Models))
+		gateway.GET("/images/batches/:id", batchImageHandler(h.BatchImage.Get))
+		gateway.GET("/images/batches/:id/items", batchImageHandler(h.BatchImage.Items))
+		gateway.GET("/images/batches/:id/items/:custom_id/content", batchImageHandler(h.BatchImage.ItemContent))
+		gateway.GET("/images/batches/:id/download", batchImageHandler(h.BatchImage.Download))
+		gateway.POST("/images/batches/:id/cancel", batchImageHandler(h.BatchImage.Cancel))
+		gateway.DELETE("/images/batches/:id", batchImageHandler(h.BatchImage.DeleteRecord))
+		gateway.DELETE("/images/batches/:id/outputs", batchImageHandler(h.BatchImage.DeleteOutputs))
 		gateway.POST("/videos/generations", videoGenerationHandler)
 		gateway.GET("/videos/:request_id", videoStatusHandler)
 	}
@@ -205,14 +256,36 @@ func RegisterGatewayRoutes(
 	gemini.Use(middleware.APIKeyAuthWithSubscriptionGoogle(apiKeyService, subscriptionService, cfg))
 	gemini.Use(requireGroupGoogle)
 	{
-		gemini.GET("/models", h.Gateway.GeminiV1BetaListModels)
-		gemini.GET("/models/:model", h.Gateway.GeminiV1BetaGetModel)
+		gemini.GET("/models", func(c *gin.Context) {
+			if isAdobeGatewayPlatform(c) {
+				adobeUnsupported(c)
+				return
+			}
+			h.Gateway.GeminiV1BetaListModels(c)
+		})
+		gemini.GET("/models/:model", func(c *gin.Context) {
+			if isAdobeGatewayPlatform(c) {
+				adobeUnsupported(c)
+				return
+			}
+			h.Gateway.GeminiV1BetaGetModel(c)
+		})
 		// Gin treats ":" as a param marker, but Gemini uses "{model}:{action}" in the same segment.
-		gemini.POST("/models/*modelAction", h.Gateway.GeminiV1BetaModels)
+		gemini.POST("/models/*modelAction", func(c *gin.Context) {
+			if isAdobeGatewayPlatform(c) {
+				adobeUnsupported(c)
+				return
+			}
+			h.Gateway.GeminiV1BetaModels(c)
+		})
 	}
 
 	// OpenAI Responses API（不带v1前缀的别名）— auto-route based on group platform
 	responsesHandler := func(c *gin.Context) {
+		if isAdobeGatewayPlatform(c) {
+			adobeUnsupported(c)
+			return
+		}
 		if isOpenAIResponsesCompatibleGatewayPlatform(c) {
 			h.OpenAIGateway.Responses(c)
 			return
@@ -222,6 +295,10 @@ func RegisterGatewayRoutes(
 	r.POST("/responses", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, responsesHandler)
 	r.POST("/responses/*subpath", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, responsesHandler)
 	r.GET("/responses", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
+		if isAdobeGatewayPlatform(c) {
+			adobeUnsupported(c)
+			return
+		}
 		h.OpenAIGateway.ResponsesWebSocket(c)
 	})
 	codexDirect := r.Group("/backend-api/codex")
@@ -232,10 +309,20 @@ func RegisterGatewayRoutes(
 		codexDirect.GET("/responses", func(c *gin.Context) {
 			h.OpenAIGateway.ResponsesWebSocket(c)
 		})
-		codexDirect.GET("/models", h.OpenAIGateway.CodexModels)
+		codexDirect.GET("/models", func(c *gin.Context) {
+			if isAdobeGatewayPlatform(c) {
+				adobeUnsupported(c)
+				return
+			}
+			h.OpenAIGateway.CodexModels(c)
+		})
 	}
 	// OpenAI Chat Completions API（不带v1前缀的别名）— auto-route based on group platform
 	r.POST("/chat/completions", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
+		if isAdobeGatewayPlatform(c) {
+			adobeUnsupported(c)
+			return
+		}
 		if isOpenAIResponsesCompatibleGatewayPlatform(c) {
 			h.OpenAIGateway.ChatCompletions(c)
 			return

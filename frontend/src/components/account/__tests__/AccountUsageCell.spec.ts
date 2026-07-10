@@ -72,6 +72,30 @@ describe('AccountUsageCell', () => {
     })
   })
 
+  it.each([
+    [{ state: 'unknown', unknown: true, available: null }, 'admin.accounts.adobe.creditsUnknown'],
+    [{ state: 'available', available: 0, checked_at: '2026-08-01T00:00:00Z' }, '0'],
+    [{ state: 'available', available: 42 }, '42'],
+  ])('Adobe credits 区分 unknown、0 和正常余额', async (adobeCredits, expected) => {
+    getUsage.mockResolvedValue({ adobe_credits: adobeCredits })
+    const wrapper = mount(AccountUsageCell, {
+      props: { account: makeAccount({ id: 9000 + Math.random(), platform: 'adobe', type: 'oauth' }) },
+      global: { stubs: { UsageProgressBar: true, AccountQuotaInfo: true } }
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="adobe-credits"]').text()).toContain(expected)
+  })
+
+  it('Adobe credits 错误独立展示', async () => {
+    getUsage.mockResolvedValue({ adobe_credits: { state: 'error', error: 'IMS unavailable' } })
+    const wrapper = mount(AccountUsageCell, {
+      props: { account: makeAccount({ id: 9010, platform: 'adobe', type: 'oauth' }) },
+      global: { stubs: { UsageProgressBar: true, AccountQuotaInfo: true } }
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="adobe-credits-error"]').text()).toContain('IMS unavailable')
+  })
+
   it('Antigravity 图片用量会聚合新旧 image 模型', async () => {
     getUsage.mockResolvedValue({
       antigravity_quota: {

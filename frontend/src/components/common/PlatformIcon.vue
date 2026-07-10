@@ -29,6 +29,10 @@
   <svg v-else-if="platform === 'kiro'" :class="sizeClass" viewBox="0 0 24 24" fill="currentColor">
     <path d="M12 2 3 6.5v11L12 22l9-4.5v-11L12 2zm0 2.3 6.2 3.1L12 10.5 5.8 7.4 12 4.3zM5 9.2l6 3v6.6l-6-3V9.2zm8 9.6v-6.6l6-3v6.6l-6 3z" />
   </svg>
+  <!-- Adobe logo mark -->
+  <svg v-else-if="platform === 'adobe'" :class="sizeClass" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M8.1 3H3l6.2 18 2.55-7.45L8.1 3Zm7.8 0H21l-6.2 18-2.55-7.45L15.9 3Zm-5.06 14.1h2.32L12 20.5l-1.16-3.4Z" />
+  </svg>
   <!-- Fallback: generic platform icon -->
   <svg v-else :class="sizeClass" fill="currentColor" viewBox="0 0 24 24">
     <path

@@ -26,6 +26,36 @@
         <p class="input-hint">{{ t('admin.accounts.notesHint') }}</p>
       </div>
 
+      <section v-if="account.platform === 'adobe' && account.type === 'oauth'" class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.accounts.adobe.editCredentialsTitle') }}</h3>
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.adobe.editCredentialsHint') }}</p>
+        </div>
+        <div class="space-y-3">
+          <div v-for="key in adobeCredentialKeys" :key="key" class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(9rem,0.7fr)_minmax(8rem,0.45fr)_minmax(12rem,1fr)] sm:items-end">
+            <div>
+              <span class="input-label">{{ adobeCredentialLabel(key) }}</span>
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                {{ account.credentials_status?.[`has_${key}`] ? t('admin.accounts.adobe.configured') : t('admin.accounts.adobe.notConfigured') }}
+              </p>
+            </div>
+            <div>
+              <label class="sr-only" :for="`adobe-action-${key}`">{{ t('admin.accounts.adobe.action') }}</label>
+              <select :id="`adobe-action-${key}`" v-model="adobeCredentialState[key].action" class="input min-h-11" @change="onAdobeCredentialActionChange(key)">
+                <option value="keep">{{ t('admin.accounts.adobe.keep') }}</option>
+                <option value="replace">{{ t('admin.accounts.adobe.replace') }}</option>
+                <option value="clear">{{ t('admin.accounts.adobe.clear') }}</option>
+              </select>
+            </div>
+            <div>
+              <label class="sr-only" :for="`adobe-value-${key}`">{{ adobeCredentialLabel(key) }}</label>
+              <input :id="`adobe-value-${key}`" v-model="adobeCredentialState[key].value" type="password" autocomplete="new-password" class="input min-h-11 font-mono" :disabled="adobeCredentialState[key].action !== 'replace'" :placeholder="t('admin.accounts.adobe.replacePlaceholder')" />
+            </div>
+          </div>
+        </div>
+        <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.adobe.devicePairClearHint') }}</p>
+      </section>
+
       <!-- API Key fields (only for apikey type) -->
       <div v-if="account.type === 'apikey'" class="space-y-4">
         <div>
@@ -525,7 +555,7 @@
 
       <!-- OpenAI/Grok/Kiro OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
       <div
-        v-if="(account.platform === 'openai' || account.platform === 'grok' || account.platform === 'kiro') && account.type === 'oauth'"
+        v-if="(account.platform === 'openai' || account.platform === 'grok' || account.platform === 'adobe' || account.platform === 'kiro') && account.type === 'oauth'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
@@ -2540,7 +2570,11 @@ import GroupSelector from '@/components/common/GroupSelector.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import {
+  ADOBE_SENSITIVE_CREDENTIAL_KEYS,
   applyAntigravityProjectID,
+  buildAdobeCredentialUpdate,
+  createAdobeCredentialEditState,
+  resetAdobeCredentialEditState,
   applyHeaderOverride,
   applyInterceptWarmup,
   getHeaderOverrideTemplate,
@@ -2549,6 +2583,7 @@ import {
   validateHeaderOverrideRows,
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
   HEADER_OVERRIDES_CREDENTIAL_KEY,
+  type AdobeSensitiveCredentialKey,
   type HeaderOverrideRow
 } from '@/components/account/credentialsBuilder'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
@@ -2621,6 +2656,18 @@ interface TempUnschedRuleForm {
 const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
+const adobeCredentialKeys = ADOBE_SENSITIVE_CREDENTIAL_KEYS
+const adobeCredentialState = reactive(createAdobeCredentialEditState())
+const adobeCredentialLabel = (key: AdobeSensitiveCredentialKey) => t(`admin.accounts.adobe.${key}`)
+const onAdobeCredentialActionChange = (key: AdobeSensitiveCredentialKey) => {
+  if (adobeCredentialState[key].action !== 'replace') adobeCredentialState[key].value = ''
+  if ((key === 'device_token' || key === 'device_id') && adobeCredentialState[key].action === 'clear') {
+    adobeCredentialState.device_token.action = 'clear'
+    adobeCredentialState.device_id.action = 'clear'
+    adobeCredentialState.device_token.value = ''
+    adobeCredentialState.device_id.value = ''
+  }
+}
 // Bedrock credentials
 const editBedrockAccessKeyId = ref('')
 const editBedrockSecretAccessKey = ref('')
@@ -3143,6 +3190,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     return
   }
   antigravityMixedChannelConfirmed.value = false
+  resetAdobeCredentialEditState(adobeCredentialState)
   showMixedChannelWarning.value = false
   mixedChannelWarningDetails.value = null
   mixedChannelWarningRawMessage.value = ''
@@ -3419,7 +3467,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     editBaseUrl.value = platformDefaultUrl
 
     // Load model mappings for OpenAI/Grok/Kiro OAuth accounts
-    if ((newAccount.platform === 'openai' || newAccount.platform === 'grok' || newAccount.platform === 'kiro') && newAccount.credentials) {
+    if ((newAccount.platform === 'openai' || newAccount.platform === 'grok' || newAccount.platform === 'adobe' || newAccount.platform === 'kiro') && newAccount.credentials) {
       const oauthCredentials = newAccount.credentials as Record<string, unknown>
       loadModelRestrictionFromMapping(oauthCredentials.model_mapping as Record<string, unknown> | undefined)
     } else {
@@ -3877,6 +3925,7 @@ const parseDateTimeLocal = parseDateTimeLocalInput
 
 // Methods
 const handleClose = () => {
+  resetAdobeCredentialEditState(adobeCredentialState)
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
   emit('close')
@@ -3931,8 +3980,31 @@ const handleSubmit = async () => {
     }
     updatePayload.auto_pause_on_expired = autoPauseOnExpired.value
 
+    if (props.account.platform === 'adobe' && props.account.type === 'oauth') {
+      const deviceTokenReplace = adobeCredentialState.device_token.action === 'replace'
+      const deviceIdReplace = adobeCredentialState.device_id.action === 'replace'
+      if (deviceTokenReplace !== deviceIdReplace) {
+        appStore.showError(t('admin.accounts.adobe.devicePairReplaceRequired'))
+        return
+      }
+      if (deviceTokenReplace && (!adobeCredentialState.device_token.value.trim() || !adobeCredentialState.device_id.value.trim())) {
+        appStore.showError(t('admin.accounts.adobe.devicePairReplaceRequired'))
+        return
+      }
+      const adobeUpdate = buildAdobeCredentialUpdate(adobeCredentialState)
+      const adobeModelMapping = buildModelRestrictionMapping()
+      if (adobeModelMapping) {
+        adobeUpdate.credentials = { ...(adobeUpdate.credentials || {}), model_mapping: adobeModelMapping }
+      }
+      if (adobeUpdate.clear_credentials?.length) {
+        if (!confirm(t('admin.accounts.adobe.clearConfirm', { fields: adobeUpdate.clear_credentials.map((key) => adobeCredentialLabel(key as AdobeSensitiveCredentialKey)).join(', ') }))) {
+          return
+        }
+      }
+      if (adobeUpdate.credentials) updatePayload.credentials = adobeUpdate.credentials
+      if (adobeUpdate.clear_credentials) updatePayload.clear_credentials = adobeUpdate.clear_credentials
     // For apikey type, handle credentials update
-    if (props.account.type === 'apikey') {
+    } else if (props.account.type === 'apikey') {
       const currentCredentials = (props.account.credentials as Record<string, unknown>) || {}
       const newBaseUrl = editBaseUrl.value.trim() || defaultBaseUrl.value
       const shouldApplyModelMapping = !(props.account.platform === 'openai' && openaiPassthroughEnabled.value)

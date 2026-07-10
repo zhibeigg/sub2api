@@ -27,6 +27,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
+	"github.com/Wei-Shaw/sub2api/internal/provider/adobe/firefly"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -121,6 +122,7 @@ type UpdateAccountRequest struct {
 	Notes                   *string        `json:"notes"`
 	Type                    string         `json:"type" binding:"omitempty,oneof=oauth setup-token apikey upstream bedrock service_account"`
 	Credentials             map[string]any `json:"credentials"`
+	ClearCredentials        []string       `json:"clear_credentials"`
 	Extra                   map[string]any `json:"extra"`
 	ProxyID                 *int64         `json:"proxy_id"`
 	Concurrency             *int           `json:"concurrency"`
@@ -784,6 +786,10 @@ func (h *AccountHandler) Create(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	if err := service.ValidatePlatformAccountType(req.Platform, req.Type); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
 	if req.RateMultiplier != nil && *req.RateMultiplier < 0 {
 		response.BadRequest(c, "rate_multiplier must be >= 0")
 		return
@@ -883,6 +889,7 @@ func (h *AccountHandler) Update(c *gin.Context) {
 		Notes:                 req.Notes,
 		Type:                  req.Type,
 		Credentials:           req.Credentials,
+		ClearCredentials:      req.ClearCredentials,
 		Extra:                 req.Extra,
 		ProxyID:               req.ProxyID,
 		Concurrency:           req.Concurrency, // 指针类型，nil 表示未提供
@@ -1106,6 +1113,14 @@ func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *serv
 	}
 
 	var newCredentials map[string]any
+
+	if account.IsAdobe() {
+		if h.accountTestService == nil {
+			return nil, "", infraerrors.New(http.StatusServiceUnavailable, "ADOBE_TOKEN_PROVIDER_NOT_CONFIGURED", "Adobe token provider is not configured")
+		}
+		updated, err := h.accountTestService.RefreshAdobeCredentials(ctx, account)
+		return updated, "", err
+	}
 
 	if account.IsOpenAI() {
 		tokenInfo, err := h.openaiOAuthService.RefreshAccountToken(ctx, account)
@@ -2250,6 +2265,35 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 	account, err := h.adminService.GetAccount(c.Request.Context(), accountID)
 	if err != nil {
 		response.NotFound(c, "Account not found")
+		return
+	}
+
+	// Adobe uses a local Firefly catalog; it has no dynamic upstream models API.
+	if account.IsAdobe() {
+		defaultModels := firefly.PublicModels()
+		mapping := account.GetModelMapping()
+		if len(mapping) == 0 {
+			response.Success(c, defaultModels)
+			return
+		}
+		defaultByID := make(map[string]firefly.ModelInfo, len(defaultModels))
+		for _, model := range defaultModels {
+			defaultByID[model.ID] = model
+		}
+		requestedModels := make([]string, 0, len(mapping))
+		for requestedModel := range mapping {
+			requestedModels = append(requestedModels, requestedModel)
+		}
+		sort.Strings(requestedModels)
+		models := make([]firefly.ModelInfo, 0, len(requestedModels))
+		for _, requestedModel := range requestedModels {
+			if model, ok := defaultByID[requestedModel]; ok {
+				models = append(models, model)
+				continue
+			}
+			models = append(models, firefly.ModelInfo{ID: requestedModel, DisplayName: requestedModel, Type: "model"})
+		}
+		response.Success(c, models)
 		return
 	}
 

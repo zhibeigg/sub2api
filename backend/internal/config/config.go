@@ -91,6 +91,7 @@ type Config struct {
 	RunMode                 string                        `mapstructure:"run_mode" yaml:"run_mode"`
 	Timezone                string                        `mapstructure:"timezone"` // e.g. "Asia/Shanghai", "UTC"
 	Gemini                  GeminiConfig                  `mapstructure:"gemini"`
+	Adobe                   AdobeConfig                   `mapstructure:"adobe"`
 	Kiro                    KiroConfig                    `mapstructure:"kiro"`
 	Update                  UpdateConfig                  `mapstructure:"update"`
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
@@ -132,6 +133,16 @@ type LogSamplingConfig struct {
 type GeminiConfig struct {
 	OAuth GeminiOAuthConfig `mapstructure:"oauth"`
 	Quota GeminiQuotaConfig `mapstructure:"quota"`
+}
+
+type AdobeConfig struct {
+	RequestTimeoutSeconds    int `mapstructure:"request_timeout_seconds"`
+	ImagePollIntervalSeconds int `mapstructure:"image_poll_interval_seconds"`
+	ImageMaxPollAttempts     int `mapstructure:"image_max_poll_attempts"`
+	VideoTaskTTLSeconds      int `mapstructure:"video_task_ttl_seconds"`
+	VideoTerminalTTLSeconds  int `mapstructure:"video_terminal_ttl_seconds"`
+	TokenRefreshSkewSeconds  int `mapstructure:"token_refresh_skew_seconds"`
+	CreditsCacheTTLSeconds   int `mapstructure:"credits_cache_ttl_seconds"`
 }
 
 // KiroConfig holds Kiro / AWS CodeWhisperer platform tuning: the spoofed IDE
@@ -1695,6 +1706,11 @@ func setDefaults() {
 		"api.minimaxi.com",
 		"generativelanguage.googleapis.com",
 		"cloudcode-pa.googleapis.com",
+		"adobeid-na1.services.adobe.com",
+		"ims-na1.adobelogin.com",
+		"firefly.adobe.io",
+		"firefly-3p.ff.adobe.io",
+		"*.ff.adobe.io",
 		"*.openai.azure.com",
 	})
 	viper.SetDefault("security.url_allowlist.pricing_hosts", []string{
@@ -1870,6 +1886,15 @@ func setDefaults() {
 	viper.SetDefault("batch_image.vertex_output_retention_hours", 72)
 	viper.SetDefault("batch_image.vertex_batch_prediction_base_url", "")
 	viper.SetDefault("batch_image.vertex_gcs_base_url", "")
+
+	// Adobe Firefly
+	viper.SetDefault("adobe.request_timeout_seconds", 120)
+	viper.SetDefault("adobe.image_poll_interval_seconds", 2)
+	viper.SetDefault("adobe.image_max_poll_attempts", 150)
+	viper.SetDefault("adobe.video_task_ttl_seconds", 72*60*60)
+	viper.SetDefault("adobe.video_terminal_ttl_seconds", 24*60*60)
+	viper.SetDefault("adobe.token_refresh_skew_seconds", 5*60)
+	viper.SetDefault("adobe.credits_cache_ttl_seconds", 5*60)
 
 	// Ops (vNext)
 	viper.SetDefault("ops.enabled", true)

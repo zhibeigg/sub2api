@@ -173,13 +173,19 @@ func (r *usageBillingRepository) applyBatchImageBalanceHold(
 
 func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, tx *sql.Tx, cmd *service.UsageBillingCommand, result *service.UsageBillingApplyResult) error {
 	if cmd.SubscriptionCost > 0 && cmd.SubscriptionID != nil {
-		if err := incrementUsageBillingSubscription(ctx, tx, *cmd.SubscriptionID, cmd.SubscriptionCost); err != nil {
+		var err error
+		if cmd.StrictFunds {
+			err = incrementUsageBillingSubscriptionStrict(ctx, tx, *cmd.SubscriptionID, cmd.GroupID, cmd.SubscriptionCost)
+		} else {
+			err = incrementUsageBillingSubscription(ctx, tx, *cmd.SubscriptionID, cmd.SubscriptionCost)
+		}
+		if err != nil {
 			return err
 		}
 	}
 
 	if cmd.BalanceCost > 0 {
-		newBalance, sufficient, err := deductUsageBillingBalance(ctx, tx, cmd.UserID, cmd.BalanceCost)
+		newBalance, sufficient, err := deductUsageBillingBalance(ctx, tx, cmd.UserID, cmd.BalanceCost, cmd.StrictFunds)
 		if err != nil {
 			return err
 		}
@@ -188,7 +194,7 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 	}
 
 	if cmd.APIKeyQuotaCost > 0 {
-		exhausted, err := incrementUsageBillingAPIKeyQuota(ctx, tx, cmd.APIKeyID, cmd.APIKeyQuotaCost)
+		exhausted, err := incrementUsageBillingAPIKeyQuota(ctx, tx, cmd.APIKeyID, cmd.APIKeyQuotaCost, cmd.StrictFunds)
 		if err != nil {
 			return err
 		}
@@ -240,7 +246,45 @@ func incrementUsageBillingSubscription(ctx context.Context, tx *sql.Tx, subscrip
 	return service.ErrSubscriptionNotFound
 }
 
-func deductUsageBillingBalance(ctx context.Context, tx *sql.Tx, userID int64, amount float64) (float64, bool, error) {
+func incrementUsageBillingSubscriptionStrict(ctx context.Context, tx *sql.Tx, subscriptionID, groupID int64, costUSD float64) error {
+	const updateSQL = `
+		UPDATE user_subscriptions us
+		SET daily_usage_usd = us.daily_usage_usd + $1,
+			weekly_usage_usd = us.weekly_usage_usd + $1,
+			monthly_usage_usd = us.monthly_usage_usd + $1,
+			updated_at = NOW()
+		FROM groups g
+		WHERE us.id = $2 AND us.deleted_at IS NULL AND g.id = $3 AND g.deleted_at IS NULL
+			AND us.status = $4 AND us.expires_at > NOW()
+			AND (CASE WHEN us.quota_snapshotted THEN us.daily_limit_usd ELSE g.daily_limit_usd END IS NULL
+				OR us.daily_usage_usd + $1 <= CASE WHEN us.quota_snapshotted THEN us.daily_limit_usd ELSE g.daily_limit_usd END)
+			AND (CASE WHEN us.quota_snapshotted THEN us.weekly_limit_usd ELSE g.weekly_limit_usd END IS NULL
+				OR us.weekly_usage_usd + $1 <= CASE WHEN us.quota_snapshotted THEN us.weekly_limit_usd ELSE g.weekly_limit_usd END)
+			AND (CASE WHEN us.quota_snapshotted THEN us.monthly_limit_usd ELSE g.monthly_limit_usd END IS NULL
+				OR us.monthly_usage_usd + $1 <= CASE WHEN us.quota_snapshotted THEN us.monthly_limit_usd ELSE g.monthly_limit_usd END)
+	`
+	res, err := tx.ExecContext(ctx, updateSQL, costUSD, subscriptionID, groupID, service.SubscriptionStatusActive)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected > 0 {
+		return nil
+	}
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT 1 FROM user_subscriptions WHERE id = $1 AND deleted_at IS NULL`, subscriptionID).Scan(&exists); errors.Is(err, sql.ErrNoRows) {
+		return service.ErrSubscriptionNotFound
+	} else if err != nil {
+		return err
+	}
+	return service.ErrAdobeMediaInsufficientFunds
+}
+
+func deductUsageBillingBalance(ctx context.Context, tx *sql.Tx, userID int64, amount float64, strictMode ...bool) (float64, bool, error) {
+	strict := len(strictMode) > 0 && strictMode[0]
 	var newBalance float64
 	err := tx.QueryRowContext(ctx, `
 		UPDATE users
@@ -254,6 +298,14 @@ func deductUsageBillingBalance(ctx context.Context, tx *sql.Tx, userID int64, am
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return 0, false, err
+	}
+	if strict {
+		if exists, existsErr := userExistsForBilling(ctx, tx, userID); existsErr != nil {
+			return 0, false, existsErr
+		} else if !exists {
+			return 0, false, service.ErrUserNotFound
+		}
+		return 0, false, service.ErrAdobeMediaInsufficientFunds
 	}
 
 	err = tx.QueryRowContext(ctx, `
@@ -413,7 +465,8 @@ func userExistsForBilling(ctx context.Context, tx *sql.Tx, userID int64) (bool, 
 	return true, nil
 }
 
-func incrementUsageBillingAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID int64, amount float64) (bool, error) {
+func incrementUsageBillingAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID int64, amount float64, strictMode ...bool) (bool, error) {
+	strict := len(strictMode) > 0 && strictMode[0]
 	var exhausted bool
 	err := tx.QueryRowContext(ctx, `
 		UPDATE api_keys
@@ -428,9 +481,18 @@ func incrementUsageBillingAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID 
 			END,
 			updated_at = NOW()
 		WHERE id = $2 AND deleted_at IS NULL
+			AND (NOT $5 OR quota <= 0 OR quota_used + $1 <= quota)
 		RETURNING quota > 0 AND quota_used >= quota AND quota_used - $1 < quota
-	`, amount, apiKeyID, service.StatusAPIKeyActive, service.StatusAPIKeyQuotaExhausted).Scan(&exhausted)
+	`, amount, apiKeyID, service.StatusAPIKeyActive, service.StatusAPIKeyQuotaExhausted, strict).Scan(&exhausted)
 	if errors.Is(err, sql.ErrNoRows) {
+		if strict {
+			var exists int
+			if existsErr := tx.QueryRowContext(ctx, `SELECT 1 FROM api_keys WHERE id = $1 AND deleted_at IS NULL`, apiKeyID).Scan(&exists); existsErr == nil {
+				return false, service.ErrAdobeMediaInsufficientFunds
+			} else if !errors.Is(existsErr, sql.ErrNoRows) {
+				return false, existsErr
+			}
+		}
 		return false, service.ErrAPIKeyNotFound
 	}
 	if err != nil {

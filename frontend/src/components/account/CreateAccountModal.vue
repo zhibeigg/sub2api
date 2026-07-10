@@ -162,6 +162,19 @@
           </button>
           <button
             type="button"
+            @click.stop.prevent="selectPlatform('adobe')"
+            :class="[
+              'flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500',
+              form.platform === 'adobe'
+                ? 'bg-white text-red-700 shadow-sm dark:bg-dark-600 dark:text-red-400'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <PlatformIcon platform="adobe" size="sm" />
+            Adobe
+          </button>
+          <button
+            type="button"
             @click.stop.prevent="selectPlatform('kiro')"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
@@ -175,6 +188,42 @@
           </button>
         </div>
       </div>
+
+      <!-- Adobe uses oauth storage but is a single-step credential import. -->
+      <section v-if="form.platform === 'adobe'" class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.accounts.adobe.credentialsTitle') }}</h3>
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.adobe.sourceHint') }}</p>
+        </div>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label class="input-label" for="adobe-access-token">{{ t('admin.accounts.adobe.accessToken') }}</label>
+            <input id="adobe-access-token" v-model="adobeCredentials.access_token" type="password" autocomplete="new-password" class="input font-mono" @blur="adobeTouched.access_token = true" />
+          </div>
+          <div>
+            <label class="input-label" for="adobe-cookie">{{ t('admin.accounts.adobe.cookie') }}</label>
+            <input id="adobe-cookie" v-model="adobeCredentials.cookie" type="password" autocomplete="new-password" class="input font-mono" @blur="adobeTouched.cookie = true" />
+          </div>
+          <div>
+            <label class="input-label" for="adobe-device-token">{{ t('admin.accounts.adobe.deviceToken') }}</label>
+            <input id="adobe-device-token" v-model="adobeCredentials.device_token" type="password" autocomplete="new-password" class="input font-mono" @blur="adobeTouched.device_token = true" />
+          </div>
+          <div>
+            <label class="input-label" for="adobe-device-id">{{ t('admin.accounts.adobe.deviceId') }}</label>
+            <input id="adobe-device-id" v-model="adobeCredentials.device_id" type="password" autocomplete="new-password" class="input font-mono" @blur="adobeTouched.device_id = true" />
+          </div>
+          <div>
+            <label class="input-label" for="adobe-password">{{ t('admin.accounts.adobe.password') }}</label>
+            <input id="adobe-password" v-model="adobeCredentials.password" type="password" autocomplete="new-password" class="input" @blur="adobeTouched.password = true" />
+            <p class="input-hint">{{ t('admin.accounts.adobe.passwordHint') }}</p>
+          </div>
+          <div>
+            <label class="input-label" for="adobe-expires-at">{{ t('admin.accounts.adobe.expiresAt') }}</label>
+            <input id="adobe-expires-at" v-model="adobeCredentials.expires_at" type="datetime-local" class="input" />
+          </div>
+        </div>
+        <p v-if="adobeValidationError" class="text-xs text-red-600 dark:text-red-400" role="alert">{{ adobeValidationError }}</p>
+      </section>
 
       <!-- Account Type Selection (Anthropic) -->
       <div v-if="form.platform === 'anthropic'">
@@ -1977,7 +2026,7 @@
 
       <!-- OpenAI / Grok / Kiro OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
       <div
-        v-if="(form.platform === 'openai' || form.platform === 'grok' || form.platform === 'kiro') && accountCategory === 'oauth-based'"
+        v-if="(form.platform === 'openai' || form.platform === 'grok' || form.platform === 'adobe' || form.platform === 'kiro') && accountCategory === 'oauth-based'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
@@ -3564,6 +3613,8 @@ import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import {
   applyAntigravityProjectID,
+  buildAdobeCreateCredentials,
+  validateAdobeCredentialSource,
   applyHeaderOverride,
   applyInterceptWarmup,
   getHeaderOverrideTemplate,
@@ -3705,6 +3756,20 @@ const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_acco
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
+const adobeCredentials = reactive({
+  access_token: '', cookie: '', device_token: '', device_id: '', password: '', expires_at: ''
+})
+const adobeTouched = reactive({
+  access_token: false, cookie: false, device_token: false, device_id: false, password: false
+})
+const adobeValidationAttempted = ref(false)
+const adobeValidationError = computed(() => {
+  if (!adobeValidationAttempted.value && !Object.values(adobeTouched).some(Boolean)) return ''
+  const error = validateAdobeCredentialSource(adobeCredentials)
+  if (!error) return ''
+  if (error === 'device_pair') return t('admin.accounts.adobe.devicePairRequired')
+  return t('admin.accounts.adobe.sourceRequired')
+})
 
 const syncPreviewCredentials = computed(() => {
   if (!apiKeyValue.value) return undefined
@@ -4081,6 +4146,7 @@ const form = reactive({
 
 // Helper to check if current type needs OAuth flow
 const isOAuthFlow = computed(() => {
+  if (form.platform === 'adobe') return false
   // Antigravity upstream 类型不需要 OAuth 流程
   if (form.platform === 'antigravity' && antigravityAccountType.value === 'upstream') {
     return false
@@ -4101,6 +4167,15 @@ const selectPlatform = (platform: AccountPlatform) => {
 
   step.value = 1
   form.platform = platform
+
+  if (platform === 'adobe') {
+    accountCategory.value = 'oauth-based'
+    addMethod.value = 'oauth'
+    modelRestrictionMode.value = 'whitelist'
+    form.type = 'oauth'
+    form.concurrency = 1
+    form.load_factor = null
+  }
 
   // Kiro 是凭证 JSON 直接导入，不应继承其它平台的 OAuth/API Key/Bedrock 子类型状态。
   if (platform === 'kiro') {
@@ -4224,6 +4299,14 @@ watch(
       antigravityWhitelistModels.value = []
       antigravityModelMappings.value = []
       antigravityModelRestrictionMode.value = 'mapping'
+    }
+    if (newPlatform === 'adobe') {
+      accountCategory.value = 'oauth-based'
+      addMethod.value = 'oauth'
+      modelRestrictionMode.value = 'whitelist'
+      allowedModels.value = [...getModelsByPlatform('adobe')]
+      form.concurrency = 1
+      form.load_factor = null
     }
     if (newPlatform === 'grok') {
       accountCategory.value = 'oauth-based'
@@ -4635,6 +4718,9 @@ const resetForm = () => {
   addMethod.value = 'oauth'
   apiKeyBaseUrl.value = 'https://api.anthropic.com'
   apiKeyValue.value = ''
+  Object.assign(adobeCredentials, { access_token: '', cookie: '', device_token: '', device_id: '', password: '', expires_at: '' })
+  Object.assign(adobeTouched, { access_token: false, cookie: false, device_token: false, device_id: false, password: false })
+  adobeValidationAttempted.value = false
   editQuotaLimit.value = null
   editQuotaDailyLimit.value = null
   editQuotaWeeklyLimit.value = null
@@ -4720,6 +4806,8 @@ const resetForm = () => {
 }
 
 const handleClose = () => {
+  Object.assign(adobeCredentials, { access_token: '', cookie: '', device_token: '', device_id: '', password: '', expires_at: '' })
+  adobeValidationAttempted.value = false
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
   emit('close')
@@ -5027,6 +5115,32 @@ const handleKiroComplete = async () => {
 }
 
 const handleSubmit = async () => {
+  if (form.platform === 'adobe') {
+    if (!form.name.trim()) {
+      appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
+      return
+    }
+    adobeValidationAttempted.value = true
+    const validationError = validateAdobeCredentialSource(adobeCredentials)
+    if (validationError) {
+      appStore.showError(validationError === 'device_pair'
+        ? t('admin.accounts.adobe.devicePairRequired')
+        : t('admin.accounts.adobe.sourceRequired'))
+      return
+    }
+    const credentials: Record<string, unknown> = buildAdobeCreateCredentials(adobeCredentials)
+    const modelMapping = buildModelMappingObject('whitelist', allowedModels.value, [])
+    if (modelMapping) credentials.model_mapping = modelMapping
+    await doCreateAccount({
+      ...form,
+      type: 'oauth',
+      concurrency: form.concurrency || 1,
+      credentials,
+      auto_pause_on_expired: autoPauseOnExpired.value
+    })
+    return
+  }
+
   // For OAuth-based type, handle OAuth flow (goes to step 2)
   if (isOAuthFlow.value) {
     if (!form.name.trim()) {

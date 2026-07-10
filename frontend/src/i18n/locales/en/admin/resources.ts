@@ -522,6 +522,8 @@ export default {
       group: 'Group',
       requestId: 'Request ID',
       requestIdCopied: 'Request ID copied',
+      platform: 'Platform',
+      allPlatforms: 'All Platforms',
       allModels: 'All Models',
       allAccounts: 'All Accounts',
       allGroups: 'All Groups',

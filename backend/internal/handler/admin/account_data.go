@@ -10,6 +10,7 @@ import (
 
 	"log/slog"
 
+	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -50,26 +51,27 @@ type DataProxy struct {
 	ExpiryWarnDays  int    `json:"expiry_warn_days,omitempty"`
 }
 
-// DataAccount 是管理员显式备份导出使用的账号结构，故意不走 dto.Account 的脱敏路径，
-// Credentials 原文返回。这是"管理员备份"这一显式行为的一部分；如未来需要导出脱敏版本，
-// 应新增独立结构而非修改这里。
+// DataAccount 是管理员显式备份导出使用的账号结构。历史平台仍保留原始 Credentials
+// 以维持备份兼容性；Adobe 凭据包含浏览器会话和设备令牌等高敏感信息，导出时必须剥离
+// 敏感键，并仅通过 CredentialsStatus 暴露是否已配置。
 // 注意:本结构不含 parent_account_id/quota_dimension——spark 影子账号在 ExportData 处被显式
 // 排除(影子不持凭据、通用凭据型导入强制 credentials 非空无法重建父子链接),不在此表达。
 // 影子的独立调度配置(priority/并发/分组/status 管理员可单独调)亦不在本备份范围,属已知局限
 // (外审第6轮裁决:保持排除 + 前端警告,而非升级格式做完整往返)。
 type DataAccount struct {
-	Name               string         `json:"name"`
-	Notes              *string        `json:"notes,omitempty"`
-	Platform           string         `json:"platform"`
-	Type               string         `json:"type"`
-	Credentials        map[string]any `json:"credentials"`
-	Extra              map[string]any `json:"extra,omitempty"`
-	ProxyKey           *string        `json:"proxy_key,omitempty"`
-	Concurrency        int            `json:"concurrency"`
-	Priority           int            `json:"priority"`
-	RateMultiplier     *float64       `json:"rate_multiplier,omitempty"`
-	ExpiresAt          *int64         `json:"expires_at,omitempty"`
-	AutoPauseOnExpired *bool          `json:"auto_pause_on_expired,omitempty"`
+	Name               string          `json:"name"`
+	Notes              *string         `json:"notes,omitempty"`
+	Platform           string          `json:"platform"`
+	Type               string          `json:"type"`
+	Credentials        map[string]any  `json:"credentials"`
+	CredentialsStatus  map[string]bool `json:"credentials_status,omitempty"`
+	Extra              map[string]any  `json:"extra,omitempty"`
+	ProxyKey           *string         `json:"proxy_key,omitempty"`
+	Concurrency        int             `json:"concurrency"`
+	Priority           int             `json:"priority"`
+	RateMultiplier     *float64        `json:"rate_multiplier,omitempty"`
+	ExpiresAt          *int64          `json:"expires_at,omitempty"`
+	AutoPauseOnExpired *bool           `json:"auto_pause_on_expired,omitempty"`
 }
 
 type DataImportRequest struct {
@@ -95,6 +97,13 @@ type DataImportError struct {
 
 func buildProxyKey(protocol, host string, port int, username, password string) string {
 	return fmt.Sprintf("%s|%s|%d|%s|%s", strings.TrimSpace(protocol), strings.TrimSpace(host), port, strings.TrimSpace(username), strings.TrimSpace(password))
+}
+
+func exportAccountCredentials(account service.Account) (map[string]any, map[string]bool) {
+	if account.IsAdobe() {
+		return dto.RedactCredentials(account.Credentials)
+	}
+	return account.Credentials, nil
 }
 
 func (h *AccountHandler) ExportData(c *gin.Context) {
@@ -199,12 +208,14 @@ func (h *AccountHandler) ExportData(c *gin.Context) {
 			v := acc.ExpiresAt.Unix()
 			expiresAt = &v
 		}
+		exportCredentials, credentialsStatus := exportAccountCredentials(acc)
 		dataAccounts = append(dataAccounts, DataAccount{
 			Name:               acc.Name,
 			Notes:              acc.Notes,
 			Platform:           acc.Platform,
 			Type:               acc.Type,
-			Credentials:        acc.Credentials,
+			Credentials:        exportCredentials,
+			CredentialsStatus:  credentialsStatus,
 			Extra:              acc.Extra,
 			ProxyKey:           proxyKey,
 			Concurrency:        acc.Concurrency,

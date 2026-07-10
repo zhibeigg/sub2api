@@ -34,6 +34,32 @@ const usageLogSuccessFilterUL = "ul.actual_cost > 0"
 // 配套要求查询里 LEFT JOIN groups g ON g.id = ul.group_id 与 LEFT JOIN accounts a ON a.id = ul.account_id。
 const usageLogEffectivePlatformExpr = "COALESCE(NULLIF(g.platform,''), a.platform)"
 
+func usageLogEffectivePlatformFilterExpr(alias string) string {
+	prefix := ""
+	if alias != "" {
+		prefix = alias + "."
+	}
+	return fmt.Sprintf("COALESCE((SELECT NULLIF(gp.platform, '') FROM groups gp WHERE gp.id = %sgroup_id), (SELECT ap.platform FROM accounts ap WHERE ap.id = %saccount_id))", prefix, prefix)
+}
+
+func appendUsageLogPlatformWhereCondition(conditions []string, args []any, platform, alias string) ([]string, []any) {
+	platform = strings.TrimSpace(platform)
+	if platform == "" {
+		return conditions, args
+	}
+	conditions = append(conditions, fmt.Sprintf("%s = $%d", usageLogEffectivePlatformFilterExpr(alias), len(args)+1))
+	args = append(args, platform)
+	return conditions, args
+}
+
+func appendUsageLogPlatformQueryFilter(query string, args []any, platform, alias string) (string, []any) {
+	conditions, args := appendUsageLogPlatformWhereCondition(nil, args, platform, alias)
+	if len(conditions) == 0 {
+		return query, args
+	}
+	return query + " AND " + conditions[0], args
+}
+
 // dateFormatWhitelist 将 granularity 参数映射为 PostgreSQL TO_CHAR 格式字符串，防止外部输入直接拼入 SQL
 var dateFormatWhitelist = map[string]string{
 	"hour":  "YYYY-MM-DD HH24:00",

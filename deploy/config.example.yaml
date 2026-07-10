@@ -97,6 +97,11 @@ security:
       - "api.minimaxi.com"
       - "generativelanguage.googleapis.com"
       - "cloudcode-pa.googleapis.com"
+      - "adobeid-na1.services.adobe.com"
+      - "ims-na1.adobelogin.com"
+      - "firefly.adobe.io"
+      - "firefly-3p.ff.adobe.io"
+      - "*.ff.adobe.io"
       - "*.openai.azure.com"
     # Allowed hosts for pricing data download
     # 允许下载定价数据的主机列表
@@ -1120,6 +1125,25 @@ gemini:
         # Cooldown time (minutes) after hitting quota
         # 达到配额后的冷却时间（分钟）
         cooldown_minutes: 5
+
+# =============================================================================
+# Adobe Firefly Configuration / Adobe Firefly 平台配置
+# =============================================================================
+adobe:
+  # Upstream request timeout in seconds / 上游请求超时（秒）
+  request_timeout_seconds: 120
+  # Synchronous image polling interval / 同步图片轮询间隔（秒）
+  image_poll_interval_seconds: 2
+  # Maximum image polling attempts / 图片最大轮询次数
+  image_max_poll_attempts: 150
+  # Active video task absolute TTL (72 hours) / 活动视频任务绝对 TTL（72 小时）
+  video_task_ttl_seconds: 259200
+  # Terminal video task cache TTL (24 hours) / 视频终态缓存 TTL（24 小时）
+  video_terminal_ttl_seconds: 86400
+  # Refresh access tokens this many seconds before expiry / token 提前刷新窗口（秒）
+  token_refresh_skew_seconds: 300
+  # Profile and credits cache TTL / Profile 与 credits 缓存 TTL（秒）
+  credits_cache_ttl_seconds: 300
 
 # =============================================================================
 # Kiro Configuration (Kiro / AWS CodeWhisperer 平台配置)

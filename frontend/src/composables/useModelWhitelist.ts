@@ -20,6 +20,12 @@ const openaiModels = [
   'gpt-image-1', 'gpt-image-1.5', 'gpt-image-2'
 ]
 
+// Adobe Firefly public media catalog
+export const adobeModels = [
+  'nano-banana-pro', 'nano-banana-v2', 'nano-banana',
+  'veo3', 'veo3.1', 'sora', 'sora-2-pro'
+]
+
 // Anthropic Claude
 export const claudeModels = [
   'claude-3-5-sonnet-20241022', 'claude-3-5-sonnet-20240620',
@@ -231,6 +237,7 @@ const perplexityModels = [
 // 所有模型（去重）
 const allModelsList: string[] = [
   ...openaiModels,
+  ...adobeModels,
   ...claudeModels,
   ...geminiModels,
   ...zhipuModels,
@@ -409,6 +416,7 @@ export const commonErrorCodes = [
 export function getModelsByPlatform(platform: string): string[] {
   switch (platform) {
     case 'openai': return openaiModels
+    case 'adobe': return adobeModels
     case 'anthropic':
     case 'claude':
     case 'kiro': return claudeModels
@@ -436,6 +444,7 @@ export function getModelsByPlatform(platform: string): string[] {
 
 // 按平台获取预设映射
 export function getPresetMappingsByPlatform(platform: string) {
+  if (platform === 'adobe') return adobeModels.map(model => ({ label: model, from: model, to: model, color: 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400' }))
   if (platform === 'openai') return openaiPresetMappings
   if (platform === 'gemini') return geminiPresetMappings
   if (platform === 'grok' || platform === 'xai') return grokPresetMappings

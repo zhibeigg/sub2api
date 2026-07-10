@@ -33,6 +33,7 @@ export default {
         cacheReadPrice: '缓存读取',
         imageOutputPrice: '图片输出',
         perRequestPrice: '每次请求',
+        perSecondPrice: '每秒价格',
         intervals: '阶梯定价',
         unitPerMillion: '/ 1M token',
         unitPerRequest: '/ 次'
@@ -93,7 +94,8 @@ export default {
       billingMode: {
         token: 'Token',
         perRequest: '按次',
-        image: '图片（按次）'
+        image: '图片（按张）',
+        video: '视频（按秒）'
       },
       form: {
         name: '名称',
@@ -125,11 +127,13 @@ export default {
         inclusive: '（含）',
         addInterval: '添加区间',
         requestTiers: '按次计费层级',
-        imageTiers: '图片计费层级（按次）',
+        imageTiers: '图片计费层级（按张）',
+        videoTiers: '视频计费层级（按秒）',
         addTier: '添加层级',
         noTiersYet: '暂无层级，点击添加配置按次计费价格',
         noPricingRules: '暂无定价规则，点击"添加"创建',
         perRequestPrice: '单次价格',
+        perSecondPrice: '每秒价格',
         perRequestPriceRequired: '按次/图片计费模式必须设置默认价格或至少一个计费层级',
         tierLabel: '层级',
         resolution: '分辨率',
@@ -150,6 +154,7 @@ export default {
         restrictModelsHint: '开启后，仅允许模型定价列表中的模型。不在列表中的模型请求将被拒绝。',
         defaultPerRequestPrice: '默认单次价格（未命中层级时使用）',
         defaultImagePrice: '默认图片价格（未命中层级时使用）',
+        defaultVideoPrice: '默认视频每秒价格（未命中层级时使用）',
         platformConfig: '平台配置',
         webSearchEmulation: 'Web Search 模拟',
         webSearchEmulationHint: '⚠️ 开启后该渠道下所有 Anthropic 分组的账号将自动拦截 web_search 请求，请谨慎操作',

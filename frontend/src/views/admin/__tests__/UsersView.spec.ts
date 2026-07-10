@@ -239,6 +239,8 @@ describe('admin UsersView', () => {
     await vi.advanceTimersByTimeAsync(50)
     await flushPromises()
 
+    expect(localStorage.getItem('user-column-settings-version')).toBe('4')
+    expect(localStorage.getItem('user-hidden-columns')).toContain('usage_adobe')
     expect(wrapper.get('[data-test="row-order"]').text()).toBe('last-used-first@example.com,usage-first@example.com')
 
     await wrapper.get('[data-test="usage-sort-trigger-usage"]').trigger('click')

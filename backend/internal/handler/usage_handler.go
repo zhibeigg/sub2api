@@ -193,11 +193,21 @@ func (h *UsageHandler) parseUserUsageFilters(c *gin.Context, requireRange bool) 
 		}
 	}
 
+	platform := strings.TrimSpace(c.Query("platform"))
+	if platform != "" {
+		if err := service.ValidatePlatform(platform); err != nil {
+			response.BadRequest(c, err.Error())
+			return nil, false
+		}
+		platform = service.NormalizePlatform(platform)
+	}
+
 	return &userUsageFilters{
 		Filters: usagestats.UsageLogFilters{
 			UserID:            subject.UserID,
 			APIKeyID:          apiKeyID,
 			GroupID:           groupID,
+			Platform:          platform,
 			Model:             strings.TrimSpace(c.Query("model")),
 			ModelFilterSource: usagestats.ModelSourceRequested,
 			RequestType:       requestType,

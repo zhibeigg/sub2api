@@ -36,7 +36,7 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int64("api_key_id"),
 		field.Int64("account_id"),
 		field.String("request_id").
-			MaxLen(64).
+			MaxLen(255).
 			NotEmpty(),
 		field.String("model").
 			MaxLen(100).
@@ -56,7 +56,7 @@ func (UsageLog) Fields() []ent.Field {
 		field.Int64("channel_id").Optional().Nillable().Comment("渠道 ID"),
 		field.String("model_mapping_chain").MaxLen(500).Optional().Nillable().Comment("模型映射链"),
 		field.String("billing_tier").MaxLen(50).Optional().Nillable().Comment("计费层级标签"),
-		field.String("billing_mode").MaxLen(20).Optional().Nillable().Comment("计费模式：token/per_request/image"),
+		field.String("billing_mode").MaxLen(20).Optional().Nillable().Comment("计费模式：token/per_request/image/video"),
 		field.Int64("group_id").
 			Optional().
 			Nillable(),
@@ -150,7 +150,7 @@ func (UsageLog) Fields() []ent.Field {
 			Optional().
 			SchemaType(map[string]string{dialect.Postgres: "jsonb"}),
 
-		// 视频生成字段（Grok 视频按秒计费；billing_mode 走 token/其他模式时这些列仍标记视频用量）
+		// 视频生成字段（媒体平台视频按秒计费；billing_mode 走 token/其他模式时这些列仍标记视频用量）
 		field.Int("video_count").
 			Default(0).
 			Comment("视频生成数量；>0 表示本行是视频生成用量"),

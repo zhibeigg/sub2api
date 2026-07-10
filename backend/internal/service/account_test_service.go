@@ -73,12 +73,30 @@ type AccountTestService struct {
 	cfg                       *config.Config
 	tlsFPProfileService       *TLSFingerprintProfileService
 	kiroUsageService          *KiroUsageService
+	adobeTokenProvider        *AdobeTokenProvider
 }
 
 // SetKiroUsageService injects the Kiro usage service used to health-check Kiro
 // accounts (via a live usage-limits probe). Optional.
 func (s *AccountTestService) SetKiroUsageService(k *KiroUsageService) {
 	s.kiroUsageService = k
+}
+
+func (s *AccountTestService) SetAdobeTokenProvider(provider *AdobeTokenProvider) {
+	s.adobeTokenProvider = provider
+}
+
+func (s *AccountTestService) RefreshAdobeCredentials(ctx context.Context, account *Account) (*Account, error) {
+	if s == nil || s.adobeTokenProvider == nil {
+		return nil, errors.New("Adobe token provider not configured")
+	}
+	if _, err := s.adobeTokenProvider.ForceRefresh(ctx, account); err != nil {
+		return nil, err
+	}
+	if _, err := s.adobeTokenProvider.RefreshProfileAndCredits(ctx, account, true); err != nil {
+		return nil, err
+	}
+	return s.accountRepo.GetByID(ctx, account.ID)
 }
 
 // NewAccountTestService creates a new AccountTestService
@@ -191,6 +209,9 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	}
 
 	// Route to platform-specific test method
+	if account.IsAdobe() {
+		return s.testAdobeAccountConnection(c, account)
+	}
 	if account.IsOpenAI() {
 		return s.testOpenAIAccountConnection(c, account, modelID, prompt, normalizeAccountTestMode(mode))
 	}
@@ -212,6 +233,29 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	}
 
 	return s.testClaudeAccountConnection(c, account, modelID)
+}
+
+func (s *AccountTestService) testAdobeAccountConnection(c *gin.Context, account *Account) error {
+	if s.adobeTokenProvider == nil {
+		return s.sendErrorAndEnd(c, "Adobe token provider not configured")
+	}
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+	c.Writer.Flush()
+	s.sendEvent(c, TestEvent{Type: "test_start", Model: "adobe-profile-credits"})
+	credits, err := s.adobeTokenProvider.RefreshProfileAndCredits(c.Request.Context(), account, true)
+	if err != nil {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Adobe profile/credits check failed: %s", err.Error()))
+	}
+	message := "Adobe account healthy (credits unknown)"
+	if credits != nil && credits.Known && credits.Available != nil {
+		message = fmt.Sprintf("Adobe account healthy (credits: %.2f)", *credits.Available)
+	}
+	s.sendEvent(c, TestEvent{Type: "content", Text: message})
+	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
+	return nil
 }
 
 // testClaudeAccountConnection tests an Anthropic Claude account's connection

@@ -122,6 +122,10 @@ func TestDeriveUpstreamEndpoint(t *testing.T) {
 		{"openai image generations", EndpointImagesGenerations, "/v1/images/generations", service.PlatformOpenAI, EndpointImagesGenerations},
 		{"openai image edits", EndpointImagesEdits, "/openai/v1/images/edits", service.PlatformOpenAI, EndpointImagesEdits},
 		{"grok video generations", EndpointVideosGenerations, "/v1/videos/generations", service.PlatformGrok, EndpointVideosGenerations},
+		{"adobe image generations", EndpointImagesGenerations, "/v1/images/generations", service.PlatformAdobe, EndpointAdobeImageSubmit},
+		{"adobe image edits", EndpointImagesEdits, "/v1/images/edits", service.PlatformAdobe, EndpointAdobeImageSubmit},
+		{"adobe video generations", EndpointVideosGenerations, "/v1/videos/generations", service.PlatformAdobe, EndpointAdobeVideoSubmit},
+		{"adobe video status", EndpointVideos, "/v1/videos/task-1", service.PlatformAdobe, EndpointAdobeVideoStatus},
 		{"grok video status", EndpointVideos, "/videos/req_123", service.PlatformGrok, EndpointVideos},
 
 		// Antigravity — uses inbound to pick Claude vs Gemini upstream.

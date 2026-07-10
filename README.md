@@ -173,8 +173,9 @@ Sub2API is an AI API gateway platform designed to distribute and manage API quot
 
 ## Features
 
-- **Multi-Account Management** - Support multiple upstream account types (OAuth, API Key); native integration for Anthropic, OpenAI, Gemini, Antigravity, Grok, and Kiro (AWS CodeWhisperer, serving Claude models)
+- **Multi-Account Management** - Support multiple upstream account types (OAuth, API Key); native integration for Anthropic, OpenAI, Gemini, Antigravity, Grok, Kiro (AWS CodeWhisperer, serving Claude models), and Adobe Firefly
 - **Native Kiro Integration** - Built-in AWS Builder ID device code, IAM Identity Center (PKCE), SSO token import, and credentials-JSON login; automatic token refresh, subscription/usage/overage queries, health checks, dynamic model discovery, and compact daily request/token plus account-billed/user-billed statistics in the usage window
+- **Native Adobe Firefly Integration** - Secure IMS credential lifecycle, automatic access-token renewal, profile and credits visibility, synchronous OpenAI-compatible image generation/editing, Redis-backed asynchronous video tasks, and idempotent media billing ([Integration Guide](docs/ADOBE_INTEGRATION.md))
 - **API Key Distribution** - Generate and manage API Keys for users
 - **Precise Billing** - Token-level usage tracking and cost calculation
 - **Smart Scheduling** - Intelligent account selection with sticky sessions
@@ -659,6 +660,22 @@ Simple Mode is designed for individual developers or internal teams who want qui
 - Enable: Set environment variable `RUN_MODE=simple`
 - Difference: Hides SaaS-related features and skips billing process
 - Security note: In production, you must also set `SIMPLE_MODE_CONFIRM=true` to allow startup
+
+---
+
+## Adobe IMS / Firefly Support
+
+Sub2API supports Adobe as an independent `adobe` platform. Adobe groups only schedule Adobe accounts and expose Firefly media through the existing OpenAI-compatible media routes.
+
+- Single-step Adobe account creation with `type = oauth`; no browser OAuth second step.
+- Secure keep/replace/clear credential editing for access token, cookie, device token/device ID, password recovery metadata, and expiry.
+- Automatic IMS renewal, profile and credits visibility, account testing, proxy support, model allowlists/mapping, scheduling, rate limits, and platform quotas.
+- Images: `/v1/images/generations` and `/v1/images/edits`, with `url` or `b64_json` results.
+- Videos: `POST /v1/videos/generations` plus `GET /v1/videos/{request_id}`; Redis snapshots and idempotent success billing prevent duplicate charges.
+- Strict media pricing: image `1K`/`2K`/`4K` per output and video `720p`/`1080p` per second. A missing tier is unavailable; an explicit zero is free.
+- Public models: `nano-banana-pro`, `nano-banana-v2`, `nano-banana`, `veo3`, `veo3.1`, `sora`, and `sora-2-pro`.
+
+See the [Adobe integration guide](docs/ADOBE_INTEGRATION.md) for credentials, configuration, API examples, billing semantics, and operational checks.
 
 ---
 

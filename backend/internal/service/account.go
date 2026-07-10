@@ -232,6 +232,14 @@ func (a *Account) IsGrok() bool {
 	return a.Platform == PlatformGrok
 }
 
+func (a *Account) IsAdobe() bool {
+	return a != nil && a.Platform == PlatformAdobe
+}
+
+func (a *Account) IsAdobeOAuth() bool {
+	return a.IsAdobe() && a.Type == AccountTypeOAuth
+}
+
 func (a *Account) IsGrokOAuth() bool {
 	return a.IsGrok() && a.Type == AccountTypeOAuth
 }
@@ -566,6 +574,9 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 		if a.Platform == domain.PlatformGrok {
 			return xai.DefaultModelMapping()
 		}
+		if a.Platform == domain.PlatformAdobe {
+			return domain.DefaultAdobeModelMapping
+		}
 		// Bedrock 默认映射由 forwardBedrock 统一处理（需配合 region prefix 调整）
 		return nil
 	}
@@ -576,6 +587,9 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 		}
 		if a.Platform == domain.PlatformGrok {
 			return xai.DefaultModelMapping()
+		}
+		if a.Platform == domain.PlatformAdobe {
+			return domain.DefaultAdobeModelMapping
 		}
 		return nil
 	}
@@ -604,6 +618,9 @@ func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]stri
 	}
 	if a.Platform == domain.PlatformGrok {
 		return xai.DefaultModelMapping()
+	}
+	if a.Platform == domain.PlatformAdobe {
+		return domain.DefaultAdobeModelMapping
 	}
 	return nil
 }

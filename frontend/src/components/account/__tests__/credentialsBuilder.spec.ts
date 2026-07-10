@@ -10,8 +10,53 @@ import {
   getHeaderOverrideTemplate,
   isHeaderOverridePlatform,
   splitHeaderOverridesObject,
-  validateHeaderOverrideRows
+  validateHeaderOverrideRows,
+  buildAdobeCreateCredentials,
+  buildAdobeCredentialUpdate,
+  createAdobeCredentialEditState,
+  resetAdobeCredentialEditState,
+  validateAdobeCredentialSource
 } from '../credentialsBuilder'
+
+describe('Adobe credentials', () => {
+  it('builds trimmed create credentials without empty secrets', () => {
+    expect(buildAdobeCreateCredentials({
+      access_token: ' token ', cookie: ' ', device_token: ' dt ', device_id: ' did ',
+      password: ' recovery ', expires_at: ' 2026-08-01T00:00:00Z '
+    })).toEqual({
+      access_token: 'token', device_token: 'dt', device_id: 'did',
+      password: 'recovery', expires_at: '2026-08-01T00:00:00Z'
+    })
+  })
+
+  it('requires a complete device pair and a usable credential source', () => {
+    expect(validateAdobeCredentialSource({ device_token: 'dt' })).toBe('device_pair')
+    expect(validateAdobeCredentialSource({ password: 'metadata-only' })).toBe('missing_source')
+    expect(validateAdobeCredentialSource({ cookie: 'cookie' })).toBeNull()
+    expect(validateAdobeCredentialSource({ device_token: 'dt', device_id: 'id' })).toBeNull()
+  })
+
+  it('keeps fields by default and emits only replace/clear operations', () => {
+    const state = createAdobeCredentialEditState()
+    state.access_token = { action: 'replace', value: ' new-token ' }
+    state.cookie = { action: 'clear', value: 'ignored' }
+    expect(buildAdobeCredentialUpdate(state)).toEqual({
+      credentials: { access_token: 'new-token' },
+      clear_credentials: ['cookie']
+    })
+  })
+
+  it('clears the device pair together and resets transient values', () => {
+    const state = createAdobeCredentialEditState()
+    state.device_token = { action: 'clear', value: '' }
+    state.device_id = { action: 'replace', value: 'replacement' }
+    expect(buildAdobeCredentialUpdate(state)).toEqual({
+      clear_credentials: ['device_token', 'device_id']
+    })
+    resetAdobeCredentialEditState(state)
+    expect(Object.values(state).every((field) => field.action === 'keep' && field.value === '')).toBe(true)
+  })
+})
 
 describe('applyInterceptWarmup', () => {
   it('create + enabled=true: should set intercept_warmup_requests to true', () => {

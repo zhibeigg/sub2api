@@ -861,6 +861,23 @@ func TestAdminService_ListGroups_WithSearch(t *testing.T) {
 	})
 }
 
+func TestAdminService_ValidateFallbackGroup_RejectsAdobeCrossPlatformChain(t *testing.T) {
+	fallbackID := int64(2)
+	repo := &groupRepoStubForFallbackCycle{
+		groups: map[int64]*Group{
+			fallbackID: {
+				ID:       fallbackID,
+				Platform: PlatformOpenAI,
+			},
+		},
+	}
+	svc := &adminServiceImpl{groupRepo: repo}
+
+	err := svc.validateFallbackGroup(context.Background(), 0, fallbackID, PlatformAdobe)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "adobe fallback group must use adobe platform")
+}
+
 func TestAdminService_ValidateFallbackGroup_DetectsCycle(t *testing.T) {
 	groupID := int64(1)
 	fallbackID := int64(2)

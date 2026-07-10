@@ -495,6 +495,7 @@ export default {
         usageOpenAI: 'Usage (OpenAI)',
         usageGemini: 'Usage (Gemini)',
         usageAntigravity: 'Usage (Antigravity)',
+        usageAdobe: 'Usage (Adobe)',
         concurrency: 'Concurrency',
         status: 'Status',
         lastActive: 'Last Active',

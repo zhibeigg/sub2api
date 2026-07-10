@@ -11,20 +11,34 @@ type TokenCacheInvalidator interface {
 }
 
 type CompositeTokenCacheInvalidator struct {
-	cache GeminiTokenCache // 统一使用一个缓存接口，通过缓存键前缀区分平台
+	cache              GeminiTokenCache // 统一使用一个缓存接口，通过缓存键前缀区分平台
+	adobeTokenProvider *AdobeTokenProvider
 }
 
 func NewCompositeTokenCacheInvalidator(cache GeminiTokenCache) *CompositeTokenCacheInvalidator {
-	return &CompositeTokenCacheInvalidator{
-		cache: cache,
+	return &CompositeTokenCacheInvalidator{cache: cache}
+}
+
+func (c *CompositeTokenCacheInvalidator) SetAdobeTokenProvider(provider *AdobeTokenProvider) {
+	if c != nil {
+		c.adobeTokenProvider = provider
 	}
 }
 
 func (c *CompositeTokenCacheInvalidator) InvalidateToken(ctx context.Context, account *Account) error {
-	if c == nil || c.cache == nil || account == nil {
+	if c == nil || account == nil {
 		return nil
 	}
 	if account.Type != AccountTypeOAuth {
+		return nil
+	}
+	if account.Platform == PlatformAdobe {
+		if c.adobeTokenProvider != nil {
+			return c.adobeTokenProvider.InvalidateToken(ctx, account)
+		}
+		return nil
+	}
+	if c.cache == nil {
 		return nil
 	}
 

@@ -177,6 +177,38 @@ type AICredit struct {
 	MinimumBalance float64 `json:"minimum_balance,omitempty"`
 }
 
+type AdobeCreditsInfo struct {
+	Known     bool       `json:"known"`
+	State     string     `json:"state"` // unknown / zero / available
+	Available *float64   `json:"available,omitempty"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+}
+
+func AdobeCreditsInfoFromExtra(extra map[string]any) *AdobeCreditsInfo {
+	info := &AdobeCreditsInfo{State: "unknown"}
+	if extra == nil {
+		return info
+	}
+	known, _ := extra["adobe_credits_known"].(bool)
+	if rawUpdatedAt, ok := extra["adobe_credits_updated_at"].(string); ok {
+		if updatedAt, err := time.Parse(time.RFC3339, rawUpdatedAt); err == nil {
+			info.UpdatedAt = &updatedAt
+		}
+	}
+	if !known {
+		return info
+	}
+	credits := parseExtraFloat64(extra["adobe_credits"])
+	info.Known = true
+	info.Available = &credits
+	if credits == 0 {
+		info.State = "zero"
+	} else {
+		info.State = "available"
+	}
+	return info
+}
+
 // UsageInfo 账号使用量信息
 type UsageInfo struct {
 	Source             string         `json:"source,omitempty"`               // "passive" or "active"
@@ -194,6 +226,9 @@ type UsageInfo struct {
 
 	// Antigravity 多模型配额
 	AntigravityQuota map[string]*AntigravityModelQuota `json:"antigravity_quota,omitempty"`
+
+	// Adobe Firefly credits；Known=false 与 Available=0 语义严格区分。
+	AdobeCredits *AdobeCreditsInfo `json:"adobe_credits,omitempty"`
 
 	// Grok / xAI 被动额度快照
 	GrokRequestQuota       *xai.QuotaWindow `json:"grok_request_quota,omitempty"`
@@ -308,12 +343,17 @@ type AccountUsageService struct {
 	identityCache           IdentityCache
 	tlsFPProfileService     *TLSFingerprintProfileService
 	kiroUsageService        *KiroUsageService
+	adobeTokenProvider      *AdobeTokenProvider
 }
 
 // SetKiroUsageService injects the Kiro usage service used for active probes.
 // Optional; when nil, Kiro usage is served passively from the Extra snapshot.
 func (s *AccountUsageService) SetKiroUsageService(k *KiroUsageService) {
 	s.kiroUsageService = k
+}
+
+func (s *AccountUsageService) SetAdobeTokenProvider(provider *AdobeTokenProvider) {
+	s.adobeTokenProvider = provider
 }
 
 // NewAccountUsageService 创建AccountUsageService实例
@@ -353,6 +393,17 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 	account, err := s.accountRepo.GetByID(ctx, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("get account failed: %w", err)
+	}
+
+	if account.IsAdobe() {
+		if s.adobeTokenProvider == nil {
+			return &UsageInfo{Source: "active", AdobeCredits: AdobeCreditsInfoFromExtra(account.Extra)}, nil
+		}
+		credits, refreshErr := s.adobeTokenProvider.RefreshProfileAndCredits(ctx, account, forceProbe)
+		if refreshErr != nil {
+			return &UsageInfo{Source: "active", AdobeCredits: AdobeCreditsInfoFromExtra(account.Extra), ErrorCode: "credits_unknown", Error: refreshErr.Error()}, nil
+		}
+		return &UsageInfo{Source: "active", UpdatedAt: credits.UpdatedAt, AdobeCredits: credits}, nil
 	}
 
 	if account.Platform == PlatformOpenAI && account.Type == AccountTypeOAuth {

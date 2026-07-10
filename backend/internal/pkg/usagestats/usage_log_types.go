@@ -274,7 +274,8 @@ type UsageLogFilters struct {
 	// 通过子查询 user_id IN (SELECT id FROM users WHERE promo_code_id = ?) 实现，
 	// usage_logs 表本身不冗余该列。
 	PromoCodeID int64
-	Model     string
+	Platform    string
+	Model       string
 	// ModelFilterSource controls how Model is matched. Empty preserves raw usage_logs.model semantics.
 	ModelFilterSource string
 	RequestType       *int16

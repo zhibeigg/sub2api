@@ -173,6 +173,14 @@ func (h *UsageHandler) List(c *gin.Context) {
 		endTime = &t
 	}
 
+	platform := service.NormalizePlatform(c.Query("platform"))
+	if platform != "" {
+		if err := service.ValidatePlatform(platform); err != nil {
+			response.BadRequest(c, err.Error())
+			return
+		}
+	}
+
 	params := pagination.PaginationParams{
 		Page:      page,
 		PageSize:  pageSize,
@@ -185,6 +193,7 @@ func (h *UsageHandler) List(c *gin.Context) {
 		AccountID:   accountID,
 		GroupID:     groupID,
 		PromoCodeID: promoCodeID,
+		Platform:    platform,
 		Model:       model,
 		RequestType: requestType,
 		Stream:      stream,
@@ -327,6 +336,14 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 		endTime = now
 	}
 
+	platform := service.NormalizePlatform(c.Query("platform"))
+	if platform != "" {
+		if err := service.ValidatePlatform(platform); err != nil {
+			response.BadRequest(c, err.Error())
+			return
+		}
+	}
+
 	// Build filters and call GetStatsWithFilters
 	filters := usagestats.UsageLogFilters{
 		UserID:      userID,
@@ -334,6 +351,7 @@ func (h *UsageHandler) Stats(c *gin.Context) {
 		AccountID:   accountID,
 		GroupID:     groupID,
 		PromoCodeID: promoCodeID,
+		Platform:    platform,
 		Model:       model,
 		RequestType: requestType,
 		Stream:      stream,

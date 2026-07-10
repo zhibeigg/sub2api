@@ -9,6 +9,7 @@ import {
   imagePricingI18nKey,
   supportsImagePricingPlatform,
   supportsVideoPricingPlatform,
+  supportsVideo480pTier,
   videoPricingI18nKey,
 } from "../groupsImagePricing";
 
@@ -18,8 +19,10 @@ describe("groups image pricing platform support", () => {
     expect(imagePricingPlatforms.has("grok")).toBe(true);
   });
 
-  it("enables video pricing controls for Grok only", () => {
+  it("enables video pricing controls for Grok and Adobe", () => {
     expect(supportsVideoPricingPlatform("grok")).toBe(true);
+    expect(supportsVideoPricingPlatform("adobe")).toBe(true);
+    expect(supportsVideo480pTier("adobe")).toBe(false);
     expect(supportsVideoPricingPlatform("openai")).toBe(false);
   });
 
@@ -42,6 +45,13 @@ describe("groups image pricing platform support", () => {
     expect(getVideoPricePlaceholder("grok", "video_price_480p")).toBe("0.05");
     expect(getVideoPricePlaceholder("grok", "video_price_720p")).toBe("0.07");
     expect(getVideoPricePlaceholder("grok", "video_price_1080p")).toBe("0.25");
+  });
+
+  it("keeps Adobe strict media prices empty instead of using placeholders", () => {
+    expect(getImagePricePlaceholder("adobe", "image_price_1k")).toBe("");
+    expect(getVideoPricePlaceholder("adobe", "video_price_720p")).toBe("");
+    expect(getDefaultImagePreviewPrice("adobe", "image_price_2k")).toBeNull();
+    expect(getDefaultVideoPreviewPrice("adobe", "video_price_1080p")).toBeNull();
   });
 
   it("keeps non-Grok image placeholders on the generic image card", () => {

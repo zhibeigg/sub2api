@@ -177,8 +177,9 @@ Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的
 
 ## 核心功能
 
-- **多账号管理** - 支持多种上游账号类型（OAuth、API Key），原生集成 Anthropic、OpenAI、Gemini、Antigravity、Grok 与 Kiro（AWS CodeWhisperer，提供 Claude 模型）
+- **多账号管理** - 支持多种上游账号类型（OAuth、API Key），原生集成 Anthropic、OpenAI、Gemini、Antigravity、Grok、Kiro（AWS CodeWhisperer，提供 Claude 模型）与 Adobe Firefly
 - **Kiro 原生接入** - 内建 AWS Builder ID 设备码、IAM Identity Center（PKCE）、SSO Token 导入与凭证 JSON 四种登录方式，支持 token 自动刷新、订阅/用量/超额查询、健康检查与动态模型发现
+- **Adobe Firefly 原生接入** - 支持 IMS 凭据安全管理与自动续期、profile/credits 展示、OpenAI Images 兼容图片生成与编辑、Redis 异步视频任务和成功轮询幂等媒体结算（[接入文档](docs/ADOBE_INTEGRATION.md)）
 - **API Key 分发** - 为用户生成和管理 API Key
 - **精确计费** - Token 级别的用量追踪和成本计算
 - **智能调度** - 智能账号选择，支持粘性会话
@@ -727,6 +728,22 @@ go generate ./cmd/server
 - 启用方式：设置环境变量 `RUN_MODE=simple`
 - 功能差异：隐藏 SaaS 相关功能，跳过计费流程
 - 安全注意事项：生产环境需同时设置 `SIMPLE_MODE_CONFIRM=true` 才允许启动
+
+---
+
+## Adobe IMS / Firefly 支持
+
+Sub2API 将 Adobe 作为独立的 `adobe` 平台接入。Adobe 分组只调度 Adobe 账号，并通过现有 OpenAI 兼容媒体路由提供 Firefly 能力。
+
+- Adobe 账号固定复用 `oauth` 类型，但采用单步凭据录入，不进入浏览器 OAuth 第二步。
+- access token、cookie、device token/device ID、password 恢复元数据与过期时间支持安全的保留、替换、清除三态编辑。
+- 支持 IMS 自动续期、profile/credits 展示、账号测试、代理、模型白名单/映射、调度、限流与 Adobe 平台配额。
+- 图片：`/v1/images/generations` 与 `/v1/images/edits`，支持 `url` 或 `b64_json` 返回。
+- 视频：`POST /v1/videos/generations` 与 `GET /v1/videos/{request_id}`，使用 Redis 不可变快照和成功轮询幂等结算，避免重复扣费。
+- 严格媒体定价：图片 `1K`/`2K`/`4K` 按张，视频 `720p`/`1080p` 按秒；缺失档位不可用，显式 `0` 表示免费。
+- 公开模型：`nano-banana-pro`、`nano-banana-v2`、`nano-banana`、`veo3`、`veo3.1`、`sora`、`sora-2-pro`。
+
+凭据、配置、API 示例、账务语义和运维检查详见 [Adobe 接入文档](docs/ADOBE_INTEGRATION.md)。
 
 ---
 

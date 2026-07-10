@@ -60,15 +60,29 @@ func (s *adminServiceImpl) GetAccountsByIDs(ctx context.Context, ids []int64) ([
 }
 
 func normalizeAccountConcurrency(platform, accountType string, concurrency int) int {
-	if platform == PlatformGrok && accountType == AccountTypeOAuth {
-		if concurrency <= 0 {
-			return 1
+	if accountType == AccountTypeOAuth {
+		if defaultConcurrency := DefaultAccountConcurrency(platform); concurrency <= 0 && defaultConcurrency > 0 {
+			return defaultConcurrency
 		}
 	}
 	return concurrency
 }
 
 func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccountInput) (*Account, error) {
+	if input == nil {
+		return nil, errors.New("account input is required")
+	}
+	input.Platform = NormalizePlatform(input.Platform)
+	input.Type = strings.ToLower(strings.TrimSpace(input.Type))
+	if err := ValidatePlatformAccountType(input.Platform, input.Type); err != nil {
+		return nil, err
+	}
+	if input.Platform == PlatformAdobe {
+		NormalizeAdobeCredentialExpiry(input.Credentials)
+		if err := ValidateAdobeAccountCredentials(input.Type, input.Credentials); err != nil {
+			return nil, err
+		}
+	}
 	// 绑定分组
 	groupIDs := input.GroupIDs
 	// 如果没有指定分组,自动绑定对应平台的默认分组
@@ -82,6 +96,12 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 					break
 				}
 			}
+		}
+	}
+
+	if input.Platform == PlatformAdobe && len(groupIDs) > 0 {
+		if err := s.validateAccountGroupPlatform(ctx, input.Platform, groupIDs); err != nil {
+			return nil, err
 		}
 	}
 
@@ -223,10 +243,12 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	}
 	if account.IsCredentialShadow() && input.Credentials != nil {
 		account.Credentials = sanitizeSparkShadowCredentials(input.Credentials)
-	} else if len(input.Credentials) > 0 {
-		// 敏感子键采用"incoming 没提供就保留"的合并语义：前端响应已脱敏，
-		// 全对象 PUT 编辑时不会再带回 token，避免覆盖时清空已有凭证。
-		account.Credentials = MergePreservingSensitiveCreds(account.Credentials, input.Credentials)
+	} else if len(input.Credentials) > 0 || len(input.ClearCredentials) > 0 {
+		mergedCredentials, mergeErr := MergeAccountCredentials(account.Credentials, input.Credentials, input.ClearCredentials)
+		if mergeErr != nil {
+			return nil, mergeErr
+		}
+		account.Credentials = mergedCredentials
 		// 校验并规范化请求头覆写配置（header 名小写化、格式检查）
 		if err := NormalizeHeaderOverrideCredentials(account.Credentials); err != nil {
 			return nil, err
@@ -309,10 +331,25 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		account.AutoPauseOnExpired = *input.AutoPauseOnExpired
 	}
 
+	if err := ValidatePlatformAccountType(account.Platform, account.Type); err != nil {
+		return nil, err
+	}
+	if account.IsAdobe() {
+		NormalizeAdobeCredentialExpiry(account.Credentials)
+		if err := ValidateAdobeAccountCredentials(account.Type, account.Credentials); err != nil {
+			return nil, err
+		}
+	}
+
 	// 先验证分组是否存在（在任何写操作之前）
 	if input.GroupIDs != nil {
 		if err := s.validateGroupIDsExist(ctx, *input.GroupIDs); err != nil {
 			return nil, err
+		}
+		if account.IsAdobe() {
+			if err := s.validateAccountGroupPlatform(ctx, account.Platform, *input.GroupIDs); err != nil {
+				return nil, err
+			}
 		}
 
 		// 检查混合渠道风险（除非用户已确认）
@@ -846,6 +883,19 @@ func (s *adminServiceImpl) checkMixedChannelRisk(ctx context.Context, currentAcc
 		}
 	}
 
+	return nil
+}
+
+func (s *adminServiceImpl) validateAccountGroupPlatform(ctx context.Context, platform string, groupIDs []int64) error {
+	for _, groupID := range groupIDs {
+		group, err := s.groupRepo.GetByID(ctx, groupID)
+		if err != nil {
+			return err
+		}
+		if group.Platform != platform {
+			return fmt.Errorf("account platform %q cannot be bound to group %d with platform %q", platform, groupID, group.Platform)
+		}
+	}
 	return nil
 }
 

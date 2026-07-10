@@ -278,12 +278,12 @@
                   </div>
                 </template>
 
-                <template v-else-if="model.billingMode === 'image'">
-                  <div class="flex justify-between">
-                    <span class="text-gray-500 dark:text-gray-400">{{ t('availableChannels.pricing.imageOutputPrice') }}</span>
+                <template v-else-if="model.billingMode === 'image' || model.billingMode === 'video'">
+                  <div v-if="mediaPrice(model.pricing) != null" class="flex justify-between">
+                    <span class="text-gray-500 dark:text-gray-400">{{ model.billingMode === 'video' ? t('availableChannels.pricing.perSecondPrice') : t('availableChannels.pricing.imageOutputPrice') }}</span>
                     <span class="font-medium text-gray-900 dark:text-gray-100">
-                      {{ formatScaled(model.pricing.image_output_price, 1) }}
-                      <span class="text-xs font-normal text-gray-400">{{ t('availableChannels.pricing.unitPerRequest') }}</span>
+                      {{ formatScaled(mediaPrice(model.pricing), 1) }}
+                      <span class="text-xs font-normal text-gray-400">{{ model.billingMode === 'video' ? '/second' : '/image' }}</span>
                     </span>
                   </div>
                 </template>
@@ -370,6 +370,8 @@ const { t } = useI18n()
 const appStore = useAppStore()
 
 const PER_M = 1_000_000
+const mediaPrice = (pricing: UserSupportedModelPricing): number | null =>
+  pricing.per_request_price ?? pricing.image_output_price ?? null
 const AUTO_REFRESH_INTERVAL_MS = 60_000
 
 // Platform → endpoint protocol family.
@@ -378,7 +380,8 @@ const ENDPOINT_OF: Record<string, string> = {
   openai: 'openai',
   grok: 'openai',
   gemini: 'gemini',
-  antigravity: 'gemini'
+  antigravity: 'gemini',
+  adobe: 'openai'
 }
 
 // Lightweight filter section wrapper (title + slotted list).

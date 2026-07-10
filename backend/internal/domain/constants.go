@@ -23,6 +23,7 @@ const (
 	PlatformGemini      = "gemini"
 	PlatformAntigravity = "antigravity"
 	PlatformGrok        = "grok"
+	PlatformAdobe       = "adobe"
 	PlatformKiro        = "kiro" // AWS Kiro / CodeWhisperer (provides Claude models)
 )
 
@@ -159,6 +160,18 @@ var DefaultBedrockModelMapping = map[string]string{
 	// Claude Haiku
 	"claude-haiku-4-5":          "us.anthropic.claude-haiku-4-5-20251001-v1:0",
 	"claude-haiku-4-5-20251001": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+}
+
+// DefaultAdobeModelMapping 是 Adobe Firefly 平台默认公开模型白名单。
+// 隐藏别名由 provider/adobe/firefly catalog 解析，仅在显式账号映射时开放。
+var DefaultAdobeModelMapping = map[string]string{
+	"nano-banana-pro": "nano-banana-pro",
+	"nano-banana-v2":  "nano-banana-v2",
+	"nano-banana":     "nano-banana",
+	"veo3":            "veo3",
+	"veo3.1":          "veo3.1",
+	"sora":            "sora",
+	"sora-2-pro":      "sora-2-pro",
 }
 
 // DefaultKiroModelMapping 是 Kiro 平台的默认模型映射（模型白名单）。

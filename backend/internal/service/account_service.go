@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -126,6 +127,7 @@ type UpdateAccountRequest struct {
 	Name               *string         `json:"name"`
 	Notes              *string         `json:"notes"`
 	Credentials        *map[string]any `json:"credentials"`
+	ClearCredentials   []string        `json:"clear_credentials"`
 	Extra              *map[string]any `json:"extra"`
 	ProxyID            *int64          `json:"proxy_id"`
 	Concurrency        *int            `json:"concurrency"`
@@ -163,6 +165,18 @@ func NewAccountService(accountRepo AccountRepository, groupRepo GroupRepository)
 
 // Create 创建账号
 func (s *AccountService) Create(ctx context.Context, req CreateAccountRequest) (*Account, error) {
+	req.Platform = NormalizePlatform(req.Platform)
+	req.Type = strings.ToLower(strings.TrimSpace(req.Type))
+	if err := ValidatePlatformAccountType(req.Platform, req.Type); err != nil {
+		return nil, err
+	}
+	if req.Platform == PlatformAdobe {
+		NormalizeAdobeCredentialExpiry(req.Credentials)
+		if err := ValidateAdobeAccountCredentials(req.Type, req.Credentials); err != nil {
+			return nil, err
+		}
+		req.Concurrency = normalizeAccountConcurrency(req.Platform, req.Type, req.Concurrency)
+	}
 	// 验证分组是否存在（如果指定了分组）
 	if len(req.GroupIDs) > 0 {
 		if err := s.validateGroupIDsExist(ctx, req.GroupIDs); err != nil {
@@ -268,8 +282,16 @@ func (s *AccountService) Update(ctx context.Context, id int64, req UpdateAccount
 		account.Notes = normalizeAccountNotes(req.Notes)
 	}
 
-	if req.Credentials != nil {
-		account.Credentials = *req.Credentials
+	if req.Credentials != nil || len(req.ClearCredentials) > 0 {
+		incoming := map[string]any{}
+		if req.Credentials != nil {
+			incoming = *req.Credentials
+		}
+		merged, mergeErr := MergeAccountCredentials(account.Credentials, incoming, req.ClearCredentials)
+		if mergeErr != nil {
+			return nil, mergeErr
+		}
+		account.Credentials = merged
 	}
 
 	if req.Extra != nil {
@@ -296,6 +318,15 @@ func (s *AccountService) Update(ctx context.Context, id int64, req UpdateAccount
 	}
 	if req.AutoPauseOnExpired != nil {
 		account.AutoPauseOnExpired = *req.AutoPauseOnExpired
+	}
+	if err := ValidatePlatformAccountType(account.Platform, account.Type); err != nil {
+		return nil, err
+	}
+	if account.IsAdobe() {
+		NormalizeAdobeCredentialExpiry(account.Credentials)
+		if err := ValidateAdobeAccountCredentials(account.Type, account.Credentials); err != nil {
+			return nil, err
+		}
 	}
 
 	// 先验证分组是否存在（在任何写操作之前）

@@ -43,7 +43,7 @@ type UsageLog struct {
 	ModelMappingChain *string `json:"model_mapping_chain,omitempty"`
 	// 计费层级标签
 	BillingTier *string `json:"billing_tier,omitempty"`
-	// 计费模式：token/per_request/image
+	// 计费模式：token/per_request/image/video
 	BillingMode *string `json:"billing_mode,omitempty"`
 	// GroupID holds the value of the "group_id" field.
 	GroupID *int64 `json:"group_id,omitempty"`

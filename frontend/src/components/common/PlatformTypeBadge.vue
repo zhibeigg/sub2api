@@ -125,6 +125,9 @@ const platformClass = computed(() => {
   if (props.platform === 'grok') {
     return 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
   }
+  if (props.platform === 'adobe') {
+    return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+  }
   if (props.platform === 'kiro') {
     return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
   }
@@ -143,6 +146,9 @@ const typeClass = computed(() => {
   }
   if (props.platform === 'grok') {
     return 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
+  }
+  if (props.platform === 'adobe') {
+    return 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
   }
   if (props.platform === 'kiro') {
     return 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400'

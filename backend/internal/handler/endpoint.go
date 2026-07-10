@@ -25,6 +25,10 @@ const (
 	EndpointVideosGenerations = "/v1/videos/generations"
 	EndpointVideos            = "/v1/videos"
 	EndpointGeminiModels      = "/v1beta/models"
+	EndpointAdobeImageSubmit  = "firefly:image-submit"
+	EndpointAdobeVideoSubmit  = "firefly:video-submit"
+	EndpointAdobeVideoStatus  = "firefly:video-status"
+	EndpointAdobeStorage      = "firefly:storage-asset"
 )
 
 // gin.Context keys used by the middleware and helpers below.
@@ -199,6 +203,18 @@ func DeriveUpstreamEndpoint(inbound, rawRequestPath, platform string) string {
 			return EndpointGeminiModels
 		}
 		return EndpointMessages
+
+	case service.PlatformAdobe:
+		switch inbound {
+		case EndpointImagesGenerations, EndpointImagesEdits:
+			return EndpointAdobeImageSubmit
+		case EndpointVideosGenerations:
+			return EndpointAdobeVideoSubmit
+		case EndpointVideos:
+			return EndpointAdobeVideoStatus
+		default:
+			return inbound
+		}
 	}
 
 	// Unknown platform — fall back to inbound.

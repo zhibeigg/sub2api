@@ -496,6 +496,7 @@ export default {
       cacheReadPrice: '缓存读取',
       imageOutputPrice: '图片输出',
       perRequestPrice: '每次请求',
+      perSecondPrice: '每秒价格',
       intervals: '阶梯定价',
       unitPerMillion: '/ 1M token',
       unitPerRequest: '/ 次'
