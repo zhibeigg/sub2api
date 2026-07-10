@@ -123,15 +123,15 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		if abortIfAPIKeyGroupUnavailable(c, apiKey) {
 			return
 		}
-		if abortIfAPIKeyGroupNotAllowed(c, apiKey) {
-			return
-		}
 		ctx := context.WithValue(c.Request.Context(), ctxkey.UserID, apiKey.User.ID)
 		c.Request = c.Request.WithContext(ctx)
 
 		// ── 4. SimpleMode → early return ─────────────────────────────
 
 		if cfg.RunMode == config.RunModeSimple {
+			if abortIfAPIKeyGroupNotAllowed(c, apiKey, nil) {
+				return
+			}
 			c.Set(string(ContextKeyAPIKey), apiKey)
 			c.Set(string(ContextKeyUser), AuthSubject{
 				UserID:      apiKey.User.ID,
@@ -152,21 +152,24 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		var subscription *service.UserSubscription
 		isSubscriptionType := apiKey.Group != nil && apiKey.Group.IsSubscriptionType()
 
-		if isSubscriptionType && subscriptionService != nil {
+		if apiKey.Group != nil && subscriptionService != nil {
 			sub, subErr := subscriptionService.GetActiveSubscription(
 				c.Request.Context(),
 				apiKey.User.ID,
 				apiKey.Group.ID,
 			)
 			if subErr != nil {
-				if !skipBilling {
+				if isSubscriptionType && !skipBilling {
 					AbortWithError(c, 403, "SUBSCRIPTION_NOT_FOUND", "No active subscription found for this group")
 					return
 				}
-				// skipBilling: 订阅不存在也放行，handler 会返回可用的数据
+				// 标准分组没有订阅时继续使用余额；skipBilling 路径也允许缺失订阅。
 			} else {
 				subscription = sub
 			}
+		}
+		if abortIfAPIKeyGroupNotAllowed(c, apiKey, subscription) {
+			return
 		}
 
 		// ── 6. 计费执行（skipBilling 时整块跳过） ────────────────────
@@ -311,8 +314,8 @@ func abortIfAPIKeyGroupUnavailable(c *gin.Context, apiKey *service.APIKey) bool 
 	return true
 }
 
-func abortIfAPIKeyGroupNotAllowed(c *gin.Context, apiKey *service.APIKey) bool {
-	if validateAPIKeyGroupAllowed(apiKey) {
+func abortIfAPIKeyGroupNotAllowed(c *gin.Context, apiKey *service.APIKey, subscription *service.UserSubscription) bool {
+	if validateAPIKeyGroupAllowed(apiKey, subscription) {
 		return false
 	}
 	service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonAPIKeyGroupUnavailable)
@@ -320,12 +323,12 @@ func abortIfAPIKeyGroupNotAllowed(c *gin.Context, apiKey *service.APIKey) bool {
 	return true
 }
 
-func validateAPIKeyGroupAllowed(apiKey *service.APIKey) bool {
+func validateAPIKeyGroupAllowed(apiKey *service.APIKey, subscription *service.UserSubscription) bool {
 	if apiKey == nil || apiKey.GroupID == nil || apiKey.User == nil || apiKey.Group == nil {
 		return true
 	}
 	group := apiKey.Group
-	if group.IsSubscriptionType() {
+	if group.IsSubscriptionType() || subscription != nil {
 		return true
 	}
 	return apiKey.User.CanBindGroup(group.ID, group.IsExclusive)

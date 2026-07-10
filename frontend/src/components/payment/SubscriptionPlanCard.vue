@@ -41,7 +41,7 @@
       <div class="mb-3 grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg bg-gray-50 px-3 py-2 text-xs dark:bg-dark-700/50">
         <div class="col-span-2 flex flex-wrap gap-1">
           <span
-            v-for="group in planGroups"
+            v-for="group in displayGroups"
             :key="group.id"
             :class="['rounded px-1.5 py-0.5 text-[10px] font-medium', platformBadgeLightClass(group.platform)]"
           >
@@ -49,25 +49,25 @@
           </span>
         </div>
         <div class="col-span-2 mt-1 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-dark-500">
-          {{ t('payment.planCard.sharedQuota') }}
+          {{ quotaHeading }}
         </div>
         <div v-if="hasPeakRate" class="col-span-2 flex items-center justify-between gap-2">
           <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.peakRate') }}</span>
           <span class="text-right font-medium text-amber-700 dark:text-amber-300">{{ peakRateDisplay }}</span>
         </div>
-        <div v-if="plan.daily_limit_usd != null" class="flex items-center justify-between">
+        <div v-if="quotaLimits.daily != null" class="flex items-center justify-between">
           <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.dailyLimit') }}</span>
-          <span class="font-medium text-gray-700 dark:text-gray-300">${{ plan.daily_limit_usd }}</span>
+          <span class="font-medium text-gray-700 dark:text-gray-300">${{ quotaLimits.daily }}</span>
         </div>
-        <div v-if="plan.weekly_limit_usd != null" class="flex items-center justify-between">
+        <div v-if="quotaLimits.weekly != null" class="flex items-center justify-between">
           <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.weeklyLimit') }}</span>
-          <span class="font-medium text-gray-700 dark:text-gray-300">${{ plan.weekly_limit_usd }}</span>
+          <span class="font-medium text-gray-700 dark:text-gray-300">${{ quotaLimits.weekly }}</span>
         </div>
-        <div v-if="plan.monthly_limit_usd != null" class="flex items-center justify-between">
+        <div v-if="quotaLimits.monthly != null" class="flex items-center justify-between">
           <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.monthlyLimit') }}</span>
-          <span class="font-medium text-gray-700 dark:text-gray-300">${{ plan.monthly_limit_usd }}</span>
+          <span class="font-medium text-gray-700 dark:text-gray-300">${{ quotaLimits.monthly }}</span>
         </div>
-        <div v-if="plan.daily_limit_usd == null && plan.weekly_limit_usd == null && plan.monthly_limit_usd == null" class="flex items-center justify-between">
+        <div v-if="quotaLimits.daily == null && quotaLimits.weekly == null && quotaLimits.monthly == null" class="flex items-center justify-between">
           <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.quota') }}</span>
           <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('payment.planCard.unlimited') }}</span>
         </div>
@@ -109,7 +109,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { SubscriptionPlan } from '@/types/payment'
+import type { SubscriptionPlan, SubscriptionPlanType } from '@/types/payment'
 import type { UserSubscription } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { hasPeakRate as groupHasPeakRate, formatPeakRateWindow, serverTimezoneLabel } from '@/utils/peak-rate'
@@ -128,6 +128,10 @@ const props = defineProps<{ plan: SubscriptionPlan; activeSubscriptions?: UserSu
 const emit = defineEmits<{ select: [plan: SubscriptionPlan] }>()
 const { t } = useI18n()
 
+const planType = computed<SubscriptionPlanType>(() =>
+  props.plan.plan_type || 'legacy_shared_subscription',
+)
+
 const planGroups = computed<SubscriptionPlan['groups']>(() => {
   if (props.plan.groups?.length) return props.plan.groups
   return [{
@@ -135,15 +139,48 @@ const planGroups = computed<SubscriptionPlan['groups']>(() => {
     name: props.plan.group_name || t('payment.groupFallback', { id: props.plan.group_id }),
     platform: props.plan.group_platform || '',
     rate_multiplier: props.plan.rate_multiplier ?? 1,
+    daily_limit_usd: props.plan.daily_limit_usd,
+    weekly_limit_usd: props.plan.weekly_limit_usd,
+    monthly_limit_usd: props.plan.monthly_limit_usd,
   }]
 })
-const planGroupIds = computed(() => props.plan.group_ids?.length ? props.plan.group_ids : planGroups.value.map(group => group.id))
-const platform = computed(() => planGroups.value[0]?.platform || '')
+const displayGroups = computed(() =>
+  planType.value === 'subscription' ? planGroups.value.slice(0, 1) : planGroups.value,
+)
+const planGroupIds = computed(() => {
+  const ids = props.plan.group_ids?.length ? props.plan.group_ids : displayGroups.value.map(group => group.id)
+  return planType.value === 'subscription' ? ids.slice(0, 1) : ids
+})
+const platform = computed(() => displayGroups.value[0]?.platform || '')
+const quotaHeading = computed(() =>
+  t(planType.value === 'subscription' ? 'payment.planCard.nativeQuota' : 'payment.planCard.sharedQuota'),
+)
+const quotaLimits = computed(() => {
+  const source = planType.value === 'subscription' ? displayGroups.value[0] : props.plan
+  return {
+    daily: source?.daily_limit_usd ?? null,
+    weekly: source?.weekly_limit_usd ?? null,
+    monthly: source?.monthly_limit_usd ?? null,
+  }
+})
+
+function sameGroupSet(left: number[], right: number[]): boolean {
+  const normalizedLeft = [...new Set(left)].sort((a, b) => a - b)
+  const normalizedRight = [...new Set(right)].sort((a, b) => a - b)
+  return normalizedLeft.length === normalizedRight.length
+    && normalizedLeft.every((id, index) => id === normalizedRight[index])
+}
+
 const isRenewal = computed(() =>
-  props.activeSubscriptions?.some(s => {
-    if (s.status !== 'active') return false
-    const subscriptionGroupIds = s.group_ids?.length ? s.group_ids : [s.group_id]
-    return subscriptionGroupIds.some(id => planGroupIds.value.includes(id))
+  props.activeSubscriptions?.some(subscription => {
+    if (subscription.status !== 'active') return false
+    if (subscription.source_plan_id != null) {
+      return subscription.source_plan_id === props.plan.id
+    }
+    const subscriptionGroupIds = subscription.group_ids?.length
+      ? subscription.group_ids
+      : [subscription.group_id]
+    return sameGroupSet(subscriptionGroupIds, planGroupIds.value)
   }) ?? false
 )
 
@@ -165,11 +202,11 @@ const discountText = computed(() => {
 
 const appStore = useAppStore()
 
-const hasPeakRate = computed(() => planGroups.value.some(group => groupHasPeakRate(group)))
+const hasPeakRate = computed(() => displayGroups.value.some(group => groupHasPeakRate(group)))
 
 const peakRateDisplay = computed(() => {
   const timezone = serverTimezoneLabel(appStore.cachedPublicSettings?.server_utc_offset)
-  return planGroups.value
+  return displayGroups.value
     .filter(group => groupHasPeakRate(group))
     .map(group => `${group.name}: ${formatPeakRateWindow(group, timezone)}`)
     .join(' · ')
@@ -183,7 +220,9 @@ const MODEL_SCOPE_LABELS: Record<string, string> = {
 
 const modelScopeLabels = computed(() => {
   if (platform.value !== 'antigravity') return []
-  const scopes = props.plan.supported_model_scopes
+  const scopes = planType.value === 'subscription'
+    ? displayGroups.value[0]?.supported_model_scopes
+    : props.plan.supported_model_scopes
   if (!scopes || scopes.length === 0) return []
   return scopes.map(s => MODEL_SCOPE_LABELS[s] || s)
 })

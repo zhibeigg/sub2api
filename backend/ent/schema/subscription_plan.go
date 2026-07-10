@@ -10,6 +10,8 @@ import (
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 )
 
 // SubscriptionPlan holds the schema definition for the SubscriptionPlan entity.
@@ -32,6 +34,9 @@ func (SubscriptionPlan) Annotations() []schema.Annotation {
 func (SubscriptionPlan) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int64("group_id"),
+		field.String("plan_type").
+			MaxLen(40).
+			Default(domain.SubscriptionPlanTypeSubscription),
 		field.String("name").
 			MaxLen(100).
 			NotEmpty(),
@@ -93,6 +98,7 @@ func (SubscriptionPlan) Edges() []ent.Edge {
 func (SubscriptionPlan) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("group_id"),
+		index.Fields("plan_type"),
 		index.Fields("for_sale"),
 	}
 }

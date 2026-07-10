@@ -310,7 +310,7 @@
                       <div class="text-xs text-gray-400">{{ row.provider || '-' }} / {{ row.model || '-' }}</div>
                     </td>
                     <td class="whitespace-nowrap px-5 py-4">
-                      <span class="inline-flex rounded-md px-2 py-1 text-xs font-medium" :class="resultBadgeClass(row)">
+                      <span data-test="risk-result-badge" class="inline-flex rounded-md px-2 py-1 text-xs font-medium" :class="resultBadgeClass(row)">
                         {{ resultLabel(row) }}
                       </span>
                     </td>
@@ -319,6 +319,10 @@
                       <div class="text-xs text-gray-400">{{ percent(row.highest_score) }}</div>
                       <div v-if="row.matched_keyword" class="mt-0.5 text-xs font-medium text-red-600 dark:text-red-300" :title="t('admin.riskControl.matchedKeyword') + ': ' + row.matched_keyword">
                         {{ t('admin.riskControl.matchedKeyword') }}: {{ row.matched_keyword }}
+                      </div>
+                      <div v-if="row.policy_source || row.policy_rule_id" data-test="policy-meta" class="mt-1 space-y-0.5 text-xs text-gray-500 dark:text-gray-400">
+                        <div v-if="row.policy_source">{{ t('admin.riskControl.policySource') }}: {{ row.policy_source }}</div>
+                        <div v-if="row.policy_rule_id" class="font-mono">{{ t('admin.riskControl.policyRuleId') }}: {{ row.policy_rule_id }}</div>
                       </div>
                     </td>
                     <td class="whitespace-nowrap px-5 py-4 text-sm text-gray-700 dark:text-gray-300">
@@ -347,6 +351,7 @@
                     <td class="w-[320px] max-w-sm px-5 py-4 text-sm text-gray-700 dark:text-gray-300">
                       <button
                         type="button"
+                        data-test="input-detail-button"
                         class="group flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-gray-100 dark:hover:bg-dark-700"
                         :title="inputSummaryText(row)"
                         @click="openInputDetail(row)"
@@ -959,6 +964,141 @@
             </div>
           </div>
 
+          <div v-else-if="activeSettingsTab === 'cyberAbuse'" class="space-y-5">
+            <div data-test="cyber-abuse-card" class="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-800">
+              <div class="flex flex-col gap-4 border-b border-gray-100 px-5 py-4 dark:border-dark-700 lg:flex-row lg:items-start lg:justify-between">
+                <div class="flex items-start gap-3">
+                  <span class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-300">
+                    <Icon name="shield" size="md" />
+                  </span>
+                  <div>
+                    <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.cyberAbuseTitle') }}</h3>
+                    <p class="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberAbuseDescription') }}</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 dark:border-dark-700 dark:bg-dark-900/30">
+                  <span class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ t('admin.riskControl.cyberAbuseEnabled') }}</span>
+                  <Toggle v-model="configForm.cyber_abuse_guard.enabled" data-test="cyber-abuse-enabled" />
+                </div>
+              </div>
+
+              <div class="space-y-5 p-5">
+                <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-900/20">
+                  <div class="flex items-start gap-3">
+                    <Icon name="exclamationTriangle" size="md" class="mt-0.5 flex-shrink-0 text-amber-500 dark:text-amber-300" />
+                    <ul class="space-y-1.5 text-sm leading-6 text-amber-800 dark:text-amber-200">
+                      <li>{{ t('admin.riskControl.cyberAbuseDefaultOffNotice') }}</li>
+                      <li>{{ t('admin.riskControl.cyberAbuseHitBehaviorNotice') }}</li>
+                      <li>{{ t('admin.riskControl.cyberAbuseResearchContextNotice') }}</li>
+                      <li>{{ t('admin.riskControl.cyberAbuseLegalNotice') }}</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                  <div class="flex items-center justify-between gap-4 rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+                    <div>
+                      <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.cyberAbuseLocalPrecheck') }}</p>
+                      <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberAbuseLocalPrecheckHint') }}</p>
+                    </div>
+                    <Toggle v-model="configForm.cyber_abuse_guard.preflight_enabled" data-test="cyber-abuse-local-precheck" />
+                  </div>
+                  <div class="flex items-center justify-between gap-4 rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+                    <div>
+                      <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.cyberAbuseUpstreamFeedback') }}</p>
+                      <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberAbuseUpstreamFeedbackHint') }}</p>
+                    </div>
+                    <Toggle v-model="configForm.cyber_abuse_guard.provider_feedback_enabled" data-test="cyber-abuse-upstream-feedback" />
+                  </div>
+                  <div class="flex items-center justify-between gap-4 rounded-lg border border-gray-100 p-4 dark:border-dark-700">
+                    <div>
+                      <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.riskControl.cyberAbuseCountAutoBan') }}</p>
+                      <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberAbuseCountAutoBanHint') }}</p>
+                    </div>
+                    <Toggle v-model="configForm.cyber_abuse_guard.count_towards_auto_ban" data-test="cyber-abuse-count-auto-ban" />
+                  </div>
+                </div>
+
+                <div>
+                  <label class="input-label" for="cyber-abuse-warning-message">{{ t('admin.riskControl.cyberAbuseWarningMessage') }}</label>
+                  <textarea
+                    id="cyber-abuse-warning-message"
+                    v-model="configForm.cyber_abuse_guard.block_message"
+                    data-test="cyber-abuse-warning-message"
+                    class="input min-h-24 resize-y text-sm"
+                    :placeholder="t('admin.riskControl.cyberAbuseWarningMessagePlaceholder')"
+                  ></textarea>
+                  <p class="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberAbuseWarningMessageHint') }}</p>
+                </div>
+              </div>
+            </div>
+
+            <div data-test="cyber-abuse-test-card" class="rounded-xl border border-gray-100 bg-gray-50 p-5 dark:border-dark-700 dark:bg-dark-900/30">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 class="text-base font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.cyberAbuseTestTitle') }}</h3>
+                  <p class="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberAbuseTestHint') }}</p>
+                </div>
+                <span class="inline-flex w-fit rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300">
+                  {{ t('admin.riskControl.cyberAbuseNoSideEffects') }}
+                </span>
+              </div>
+              <textarea
+                v-model="cyberAbuseTestInput"
+                data-test="cyber-abuse-test-input"
+                class="input mt-4 min-h-32 resize-y text-sm"
+                :placeholder="t('admin.riskControl.cyberAbuseTestPlaceholder')"
+              ></textarea>
+              <div class="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  data-test="cyber-abuse-test-button"
+                  class="btn btn-secondary inline-flex items-center gap-2"
+                  :disabled="cyberAbuseTesting || cyberAbuseTestInput.trim() === ''"
+                  @click="testCyberAbuse"
+                >
+                  <Icon name="beaker" size="sm" :class="cyberAbuseTesting ? 'animate-pulse' : ''" />
+                  {{ cyberAbuseTesting ? t('admin.riskControl.cyberAbuseTesting') : t('admin.riskControl.cyberAbuseRunTest') }}
+                </button>
+              </div>
+
+              <div v-if="cyberAbuseTestResult" data-test="cyber-abuse-test-result" class="mt-5 rounded-lg border border-gray-100 bg-white p-4 dark:border-dark-700 dark:bg-dark-800">
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.riskControl.cyberAbuseTestResult') }}</p>
+                  <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-medium" :class="cyberAbuseTestResult.matched ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300'">
+                    {{ cyberAbuseTestResult.matched ? t('admin.riskControl.cyberAbuseMatched') : t('admin.riskControl.cyberAbuseNotMatched') }}
+                  </span>
+                </div>
+                <dl class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700/50">
+                    <dt class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberAbuseResultMatched') }}</dt>
+                    <dd class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ cyberAbuseTestResult.matched ? t('common.yes') : t('common.no') }}</dd>
+                  </div>
+                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700/50">
+                    <dt class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberAbuseResultCategory') }}</dt>
+                    <dd class="mt-1 break-words text-sm font-semibold text-gray-900 dark:text-white">{{ cyberAbuseTestResult.category || '-' }}</dd>
+                  </div>
+                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700/50">
+                    <dt class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberAbuseResultRuleId') }}</dt>
+                    <dd class="mt-1 break-all font-mono text-sm font-semibold text-gray-900 dark:text-white">{{ cyberAbuseTestResult.rule_id || '-' }}</dd>
+                  </div>
+                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700/50">
+                    <dt class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberAbuseResultConfidence') }}</dt>
+                    <dd class="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{{ percent(cyberAbuseTestResult.confidence) }}</dd>
+                  </div>
+                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700/50">
+                    <dt class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberAbuseResultErrorCode') }}</dt>
+                    <dd class="mt-1 break-all font-mono text-sm font-semibold text-gray-900 dark:text-white">{{ cyberAbuseTestResult.error_code || '-' }}</dd>
+                  </div>
+                  <div class="rounded-lg bg-gray-50 p-3 dark:bg-dark-700/50">
+                    <dt class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.cyberAbuseResultMessage') }}</dt>
+                    <dd class="mt-1 break-words text-sm font-semibold text-gray-900 dark:text-white">{{ cyberAbuseTestResult.message || '-' }}</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+          </div>
+
           <div v-else-if="activeSettingsTab === 'keywords'" class="space-y-5">
             <div
               class="flex items-start gap-3 rounded-lg border p-4"
@@ -1085,6 +1225,14 @@
               <p class="text-xs font-medium text-red-500 dark:text-red-300">{{ t('admin.riskControl.matchedKeyword') }}</p>
               <p class="mt-1 truncate text-sm font-semibold text-red-700 dark:text-red-200" :title="inputDetailRow.matched_keyword">{{ inputDetailRow.matched_keyword }}</p>
             </div>
+            <div v-if="inputDetailRow.policy_source" data-test="detail-policy-source" class="rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/70">
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.policySource') }}</p>
+              <p class="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-white" :title="inputDetailRow.policy_source">{{ inputDetailRow.policy_source }}</p>
+            </div>
+            <div v-if="inputDetailRow.policy_rule_id" data-test="detail-policy-rule-id" class="rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-dark-700 dark:bg-dark-800/70">
+              <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('admin.riskControl.policyRuleId') }}</p>
+              <p class="mt-1 truncate font-mono text-sm font-semibold text-gray-900 dark:text-white" :title="inputDetailRow.policy_rule_id">{{ inputDetailRow.policy_rule_id }}</p>
+            </div>
           </div>
 
           <div class="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-dark-700 dark:bg-dark-800">
@@ -1129,6 +1277,7 @@ import type {
   ContentModerationAPIKeyStatus,
   ContentModerationConfig,
   ContentModerationLog,
+  CyberAbuseTestResponse,
   ContentModerationModelFilter,
   ContentModerationModelFilterType,
   ContentModerationRuntimeStatus,
@@ -1142,7 +1291,7 @@ import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatDateTime as formatDateTimeValue } from '@/utils/format'
 
-type SettingsTab = 'basic' | 'scope' | 'runtime' | 'response' | 'riskThresholds' | 'retention' | 'keywords'
+type SettingsTab = 'basic' | 'scope' | 'runtime' | 'response' | 'riskThresholds' | 'cyberAbuse' | 'retention' | 'keywords'
 type WorkerSlotState = 'active' | 'idle' | 'disabled'
 type APIKeysWriteMode = 'append' | 'replace'
 type OverviewIcon = 'shield' | 'key' | 'users' | 'document'
@@ -1192,6 +1341,7 @@ const riskThresholdCategories = Object.keys(riskThresholdDefaults)
 const { t } = useI18n()
 const appStore = useAppStore()
 const defaultBlockMessage = () => t('admin.riskControl.defaultBlockMessage')
+const defaultCyberAbuseWarningMessage = () => t('admin.riskControl.cyberAbuseDefaultWarningMessage')
 
 const loading = ref(true)
 const saving = ref(false)
@@ -1213,6 +1363,9 @@ const apiKeyRowsExpanded = ref<boolean>(false)
 const moderationTestPrompt = ref('')
 const moderationTestImages = ref<string[]>([])
 const moderationTestResult = ref<ContentModerationTestAuditResult | null>(null)
+const cyberAbuseTestInput = ref('')
+const cyberAbuseTesting = ref(false)
+const cyberAbuseTestResult = ref<CyberAbuseTestResponse | null>(null)
 const inputDetailRow = ref<ContentModerationLog | null>(null)
 let statusTimer: number | null = null
 
@@ -1242,6 +1395,13 @@ const configForm = reactive({
   email_on_hit: true,
   auto_ban_enabled: true,
   cyber_policy_exclude_from_ban_count: false,
+  cyber_abuse_guard: {
+    enabled: false,
+    preflight_enabled: true,
+    provider_feedback_enabled: true,
+    count_towards_auto_ban: false,
+    block_message: defaultCyberAbuseWarningMessage(),
+  },
   ban_threshold: 10,
   violation_window_hours: 720,
   hit_retention_days: 180,
@@ -1276,6 +1436,7 @@ const settingsTabs = computed<Array<{ id: SettingsTab; label: string }>>(() => [
   { id: 'runtime', label: t('admin.riskControl.tabs.runtime') },
   { id: 'response', label: t('admin.riskControl.tabs.response') },
   { id: 'riskThresholds', label: t('admin.riskControl.tabs.riskThresholds') },
+  { id: 'cyberAbuse', label: t('admin.riskControl.tabs.cyberAbuse') },
   { id: 'keywords', label: t('admin.riskControl.tabs.keywords') },
   { id: 'retention', label: t('admin.riskControl.tabs.retention') },
 ])
@@ -1719,6 +1880,13 @@ function applyConfig(config: ContentModerationConfig) {
   configForm.email_on_hit = config.email_on_hit ?? true
   configForm.auto_ban_enabled = config.auto_ban_enabled ?? true
   configForm.cyber_policy_exclude_from_ban_count = config.cyber_policy_exclude_from_ban_count ?? false
+  configForm.cyber_abuse_guard = {
+    enabled: config.cyber_abuse_guard?.enabled ?? false,
+    preflight_enabled: config.cyber_abuse_guard?.preflight_enabled ?? true,
+    provider_feedback_enabled: config.cyber_abuse_guard?.provider_feedback_enabled ?? true,
+    count_towards_auto_ban: config.cyber_abuse_guard?.count_towards_auto_ban ?? false,
+    block_message: config.cyber_abuse_guard?.block_message || defaultCyberAbuseWarningMessage(),
+  }
   configForm.ban_threshold = config.ban_threshold || 10
   configForm.violation_window_hours = config.violation_window_hours || 720
   configForm.hit_retention_days = config.hit_retention_days || 180
@@ -1800,6 +1968,10 @@ async function saveConfig() {
       email_on_hit: configForm.email_on_hit,
       auto_ban_enabled: configForm.auto_ban_enabled,
       cyber_policy_exclude_from_ban_count: configForm.cyber_policy_exclude_from_ban_count,
+      cyber_abuse_guard: {
+        ...configForm.cyber_abuse_guard,
+        block_message: configForm.cyber_abuse_guard.block_message || defaultCyberAbuseWarningMessage(),
+      },
       ban_threshold: Number(configForm.ban_threshold) || 10,
       violation_window_hours: Number(configForm.violation_window_hours) || 720,
       hit_retention_days: Number(configForm.hit_retention_days) || 180,
@@ -1971,6 +2143,20 @@ function setModelFilterType(type: ContentModerationModelFilterType) {
   }
 }
 
+async function testCyberAbuse() {
+  const input = cyberAbuseTestInput.value.trim()
+  if (!input || cyberAbuseTesting.value) return
+  cyberAbuseTesting.value = true
+  cyberAbuseTestResult.value = null
+  try {
+    cyberAbuseTestResult.value = await adminAPI.riskControl.testCyberAbuse({ text: input })
+  } catch (err: unknown) {
+    appStore.showError(extractApiErrorMessage(err, t('admin.riskControl.cyberAbuseTestFailed')))
+  } finally {
+    cyberAbuseTesting.value = false
+  }
+}
+
 async function testApiKeys(useInputKeys: boolean) {
   const keys = useInputKeys ? parseApiKeys(configForm.api_keys_text) : []
   if (useInputKeys && keys.length === 0) {
@@ -2115,6 +2301,7 @@ function modeDescription(mode: ModerationMode): string {
 }
 
 function resultLabel(row: ContentModerationLog): string {
+  if (row.action === 'cyber_abuse_block') return t('admin.riskControl.action.cyberAbuseBlock')
   if (row.action === 'cyber_policy') return t('admin.riskControl.action.cyberPolicy')
   if (row.action === 'keyword_block') return t('admin.riskControl.action.keywordBlock')
   if (row.action === 'block') return t('admin.riskControl.action.block')
@@ -2124,7 +2311,7 @@ function resultLabel(row: ContentModerationLog): string {
 }
 
 function resultBadgeClass(row: ContentModerationLog): string {
-  if (row.action === 'block' || row.action === 'keyword_block' || row.action === 'cyber_policy') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+  if (row.action === 'block' || row.action === 'keyword_block' || row.action === 'cyber_abuse_block' || row.action === 'cyber_policy') return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
   if (row.action === 'error' || row.error) return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
   if (row.flagged) return 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300'
   return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'

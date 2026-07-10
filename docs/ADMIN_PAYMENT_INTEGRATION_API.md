@@ -28,6 +28,59 @@
 
 说明：管理员 JWT 也可访问 admin 路由，但服务间调用建议使用 Admin API Key。
 
+### 订阅套餐双类型
+
+套餐接口：
+- `GET /api/v1/admin/payment/plans`
+- `POST /api/v1/admin/payment/plans`
+- `PUT /api/v1/admin/payment/plans/:id`
+
+`plan_type` 支持：
+- `subscription`：`group_ids` 必须且只能包含一个 `subscription` 分组；套餐级 `daily_limit_usd`、`weekly_limit_usd`、`monthly_limit_usd` 会被清空，用户订阅继续读取分组自身限额。
+- `standard_quota`：`group_ids` 可包含一个或多个 `standard`（余额）分组；至少设置一个正数套餐限额，所有分组共享同一订阅实例和用量。
+
+标准共享额度套餐示例：
+```json
+{
+  "plan_type": "standard_quota",
+  "name": "多模型共享额度",
+  "group_id": 11,
+  "group_ids": [11, 12],
+  "daily_limit_usd": 5,
+  "weekly_limit_usd": 25,
+  "monthly_limit_usd": 80,
+  "description": "标准分组共享套餐额度",
+  "price": 19.9,
+  "validity_days": 30,
+  "validity_unit": "days",
+  "features": "共享额度",
+  "for_sale": true,
+  "sort_order": 0
+}
+```
+
+原生订阅分组套餐示例：
+```json
+{
+  "plan_type": "subscription",
+  "name": "原生订阅套餐",
+  "group_id": 21,
+  "group_ids": [21],
+  "daily_limit_usd": null,
+  "weekly_limit_usd": null,
+  "monthly_limit_usd": null,
+  "description": "使用订阅分组自身限额",
+  "price": 9.9,
+  "validity_days": 30,
+  "validity_unit": "days",
+  "features": "原生限额",
+  "for_sale": true,
+  "sort_order": 0
+}
+```
+
+运行时规则：标准分组存在有效 `standard_quota` 订阅时优先消耗套餐额度且不扣余额；套餐额度耗尽会直接拒绝请求，不会静默改扣余额；套餐过期后，公开标准分组恢复余额计费。旧版多订阅分组套餐会标记为 `legacy_shared_subscription` 并下架，已有订阅和已创建订单继续按快照履约。
+
 ### 1) 一步完成创建并兑换
 `POST /api/v1/admin/redeem-codes/create-and-redeem`
 
@@ -149,6 +202,59 @@ Recommended headers:
 - `Idempotency-Key` for idempotent endpoints
 
 Note: Admin JWT can also access admin routes, but Admin API Key is recommended for server-to-server integration.
+
+### Dual subscription plan types
+
+Plan endpoints:
+- `GET /api/v1/admin/payment/plans`
+- `POST /api/v1/admin/payment/plans`
+- `PUT /api/v1/admin/payment/plans/:id`
+
+Supported `plan_type` values:
+- `subscription`: `group_ids` must contain exactly one `subscription` group. Plan-level daily, weekly, and monthly limits are cleared, and subscriptions use the group's native limits.
+- `standard_quota`: `group_ids` may contain one or more `standard` balance groups. At least one positive plan limit is required, and all included groups share one subscription instance and usage counter.
+
+Standard shared-quota example:
+```json
+{
+  "plan_type": "standard_quota",
+  "name": "Multi-model shared quota",
+  "group_id": 11,
+  "group_ids": [11, 12],
+  "daily_limit_usd": 5,
+  "weekly_limit_usd": 25,
+  "monthly_limit_usd": 80,
+  "description": "Shared quota across standard groups",
+  "price": 19.9,
+  "validity_days": 30,
+  "validity_unit": "days",
+  "features": "Shared quota",
+  "for_sale": true,
+  "sort_order": 0
+}
+```
+
+Native subscription-group example:
+```json
+{
+  "plan_type": "subscription",
+  "name": "Native subscription plan",
+  "group_id": 21,
+  "group_ids": [21],
+  "daily_limit_usd": null,
+  "weekly_limit_usd": null,
+  "monthly_limit_usd": null,
+  "description": "Uses the subscription group's own limits",
+  "price": 9.9,
+  "validity_days": 30,
+  "validity_unit": "days",
+  "features": "Native limits",
+  "for_sale": true,
+  "sort_order": 0
+}
+```
+
+Runtime behavior: while an active `standard_quota` subscription covers a standard group, plan quota takes priority and the user's balance is not charged. Exhausted plan quota rejects the request instead of silently falling back to balance. After expiration, public standard groups return to balance billing. Legacy multi-subscription-group plans are marked `legacy_shared_subscription` and taken off sale, while existing subscriptions and already-created orders continue from their snapshots.
 
 ### 1) Create and Redeem in one step
 `POST /api/v1/admin/redeem-codes/create-and-redeem`

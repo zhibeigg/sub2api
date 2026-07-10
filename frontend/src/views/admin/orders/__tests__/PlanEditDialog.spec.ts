@@ -1,9 +1,13 @@
-import { describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import PlanEditDialog from '../PlanEditDialog.vue'
+import GroupSelector from '@/components/common/GroupSelector.vue'
 import { adminPaymentAPI } from '@/api/admin/payment'
 import type { AdminGroup } from '@/types'
 import type { SubscriptionPlan } from '@/types/payment'
+
+const showError = vi.fn()
+const showSuccess = vi.fn()
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
@@ -16,10 +20,7 @@ vi.mock('vue-i18n', () => ({
 }))
 
 vi.mock('@/stores/app', () => ({
-  useAppStore: () => ({
-    showError: vi.fn(),
-    showSuccess: vi.fn(),
-  }),
+  useAppStore: () => ({ showError, showSuccess }),
 }))
 
 vi.mock('@/api/admin/payment', () => ({
@@ -29,15 +30,22 @@ vi.mock('@/api/admin/payment', () => ({
   },
 }))
 
+const groups = [
+  { id: 1, name: 'Standard A', platform: 'openai', rate_multiplier: 1, subscription_type: 'standard', status: 'active' },
+  { id: 2, name: 'Standard B', platform: 'anthropic', rate_multiplier: 1.2, subscription_type: 'standard', status: 'active' },
+  { id: 11, name: 'Subscription A', platform: 'openai', rate_multiplier: 1, subscription_type: 'subscription', status: 'active' },
+  { id: 12, name: 'Subscription B', platform: 'anthropic', rate_multiplier: 1.2, subscription_type: 'subscription', status: 'active' },
+] as unknown as AdminGroup[]
+
 function mountDialog(
-  paymentConfig: Record<string, unknown> | null,
+  paymentConfig: Record<string, unknown> | null = null,
   options: { plan?: SubscriptionPlan | null; groups?: AdminGroup[] } = {},
 ) {
   return mount(PlanEditDialog, {
     props: {
       show: true,
       plan: options.plan ?? null,
-      groups: options.groups ?? [],
+      groups: options.groups ?? groups,
       paymentConfig,
     },
     global: {
@@ -53,6 +61,26 @@ function mountDialog(
     },
   })
 }
+
+async function reopen(wrapper: VueWrapper) {
+  await wrapper.setProps({ show: false })
+  await wrapper.setProps({ show: true })
+}
+
+async function selectGroup(wrapper: VueWrapper, index = 0) {
+  const selector = wrapper.findComponent(GroupSelector)
+  const inputType = selector.props('multiple') ? 'checkbox' : 'radio'
+  const inputs = selector.findAll(`input[type="${inputType}"]`)
+  await inputs[index].setValue(true)
+  return selector
+}
+
+beforeEach(() => {
+  showError.mockReset()
+  showSuccess.mockReset()
+  vi.mocked(adminPaymentAPI.createPlan).mockReset().mockResolvedValue({} as never)
+  vi.mocked(adminPaymentAPI.updatePlan).mockReset().mockResolvedValue({} as never)
+})
 
 describe('PlanEditDialog subscription CNY payment preview', () => {
   it('shows CNY channel charge using the configured subscription rate and fee', async () => {
@@ -82,49 +110,137 @@ describe('PlanEditDialog subscription CNY payment preview', () => {
   })
 })
 
-describe('PlanEditDialog shared quota payload', () => {
-  it('updates group ids, keeps the first legacy group id, and explicitly snapshots empty quotas', async () => {
-    const groups = [
-      { id: 11, name: 'OpenAI A', platform: 'openai', rate_multiplier: 1, subscription_type: 'subscription', status: 'active' },
-      { id: 12, name: 'Claude B', platform: 'anthropic', rate_multiplier: 1.2, subscription_type: 'subscription', status: 'active' },
-    ] as unknown as AdminGroup[]
-    const plan = {
-      id: 7,
-      group_id: 11,
-      group_ids: [11, 12],
-      groups: [
-        { id: 11, name: 'OpenAI A', platform: 'openai', rate_multiplier: 1 },
-        { id: 12, name: 'Claude B', platform: 'anthropic', rate_multiplier: 1.2 },
-      ],
-      name: 'Shared Plan',
-      description: 'Shared quota',
-      price: 20,
-      original_price: 0,
-      validity_days: 30,
-      validity_unit: 'days',
-      features: [],
-      for_sale: true,
-      sort_order: 0,
-      daily_limit_usd: 5,
-      weekly_limit_usd: null,
-      monthly_limit_usd: 50,
-    } satisfies SubscriptionPlan
-    vi.mocked(adminPaymentAPI.updatePlan).mockReset().mockResolvedValue({} as never)
+describe('PlanEditDialog plan types', () => {
+  it('filters subscription groups, uses single selection, and hides plan quotas', async () => {
+    const wrapper = mountDialog()
+    const selector = wrapper.findComponent(GroupSelector)
 
-    const wrapper = mountDialog(null, { plan, groups })
-    await wrapper.setProps({ show: false })
-    await wrapper.setProps({ show: true })
-    await wrapper.find('[data-test="daily-limit"]').setValue('')
+    expect(selector.props('multiple')).toBe(false)
+    expect((selector.props('groups') as AdminGroup[]).map(group => group.id)).toEqual([11, 12])
+    expect(selector.findAll('input[type="radio"]')).toHaveLength(2)
+    expect(wrapper.find('[data-test="shared-quota-section"]').exists()).toBe(false)
+
+    await selectGroup(wrapper, 0)
+    await selectGroup(wrapper, 1)
+
+    expect(wrapper.findComponent(GroupSelector).props('modelValue')).toEqual([12])
+  })
+
+  it('filters standard groups, keeps multiple selections, and shows shared quotas', async () => {
+    const wrapper = mountDialog()
+    await wrapper.find('[data-test="plan-type-standard_quota"]').setValue(true)
+
+    const selector = wrapper.findComponent(GroupSelector)
+    expect(selector.props('multiple')).toBe(true)
+    expect((selector.props('groups') as AdminGroup[]).map(group => group.id)).toEqual([1, 2])
+    expect(selector.findAll('input[type="checkbox"]')).toHaveLength(2)
+    expect(wrapper.find('[data-test="shared-quota-section"]').exists()).toBe(true)
+
+    await selectGroup(wrapper, 0)
+    await selectGroup(wrapper, 1)
+
+    expect(wrapper.findComponent(GroupSelector).props('modelValue')).toEqual([1, 2])
+  })
+
+  it('clears incompatible groups and quotas when switching types', async () => {
+    const plan = makePlan({
+      plan_type: 'standard_quota',
+      group_id: 1,
+      group_ids: [1, 2],
+      daily_limit_usd: 5,
+      monthly_limit_usd: 50,
+    })
+    const wrapper = mountDialog(null, { plan })
+    await reopen(wrapper)
+
+    await wrapper.find('[data-test="plan-type-subscription"]').setValue(true)
+
+    expect(wrapper.findComponent(GroupSelector).props('modelValue')).toEqual([])
+    expect(wrapper.find('[data-test="shared-quota-section"]').exists()).toBe(false)
+
+    await selectGroup(wrapper, 0)
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
     expect(adminPaymentAPI.updatePlan).toHaveBeenCalledWith(7, expect.objectContaining({
+      plan_type: 'subscription',
       group_id: 11,
-      group_ids: [11, 12],
+      group_ids: [11],
       daily_limit_usd: null,
       weekly_limit_usd: null,
-      monthly_limit_usd: 50,
+      monthly_limit_usd: null,
       quota_limits_set: true,
     }))
   })
+
+  it('requires a positive standard quota before saving', async () => {
+    const wrapper = mountDialog()
+    await wrapper.find('[data-test="plan-type-standard_quota"]').setValue(true)
+    await selectGroup(wrapper)
+    await wrapper.find('[data-test="plan-price"]').setValue('10')
+    await wrapper.find('form').trigger('submit')
+
+    expect(showError).toHaveBeenCalledWith('payment.admin.standardQuotaRequired')
+    expect(adminPaymentAPI.createPlan).not.toHaveBeenCalled()
+  })
+
+  it('submits the standard quota type, multiple groups, and shared limits', async () => {
+    const wrapper = mountDialog()
+    await wrapper.find('[data-test="plan-type-standard_quota"]').setValue(true)
+    await selectGroup(wrapper, 0)
+    await selectGroup(wrapper, 1)
+    await wrapper.find('[data-test="daily-limit"]').setValue('5')
+    await wrapper.find('[data-test="plan-price"]').setValue('10')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(adminPaymentAPI.createPlan).toHaveBeenCalledWith(expect.objectContaining({
+      plan_type: 'standard_quota',
+      group_id: 1,
+      group_ids: [1, 2],
+      daily_limit_usd: 5,
+      weekly_limit_usd: null,
+      monthly_limit_usd: null,
+    }))
+  })
+
+  it('shows a legacy conversion warning and blocks saving until a formal type is selected', async () => {
+    const wrapper = mountDialog(null, {
+      plan: makePlan({ plan_type: 'legacy_shared_subscription', group_id: 11, group_ids: [11, 12] }),
+    })
+    await reopen(wrapper)
+
+    expect(wrapper.find('[data-test="legacy-plan-warning"]').exists()).toBe(true)
+    expect((wrapper.findComponent(GroupSelector).props('groups') as AdminGroup[])).toEqual([])
+
+    await wrapper.find('form').trigger('submit')
+
+    expect(showError).toHaveBeenCalledWith('payment.admin.formalPlanTypeRequired')
+    expect(adminPaymentAPI.updatePlan).not.toHaveBeenCalled()
+  })
 })
+
+function makePlan(overrides: Partial<SubscriptionPlan> = {}): SubscriptionPlan {
+  return {
+    id: 7,
+    plan_type: 'subscription',
+    group_id: 11,
+    group_ids: [11],
+    groups: [
+      { id: 11, name: 'Subscription A', platform: 'openai', rate_multiplier: 1, subscription_type: 'subscription' },
+    ],
+    name: 'Plan',
+    description: 'Description',
+    price: 20,
+    original_price: 0,
+    validity_days: 30,
+    validity_unit: 'days',
+    features: [],
+    for_sale: true,
+    sort_order: 0,
+    daily_limit_usd: null,
+    weekly_limit_usd: null,
+    monthly_limit_usd: null,
+    ...overrides,
+  }
+}

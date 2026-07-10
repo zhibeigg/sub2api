@@ -7,6 +7,7 @@ import (
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/dgraph-io/ristretto"
@@ -96,10 +97,16 @@ func (groupRepoNoop) UpdateSortOrders(context.Context, []GroupSortOrderUpdate) e
 
 type subscriptionGroupRepoStub struct {
 	groupRepoNoop
-	group *Group
+	group  *Group
+	groups map[int64]*Group
 }
 
-func (s *subscriptionGroupRepoStub) GetByID(context.Context, int64) (*Group, error) {
+func (s *subscriptionGroupRepoStub) GetByID(_ context.Context, id int64) (*Group, error) {
+	if s.groups != nil {
+		if group := s.groups[id]; group != nil {
+			return group, nil
+		}
+	}
 	return s.group, nil
 }
 
@@ -439,13 +446,93 @@ func TestAssignSubscriptionGroupTypeValidation(t *testing.T) {
 	subRepo := newSubscriptionUserSubRepoStub()
 	svc := NewSubscriptionService(groupRepo, subRepo, nil, nil, nil)
 
-	_, err := svc.AssignSubscription(context.Background(), &AssignSubscriptionInput{
+	_, err := svc.prepareAssignmentInput(context.Background(), &AssignSubscriptionInput{
 		UserID:       1,
 		GroupID:      1,
 		ValidityDays: 30,
 	})
 	require.Error(t, err)
 	require.Equal(t, infraerrors.Code(ErrGroupNotSubscriptionType), infraerrors.Code(err))
+}
+
+func TestPrepareAssignmentInput_AllowsStandardQuotaPlanMultipleGroups(t *testing.T) {
+	planID := int64(88)
+	daily := 10.0
+	groupRepo := &subscriptionGroupRepoStub{groups: map[int64]*Group{
+		1: {ID: 1, SubscriptionType: SubscriptionTypeStandard},
+		2: {ID: 2, SubscriptionType: SubscriptionTypeStandard},
+	}}
+	svc := NewSubscriptionService(groupRepo, newSubscriptionUserSubRepoStub(), nil, nil, nil)
+
+	prepared, err := svc.prepareAssignmentInput(context.Background(), &AssignSubscriptionInput{
+		UserID:           7,
+		GroupIDs:         []int64{1, 2},
+		SourcePlanID:     &planID,
+		QuotaSnapshotted: true,
+		DailyLimitUSD:    &daily,
+		ValidityDays:     30,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), prepared.GroupID)
+	require.Equal(t, []int64{1, 2}, prepared.GroupIDs)
+	require.Same(t, &planID, prepared.SourcePlanID)
+	require.True(t, prepared.QuotaSnapshotted)
+	require.Equal(t, &daily, prepared.DailyLimitUSD)
+}
+
+func TestPrepareAssignmentInput_RejectsMixedGroupTypes(t *testing.T) {
+	planID := int64(89)
+	daily := 10.0
+	groupRepo := &subscriptionGroupRepoStub{groups: map[int64]*Group{
+		1: {ID: 1, SubscriptionType: SubscriptionTypeStandard},
+		2: {ID: 2, SubscriptionType: SubscriptionTypeSubscription},
+	}}
+	svc := NewSubscriptionService(groupRepo, newSubscriptionUserSubRepoStub(), nil, nil, nil)
+
+	_, err := svc.prepareAssignmentInput(context.Background(), &AssignSubscriptionInput{
+		UserID:           7,
+		GroupIDs:         []int64{1, 2},
+		SourcePlanID:     &planID,
+		QuotaSnapshotted: true,
+		DailyLimitUSD:    &daily,
+	})
+	require.Error(t, err)
+	require.Equal(t, "SUBSCRIPTION_GROUP_TYPE_MIXED", infraerrors.Reason(err))
+}
+
+type negativeSubscriptionCacheRepoStub struct {
+	userSubRepoNoop
+	calls int
+}
+
+func (s *negativeSubscriptionCacheRepoStub) GetActiveByUserIDAndGroupID(context.Context, int64, int64) (*UserSubscription, error) {
+	s.calls++
+	return nil, ErrSubscriptionNotFound
+}
+
+func TestGetActiveSubscription_CachesNotFoundUntilInvalidated(t *testing.T) {
+	repo := &negativeSubscriptionCacheRepoStub{}
+	cfg := &config.Config{}
+	cfg.SubscriptionCache.L1Size = 100
+	cfg.SubscriptionCache.L1TTLSeconds = 60
+
+	svc := NewSubscriptionService(nil, repo, nil, nil, cfg)
+	require.NotNil(t, svc.subCacheL1)
+	t.Cleanup(svc.subCacheL1.Close)
+
+	_, err := svc.GetActiveSubscription(context.Background(), 7, 11)
+	require.ErrorIs(t, err, ErrSubscriptionNotFound)
+	svc.subCacheL1.Wait()
+
+	_, err = svc.GetActiveSubscription(context.Background(), 7, 11)
+	require.ErrorIs(t, err, ErrSubscriptionNotFound)
+	require.Equal(t, 1, repo.calls)
+
+	svc.InvalidateSubCache(7, 11)
+	svc.subCacheL1.Wait()
+	_, err = svc.GetActiveSubscription(context.Background(), 7, 11)
+	require.ErrorIs(t, err, ErrSubscriptionNotFound)
+	require.Equal(t, 2, repo.calls)
 }
 
 func strconvFormatInt(v int64) string {

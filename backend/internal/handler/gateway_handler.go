@@ -1472,8 +1472,9 @@ func (h *GatewayHandler) usageQuotaLimited(c *gin.Context, ctx context.Context, 
 
 // usageUnrestricted 处理 unrestricted 模式的响应（向后兼容）
 func (h *GatewayHandler) usageUnrestricted(c *gin.Context, ctx context.Context, apiKey *service.APIKey, subject middleware2.AuthSubject, usageData gin.H, dailyUsage any, modelStats any) {
-	// 订阅模式
-	if apiKey.Group != nil && apiKey.Group.IsSubscriptionType() {
+	subscription, hasSubscription := middleware2.GetSubscriptionFromContext(c)
+	// 原生订阅分组，或标准分组当前存在有效套餐订阅时，均展示订阅额度。
+	if apiKey.Group != nil && (apiKey.Group.IsSubscriptionType() || hasSubscription) {
 		resp := gin.H{
 			"mode":     "unrestricted",
 			"isValid":  true,
@@ -1481,18 +1482,17 @@ func (h *GatewayHandler) usageUnrestricted(c *gin.Context, ctx context.Context, 
 			"unit":     "USD",
 		}
 
-		// 订阅信息可能不在 context 中（/v1/usage 路径跳过了中间件的计费检查）
-		subscription, ok := middleware2.GetSubscriptionFromContext(c)
-		if ok {
+		// 订阅信息可能不在 context 中（/v1/usage 路径允许原生订阅缺失时返回基础信息）。
+		if hasSubscription {
 			remaining := h.calculateSubscriptionRemaining(apiKey.Group, subscription)
 			resp["remaining"] = remaining
 			resp["subscription"] = gin.H{
 				"daily_usage_usd":   subscription.DailyUsageUSD,
 				"weekly_usage_usd":  subscription.WeeklyUsageUSD,
 				"monthly_usage_usd": subscription.MonthlyUsageUSD,
-				"daily_limit_usd":   apiKey.Group.DailyLimitUSD,
-				"weekly_limit_usd":  apiKey.Group.WeeklyLimitUSD,
-				"monthly_limit_usd": apiKey.Group.MonthlyLimitUSD,
+				"daily_limit_usd":   subscription.EffectiveDailyLimit(apiKey.Group),
+				"weekly_limit_usd":  subscription.EffectiveWeeklyLimit(apiKey.Group),
+				"monthly_limit_usd": subscription.EffectiveMonthlyLimit(apiKey.Group),
 				"expires_at":        subscription.ExpiresAt,
 			}
 		}
@@ -1545,8 +1545,8 @@ func (h *GatewayHandler) calculateSubscriptionRemaining(group *service.Group, su
 	var remainingValues []float64
 
 	// 检查日限额
-	if group.HasDailyLimit() {
-		remaining := *group.DailyLimitUSD - sub.DailyUsageUSD
+	if limit := sub.EffectiveDailyLimit(group); limit != nil {
+		remaining := *limit - sub.DailyUsageUSD
 		if remaining <= 0 {
 			return 0
 		}
@@ -1554,8 +1554,8 @@ func (h *GatewayHandler) calculateSubscriptionRemaining(group *service.Group, su
 	}
 
 	// 检查周限额
-	if group.HasWeeklyLimit() {
-		remaining := *group.WeeklyLimitUSD - sub.WeeklyUsageUSD
+	if limit := sub.EffectiveWeeklyLimit(group); limit != nil {
+		remaining := *limit - sub.WeeklyUsageUSD
 		if remaining <= 0 {
 			return 0
 		}
@@ -1563,8 +1563,8 @@ func (h *GatewayHandler) calculateSubscriptionRemaining(group *service.Group, su
 	}
 
 	// 检查月限额
-	if group.HasMonthlyLimit() {
-		remaining := *group.MonthlyLimitUSD - sub.MonthlyUsageUSD
+	if limit := sub.EffectiveMonthlyLimit(group); limit != nil {
+		remaining := *limit - sub.MonthlyUsageUSD
 		if remaining <= 0 {
 			return 0
 		}

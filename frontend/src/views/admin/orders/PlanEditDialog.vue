@@ -6,7 +6,50 @@
         <input v-model="planForm.name" type="text" class="input" required />
       </div>
 
-      <GroupSelector v-model="planForm.group_ids" :groups="subscriptionGroups" searchable />
+      <div>
+        <label class="input-label">{{ t('payment.admin.planType') }} <span class="text-red-500">*</span></label>
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <label
+            v-for="option in planTypeOptions"
+            :key="option.value"
+            :class="[
+              'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors',
+              planForm.plan_type === option.value
+                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                : 'border-gray-200 hover:border-gray-300 dark:border-dark-600 dark:hover:border-dark-500'
+            ]"
+          >
+            <input
+              :data-test="`plan-type-${option.value}`"
+              type="radio"
+              name="subscription-plan-type"
+              :value="option.value"
+              :checked="planForm.plan_type === option.value"
+              class="mt-0.5 h-4 w-4 border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
+              @change="handlePlanTypeChange(option.value)"
+            />
+            <span>
+              <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ option.label }}</span>
+              <span class="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">{{ option.description }}</span>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <div
+        v-if="isLegacyPlan"
+        data-test="legacy-plan-warning"
+        class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200"
+      >
+        {{ t('payment.admin.legacyPlanConversionWarning') }}
+      </div>
+
+      <GroupSelector
+        v-model="planForm.group_ids"
+        :groups="availableGroups"
+        :multiple="planForm.plan_type !== 'subscription'"
+        searchable
+      />
 
       <!-- Group Info Preview -->
       <div v-if="selectedGroupInfos.length" class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-dark-600 dark:bg-dark-800">
@@ -22,20 +65,20 @@
         </div>
       </div>
 
-      <div>
+      <div v-if="isStandardQuotaPlan" data-test="shared-quota-section">
         <label class="input-label">{{ t('payment.admin.sharedQuotaLimits') }}</label>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <label class="mb-1 block text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.dailyLimit') }}</label>
-            <input v-model.number="planForm.daily_limit_usd" data-test="daily-limit" type="number" step="0.01" min="0" class="input" :placeholder="t('payment.admin.unlimited')" />
+            <input v-model.number="planForm.daily_limit_usd" data-test="daily-limit" type="number" step="0.01" min="0.01" class="input" :placeholder="t('payment.admin.unlimited')" />
           </div>
           <div>
             <label class="mb-1 block text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.weeklyLimit') }}</label>
-            <input v-model.number="planForm.weekly_limit_usd" data-test="weekly-limit" type="number" step="0.01" min="0" class="input" :placeholder="t('payment.admin.unlimited')" />
+            <input v-model.number="planForm.weekly_limit_usd" data-test="weekly-limit" type="number" step="0.01" min="0.01" class="input" :placeholder="t('payment.admin.unlimited')" />
           </div>
           <div>
             <label class="mb-1 block text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.monthlyLimit') }}</label>
-            <input v-model.number="planForm.monthly_limit_usd" data-test="monthly-limit" type="number" step="0.01" min="0" class="input" :placeholder="t('payment.admin.unlimited')" />
+            <input v-model.number="planForm.monthly_limit_usd" data-test="monthly-limit" type="number" step="0.01" min="0.01" class="input" :placeholder="t('payment.admin.unlimited')" />
           </div>
         </div>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.sharedQuotaHint') }}</p>
@@ -53,7 +96,7 @@
             </span>
           </p>
         </div>
-        <div><label class="input-label">{{ t('payment.admin.originalPrice') }}</label><input v-model.number="planForm.original_price" type="number" step="0.01" min="0" class="input" /></div>
+        <div><label class="input-label">{{ t('payment.admin.originalPrice') }}</label><input v-model.number="planForm.original_price" type="number" step="0.01" min="0.01" class="input" /></div>
       </div>
       <div class="grid grid-cols-2 gap-4">
         <div><label class="input-label">{{ t('payment.admin.validityDays') }} <span class="text-red-500">*</span></label><input v-model.number="planForm.validity_days" type="number" min="1" class="input" required /></div>
@@ -101,7 +144,7 @@ import { adminPaymentAPI } from '@/api/admin/payment'
 import type { AdminPaymentConfig } from '@/api/admin/payment'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatPaymentAmount } from '@/components/payment/currency'
-import type { SubscriptionPlan } from '@/types/payment'
+import type { SubscriptionPlan, SubscriptionPlanType } from '@/types/payment'
 import type { AdminGroup } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
@@ -125,8 +168,10 @@ const appStore = useAppStore()
 
 const saving = ref(false)
 type QuotaInput = number | null | ''
+type FormalSubscriptionPlanType = Exclude<SubscriptionPlanType, 'legacy_shared_subscription'>
 const planForm = reactive({
   name: '',
+  plan_type: 'subscription' as SubscriptionPlanType,
   group_ids: [] as number[],
   daily_limit_usd: null as QuotaInput,
   weekly_limit_usd: null as QuotaInput,
@@ -147,9 +192,34 @@ const validityUnitOptions = computed(() => [
   { value: 'months', label: t('payment.admin.months') },
 ])
 
-const subscriptionGroups = computed(() =>
-  props.groups.filter(g => g.subscription_type === 'subscription'),
+const planTypeOptions = computed(() => [
+  {
+    value: 'subscription' as const,
+    label: t('payment.admin.planTypes.subscription'),
+    description: t('payment.admin.planTypeDescriptions.subscription'),
+  },
+  {
+    value: 'standard_quota' as const,
+    label: t('payment.admin.planTypes.standardQuota'),
+    description: t('payment.admin.planTypeDescriptions.standardQuota'),
+  },
+])
+
+const originalPlanType = computed<SubscriptionPlanType>(() =>
+  props.plan?.plan_type || 'legacy_shared_subscription',
 )
+const isLegacyPlan = computed(() => Boolean(props.plan) && originalPlanType.value === 'legacy_shared_subscription')
+const isStandardQuotaPlan = computed(() => planForm.plan_type === 'standard_quota')
+
+const availableGroups = computed(() => {
+  if (planForm.plan_type === 'subscription') {
+    return props.groups.filter(group => group.subscription_type === 'subscription')
+  }
+  if (planForm.plan_type === 'standard_quota') {
+    return props.groups.filter(group => group.subscription_type === 'standard')
+  }
+  return []
+})
 
 const selectedGroupInfos = computed(() => {
   const selected = new Set(planForm.group_ids)
@@ -185,13 +255,15 @@ const subscriptionCnyPreview = computed(() => {
 watch(() => props.show, (visible) => {
   if (!visible) return
   if (props.plan) {
+    const planType = originalPlanType.value
     const groupIds = props.plan.group_ids?.length ? props.plan.group_ids : [props.plan.group_id].filter(id => id > 0)
     Object.assign(planForm, {
       name: props.plan.name,
-      group_ids: [...groupIds],
-      daily_limit_usd: props.plan.daily_limit_usd ?? null,
-      weekly_limit_usd: props.plan.weekly_limit_usd ?? null,
-      monthly_limit_usd: props.plan.monthly_limit_usd ?? null,
+      plan_type: planType,
+      group_ids: planType === 'subscription' ? groupIds.slice(0, 1) : [...groupIds],
+      daily_limit_usd: planType === 'subscription' ? null : (props.plan.daily_limit_usd ?? null),
+      weekly_limit_usd: planType === 'subscription' ? null : (props.plan.weekly_limit_usd ?? null),
+      monthly_limit_usd: planType === 'subscription' ? null : (props.plan.monthly_limit_usd ?? null),
       description: props.plan.description,
       price: props.plan.price,
       original_price: props.plan.original_price || 0,
@@ -204,6 +276,7 @@ watch(() => props.show, (visible) => {
   } else {
     Object.assign(planForm, {
       name: '',
+      plan_type: 'subscription',
       group_ids: [],
       daily_limit_usd: null,
       weekly_limit_usd: null,
@@ -220,6 +293,24 @@ watch(() => props.show, (visible) => {
   }
 })
 
+function handlePlanTypeChange(planType: FormalSubscriptionPlanType) {
+  if (planForm.plan_type === planType) return
+
+  planForm.plan_type = planType
+  const compatibleGroupIds = new Set(
+    props.groups
+      .filter(group => group.subscription_type === (planType === 'subscription' ? 'subscription' : 'standard'))
+      .map(group => group.id),
+  )
+  planForm.group_ids = planForm.group_ids.filter(groupId => compatibleGroupIds.has(groupId))
+  if (planType === 'subscription' && planForm.group_ids.length > 1) {
+    planForm.group_ids = planForm.group_ids.slice(0, 1)
+  }
+  planForm.daily_limit_usd = null
+  planForm.weekly_limit_usd = null
+  planForm.monthly_limit_usd = null
+}
+
 function normalizeQuota(value: QuotaInput): number | null {
   if (value === '' || value == null) return null
   const parsed = Number(value)
@@ -229,14 +320,26 @@ function normalizeQuota(value: QuotaInput): number | null {
 /** Build request payload with snake_case keys matching backend JSON tags */
 function buildPlanPayload() {
   const features = planFeaturesText.value.split('\n').map(f => f.trim()).filter(Boolean).join('\n')
-  const groupIds = [...planForm.group_ids]
+  const groupIds = planForm.plan_type === 'subscription'
+    ? planForm.group_ids.slice(0, 1)
+    : [...planForm.group_ids]
+  const quotaLimits = planForm.plan_type === 'standard_quota'
+    ? {
+        daily_limit_usd: normalizeQuota(planForm.daily_limit_usd),
+        weekly_limit_usd: normalizeQuota(planForm.weekly_limit_usd),
+        monthly_limit_usd: normalizeQuota(planForm.monthly_limit_usd),
+      }
+    : {
+        daily_limit_usd: null,
+        weekly_limit_usd: null,
+        monthly_limit_usd: null,
+      }
   return {
     name: planForm.name,
+    plan_type: planForm.plan_type,
     group_id: groupIds[0] ?? null,
     group_ids: groupIds,
-    daily_limit_usd: normalizeQuota(planForm.daily_limit_usd),
-    weekly_limit_usd: normalizeQuota(planForm.weekly_limit_usd),
-    monthly_limit_usd: normalizeQuota(planForm.monthly_limit_usd),
+    ...quotaLimits,
     ...(props.plan ? { quota_limits_set: true } : {}),
     description: planForm.description,
     price: planForm.price,
@@ -250,9 +353,24 @@ function buildPlanPayload() {
 }
 
 async function handleSavePlan() {
+  if (planForm.plan_type === 'legacy_shared_subscription') {
+    appStore.showError(t('payment.admin.formalPlanTypeRequired'))
+    return
+  }
   if (planForm.group_ids.length === 0) {
     appStore.showError(t('payment.admin.groupRequired'))
     return
+  }
+  if (planForm.plan_type === 'standard_quota') {
+    const quotaLimits = [
+      normalizeQuota(planForm.daily_limit_usd),
+      normalizeQuota(planForm.weekly_limit_usd),
+      normalizeQuota(planForm.monthly_limit_usd),
+    ]
+    if (!quotaLimits.some(limit => limit != null && limit > 0)) {
+      appStore.showError(t('payment.admin.standardQuotaRequired'))
+      return
+    }
   }
   if (!planForm.price || planForm.price <= 0) {
     appStore.showError(t('payment.admin.priceRequired'))

@@ -1486,6 +1486,7 @@ var (
 	SubscriptionPlansColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
 		{Name: "group_id", Type: field.TypeInt64},
+		{Name: "plan_type", Type: field.TypeString, Size: 40, Default: "subscription"},
 		{Name: "name", Type: field.TypeString, Size: 100},
 		{Name: "description", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "price", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,2)"}},
@@ -1514,9 +1515,14 @@ var (
 				Columns: []*schema.Column{SubscriptionPlansColumns[1]},
 			},
 			{
+				Name:    "subscriptionplan_plan_type",
+				Unique:  false,
+				Columns: []*schema.Column{SubscriptionPlansColumns[2]},
+			},
+			{
 				Name:    "subscriptionplan_for_sale",
 				Unique:  false,
-				Columns: []*schema.Column{SubscriptionPlansColumns[13]},
+				Columns: []*schema.Column{SubscriptionPlansColumns[14]},
 			},
 		},
 	}

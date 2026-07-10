@@ -31,11 +31,15 @@
         :title="t('admin.groups.rateAndAccounts', { rate: group.rate_multiplier, count: group.account_count || 0 })"
       >
         <input
-          type="checkbox"
+          :type="multiple ? 'checkbox' : 'radio'"
+          :name="multiple ? undefined : radioGroupName"
           :value="group.id"
           :checked="modelValue.includes(group.id)"
           @change="handleChange(group.id, ($event.target as HTMLInputElement).checked)"
-          class="h-3.5 w-3.5 shrink-0 rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
+          :class="[
+            'h-3.5 w-3.5 shrink-0 border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500',
+            multiple ? 'rounded' : 'rounded-full'
+          ]"
         />
         <GroupBadge
           :name="group.name"
@@ -71,16 +75,19 @@ interface Props {
   platform?: GroupPlatform // Optional platform filter
   mixedScheduling?: boolean // For antigravity accounts: allow anthropic/gemini groups
   searchable?: boolean | 'auto'
+  multiple?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  searchable: 'auto'
+  searchable: 'auto',
+  multiple: true
 })
 const emit = defineEmits<{
   'update:modelValue': [value: number[]]
 }>()
 
 const searchText = ref('')
+const radioGroupName = `group-selector-${Math.random().toString(36).slice(2)}`
 
 const isSearchable = computed(() => {
   if (props.searchable === 'auto') return props.groups.length > 5
@@ -117,6 +124,11 @@ const filteredGroups = computed(() => {
 })
 
 const handleChange = (groupId: number, checked: boolean) => {
+  if (!props.multiple) {
+    emit('update:modelValue', checked ? [groupId] : [])
+    return
+  }
+
   const newValue = checked
     ? [...props.modelValue, groupId]
     : props.modelValue.filter((id) => id !== groupId)

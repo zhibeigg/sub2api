@@ -12,7 +12,7 @@
 
 **AI API Gateway Platform for Subscription Quota Distribution**
 
-Supports multi-group quota subscriptions with shared daily/weekly/monthly limits, administrator assignment, and independent visibility controls for recharge and subscription purchases.
+Supports two subscription plan modes: one native subscription group using its own limits, or one or more standard balance groups sharing plan-level daily/weekly/monthly limits, with administrator assignment and independent purchase visibility controls.
 
 English | [中文](README_CN.md) | [日本語](README_JA.md)
 
@@ -181,7 +181,9 @@ Sub2API is an AI API gateway platform designed to distribute and manage API quot
 - **Concurrency Control** - Per-user and per-account concurrency limits
 - **Rate Limiting** - Configurable request and token rate limits
 - **Built-in Payment System** - Supports EasyPay, Alipay, WeChat Pay, and Stripe for user self-service top-up; promo codes can grant a balance bonus on the first successful top-up only, with no separate payment service needed ([Configuration Guide](docs/PAYMENT.md))
-- **Trustworthy Editorial Public Entrance** - Home uses a three-scene, scroll-driven editorial stage for genuine models, protocol access, and traceable billing; login and registration share the same route-aware protocol orbit, while the documentation homepage provides matching Base URL and toolchain shortcuts. Motion uses only lightweight CSS/SVG and transform/opacity effects, automatically becomes static with `prefers-reduced-motion` or constrained pointer/data settings, and does not copy third-party artwork or brand assets. The privacy boundary remains explicit: only account, routing, billing, and security data required to run the service is processed; API request bodies are not retained, sold, or used for model training
+- **Dual Subscription Plan Modes** - A `subscription` plan binds exactly one subscription group and uses that group's native limits. A `standard_quota` plan binds one or more standard balance groups and defines shared daily, weekly, or monthly plan limits. An active plan takes priority over balance billing on its standard groups; public groups return to balance billing after expiration
+- **Cyber Abuse Guard** - The risk-control center can enable conservative, high-confidence preflight detection for credential theft, malware, unauthorized intrusion, security-control evasion, data exfiltration, and botnet/DDoS patterns. Matching requests receive a warning and are terminated before upstream forwarding. The guard is disabled by default and includes side-effect-free testing, redacted audit records, and integration with upstream `cyber_policy` feedback; it does not replace human review or legal advice
+- **Trustworthy Editorial Public Entrance** - Home uses a three-scene, scroll-driven editorial stage for genuine models, protocol access, and traceable billing; login and registration share the same route-aware protocol orbit, while the documentation homepage provides matching Base URL and toolchain shortcuts. Motion uses only lightweight CSS/SVG and transform/opacity effects, automatically becomes static with `prefers-reduced-motion` or constrained pointer/data settings, and does not copy third-party artwork or brand assets. The privacy boundary remains explicit: only account, routing, billing, and security data required to run the service is processed; full API request bodies are not retained by default, while enabled risk-control auditing stores only necessary redacted and truncated excerpts; data is not sold or used for model training
 - **Admin Dashboard** - Web interface for monitoring and management
 - **External System Integration** - Embed external systems (e.g. ticketing) via iframe to extend the admin dashboard
 
@@ -558,6 +560,9 @@ Additional security-related options are available in `config.yaml`:
 - `billing.circuit_breaker` to fail closed on billing errors
 - `server.trusted_proxies` to enable X-Forwarded-For parsing
 - `turnstile.required` to require Turnstile in release mode
+- The admin Risk Control center stores content-moderation and Cyber Abuse Guard settings in the database. The guard is disabled by default; when enabled, its conservative local preflight checks run independently of external moderation sampling or API availability. Administrators can use `POST /api/v1/admin/risk-control/cyber-abuse/test` for a side-effect-free dry run
+
+The Cyber Abuse dry-run endpoint requires administrator authentication and accepts `{"text":"content to evaluate"}`. Its `data` response contains `matched`, `category`, `rule_id`, `confidence`, `error_code`, and `message`. It does not write audit logs, send notices, count violations, or ban users.
 
 **⚠️ Security Warning: HTTP URL Configuration**
 

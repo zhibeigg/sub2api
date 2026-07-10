@@ -45,14 +45,15 @@ type contentModerationConfigRequest struct {
 	ViolationWindowHours *int                `json:"violation_window_hours"`
 	// cyber_policy 命中是否排除出自动封号计数；前端 RiskControlView 已发送该字段，
 	// service.UpdateContentModerationConfigInput 已支持，此前 handler 层缺透传导致开关静默失效。
-	CyberPolicyExcludeFromBanCount *bool                                 `json:"cyber_policy_exclude_from_ban_count"`
-	RetryCount                     *int                                  `json:"retry_count"`
-	HitRetentionDays               *int                                  `json:"hit_retention_days"`
-	NonHitRetentionDays            *int                                  `json:"non_hit_retention_days"`
-	PreHashCheckEnabled            *bool                                 `json:"pre_hash_check_enabled"`
-	BlockedKeywords                *[]string                             `json:"blocked_keywords"`
-	KeywordBlockingMode            *string                               `json:"keyword_blocking_mode"`
-	ModelFilter                    *service.ContentModerationModelFilter `json:"model_filter"`
+	CyberPolicyExcludeFromBanCount *bool                                     `json:"cyber_policy_exclude_from_ban_count"`
+	RetryCount                     *int                                      `json:"retry_count"`
+	HitRetentionDays               *int                                      `json:"hit_retention_days"`
+	NonHitRetentionDays            *int                                      `json:"non_hit_retention_days"`
+	PreHashCheckEnabled            *bool                                     `json:"pre_hash_check_enabled"`
+	BlockedKeywords                *[]string                                 `json:"blocked_keywords"`
+	KeywordBlockingMode            *string                                   `json:"keyword_blocking_mode"`
+	ModelFilter                    *service.ContentModerationModelFilter     `json:"model_filter"`
+	CyberAbuseGuard                *service.UpdateCyberAbuseGuardConfigInput `json:"cyber_abuse_guard"`
 }
 
 type contentModerationAPIKeyTestRequest struct {
@@ -66,6 +67,10 @@ type contentModerationAPIKeyTestRequest struct {
 
 type contentModerationHashRequest struct {
 	InputHash string `json:"input_hash"`
+}
+
+type cyberAbuseTestRequest struct {
+	Text string `json:"text" binding:"required"`
 }
 
 func (h *ContentModerationHandler) GetConfig(c *gin.Context) {
@@ -115,6 +120,7 @@ func (h *ContentModerationHandler) UpdateConfig(c *gin.Context) {
 		BlockedKeywords:                req.BlockedKeywords,
 		KeywordBlockingMode:            req.KeywordBlockingMode,
 		ModelFilter:                    req.ModelFilter,
+		CyberAbuseGuard:                req.CyberAbuseGuard,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -137,6 +143,20 @@ func (h *ContentModerationHandler) TestAPIKeys(c *gin.Context) {
 		Prompt:    req.Prompt,
 		Images:    req.Images,
 	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *ContentModerationHandler) TestCyberAbuse(c *gin.Context) {
+	var req cyberAbuseTestRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	result, err := h.service.TestCyberAbuse(c.Request.Context(), service.TestCyberAbuseInput{Text: req.Text})
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

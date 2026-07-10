@@ -164,7 +164,8 @@ type ContentModerationConfig struct {
 	// CyberPolicyExcludeFromBanCount 为 true 时，cyber_policy 命中不参与自动封号计数：
 	// 当次不判定封号，且历史 cyber 行在 CountFlaggedByUserSince 中被排除。
 	// 默认 false（计入，与历史行为一致；旧配置 JSON 无此字段时反序列化为 false）。
-	CyberPolicyExcludeFromBanCount bool `json:"cyber_policy_exclude_from_ban_count"`
+	CyberPolicyExcludeFromBanCount bool                  `json:"cyber_policy_exclude_from_ban_count"`
+	CyberAbuseGuard                CyberAbuseGuardConfig `json:"cyber_abuse_guard"`
 }
 
 type ContentModerationConfigView struct {
@@ -199,6 +200,7 @@ type ContentModerationConfigView struct {
 	KeywordBlockingMode            string                          `json:"keyword_blocking_mode"`
 	ModelFilter                    ContentModerationModelFilter    `json:"model_filter"`
 	CyberPolicyExcludeFromBanCount bool                            `json:"cyber_policy_exclude_from_ban_count"`
+	CyberAbuseGuard                CyberAbuseGuardConfig           `json:"cyber_abuse_guard"`
 }
 
 type ContentModerationAPIKeyStatus struct {
@@ -256,37 +258,38 @@ type ContentModerationTestAuditResult struct {
 }
 
 type UpdateContentModerationConfigInput struct {
-	Enabled                        *bool                         `json:"enabled"`
-	Mode                           *string                       `json:"mode"`
-	BaseURL                        *string                       `json:"base_url"`
-	Model                          *string                       `json:"model"`
-	APIKey                         *string                       `json:"api_key"`
-	APIKeys                        *[]string                     `json:"api_keys"`
-	APIKeysMode                    string                        `json:"api_keys_mode"`
-	DeleteAPIKeyHashes             *[]string                     `json:"delete_api_key_hashes"`
-	ClearAPIKey                    bool                          `json:"clear_api_key"`
-	TimeoutMS                      *int                          `json:"timeout_ms"`
-	SampleRate                     *int                          `json:"sample_rate"`
-	AllGroups                      *bool                         `json:"all_groups"`
-	GroupIDs                       *[]int64                      `json:"group_ids"`
-	RecordNonHits                  *bool                         `json:"record_non_hits"`
-	Thresholds                     *map[string]float64           `json:"thresholds"`
-	WorkerCount                    *int                          `json:"worker_count"`
-	QueueSize                      *int                          `json:"queue_size"`
-	BlockStatus                    *int                          `json:"block_status"`
-	BlockMessage                   *string                       `json:"block_message"`
-	EmailOnHit                     *bool                         `json:"email_on_hit"`
-	AutoBanEnabled                 *bool                         `json:"auto_ban_enabled"`
-	BanThreshold                   *int                          `json:"ban_threshold"`
-	ViolationWindowHours           *int                          `json:"violation_window_hours"`
-	RetryCount                     *int                          `json:"retry_count"`
-	HitRetentionDays               *int                          `json:"hit_retention_days"`
-	NonHitRetentionDays            *int                          `json:"non_hit_retention_days"`
-	PreHashCheckEnabled            *bool                         `json:"pre_hash_check_enabled"`
-	BlockedKeywords                *[]string                     `json:"blocked_keywords"`
-	KeywordBlockingMode            *string                       `json:"keyword_blocking_mode"`
-	ModelFilter                    *ContentModerationModelFilter `json:"model_filter"`
-	CyberPolicyExcludeFromBanCount *bool                         `json:"cyber_policy_exclude_from_ban_count"`
+	Enabled                        *bool                             `json:"enabled"`
+	Mode                           *string                           `json:"mode"`
+	BaseURL                        *string                           `json:"base_url"`
+	Model                          *string                           `json:"model"`
+	APIKey                         *string                           `json:"api_key"`
+	APIKeys                        *[]string                         `json:"api_keys"`
+	APIKeysMode                    string                            `json:"api_keys_mode"`
+	DeleteAPIKeyHashes             *[]string                         `json:"delete_api_key_hashes"`
+	ClearAPIKey                    bool                              `json:"clear_api_key"`
+	TimeoutMS                      *int                              `json:"timeout_ms"`
+	SampleRate                     *int                              `json:"sample_rate"`
+	AllGroups                      *bool                             `json:"all_groups"`
+	GroupIDs                       *[]int64                          `json:"group_ids"`
+	RecordNonHits                  *bool                             `json:"record_non_hits"`
+	Thresholds                     *map[string]float64               `json:"thresholds"`
+	WorkerCount                    *int                              `json:"worker_count"`
+	QueueSize                      *int                              `json:"queue_size"`
+	BlockStatus                    *int                              `json:"block_status"`
+	BlockMessage                   *string                           `json:"block_message"`
+	EmailOnHit                     *bool                             `json:"email_on_hit"`
+	AutoBanEnabled                 *bool                             `json:"auto_ban_enabled"`
+	BanThreshold                   *int                              `json:"ban_threshold"`
+	ViolationWindowHours           *int                              `json:"violation_window_hours"`
+	RetryCount                     *int                              `json:"retry_count"`
+	HitRetentionDays               *int                              `json:"hit_retention_days"`
+	NonHitRetentionDays            *int                              `json:"non_hit_retention_days"`
+	PreHashCheckEnabled            *bool                             `json:"pre_hash_check_enabled"`
+	BlockedKeywords                *[]string                         `json:"blocked_keywords"`
+	KeywordBlockingMode            *string                           `json:"keyword_blocking_mode"`
+	ModelFilter                    *ContentModerationModelFilter     `json:"model_filter"`
+	CyberPolicyExcludeFromBanCount *bool                             `json:"cyber_policy_exclude_from_ban_count"`
+	CyberAbuseGuard                *UpdateCyberAbuseGuardConfigInput `json:"cyber_abuse_guard"`
 }
 
 type ContentModerationModelFilter struct {
@@ -365,6 +368,7 @@ type ContentModerationDecision struct {
 	Blocked         bool               `json:"blocked"`
 	Flagged         bool               `json:"flagged"`
 	Message         string             `json:"message"`
+	ErrorCode       string             `json:"error_code,omitempty"`
 	StatusCode      int                `json:"status_code"`
 	InputHash       string             `json:"input_hash,omitempty"`
 	HighestCategory string             `json:"highest_category"`
@@ -391,6 +395,8 @@ type ContentModerationLog struct {
 	HighestCategory   string             `json:"highest_category"`
 	HighestScore      float64            `json:"highest_score"`
 	MatchedKeyword    string             `json:"matched_keyword"`
+	PolicySource      string             `json:"policy_source"`
+	PolicyRuleID      string             `json:"policy_rule_id"`
 	CategoryScores    map[string]float64 `json:"category_scores"`
 	ThresholdSnapshot map[string]float64 `json:"threshold_snapshot"`
 	InputExcerpt      string             `json:"input_excerpt"`
@@ -516,14 +522,15 @@ type ContentModerationService struct {
 }
 
 type contentModerationTask struct {
-	input            ContentModerationCheckInput
-	content          ContentModerationInput
-	inputHash        string
-	log              *ContentModerationLog
-	config           *ContentModerationConfig
-	recordHash       bool
-	applySideEffects bool
-	enqueuedAt       time.Time
+	input                   ContentModerationCheckInput
+	content                 ContentModerationInput
+	inputHash               string
+	log                     *ContentModerationLog
+	config                  *ContentModerationConfig
+	recordHash              bool
+	applySideEffects        bool
+	sendNotificationEffects bool
+	enqueuedAt              time.Time
 }
 
 type contentModerationKeyHealth struct {
@@ -663,6 +670,26 @@ func (s *ContentModerationService) UpdateConfig(ctx context.Context, input Updat
 	if input.CyberPolicyExcludeFromBanCount != nil {
 		cfg.CyberPolicyExcludeFromBanCount = *input.CyberPolicyExcludeFromBanCount
 	}
+	if input.CyberAbuseGuard != nil {
+		update := input.CyberAbuseGuard
+		if update.Enabled != nil {
+			cfg.CyberAbuseGuard.Enabled = *update.Enabled
+		}
+		if update.PreflightEnabled != nil {
+			cfg.CyberAbuseGuard.PreflightEnabled = *update.PreflightEnabled
+			cfg.CyberAbuseGuard.preflightConfigured = true
+		}
+		if update.ProviderFeedbackEnabled != nil {
+			cfg.CyberAbuseGuard.ProviderFeedbackEnabled = *update.ProviderFeedbackEnabled
+			cfg.CyberAbuseGuard.providerFeedbackConfigured = true
+		}
+		if update.CountTowardsAutoBan != nil {
+			cfg.CyberAbuseGuard.CountTowardsAutoBan = *update.CountTowardsAutoBan
+		}
+		if update.BlockMessage != nil {
+			cfg.CyberAbuseGuard.BlockMessage = strings.TrimSpace(*update.BlockMessage)
+		}
+	}
 	if input.Thresholds != nil {
 		cfg.Thresholds = mergeContentModerationThresholds(ContentModerationDefaultThresholds(), *input.Thresholds)
 	}
@@ -764,9 +791,32 @@ func (s *ContentModerationService) TestAPIKeys(ctx context.Context, input TestCo
 	return &TestContentModerationAPIKeysResult{Items: items, AuditResult: auditResult, ImageCount: imageCount}, nil
 }
 
+func (s *ContentModerationService) TestCyberAbuse(ctx context.Context, input TestCyberAbuseInput) (*TestCyberAbuseResult, error) {
+	cfg := defaultContentModerationConfig()
+	if s != nil && s.settingRepo != nil {
+		loaded, err := s.loadConfig(ctx)
+		if err != nil {
+			return nil, err
+		}
+		cfg = loaded
+	}
+	detection := DetectCyberAbuse(input.Text)
+	result := &TestCyberAbuseResult{
+		Matched:    detection.Matched,
+		Category:   detection.Category,
+		RuleID:     detection.RuleID,
+		Confidence: detection.Confidence,
+	}
+	if detection.Matched {
+		result.ErrorCode = ContentModerationErrorCodeCyberAbuse
+		result.Message = cfg.CyberAbuseGuard.BlockMessage
+	}
+	return result, nil
+}
+
 func (s *ContentModerationService) Check(ctx context.Context, input ContentModerationCheckInput) (*ContentModerationDecision, error) {
 	allow := &ContentModerationDecision{Allowed: true, Action: ContentModerationActionAllow}
-	if s == nil || s.settingRepo == nil || s.repo == nil {
+	if s == nil || s.settingRepo == nil {
 		slog.Info("content_moderation.skip_unavailable",
 			"user_id", input.UserID,
 			"api_key_id", input.APIKeyID,
@@ -793,6 +843,61 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 			"endpoint", input.Endpoint,
 			"protocol", input.Protocol,
 			"error", err)
+		return allow, nil
+	}
+	content := ExtractContentModerationInput(input.Protocol, input.Body)
+	content.Normalize()
+	if content.IsEmpty() {
+		slog.Info("content_moderation.skip_empty_input",
+			"user_id", input.UserID,
+			"api_key_id", input.APIKeyID,
+			"group_id", contentModerationLogGroupID(input.GroupID),
+			"endpoint", input.Endpoint,
+			"protocol", input.Protocol,
+			"body_bytes", len(input.Body))
+		return allow, nil
+	}
+	slog.Info("content_moderation.input_extracted",
+		"user_id", input.UserID,
+		"api_key_id", input.APIKeyID,
+		"group_id", contentModerationLogGroupID(input.GroupID),
+		"endpoint", input.Endpoint,
+		"protocol", input.Protocol,
+		"text_runes", len([]rune(content.Text)),
+		"image_count", len(content.Images))
+	if cfg.CyberAbuseGuard.Enabled && cfg.CyberAbuseGuard.PreflightEnabled {
+		if detection := DetectCyberAbuse(content.Text); detection.Matched {
+			policyCategory := "cyber_abuse/" + detection.Category
+			s.recordPreBlockSyncMetric(0, ContentModerationActionCyberAbuseBlock)
+			slog.Warn("content_moderation.cyber_abuse_block",
+				"user_id", input.UserID,
+				"api_key_id", input.APIKeyID,
+				"group_id", contentModerationLogGroupID(input.GroupID),
+				"endpoint", input.Endpoint,
+				"protocol", input.Protocol,
+				"category", detection.Category,
+				"rule_id", detection.RuleID,
+				"confidence", detection.Confidence)
+			s.recordCyberAbuseBlock(input, cfg, content, detection)
+			return &ContentModerationDecision{
+				Allowed:         false,
+				Blocked:         true,
+				Flagged:         true,
+				Message:         cfg.CyberAbuseGuard.BlockMessage,
+				ErrorCode:       ContentModerationErrorCodeCyberAbuse,
+				StatusCode:      http.StatusForbidden,
+				HighestCategory: policyCategory,
+				HighestScore:    detection.Confidence,
+				CategoryScores:  map[string]float64{policyCategory: detection.Confidence},
+				Action:          ContentModerationActionCyberAbuseBlock,
+			}, nil
+		}
+	}
+	if s.repo == nil {
+		slog.Warn("content_moderation.skip_audit_repository_unavailable",
+			"user_id", input.UserID,
+			"endpoint", input.Endpoint,
+			"protocol", input.Protocol)
 		return allow, nil
 	}
 	inGroupScope := cfg.includesGroup(input.GroupID)
@@ -861,26 +966,6 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 			"configured_models", cfg.ModelFilter.Models)
 		return allow, nil
 	}
-	content := ExtractContentModerationInput(input.Protocol, input.Body)
-	if content.IsEmpty() {
-		slog.Info("content_moderation.skip_empty_input",
-			"user_id", input.UserID,
-			"api_key_id", input.APIKeyID,
-			"group_id", contentModerationLogGroupID(input.GroupID),
-			"endpoint", input.Endpoint,
-			"protocol", input.Protocol,
-			"body_bytes", len(input.Body))
-		return allow, nil
-	}
-	content.Normalize()
-	slog.Info("content_moderation.input_extracted",
-		"user_id", input.UserID,
-		"api_key_id", input.APIKeyID,
-		"group_id", contentModerationLogGroupID(input.GroupID),
-		"endpoint", input.Endpoint,
-		"protocol", input.Protocol,
-		"text_runes", len([]rune(content.Text)),
-		"image_count", len(content.Images))
 	hashText := content.Hash()
 	if cfg.Mode == ContentModerationModePreBlock {
 		if cfg.KeywordBlockingMode != ContentModerationKeywordModeAPIOnly && len(cfg.BlockedKeywords) > 0 {
@@ -996,6 +1081,27 @@ func (s *ContentModerationService) Check(ctx context.Context, input ContentModer
 	return s.checkSync(ctx, input, cfg, content, hashText, nil, true), nil
 }
 
+func (s *ContentModerationService) recordCyberAbuseBlock(input ContentModerationCheckInput, cfg *ContentModerationConfig, content ContentModerationInput, detection CyberAbuseDetection) {
+	if s == nil || cfg == nil {
+		return
+	}
+	if s.repo == nil {
+		slog.Warn("content_moderation.cyber_abuse_audit_unavailable",
+			"user_id", input.UserID,
+			"endpoint", input.Endpoint,
+			"category", detection.Category,
+			"rule_id", detection.RuleID)
+		return
+	}
+	policyCategory := "cyber_abuse/" + detection.Category
+	scores := map[string]float64{policyCategory: detection.Confidence}
+	log := s.buildLog(input, cfg, ContentModerationActionCyberAbuseBlock, true, policyCategory, detection.Confidence, scores, cyberAbuseAuditExcerpt, nil, nil, "")
+	log.Mode = "local_preflight"
+	log.PolicySource = ContentModerationPolicySourceCyberAbuse
+	log.PolicyRuleID = detection.RuleID
+	s.enqueueRecordWithOptions(input, cfg, log, content.Hash(), false, cfg.CyberAbuseGuard.CountTowardsAutoBan, true)
+}
+
 func (s *ContentModerationService) checkSync(ctx context.Context, input ContentModerationCheckInput, cfg *ContentModerationConfig, content ContentModerationInput, hashText string, queueDelay *int, allowBlock bool) *ContentModerationDecision {
 	allow := &ContentModerationDecision{Allowed: true, Action: ContentModerationActionAllow}
 	trackPreBlock := queueDelay == nil && allowBlock && cfg != nil && cfg.Mode == ContentModerationModePreBlock
@@ -1099,7 +1205,7 @@ func (s *ContentModerationService) recordPreBlockSyncMetric(latencyMS int, actio
 	}
 	s.preBlockLatencyTotalMS.Add(int64(latencyMS))
 	switch action {
-	case ContentModerationActionBlock, ContentModerationActionHashBlock, ContentModerationActionKeywordBlock:
+	case ContentModerationActionBlock, ContentModerationActionHashBlock, ContentModerationActionKeywordBlock, ContentModerationActionCyberAbuseBlock:
 		s.preBlockBlocked.Add(1)
 	case ContentModerationActionError:
 		s.preBlockErrors.Add(1)
@@ -1137,6 +1243,10 @@ func (s *ContentModerationService) enqueueAsync(input ContentModerationCheckInpu
 }
 
 func (s *ContentModerationService) enqueueRecord(input ContentModerationCheckInput, cfg *ContentModerationConfig, log *ContentModerationLog, inputHash string, recordHash bool, applySideEffects bool) {
+	s.enqueueRecordWithOptions(input, cfg, log, inputHash, recordHash, applySideEffects, applySideEffects)
+}
+
+func (s *ContentModerationService) enqueueRecordWithOptions(input ContentModerationCheckInput, cfg *ContentModerationConfig, log *ContentModerationLog, inputHash string, recordHash bool, applySideEffects bool, sendNotificationEffects bool) {
 	if s == nil || s.asyncQueue == nil || log == nil {
 		return
 	}
@@ -1154,13 +1264,14 @@ func (s *ContentModerationService) enqueueRecord(input ContentModerationCheckInp
 		return
 	}
 	task := contentModerationTask{
-		input:            input,
-		inputHash:        inputHash,
-		log:              log,
-		config:           cloneContentModerationConfig(cfg),
-		recordHash:       recordHash,
-		applySideEffects: applySideEffects,
-		enqueuedAt:       time.Now(),
+		input:                   input,
+		inputHash:               inputHash,
+		log:                     log,
+		config:                  cloneContentModerationConfig(cfg),
+		recordHash:              recordHash,
+		applySideEffects:        applySideEffects,
+		sendNotificationEffects: sendNotificationEffects,
+		enqueuedAt:              time.Now(),
 	}
 	select {
 	case s.asyncQueue <- task:
@@ -1204,7 +1315,7 @@ func (s *ContentModerationService) worker(id int) {
 				if taskCfg == nil {
 					taskCfg = cfg
 				}
-				s.persistContentModerationLog(ctx, taskCfg, task.log, task.inputHash, task.recordHash, task.applySideEffects)
+				s.persistContentModerationLogWithOptions(ctx, taskCfg, task.log, task.inputHash, task.recordHash, task.applySideEffects, task.sendNotificationEffects)
 				s.asyncProcessed.Add(1)
 				return
 			}
@@ -1632,6 +1743,10 @@ func (s *ContentModerationService) buildLog(input ContentModerationCheckInput, c
 }
 
 func (s *ContentModerationService) persistContentModerationLog(ctx context.Context, cfg *ContentModerationConfig, log *ContentModerationLog, hashText string, recordHash bool, applySideEffects bool) {
+	s.persistContentModerationLogWithOptions(ctx, cfg, log, hashText, recordHash, applySideEffects, applySideEffects)
+}
+
+func (s *ContentModerationService) persistContentModerationLogWithOptions(ctx context.Context, cfg *ContentModerationConfig, log *ContentModerationLog, hashText string, recordHash bool, applySideEffects bool, sendNotificationEffects bool) {
 	if s == nil || log == nil {
 		return
 	}
@@ -1643,6 +1758,8 @@ func (s *ContentModerationService) persistContentModerationLog(ctx context.Conte
 	autoBanJustApplied := false
 	if applySideEffects {
 		autoBanJustApplied = s.applyFlaggedAccountSideEffects(ctx, cfg, log)
+	}
+	if sendNotificationEffects {
 		s.sendFlaggedNotificationSideEffects(ctx, cfg, log, autoBanJustApplied)
 	}
 	if s.repo != nil {
@@ -1852,6 +1969,15 @@ func defaultContentModerationConfig() *ContentModerationConfig {
 			Models: []string{},
 		},
 		CyberPolicyExcludeFromBanCount: false,
+		CyberAbuseGuard: CyberAbuseGuardConfig{
+			Enabled:                    false,
+			PreflightEnabled:           true,
+			ProviderFeedbackEnabled:    true,
+			CountTowardsAutoBan:        false,
+			BlockMessage:               defaultCyberAbuseBlockMessage,
+			preflightConfigured:        true,
+			providerFeedbackConfigured: true,
+		},
 	}
 }
 
@@ -1949,6 +2075,7 @@ func (cfg *ContentModerationConfig) normalize() {
 	cfg.BlockedKeywords = normalizeBlockedKeywords(cfg.BlockedKeywords)
 	cfg.KeywordBlockingMode = normalizeKeywordBlockingMode(cfg.KeywordBlockingMode)
 	cfg.ModelFilter = normalizeContentModerationModelFilter(cfg.ModelFilter)
+	cfg.CyberAbuseGuard.normalize()
 }
 
 func (cfg *ContentModerationConfig) includesGroup(groupID *int64) bool {
@@ -2179,6 +2306,7 @@ func (s *ContentModerationService) configView(cfg *ContentModerationConfig) *Con
 		KeywordBlockingMode:            cfg.KeywordBlockingMode,
 		ModelFilter:                    cloneContentModerationModelFilter(cfg.ModelFilter),
 		CyberPolicyExcludeFromBanCount: cfg.CyberPolicyExcludeFromBanCount,
+		CyberAbuseGuard:                cfg.CyberAbuseGuard,
 	}
 }
 
@@ -2738,7 +2866,10 @@ func (s *ContentModerationService) RecordCyberPolicyEvent(ctx context.Context, i
 	cfg, err := s.loadConfig(ctx)
 	if err != nil {
 		slog.Warn("content_moderation.cyber_load_config_failed", "error", err)
-		cfg = &ContentModerationConfig{}
+		cfg = defaultContentModerationConfig()
+	}
+	if !cfg.CyberAbuseGuard.ProviderFeedbackEnabled {
+		return
 	}
 	var userID *int64
 	if in.UserID > 0 {
@@ -2772,6 +2903,8 @@ func (s *ContentModerationService) RecordCyberPolicyEvent(ctx context.Context, i
 		Flagged:         true,
 		HighestCategory: "cyber_policy",
 		HighestScore:    1.0,
+		PolicySource:    ContentModerationPolicySourceCyberPolicy,
+		PolicyRuleID:    "cyber_policy",
 		Error:           trimRunes(redactContentModerationSecrets(errBody), maxModerationExcerptRunes*4),
 		CreatedAt:       time.Now(),
 	}

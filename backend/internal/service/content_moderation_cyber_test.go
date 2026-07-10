@@ -91,6 +91,23 @@ func TestRecordCyberPolicyEvent_DisabledWhenRiskControlOff(t *testing.T) {
 	require.Empty(t, repo.snapshotLogs(), "CreateLog must NOT be called when risk_control_enabled is off")
 }
 
+func TestRecordCyberPolicyEvent_ProviderFeedbackDisabled(t *testing.T) {
+	repo := &contentModerationTestRepo{}
+	svc := NewContentModerationService(
+		&contentModerationTestSettingRepo{values: map[string]string{
+			SettingKeyRiskControlEnabled:      "true",
+			SettingKeyContentModerationConfig: `{"cyber_abuse_guard":{"provider_feedback_enabled":false}}`,
+		}},
+		repo, nil, nil, nil, nil, nil,
+	)
+
+	svc.RecordCyberPolicyEvent(context.Background(), CyberPolicyRecordInput{
+		UserID: 1, UserEmail: "u@x.com", UpstreamMessage: "flagged",
+	})
+
+	require.Empty(t, repo.snapshotLogs())
+}
+
 func TestRecordCyberPolicyEvent_WritesLogWhenEnabled(t *testing.T) {
 	repo := &contentModerationTestRepo{}
 	svc := NewContentModerationService(
@@ -122,6 +139,8 @@ func TestRecordCyberPolicyEvent_WritesLogWhenEnabled(t *testing.T) {
 	require.Equal(t, "cyber_policy", log.Action)
 	require.True(t, log.Flagged)
 	require.Equal(t, "cyber_policy", log.HighestCategory)
+	require.Equal(t, ContentModerationPolicySourceCyberPolicy, log.PolicySource)
+	require.Equal(t, "cyber_policy", log.PolicyRuleID)
 	require.Contains(t, log.Error, "flagged")
 	require.False(t, log.AutoBanned)
 	// emailService is nil, so EmailSent must be false

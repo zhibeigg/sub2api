@@ -13,6 +13,7 @@ import (
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	"github.com/Wei-Shaw/sub2api/internal/payment/provider"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -170,13 +171,23 @@ func (s *PaymentService) validateSubOrder(ctx context.Context, req CreateOrderRe
 	if err != nil {
 		return nil, err
 	}
+	planType := normalizeSubscriptionPlanType(snapshot.PlanType)
+	if planType == domain.SubscriptionPlanTypeLegacySharedSubscription {
+		return nil, infraerrors.Conflict("PLAN_LEGACY_NOT_FOR_SALE", "legacy shared subscription plans must be converted before purchase")
+	}
+	if err := validatePlanSemantics(planType, snapshot.GroupIDs, snapshot.DailyLimitUSD, snapshot.WeeklyLimitUSD, snapshot.MonthlyLimitUSD); err != nil {
+		return nil, err
+	}
 	for _, groupID := range snapshot.GroupIDs {
 		item, groupErr := s.groupRepo.GetByID(ctx, groupID)
 		if groupErr != nil || item.Status != payment.EntityStatusActive {
 			return nil, infraerrors.NotFound("GROUP_NOT_FOUND", "subscription group is no longer available")
 		}
-		if !item.IsSubscriptionType() {
-			return nil, infraerrors.BadRequest("GROUP_TYPE_MISMATCH", "group is not a subscription type")
+		if planType == domain.SubscriptionPlanTypeSubscription && !item.IsSubscriptionType() {
+			return nil, infraerrors.BadRequest("GROUP_TYPE_MISMATCH", "subscription plans require a subscription group")
+		}
+		if planType == domain.SubscriptionPlanTypeStandardQuota && item.SubscriptionType != domain.SubscriptionTypeStandard {
+			return nil, infraerrors.BadRequest("GROUP_TYPE_MISMATCH", "standard_quota plans require standard groups")
 		}
 	}
 	return plan, nil

@@ -16,6 +16,8 @@ const (
 	FieldID = "id"
 	// FieldGroupID holds the string denoting the group_id field in the database.
 	FieldGroupID = "group_id"
+	// FieldPlanType holds the string denoting the plan_type field in the database.
+	FieldPlanType = "plan_type"
 	// FieldName holds the string denoting the name field in the database.
 	FieldName = "name"
 	// FieldDescription holds the string denoting the description field in the database.
@@ -79,6 +81,7 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldGroupID,
+	FieldPlanType,
 	FieldName,
 	FieldDescription,
 	FieldPrice,
@@ -113,6 +116,10 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// DefaultPlanType holds the default value on creation for the "plan_type" field.
+	DefaultPlanType string
+	// PlanTypeValidator is a validator for the "plan_type" field. It is called by the builders before save.
+	PlanTypeValidator func(string) error
 	// NameValidator is a validator for the "name" field. It is called by the builders before save.
 	NameValidator func(string) error
 	// DefaultDescription holds the default value on creation for the "description" field.
@@ -152,6 +159,11 @@ func ByID(opts ...sql.OrderTermOption) OrderOption {
 // ByGroupID orders the results by the group_id field.
 func ByGroupID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldGroupID, opts...).ToFunc()
+}
+
+// ByPlanType orders the results by the plan_type field.
+func ByPlanType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPlanType, opts...).ToFunc()
 }
 
 // ByName orders the results by the name field.

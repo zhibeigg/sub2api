@@ -3,13 +3,16 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 )
 
 type paymentSubscriptionSnapshot struct {
 	SchemaVersion   int      `json:"schema_version"`
 	PlanID          int64    `json:"plan_id"`
+	PlanType        string   `json:"plan_type"`
 	GroupIDs        []int64  `json:"group_ids"`
 	ValidityDays    int      `json:"validity_days"`
 	DailyLimitUSD   *float64 `json:"daily_limit_usd"`
@@ -26,10 +29,19 @@ func (s *PaymentService) buildSubscriptionSnapshot(ctx context.Context, plan *db
 	if len(groupIDs) == 0 {
 		groupIDs = []int64{plan.GroupID}
 	}
+	planType := normalizeSubscriptionPlanType(plan.PlanType)
+	dailyLimit := plan.DailyLimitUsd
+	weeklyLimit := plan.WeeklyLimitUsd
+	monthlyLimit := plan.MonthlyLimitUsd
+	if planType == domain.SubscriptionPlanTypeSubscription {
+		dailyLimit = nil
+		weeklyLimit = nil
+		monthlyLimit = nil
+	}
 	return &paymentSubscriptionSnapshot{
-		SchemaVersion: 1, PlanID: plan.ID, GroupIDs: groupIDs,
+		SchemaVersion: 2, PlanID: plan.ID, PlanType: planType, GroupIDs: groupIDs,
 		ValidityDays:  psComputeValidityDays(plan.ValidityDays, plan.ValidityUnit),
-		DailyLimitUSD: plan.DailyLimitUsd, WeeklyLimitUSD: plan.WeeklyLimitUsd, MonthlyLimitUSD: plan.MonthlyLimitUsd,
+		DailyLimitUSD: dailyLimit, WeeklyLimitUSD: weeklyLimit, MonthlyLimitUSD: monthlyLimit,
 	}, nil
 }
 
@@ -52,6 +64,13 @@ func parsePaymentSubscriptionSnapshot(order *dbent.PaymentOrder) *paymentSubscri
 		if err == nil {
 			var snapshot paymentSubscriptionSnapshot
 			if json.Unmarshal(raw, &snapshot) == nil && len(snapshot.GroupIDs) > 0 && snapshot.ValidityDays > 0 {
+				if strings.TrimSpace(snapshot.PlanType) == "" {
+					if snapshot.SchemaVersion > 0 {
+						snapshot.PlanType = domain.SubscriptionPlanTypeLegacySharedSubscription
+					} else {
+						snapshot.PlanType = domain.SubscriptionPlanTypeSubscription
+					}
+				}
 				return &snapshot
 			}
 		}
@@ -59,7 +78,23 @@ func parsePaymentSubscriptionSnapshot(order *dbent.PaymentOrder) *paymentSubscri
 	if order.SubscriptionGroupID == nil || order.SubscriptionDays == nil {
 		return nil
 	}
-	return &paymentSubscriptionSnapshot{SchemaVersion: 0, PlanID: valueInt64(order.PlanID), GroupIDs: []int64{*order.SubscriptionGroupID}, ValidityDays: *order.SubscriptionDays}
+	return &paymentSubscriptionSnapshot{
+		SchemaVersion: 0,
+		PlanID:        valueInt64(order.PlanID),
+		PlanType:      domain.SubscriptionPlanTypeSubscription,
+		GroupIDs:      []int64{*order.SubscriptionGroupID},
+		ValidityDays:  *order.SubscriptionDays,
+	}
+}
+
+func (snapshot *paymentSubscriptionSnapshot) quotaSnapshotted() bool {
+	if snapshot == nil {
+		return false
+	}
+	if snapshot.SchemaVersion >= 2 {
+		return normalizeSubscriptionPlanType(snapshot.PlanType) != domain.SubscriptionPlanTypeSubscription
+	}
+	return snapshot.SchemaVersion > 0
 }
 
 func valueInt64(value *int64) int64 {

@@ -194,6 +194,10 @@ func (s *stubUserRepo) DeductBalance(ctx context.Context, id int64, amount float
 	panic("unexpected DeductBalance call")
 }
 
+func (s *stubUserRepo) BindPromoCode(context.Context, int64, int64) error {
+	panic("unexpected BindPromoCode call")
+}
+
 func (s *stubUserRepo) UpdateConcurrency(ctx context.Context, id int64, amount int) error {
 	panic("unexpected UpdateConcurrency call")
 }

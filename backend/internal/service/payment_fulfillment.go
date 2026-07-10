@@ -17,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
 	"github.com/Wei-Shaw/sub2api/ent/user"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
@@ -574,10 +575,20 @@ func (s *PaymentService) doSub(ctx context.Context, o *dbent.PaymentOrder, lease
 	if snapshot == nil {
 		return errors.New("missing subscription snapshot")
 	}
+	planType := normalizeSubscriptionPlanType(snapshot.PlanType)
 	for _, groupID := range snapshot.GroupIDs {
 		g, err := s.groupRepo.GetByID(ctx, groupID)
 		if err != nil || g.Status != payment.EntityStatusActive {
 			return fmt.Errorf("group %d no longer exists or inactive", groupID)
+		}
+		if planType == domain.SubscriptionPlanTypeSubscription && !g.IsSubscriptionType() {
+			return fmt.Errorf("group %d is no longer a subscription group", groupID)
+		}
+		if planType == domain.SubscriptionPlanTypeStandardQuota && g.SubscriptionType != domain.SubscriptionTypeStandard {
+			return fmt.Errorf("group %d is no longer a standard group", groupID)
+		}
+		if planType == domain.SubscriptionPlanTypeLegacySharedSubscription && !g.IsSubscriptionType() {
+			return fmt.Errorf("legacy group %d is no longer a subscription group", groupID)
 		}
 	}
 	if err := s.ensurePaymentSubscriptionAssigned(ctx, o, snapshot); err != nil {
@@ -622,7 +633,7 @@ func (s *PaymentService) ensurePaymentSubscriptionAssigned(ctx context.Context, 
 			planID := snapshot.PlanID
 			if _, _, err := s.subscriptionSvc.assignOrExtendSubscription(txCtx, &AssignSubscriptionInput{
 				UserID: o.UserID, GroupID: groupID, GroupIDs: snapshot.GroupIDs,
-				SourcePlanID: &planID, QuotaSnapshotted: snapshot.SchemaVersion > 0,
+				SourcePlanID: &planID, QuotaSnapshotted: snapshot.quotaSnapshotted(),
 				DailyLimitUSD: snapshot.DailyLimitUSD, WeeklyLimitUSD: snapshot.WeeklyLimitUSD,
 				MonthlyLimitUSD: snapshot.MonthlyLimitUSD, ValidityDays: days,
 				AssignedBy: 0, Notes: orderNote,
@@ -633,6 +644,7 @@ func (s *PaymentService) ensurePaymentSubscriptionAssigned(ctx context.Context, 
 
 		detail, _ := json.Marshal(map[string]any{
 			"groupID": groupID, "groupIDs": snapshot.GroupIDs, "planID": snapshot.PlanID,
+			"planType": snapshot.PlanType, "quotaSnapshotted": snapshot.quotaSnapshotted(),
 			"dailyLimitUSD": snapshot.DailyLimitUSD, "weeklyLimitUSD": snapshot.WeeklyLimitUSD,
 			"monthlyLimitUSD": snapshot.MonthlyLimitUSD, "validityDays": days,
 			"recoveredFromNote": recoveredFromNote,

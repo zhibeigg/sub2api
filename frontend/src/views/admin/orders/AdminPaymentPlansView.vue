@@ -14,6 +14,19 @@
         <template #cell-name="{ value, row }">
           <span class="text-sm font-medium" :class="getPlanNameClass(row)">{{ value }}</span>
         </template>
+        <template #cell-plan_type="{ row }">
+          <div class="flex flex-col items-start gap-1">
+            <span :class="['badge', getPlanTypeBadgeClass(row)]">
+              {{ getPlanTypeLabel(row) }}
+            </span>
+            <span
+              v-if="getPlanType(row) === 'legacy_shared_subscription'"
+              class="max-w-48 text-xs leading-relaxed text-amber-600 dark:text-amber-300"
+            >
+              {{ t('payment.admin.legacyPlanOffSaleHint') }}
+            </span>
+          </div>
+        </template>
         <template #cell-group_id="{ row }">
           <div v-if="getPlanGroups(row).length" class="flex max-w-sm flex-wrap gap-1.5">
             <GroupBadge
@@ -84,7 +97,7 @@ import { adminPaymentAPI } from '@/api/admin/payment'
 import type { AdminPaymentConfig } from '@/api/admin/payment'
 import { extractI18nErrorMessage } from '@/utils/apiError'
 import adminAPI from '@/api/admin'
-import type { SubscriptionPlan } from '@/types/payment'
+import type { SubscriptionPlan, SubscriptionPlanType } from '@/types/payment'
 import type { AdminGroup } from '@/types'
 import type { Column } from '@/components/common/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -145,6 +158,25 @@ function getPlanNameClass(plan: SubscriptionPlan): string {
   return group ? platformTextClass(group.platform) : 'text-gray-900 dark:text-white'
 }
 
+function getPlanType(plan: SubscriptionPlan): SubscriptionPlanType {
+  return plan.plan_type || 'legacy_shared_subscription'
+}
+
+function getPlanTypeLabel(plan: SubscriptionPlan): string {
+  const labels: Record<SubscriptionPlanType, string> = {
+    subscription: t('payment.admin.planTypes.subscription'),
+    standard_quota: t('payment.admin.planTypes.standardQuota'),
+    legacy_shared_subscription: t('payment.admin.planTypes.legacy'),
+  }
+  return labels[getPlanType(plan)]
+}
+
+function getPlanTypeBadgeClass(plan: SubscriptionPlan): string {
+  if (getPlanType(plan) === 'subscription') return 'badge-primary'
+  if (getPlanType(plan) === 'standard_quota') return 'badge-success'
+  return 'badge-warning'
+}
+
 
 // ==================== Plans ====================
 
@@ -158,6 +190,7 @@ const deletingPlanId = ref<number | null>(null)
 const planColumns = computed((): Column[] => [
   { key: 'id', label: 'ID' },
   { key: 'name', label: t('payment.admin.planName') },
+  { key: 'plan_type', label: t('payment.admin.planType') },
   { key: 'group_id', label: t('payment.admin.group') },
   { key: 'price', label: t('payment.admin.price') },
   { key: 'validity_days', label: t('payment.admin.validityDays') },
@@ -171,8 +204,9 @@ async function loadPlans() {
   try {
     const res = await adminPaymentAPI.getPlans()
     // Backend returns features as newline-separated string; parse to array
-    plans.value = (res.data || []).map((p: Omit<SubscriptionPlan, 'features'> & { features: string | string[] }) => ({
+    plans.value = (res.data || []).map((p: Omit<SubscriptionPlan, 'features' | 'plan_type'> & { features: string | string[]; plan_type?: SubscriptionPlanType }) => ({
       ...p,
+      plan_type: p.plan_type || 'legacy_shared_subscription',
       features: typeof p.features === 'string'
         ? p.features.split('\n').map((f: string) => f.trim()).filter(Boolean)
         : (p.features || []),

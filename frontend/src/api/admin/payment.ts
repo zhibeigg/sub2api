@@ -9,6 +9,7 @@ import type {
   PaymentOrder,
   PaymentChannel,
   SubscriptionPlan,
+  SubscriptionPlanType,
   ProviderInstance
 } from '@/types/payment'
 import type { BasePaginationResponse } from '@/types'
@@ -57,6 +58,7 @@ export interface UpdatePaymentConfigRequest {
 
 export interface CreateSubscriptionPlanRequest {
   name: string
+  plan_type: SubscriptionPlanType
   group_id: number | null
   group_ids: number[]
   daily_limit_usd: number | null

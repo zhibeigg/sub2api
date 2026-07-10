@@ -14,6 +14,7 @@ import (
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplangroup"
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/dgraph-io/ristretto"
@@ -23,6 +24,10 @@ import (
 // MaxExpiresAt is the maximum allowed expiration date (year 2099)
 // This prevents time.Time JSON serialization errors (RFC 3339 requires year <= 9999)
 var MaxExpiresAt = time.Date(2099, 12, 31, 23, 59, 59, 0, time.UTC)
+
+// noActiveSubscriptionCacheEntry 是标准分组余额回退路径使用的 L1 负缓存哨兵。
+// 套餐分配/续期会按所有授权 group_ids 主动失效该 key，因此不会延迟已购买套餐生效。
+var noActiveSubscriptionCacheEntry = &UserSubscription{}
 
 // MaxValidityDays is the maximum allowed validity days for subscriptions (100 years)
 const MaxValidityDays = 36500
@@ -140,6 +145,17 @@ func (s *SubscriptionService) jitteredTTL(ttl time.Duration) time.Duration {
 	return time.Duration(float64(ttl) * factor)
 }
 
+func (s *SubscriptionService) negativeSubCacheTTL() time.Duration {
+	ttl := s.subCacheTTL / 10
+	if ttl <= 0 || ttl > 15*time.Second {
+		ttl = 15 * time.Second
+	}
+	if ttl < time.Second {
+		ttl = time.Second
+	}
+	return s.jitteredTTL(ttl)
+}
+
 // InvalidateSubCache 失效指定用户+分组的订阅 L1 缓存
 func (s *SubscriptionService) InvalidateSubCache(userID, groupID int64) {
 	if s.subCacheL1 == nil {
@@ -251,13 +267,29 @@ func (s *SubscriptionService) BuildPlanAssignmentInput(ctx context.Context, user
 	if len(groupIDs) == 0 {
 		groupIDs = []int64{plan.GroupID}
 	}
+	planType := normalizeSubscriptionPlanType(plan.PlanType)
+	if planType == domain.SubscriptionPlanTypeLegacySharedSubscription {
+		return nil, infraerrors.Conflict("PLAN_LEGACY_READ_ONLY", "legacy shared subscription plans must be converted before assignment")
+	}
+	dailyLimit := plan.DailyLimitUsd
+	weeklyLimit := plan.WeeklyLimitUsd
+	monthlyLimit := plan.MonthlyLimitUsd
+	quotaSnapshotted := planType == domain.SubscriptionPlanTypeStandardQuota
+	if !quotaSnapshotted {
+		dailyLimit = nil
+		weeklyLimit = nil
+		monthlyLimit = nil
+	}
+	if err := validatePlanSemantics(planType, groupIDs, dailyLimit, weeklyLimit, monthlyLimit); err != nil {
+		return nil, err
+	}
 	if validityDays <= 0 {
 		validityDays = psComputeValidityDays(plan.ValidityDays, plan.ValidityUnit)
 	}
 	return &AssignSubscriptionInput{
 		UserID: userID, GroupID: groupIDs[0], GroupIDs: groupIDs, SourcePlanID: &plan.ID,
-		QuotaSnapshotted: true, DailyLimitUSD: plan.DailyLimitUsd,
-		WeeklyLimitUSD: plan.WeeklyLimitUsd, MonthlyLimitUSD: plan.MonthlyLimitUsd,
+		QuotaSnapshotted: quotaSnapshotted, DailyLimitUSD: dailyLimit,
+		WeeklyLimitUSD: weeklyLimit, MonthlyLimitUSD: monthlyLimit,
 		ValidityDays: validityDays, AssignedBy: assignedBy, Notes: notes,
 	}, nil
 }
@@ -283,14 +315,34 @@ func (s *SubscriptionService) prepareAssignmentInput(ctx context.Context, input 
 		return nil, infraerrors.BadRequest("SUBSCRIPTION_GROUP_REQUIRED", "at least one subscription group is required")
 	}
 	prepared.GroupID = prepared.GroupIDs[0]
+	hasStandardGroup := false
+	hasSubscriptionGroup := false
 	for _, groupID := range prepared.GroupIDs {
 		item, err := s.groupRepo.GetByID(ctx, groupID)
 		if err != nil {
 			return nil, fmt.Errorf("group %d not found: %w", groupID, err)
 		}
-		if !item.IsSubscriptionType() {
+		switch item.SubscriptionType {
+		case domain.SubscriptionTypeSubscription:
+			hasSubscriptionGroup = true
+		case domain.SubscriptionTypeStandard:
+			hasStandardGroup = true
+		default:
 			return nil, ErrGroupNotSubscriptionType
 		}
+	}
+	if hasStandardGroup && hasSubscriptionGroup {
+		return nil, infraerrors.BadRequest("SUBSCRIPTION_GROUP_TYPE_MIXED", "subscription assignments cannot mix standard and subscription groups")
+	}
+	if hasStandardGroup {
+		if !prepared.QuotaSnapshotted || prepared.SourcePlanID == nil {
+			return nil, ErrGroupNotSubscriptionType
+		}
+		if prepared.DailyLimitUSD == nil && prepared.WeeklyLimitUSD == nil && prepared.MonthlyLimitUSD == nil {
+			return nil, infraerrors.BadRequest("PLAN_QUOTA_REQUIRED", "standard group subscriptions require at least one quota limit")
+		}
+	} else if !prepared.QuotaSnapshotted && len(prepared.GroupIDs) != 1 {
+		return nil, infraerrors.BadRequest("SUBSCRIPTION_GROUP_COUNT_INVALID", "native subscription assignments require exactly one group")
 	}
 	return &prepared, nil
 }
@@ -759,7 +811,7 @@ func (s *SubscriptionService) RevokeSubscription(ctx context.Context, subscripti
 		return err
 	}
 
-	if err := s.invalidateSubscriptionGroupCaches(sub.UserID, sub.GroupIDs); err != nil {
+	if err := s.invalidateSubscriptionGroupCaches(sub.UserID, subscriptionGroupIDs(sub)); err != nil {
 		return err
 	}
 
@@ -776,7 +828,7 @@ func (s *SubscriptionService) RestoreSubscription(ctx context.Context, subscript
 		return nil, ErrSubscriptionNotRevoked
 	}
 
-	for _, groupID := range sub.GroupIDs {
+	for _, groupID := range subscriptionGroupIDs(sub) {
 		exists, err := s.userSubRepo.ExistsActiveByUserIDAndGroupID(ctx, sub.UserID, groupID)
 		if err != nil {
 			return nil, err
@@ -801,7 +853,7 @@ func (s *SubscriptionService) RestoreSubscription(ctx context.Context, subscript
 		return nil, err
 	}
 
-	if err := s.invalidateSubscriptionGroupCaches(restored.UserID, restored.GroupIDs); err != nil {
+	if err := s.invalidateSubscriptionGroupCaches(restored.UserID, subscriptionGroupIDs(restored)); err != nil {
 		return nil, err
 	}
 	return restored, nil
@@ -861,7 +913,7 @@ func (s *SubscriptionService) ExtendSubscription(ctx context.Context, subscripti
 	}
 
 	// 失效该共享订阅的全部分组缓存。
-	s.maybeInvalidateAssignmentGroupCaches(sub.UserID, sub.GroupIDs, false)
+	s.maybeInvalidateAssignmentGroupCaches(sub.UserID, subscriptionGroupIDs(sub), false)
 
 	return s.userSubRepo.GetByID(ctx, subscriptionID)
 }
@@ -881,6 +933,9 @@ func (s *SubscriptionService) GetActiveSubscription(ctx context.Context, userID,
 	if s.subCacheL1 != nil {
 		if v, ok := s.subCacheL1.Get(key); ok {
 			if sub, ok := v.(*UserSubscription); ok {
+				if sub.ID == 0 {
+					return nil, ErrSubscriptionNotFound
+				}
 				cp := *sub
 				return &cp, nil
 			}
@@ -891,6 +946,9 @@ func (s *SubscriptionService) GetActiveSubscription(ctx context.Context, userID,
 	value, err, _ := s.subCacheGroup.Do(key, func() (any, error) {
 		sub, err := s.userSubRepo.GetActiveByUserIDAndGroupID(ctx, userID, groupID)
 		if err != nil {
+			if errors.Is(err, ErrSubscriptionNotFound) && s.subCacheL1 != nil {
+				_ = s.subCacheL1.SetWithTTL(key, noActiveSubscriptionCacheEntry, 1, s.negativeSubCacheTTL())
+			}
 			return nil, err // 直接透传 repo 已翻译的错误（NotFound → ErrSubscriptionNotFound，其他错误原样返回）
 		}
 		// 写入 L1 缓存
@@ -1024,7 +1082,7 @@ func (s *SubscriptionService) AdminResetQuota(ctx context.Context, subscriptionI
 	// Invalidate L1 ristretto cache. Ristretto's Del() is asynchronous by design,
 	// so call Wait() immediately after to flush pending operations and guarantee
 	// the deleted key is not returned on the very next Get() call.
-	for _, groupID := range uniqueSubscriptionGroupIDs(sub.GroupIDs) {
+	for _, groupID := range subscriptionGroupIDs(sub) {
 		s.InvalidateSubCacheSync(sub.UserID, groupID)
 		if s.billingCacheService != nil {
 			_ = s.billingCacheService.InvalidateSubscription(ctx, sub.UserID, groupID)
@@ -1075,7 +1133,7 @@ func (s *SubscriptionService) CheckAndResetWindows(ctx context.Context, sub *Use
 
 	// 如果有窗口被重置，失效缓存以保持一致性
 	if needsInvalidateCache {
-		for _, groupID := range uniqueSubscriptionGroupIDs(sub.GroupIDs) {
+		for _, groupID := range subscriptionGroupIDs(sub) {
 			s.InvalidateSubCache(sub.UserID, groupID)
 			if s.billingCacheService != nil {
 				_ = s.billingCacheService.InvalidateSubscription(ctx, sub.UserID, groupID)
@@ -1108,7 +1166,7 @@ func (s *SubscriptionService) EnsureWindowMaintenance(ctx context.Context, sub *
 	if err != nil {
 		return nil, err
 	}
-	for _, groupID := range uniqueSubscriptionGroupIDs(sub.GroupIDs) {
+	for _, groupID := range subscriptionGroupIDs(sub) {
 		s.InvalidateSubCacheSync(sub.UserID, groupID)
 	}
 	return refreshed, nil
@@ -1215,7 +1273,7 @@ func (s *SubscriptionService) doWindowMaintenance(sub *UserSubscription) {
 	}
 
 	// 失效 L1 缓存，确保全部白名单分组拿到更新后的数据。
-	for _, groupID := range uniqueSubscriptionGroupIDs(sub.GroupIDs) {
+	for _, groupID := range subscriptionGroupIDs(sub) {
 		s.InvalidateSubCache(sub.UserID, groupID)
 	}
 }

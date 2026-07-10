@@ -2,7 +2,16 @@
 
 Sub2API has a built-in payment system that enables user self-service top-up without deploying a separate payment service.
 
-Quota subscription plans can whitelist multiple groups that share one daily, weekly, and monthly USD quota. Group access, limits, and validity are snapshotted when purchased or assigned, so later plan edits do not retroactively change existing subscriptions. Administrators can also hide balance recharge and subscription purchase independently; the backend rejects new orders of the disabled type.
+Subscription plans have two modes. A `subscription` plan binds exactly one subscription group and uses that group's native limits. A `standard_quota` plan binds one or more standard balance groups and defines shared daily, weekly, or monthly USD plan limits. Plan type, group access, limits, and validity are snapshotted when purchased or assigned, so later plan edits do not retroactively change existing subscriptions. Administrators can also hide balance recharge and subscription purchase independently; the backend rejects new orders of the disabled type.
+
+### Subscription plan types
+
+| `plan_type` | Eligible groups | Count | Limit source | After expiration |
+|---|---|---:|---|---|
+| `subscription` | Subscription groups | Exactly 1 | The group's native daily/weekly/monthly limits | The subscription group is no longer available |
+| `standard_quota` | Standard balance groups | One or more | Shared plan-level limits; at least one period is required | Public standard groups return to balance billing; exclusive groups require separate access |
+
+An active `standard_quota` subscription takes priority over balance billing. Exhausted plan quota rejects the request instead of silently charging balance. Legacy multi-subscription-group plans are retained as read-only `legacy_shared_subscription` plans and taken off sale; existing subscriptions and order snapshots remain valid.
 
 ---
 
@@ -289,7 +298,7 @@ If you previously used [Sub2ApiPay](https://github.com/touwaeriol/sub2apipay) as
 | Payment Methods | EasyPay, Alipay, WeChat, Stripe | Same |
 | Configuration | Environment variables + separate admin UI | Unified in Sub2API admin dashboard |
 | Top-up Integration | Via Admin API callback | Internal processing, more reliable |
-| Subscription Plans | Supported | Not yet (planned) |
+| Subscription Plans | Supported | Built in, with native single-group and standard shared-quota modes |
 | Order Management | Separate admin interface | Integrated in Sub2API admin dashboard |
 
 ### Migration Steps

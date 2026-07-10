@@ -126,6 +126,7 @@ function checkoutInfoWithPlansFixture(options: {
   const base = checkoutInfoFixture(options.checkout).data
   const plan: SubscriptionPlan = {
     id: 7,
+    plan_type: 'subscription',
     group_id: 3,
     group_ids: [3],
     groups: [{ id: 3, name: 'OpenAI', platform: 'openai', rate_multiplier: 1 }],

@@ -23,6 +23,8 @@ export type PaymentType = 'alipay' | 'wxpay' | 'alipay_direct' | 'wxpay_direct' 
 
 export type OrderType = 'balance' | 'subscription'
 
+export type SubscriptionPlanType = 'subscription' | 'standard_quota' | 'legacy_shared_subscription'
+
 // ==================== Configuration ====================
 
 export interface PaymentConfig {
@@ -114,7 +116,7 @@ export interface SubscriptionPlanGroup {
   platform: string
   rate_multiplier: number
   description?: string | null
-  subscription_type?: string
+  subscription_type?: 'standard' | 'subscription'
   daily_limit_usd?: number | null
   weekly_limit_usd?: number | null
   monthly_limit_usd?: number | null
@@ -127,6 +129,7 @@ export interface SubscriptionPlanGroup {
 
 export interface SubscriptionPlan {
   id: number
+  plan_type: SubscriptionPlanType
   group_id: number
   group_ids: number[]
   groups: SubscriptionPlanGroup[]

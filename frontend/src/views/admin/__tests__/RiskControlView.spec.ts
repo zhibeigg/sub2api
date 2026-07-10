@@ -4,13 +4,14 @@ import { flushPromises, mount } from '@vue/test-utils'
 import type { DOMWrapper, VueWrapper } from '@vue/test-utils'
 
 import RiskControlView from '../RiskControlView.vue'
-import type { ContentModerationConfig, UpdateContentModerationConfig } from '@/api/admin/riskControl'
+import type { ContentModerationConfig, ContentModerationLog, UpdateContentModerationConfig } from '@/api/admin/riskControl'
 
 const {
   getConfig,
   updateConfig,
   getStatus,
   listLogs,
+  testCyberAbuse,
   getGroups,
   showError,
   showSuccess,
@@ -19,6 +20,7 @@ const {
   updateConfig: vi.fn(),
   getStatus: vi.fn(),
   listLogs: vi.fn(),
+  testCyberAbuse: vi.fn(),
   getGroups: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
@@ -32,6 +34,7 @@ vi.mock('@/api/admin', () => ({
       getStatus,
       listLogs,
       testAPIKeys: vi.fn(),
+      testCyberAbuse,
       deleteFlaggedHash: vi.fn(),
       clearFlaggedHashes: vi.fn(),
       unbanUser: vi.fn(),
@@ -105,6 +108,14 @@ const baseConfig = (): ContentModerationConfig => ({
     type: 'all',
     models: [],
   },
+  cyber_policy_exclude_from_ban_count: false,
+  cyber_abuse_guard: {
+    enabled: false,
+    preflight_enabled: true,
+    provider_feedback_enabled: true,
+    count_towards_auto_ban: false,
+    block_message: '请补充授权和防御性上下文后重试',
+  },
 })
 
 const runtimeStatus = () => ({
@@ -136,6 +147,39 @@ const runtimeStatus = () => ({
   flagged_hash_count: 0,
   last_cleanup_deleted_hit: 0,
   last_cleanup_deleted_non_hit: 0,
+})
+
+const cyberAbuseLog = (): ContentModerationLog => ({
+  id: 1,
+  request_id: 'req-cyber-1',
+  user_id: 7,
+  user_email: 'researcher@example.com',
+  api_key_id: 9,
+  api_key_name: 'security-key',
+  group_id: 3,
+  group_name: 'default',
+  endpoint: '/v1/responses',
+  provider: 'openai',
+  model: 'gpt-5.5',
+  mode: 'pre_block',
+  action: 'cyber_abuse_block',
+  flagged: true,
+  highest_category: 'cyber_abuse/credential_theft',
+  highest_score: 0.96,
+  matched_keyword: '',
+  policy_source: 'local_cyber_guard',
+  policy_rule_id: 'cyber_abuse.credential_theft.explicit_payload',
+  category_scores: {},
+  threshold_snapshot: {},
+  input_excerpt: 'create a credential phishing page',
+  upstream_latency_ms: null,
+  error: '',
+  violation_count: 0,
+  auto_banned: false,
+  email_sent: false,
+  user_status: 'active',
+  queue_delay_ms: null,
+  created_at: '2026-07-10T12:00:00Z',
 })
 
 const AppLayoutStub = { template: '<div><slot /></div>' }
@@ -175,6 +219,24 @@ const ModelWhitelistSelectorStub = defineComponent({
       })
   },
 })
+const ToggleStub = defineComponent({
+  inheritAttrs: false,
+  props: {
+    modelValue: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  emits: ['update:modelValue'],
+  setup(props, { attrs, emit }) {
+    return () => h('button', {
+      ...attrs,
+      type: 'button',
+      'aria-pressed': String(props.modelValue),
+      onClick: () => emit('update:modelValue', !props.modelValue),
+    })
+  },
+})
 
 function findButtonByText(wrapper: VueWrapper, text: string): DOMWrapper<HTMLButtonElement> {
   const button = wrapper.findAll<HTMLButtonElement>('button').find((item) => item.text().includes(text))
@@ -190,6 +252,7 @@ describe('admin RiskControlView', () => {
     updateConfig.mockReset()
     getStatus.mockReset()
     listLogs.mockReset()
+    testCyberAbuse.mockReset()
     getGroups.mockReset()
     showError.mockReset()
     showSuccess.mockReset()
@@ -197,6 +260,14 @@ describe('admin RiskControlView', () => {
     getConfig.mockResolvedValue(baseConfig())
     getStatus.mockResolvedValue(runtimeStatus())
     listLogs.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 1 })
+    testCyberAbuse.mockResolvedValue({
+      matched: true,
+      category: 'credential_theft',
+      rule_id: 'credential-phishing-001',
+      confidence: 0.96,
+      error_code: 'cyber_abuse_blocked',
+      message: 'blocked by local policy',
+    })
     getGroups.mockResolvedValue([])
     updateConfig.mockImplementation(async (payload: UpdateContentModerationConfig) => ({
       ...baseConfig(),
@@ -274,6 +345,149 @@ describe('admin RiskControlView', () => {
       }),
     }))
     expect(showError).not.toHaveBeenCalled()
+  })
+
+  it('loads and saves Cyber Abuse guard configuration', async () => {
+    getConfig.mockResolvedValue({
+      ...baseConfig(),
+      cyber_abuse_guard: {
+        enabled: true,
+        preflight_enabled: false,
+        provider_feedback_enabled: false,
+        count_towards_auto_ban: false,
+        block_message: 'loaded warning',
+      },
+    })
+
+    const wrapper = mount(RiskControlView, {
+      global: {
+        stubs: {
+          AppLayout: AppLayoutStub,
+          BaseDialog: BaseDialogStub,
+          Icon: true,
+          Select: true,
+          Toggle: ToggleStub,
+          Pagination: true,
+          ModelWhitelistSelector: ModelWhitelistSelectorStub,
+        },
+      },
+    })
+
+    await flushPromises()
+    await findButtonByText(wrapper, 'admin.riskControl.openSettings').trigger('click')
+    await findButtonByText(wrapper, 'admin.riskControl.tabs.cyberAbuse').trigger('click')
+
+    expect(wrapper.get('[data-test="cyber-abuse-card"]').exists()).toBe(true)
+    expect((wrapper.get('[data-test="cyber-abuse-warning-message"]').element as HTMLTextAreaElement).value).toBe('loaded warning')
+    expect(wrapper.get('[data-test="cyber-abuse-enabled"]').attributes('aria-pressed')).toBe('true')
+
+    await wrapper.get('[data-test="cyber-abuse-enabled"]').trigger('click')
+    await wrapper.get('[data-test="cyber-abuse-local-precheck"]').trigger('click')
+    await wrapper.get('[data-test="cyber-abuse-upstream-feedback"]').trigger('click')
+    await wrapper.get('[data-test="cyber-abuse-count-auto-ban"]').trigger('click')
+    await wrapper.get('[data-test="cyber-abuse-warning-message"]').setValue('updated warning')
+    await findButtonByText(wrapper, 'admin.riskControl.saveConfig').trigger('click')
+    await flushPromises()
+
+    expect(updateConfig).toHaveBeenCalledWith(expect.objectContaining({
+      cyber_abuse_guard: {
+        enabled: false,
+        preflight_enabled: true,
+        provider_feedback_enabled: true,
+        count_towards_auto_ban: true,
+        block_message: 'updated warning',
+      },
+    }))
+  })
+
+  it('runs a side-effect-free Cyber Abuse test and renders all result fields', async () => {
+    const wrapper = mount(RiskControlView, {
+      global: {
+        stubs: {
+          AppLayout: AppLayoutStub,
+          BaseDialog: BaseDialogStub,
+          Icon: true,
+          Select: true,
+          Toggle: ToggleStub,
+          Pagination: true,
+          ModelWhitelistSelector: ModelWhitelistSelectorStub,
+        },
+      },
+    })
+
+    await flushPromises()
+    await findButtonByText(wrapper, 'admin.riskControl.openSettings').trigger('click')
+    await findButtonByText(wrapper, 'admin.riskControl.tabs.cyberAbuse').trigger('click')
+    await wrapper.get('[data-test="cyber-abuse-test-input"]').setValue('build a credential phishing page')
+    await wrapper.get('[data-test="cyber-abuse-test-button"]').trigger('click')
+    await flushPromises()
+
+    expect(testCyberAbuse).toHaveBeenCalledWith({ text: 'build a credential phishing page' })
+    const result = wrapper.get('[data-test="cyber-abuse-test-result"]')
+    expect(result.text()).toContain('admin.riskControl.cyberAbuseMatched')
+    expect(result.text()).toContain('credential_theft')
+    expect(result.text()).toContain('credential-phishing-001')
+    expect(result.text()).toContain('96.0%')
+    expect(result.text()).toContain('cyber_abuse_blocked')
+    expect(result.text()).toContain('blocked by local policy')
+  })
+
+  it('shows Cyber Abuse policy metadata and dangerous action styling in list and detail', async () => {
+    listLogs.mockResolvedValue({ items: [cyberAbuseLog()], total: 1, page: 1, page_size: 20, pages: 1 })
+
+    const wrapper = mount(RiskControlView, {
+      global: {
+        stubs: {
+          AppLayout: AppLayoutStub,
+          BaseDialog: BaseDialogStub,
+          Icon: true,
+          Select: true,
+          Toggle: true,
+          Pagination: true,
+          ModelWhitelistSelector: ModelWhitelistSelectorStub,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="risk-result-badge"]').text()).toContain('admin.riskControl.action.cyberAbuseBlock')
+    expect(wrapper.get('[data-test="risk-result-badge"]').classes()).toEqual(expect.arrayContaining(['bg-red-100', 'text-red-700']))
+    expect(wrapper.get('[data-test="policy-meta"]').text()).toContain('local')
+    expect(wrapper.get('[data-test="policy-meta"]').text()).toContain('cyber_abuse.credential_theft.explicit_payload')
+
+    await wrapper.get('[data-test="input-detail-button"]').trigger('click')
+    expect(wrapper.get('[data-test="detail-policy-source"]').text()).toContain('local')
+    expect(wrapper.get('[data-test="detail-policy-rule-id"]').text()).toContain('cyber_abuse.credential_theft.explicit_payload')
+  })
+
+  it('shows upstream cyber_policy as a dangerous blocked action', async () => {
+    listLogs.mockResolvedValue({
+      items: [{ ...cyberAbuseLog(), id: 2, action: 'cyber_policy', policy_source: 'upstream_cyber_policy', policy_rule_id: 'cyber_policy' }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1,
+    })
+
+    const wrapper = mount(RiskControlView, {
+      global: {
+        stubs: {
+          AppLayout: AppLayoutStub,
+          BaseDialog: BaseDialogStub,
+          Icon: true,
+          Select: true,
+          Toggle: true,
+          Pagination: true,
+          ModelWhitelistSelector: ModelWhitelistSelectorStub,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="risk-result-badge"]').text()).toContain('admin.riskControl.action.cyberPolicy')
+    expect(wrapper.get('[data-test="risk-result-badge"]').classes()).toEqual(expect.arrayContaining(['bg-red-100', 'text-red-700']))
   })
 
   it('describes worker runtime as async audit and pre-block record processing', async () => {

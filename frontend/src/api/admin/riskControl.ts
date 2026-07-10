@@ -9,6 +9,14 @@ export interface ContentModerationModelFilter {
   models: string[]
 }
 
+export interface CyberAbuseGuardConfig {
+  enabled: boolean
+  preflight_enabled: boolean
+  provider_feedback_enabled: boolean
+  count_towards_auto_ban: boolean
+  block_message: string
+}
+
 export interface ContentModerationConfig {
   enabled: boolean
   mode: ModerationMode
@@ -41,6 +49,7 @@ export interface ContentModerationConfig {
   keyword_blocking_mode: KeywordBlockingMode
   model_filter: ContentModerationModelFilter
   cyber_policy_exclude_from_ban_count: boolean
+  cyber_abuse_guard: CyberAbuseGuardConfig
 }
 
 export type ContentModerationAPIKeyStatusValue = 'unknown' | 'ok' | 'error' | 'frozen'
@@ -85,6 +94,22 @@ export interface ContentModerationTestAuditResult {
   thresholds: Record<string, number>
 }
 
+export interface CyberAbuseTestRequest {
+  text: string
+}
+
+export interface CyberAbuseTestResponse {
+  matched: boolean
+  category: string
+  rule_id: string
+  confidence: number
+  error_code: string
+  message: string
+}
+
+export type TestCyberAbusePayload = CyberAbuseTestRequest
+export type TestCyberAbuseResponse = CyberAbuseTestResponse
+
 export interface UpdateContentModerationConfig {
   enabled?: boolean
   mode?: ModerationMode
@@ -117,6 +142,7 @@ export interface UpdateContentModerationConfig {
   keyword_blocking_mode?: KeywordBlockingMode
   model_filter?: ContentModerationModelFilter
   cyber_policy_exclude_from_ban_count?: boolean
+  cyber_abuse_guard?: CyberAbuseGuardConfig
 }
 
 export interface ContentModerationRuntimeStatus {
@@ -183,6 +209,8 @@ export interface ContentModerationLog {
   highest_category: string
   highest_score: number
   matched_keyword: string
+  policy_source: string
+  policy_rule_id: string
   category_scores: Record<string, number>
   threshold_snapshot: Record<string, number>
   input_excerpt: string
@@ -253,6 +281,13 @@ export async function testAPIKeys(
   return data
 }
 
+export async function testCyberAbuse(
+  payload: CyberAbuseTestRequest
+): Promise<CyberAbuseTestResponse> {
+  const { data } = await apiClient.post<CyberAbuseTestResponse>('/admin/risk-control/cyber-abuse/test', payload)
+  return data
+}
+
 export async function listLogs(
   params: ListContentModerationLogsParams = {}
 ): Promise<ContentModerationLogsResponse> {
@@ -286,6 +321,7 @@ export const riskControlAPI = {
   updateConfig,
   getStatus,
   testAPIKeys,
+  testCyberAbuse,
   listLogs,
   unbanUser,
   deleteFlaggedHash,

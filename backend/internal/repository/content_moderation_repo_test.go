@@ -17,18 +17,27 @@ func TestBuildContentModerationLogWhere_BlockedIncludesAllBlockActions(t *testin
 
 	require.Empty(t, args)
 	sql := strings.Join(where, " AND ")
-	require.Contains(t, sql, "l.action IN ('block', 'keyword_block', 'hash_block')")
+	require.Contains(t, sql, "l.action IN ('block', 'keyword_block', 'hash_block', 'cyber_policy', 'cyber_abuse_block')")
 	require.NotContains(t, sql, "l.action = 'block'")
 }
 
-func TestContentModerationRepositoryCountFlaggedByUserSince_ExcludesHashBlock(t *testing.T) {
+func TestBuildContentModerationLogWhere_SearchIncludesPolicyFields(t *testing.T) {
+	where, args := buildContentModerationLogWhere(service.ContentModerationLogFilter{Search: "cyber_abuse"})
+
+	require.Len(t, args, 7)
+	sql := strings.Join(where, " AND ")
+	require.Contains(t, sql, "l.policy_source ILIKE")
+	require.Contains(t, sql, "l.policy_rule_id ILIKE")
+}
+
+func TestContentModerationRepositoryCountFlaggedByUserSince_ExcludesNonCountingCyberAbuse(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer func() { _ = db.Close() }()
 
 	repo := NewContentModerationRepository(db)
 	since := time.Now().Add(-time.Hour)
-	mock.ExpectQuery(regexp.QuoteMeta("AND action <> 'hash_block'")).
+	mock.ExpectQuery(regexp.QuoteMeta("AND (action <> 'cyber_abuse_block' OR violation_count > 0)")).
 		WithArgs(int64(1001), since, false).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
 

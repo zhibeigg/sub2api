@@ -62,6 +62,13 @@ const (
 	SubscriptionTypeSubscription = "subscription" // 订阅模式（按限额控制）
 )
 
+// Subscription plan type constants.
+const (
+	SubscriptionPlanTypeSubscription             = "subscription"
+	SubscriptionPlanTypeStandardQuota            = "standard_quota"
+	SubscriptionPlanTypeLegacySharedSubscription = "legacy_shared_subscription"
+)
+
 // Subscription status constants
 const (
 	SubscriptionStatusActive    = "active"
