@@ -147,4 +147,5 @@ frontend/coverage/
 aicodex
 output/
 .narrafork/
+.omx/
 .worktrees/
