@@ -126,6 +126,8 @@ Kiro-Go-main/
 # 其他
 # ===================
 tests
+!extensions/cursor-cookie-importer/tests/
+!extensions/cursor-cookie-importer/tests/*.test.js
 CLAUDE.md
 .claude
 scripts
