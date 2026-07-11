@@ -60,9 +60,49 @@ curl --fail-with-body \
 
 - 账号列表会自动读取 Sub2API 本地 usage logs，展示今日请求、总 Token、缓存写入 Token、缓存读取 Token 及本地计费。
 - 若 Cursor 账号配置了 Sub2API 的日、周或总额度，账号列表会复用统一的 `1d`、`7d`、`total` 进度条；这些是本地额度，不是 Cursor 官方套餐额度。
-- 点击“刷新检测”或刷新账号列表时，管理 API 会以 `force=true` 调用 Cursor `GET /v1/me` 验证当前 API Key，并返回检测状态和时间；普通自动加载不会批量探测上游。
-- 管理接口为 `GET /api/v1/admin/accounts/{id}/usage?source=active&force=true`。Cursor 响应包含 `cursor_local_usage`、`cursor_api_key_configured`、`cursor_probe_state`、`cursor_probe_message` 和 `cursor_checked_at`。
+- 点击“刷新检测”或刷新账号列表时，管理 API 会以 `force=true` 调用 Cursor `GET /v1/me` 验证当前 Cloud Agents API Key；普通自动加载不会批量探测上游。
 - Cursor Run 返回的 `cacheWriteTokens` 和 `cacheReadTokens` 分别保存为统一用量记录的 `cache_creation_tokens`（界面显示“缓存写入”）和 `cache_read_tokens`，并参与平台专属计费。
+
+### Cursor Spending 官方套餐进度（可选）
+
+Cursor 的 Cloud Agents API Key 不能读取 Spending 页面中的套餐进度。若希望在 Sub2API 账号列表显示与 `https://cursor.com/dashboard/spending` 一致的 `Total / First-party / API` 进度，需要额外配置 Cursor 桌面登录凭据：
+
+- `dashboard_access_token`：Cursor 桌面登录 Access Token；
+- `dashboard_refresh_token`：对应的 Refresh Token，推荐同时配置以支持自动续期。
+
+Windows 上这两个值来自 `%APPDATA%\\Cursor\\User\\globalStorage\\state.vscdb` 的 `ItemTable`：
+
+- `cursorAuth/accessToken`
+- `cursorAuth/refreshToken`
+
+这些 Token 作为敏感凭据加密保存在服务端，不会返回前端、写入日志或随普通账号响应导出。Dashboard Token 只会发送到配置项 `cursor.dashboard_base_url`，默认且强制限定为 `https://api2.cursor.sh`；它不会参与 Cloud Agent 创建、模型同步或转发认证。
+
+强制刷新会执行：
+
+```http
+POST /aiserver.v1.DashboardService/GetCurrentPeriodUsage
+Authorization: Bearer <dashboard_access_token>
+Content-Type: application/json
+Connect-Protocol-Version: 1
+
+{}
+```
+
+响应中的 `planUsage.totalPercentUsed`、`planUsage.autoPercentUsed`、`planUsage.apiPercentUsed`、`limit`、`totalSpend`、`remaining` 和 `billingCycleStart/End` 会归一化为官方套餐快照。金额单位是美分。遇到 `401` 且存在 Refresh Token 时，服务端调用 `POST /oauth/token` 刷新凭据并重试一次。
+
+该 Dashboard RPC 未作为稳定第三方 API 发布，字段或路径可能变化。因此 Sub2API 使用以下降级策略：
+
+- 普通列表加载只读取账号 `Extra` 中最后成功快照；
+- 强制刷新成功后更新快照；
+- 刷新失败但存在旧快照时标记 `stale` 并继续显示；
+- Dashboard 错误不改变 Cloud Agents API Key 的验证状态，也不隐藏 Sub2API 本地用量。
+
+管理接口为 `GET /api/v1/admin/accounts/{id}/usage?source=active&force=true`。Cursor 响应除本地字段外还可包含：
+
+- `cursor_dashboard_configured`
+- `cursor_dashboard_state`：`configured / cached / verified / missing / stale / error`
+- `cursor_dashboard_message`
+- `cursor_plan_usage`：官方百分比、金额（美分）、账期和更新时间
 
 ## 获取模型：`GET /v1/models`
 
@@ -233,11 +273,12 @@ Sub2API 必须保持以下边界：
 ```yaml
 cursor:
   base_url: "https://api.cursor.com"
+  dashboard_base_url: "https://api2.cursor.sh"
   request_timeout_seconds: 120
   stream_idle_timeout_seconds: 60
 ```
 
-API Key 属于账号凭据，不应写入共享配置模板。`base_url` 应保持为官方 HTTPS 地址；如未来允许覆盖，也必须限制到可信 Cursor API 主机，避免凭据被发送到非官方端点。
+API Key 与 Dashboard Token 都属于账号敏感凭据，不应写入共享配置模板。`base_url` 固定限制为 `api.cursor.com`，`dashboard_base_url` 固定限制为 `api2.cursor.sh`，避免任一凭据被发送到非 Cursor 主机。
 
 ## 迁移检查
 

@@ -318,6 +318,25 @@ describe('CreateAccountModal Adobe/Cursor credential validation flow', () => {
     }))
   })
 
+  it('persists optional Cursor Dashboard tokens with the validated account', async () => {
+    validateCredentialsMock.mockResolvedValue({ success: true, platform: 'cursor', message: 'ok' })
+    const wrapper = mountModal()
+    await selectPlatform(wrapper, 'Cursor')
+    await enterNameAndContinue(wrapper)
+    await wrapper.get('[data-testid="cursor-api-key-input"]').setValue('cursor-api-key')
+    await wrapper.get('#cursor-dashboard-access-token').setValue('dashboard-access')
+    await wrapper.get('#cursor-dashboard-refresh-token').setValue('dashboard-refresh')
+    await wrapper.get('#credential-validation-form').trigger('submit')
+
+    expect(createAccountMock).toHaveBeenCalledWith(expect.objectContaining({
+      credentials: expect.objectContaining({
+        api_key: 'cursor-api-key',
+        dashboard_access_token: 'dashboard-access',
+        dashboard_refresh_token: 'dashboard-refresh'
+      })
+    }))
+  })
+
   it('requires a Cursor API Key before validation', async () => {
     const wrapper = mountModal()
     await selectPlatform(wrapper, 'Cursor')

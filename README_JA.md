@@ -670,9 +670,10 @@ Sub2API の Cursor 統合ドキュメントは、`https://api.cursor.com` の公
 - `GET /v1/models` で利用可能なモデル ID とパラメータを取得します。Cursor の既定モデルを使う場合は `model` を省略します。混合スケジューリングを有効にすると、Cursor アカウントを Cursor、Anthropic、Gemini、OpenAI、Grok グループに追加し、互換の `/v1/messages`、`/v1/chat/completions`、`/v1/responses` リクエストを処理できます。Gemini ネイティブの `generateContent` は Cursor に振り分けません。
 - `POST /v1/agents` で Agent を作成します。`repos` と `env` を両方省略するか `repos: []` を送ると、一時タスク向けのリポジトリなし Agent を作成できます。不要になった Agent は明示的に削除してください。
 - Cloud Agents API は公式 Beta であり、機能がアカウント単位で段階提供されたり `feature_unavailable` を返したりする場合があります。
-- 管理画面のアカウント一覧には、Sub2API ローカルのリクエスト、Token、費用、キャッシュ書き込み/読み取り Token、および設定済みの日次/週次/総クォータバーが表示されます。「更新チェック」は `/v1/me` で現在の API Key を検証します。
+- 管理画面では、Sub2API ローカルのリクエスト、Token、費用、キャッシュ Token、ローカルの日次/週次/総クォータを分けて表示します。「更新チェック」は引き続き `/v1/me` で Cloud Agents API Key を検証し、通常の一覧読み込みでは上流へ一括問い合わせしません。
+- Cursor アカウントには、デスクトップログインの `dashboard_access_token` / `dashboard_refresh_token` を任意で保存できます。設定すると、強制更新時に `api2.cursor.sh` の Dashboard Connect RPC を呼び出し、Cursor Spending ページと同じ `Total / First-party / API` の公式プラン進捗、含まれる金額、請求期間を表示します。401 時は Token を更新して暗号化保存します。この API は非公開仕様のため、失敗時は最後のスナップショットとローカル使用量を維持します。
 - Cursor Run の `cacheWriteTokens` と `cacheReadTokens` は、統一使用量ログ、課金、互換プロトコル応答、エクスポートに保存されます。
-- Cursor のプラン使用量、モデル使用量、Cloud Agent 実行、オンデマンド超過は Cursor 側の請求です。Sub2API は Cursor プラットフォーム専用のローカル価格を使用し、ローカル使用量を Cursor 公式 credits として表示しません。
+- Cursor のプラン使用量、モデル使用量、Cloud Agent 実行、オンデマンド超過は Cursor 側の請求です。Dashboard の公式プランスナップショットと Sub2API のローカル課金は明確に分離されます。
 
 認証、エンドポイント、サービスアカウント、リポジトリなし Agent、Beta と課金境界は [Cursor 統合ガイド](docs/CURSOR_INTEGRATION.md) を参照してください。
 

@@ -149,6 +149,7 @@ type AdobeConfig struct {
 // CursorConfig controls the official Cursor Cloud Agents API adapter.
 type CursorConfig struct {
 	BaseURL                  string `mapstructure:"base_url"`
+	DashboardBaseURL         string `mapstructure:"dashboard_base_url"`
 	RequestTimeoutSeconds    int    `mapstructure:"request_timeout_seconds"`
 	StreamIdleTimeoutSeconds int    `mapstructure:"stream_idle_timeout_seconds"`
 	DefaultModel             string `mapstructure:"default_model"`
@@ -1724,6 +1725,7 @@ func setDefaults() {
 		"firefly-3p.ff.adobe.io",
 		"*.ff.adobe.io",
 		"api.cursor.com",
+		"api2.cursor.sh",
 		"*.openai.azure.com",
 	})
 	viper.SetDefault("security.url_allowlist.pricing_hosts", []string{
@@ -1911,6 +1913,7 @@ func setDefaults() {
 
 	// Cursor official Cloud Agents API (user or service-account API Key)
 	viper.SetDefault("cursor.base_url", "https://api.cursor.com")
+	viper.SetDefault("cursor.dashboard_base_url", "https://api2.cursor.sh")
 	viper.SetDefault("cursor.request_timeout_seconds", 120)
 	viper.SetDefault("cursor.stream_idle_timeout_seconds", 60)
 	viper.SetDefault("cursor.default_model", "auto")

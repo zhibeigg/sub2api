@@ -6,9 +6,11 @@ import (
 )
 
 var cursorCredentialKeys = map[string]struct{}{
-	"api_key":               {},
-	"cursor_upstream_model": {},
-	"cursor_model_params":   {},
+	"api_key":                 {},
+	"dashboard_access_token":  {},
+	"dashboard_refresh_token": {},
+	"cursor_upstream_model":   {},
+	"cursor_model_params":     {},
 }
 
 // ValidateCursorAccountCredentials validates a Cursor Cloud Agents API key.
@@ -38,6 +40,18 @@ func ValidateCursorAccountCredentials(accountType string, credentials map[string
 	}
 	if strings.ContainsAny(apiKey, "\r\n\x00") {
 		return fmt.Errorf("Cursor API key contains invalid control characters")
+	}
+	for _, key := range []string{"dashboard_access_token", "dashboard_refresh_token"} {
+		value := strings.TrimSpace(credentialString(credentials, key))
+		if value == "" {
+			continue
+		}
+		if len(value) > 65536 {
+			return fmt.Errorf("Cursor %s exceeds 65536 characters", key)
+		}
+		if strings.ContainsAny(value, "\r\n\x00") {
+			return fmt.Errorf("Cursor %s contains invalid control characters", key)
+		}
 	}
 	return nil
 }

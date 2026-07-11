@@ -556,6 +556,31 @@
           <div class="h-3 w-20 animate-pulse rounded bg-gray-100 dark:bg-gray-800"></div>
         </div>
         <template v-else>
+          <div v-if="cursorPlanUsage" class="space-y-1 rounded border border-purple-100 bg-purple-50/50 p-1.5 dark:border-purple-900/40 dark:bg-purple-950/20" data-testid="cursor-official-usage">
+            <div class="flex flex-wrap items-center justify-between gap-1 text-[9px]">
+              <span class="font-medium text-purple-700 dark:text-purple-300">{{ t('admin.accounts.usageWindow.cursorOfficialUsage') }}</span>
+              <span v-if="cursorPlanSpendLabel" class="text-gray-500 dark:text-gray-400">{{ cursorPlanSpendLabel }}</span>
+            </div>
+            <div v-if="cursorPlanUsage.enabled" class="space-y-0.5">
+              <UsageProgressBar v-for="bar in cursorOfficialBars" :key="bar.label" :label="bar.label" :utilization="bar.utilization" :resets-at="bar.resetsAt" :color="bar.color" />
+            </div>
+            <p v-else class="text-[9px] text-gray-500 dark:text-gray-400">{{ t('admin.accounts.usageWindow.cursorNoActivePlan') }}</p>
+            <div v-if="cursorPlanUsage.updated_at" class="text-[9px] text-gray-400 dark:text-gray-500">
+              {{ t('admin.accounts.usageWindow.cursorDashboardUpdatedAt', { time: formatRelativeTime(cursorPlanUsage.updated_at) }) }}
+            </div>
+            <div v-if="usageInfo?.cursor_dashboard_state === 'stale'" class="text-[9px] text-amber-600 dark:text-amber-400">
+              {{ t('admin.accounts.usageWindow.cursorDashboardStale') }}
+            </div>
+          </div>
+          <div v-else-if="!cursorDashboardConfigured" class="text-[9px] text-gray-400 dark:text-gray-500" data-testid="cursor-dashboard-missing">
+            {{ t('admin.accounts.usageWindow.cursorDashboardMissing') }}
+          </div>
+          <div v-else-if="usageInfo?.cursor_dashboard_state === 'error'" class="max-w-[220px] truncate text-[9px] text-amber-600 dark:text-amber-400" :title="usageInfo.cursor_dashboard_message">
+            {{ t('admin.accounts.usageWindow.cursorDashboardError') }}
+          </div>
+          <div v-if="cursorLocalUsage || quotaDailyBar || quotaWeeklyBar || quotaTotalBar" class="pt-0.5 text-[9px] font-medium text-gray-400 dark:text-gray-500">
+            {{ t('admin.accounts.usageWindow.cursorLocalUsage') }}
+          </div>
           <UsageProgressBar
             v-if="quotaDailyBar"
             label="1d"
@@ -1416,6 +1441,38 @@ const cursorApiKeyConfigured = computed(() => {
 })
 const cursorLocalUsage = computed(() => usageInfo.value?.cursor_local_usage ?? props.todayStats ?? null)
 const cursorCheckedAt = computed(() => usageInfo.value?.cursor_checked_at || null)
+const cursorDashboardConfigured = computed(() => {
+  if (usageInfo.value?.cursor_dashboard_configured === true) return true
+  return Boolean(props.account.credentials_status?.has_dashboard_access_token)
+})
+const cursorPlanUsage = computed(() => usageInfo.value?.cursor_plan_usage ?? null)
+const cursorOfficialBars = computed(() => {
+  const plan = cursorPlanUsage.value
+  if (!plan?.enabled) return []
+  const bars: Array<{
+    label: string
+    utilization: number
+    resetsAt: string | null
+    color: 'indigo' | 'emerald' | 'purple' | 'amber'
+  }> = []
+  const push = (label: string, value: number | null | undefined, color: 'indigo' | 'emerald' | 'purple' | 'amber', resetsAt: string | null = null) => {
+    if (value == null || !Number.isFinite(value)) return
+    bars.push({ label, utilization: Math.max(0, value), resetsAt, color })
+  }
+  push('Total', plan.total_percent_used, 'purple', plan.billing_cycle_end || null)
+  push(t('admin.accounts.usageWindow.cursorFirstParty'), plan.first_party_percent_used, 'indigo')
+  push(t('admin.accounts.usageWindow.cursorAPI'), plan.api_percent_used, 'amber')
+  return bars
+})
+const cursorPlanSpendLabel = computed(() => {
+  const plan = cursorPlanUsage.value
+  if (!plan || plan.limit_cents == null || plan.limit_cents <= 0) return ''
+  const usedCents = plan.total_spend_cents ?? Math.max(0, plan.limit_cents - (plan.remaining_cents ?? plan.limit_cents))
+  return t('admin.accounts.usageWindow.cursorPlanSpend', {
+    used: (usedCents / 100).toFixed(2),
+    limit: (plan.limit_cents / 100).toFixed(2)
+  })
+})
 const cursorCredentialStatusLabel = computed(() => {
   switch (usageInfo.value?.cursor_probe_state) {
     case 'verified': return t('admin.accounts.usageWindow.cursorVerified')

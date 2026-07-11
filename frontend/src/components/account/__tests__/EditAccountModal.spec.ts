@@ -780,6 +780,33 @@ describe('EditAccountModal', () => {
     expect(updateAccountMock.mock.calls[0]?.[1]?.clear_credentials).toBeUndefined()
   })
 
+  it('replaces optional Cursor Dashboard tokens without exposing existing values', async () => {
+    const account = buildCursorAccount()
+    account.credentials_status = {
+      has_api_key: true,
+      has_dashboard_access_token: true,
+      has_dashboard_refresh_token: true
+    }
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    const section = wrapper.get('[data-testid="cursor-edit-credentials"]')
+    const selects = section.findAll('select')
+    await selects[1].setValue('replace')
+    await selects[2].setValue('replace')
+    await section.get('[data-testid="cursor-dashboard-access-token-input"]').setValue(' new-access ')
+    await section.get('[data-testid="cursor-dashboard-refresh-token-input"]').setValue(' new-refresh ')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).toEqual(expect.objectContaining({
+      dashboard_access_token: 'new-access',
+      dashboard_refresh_token: 'new-refresh'
+    }))
+  })
+
   it('clears the Cursor API Key when explicitly confirmed', async () => {
     const account = buildCursorAccount()
     updateAccountMock.mockReset()

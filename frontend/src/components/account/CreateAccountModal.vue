@@ -3161,6 +3161,23 @@
           />
           <p class="input-hint">{{ t('admin.accounts.cursor.apiKeyHint') }}</p>
         </div>
+        <div class="space-y-3 border-t border-gray-200 pt-4 dark:border-dark-600" data-testid="cursor-dashboard-credentials">
+          <div>
+            <h4 class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.accounts.cursor.dashboardCredentialsTitle') }}</h4>
+            <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.dashboardCredentialsHint') }}</p>
+          </div>
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label class="input-label" for="cursor-dashboard-access-token">{{ t('admin.accounts.cursor.dashboardAccessToken') }}</label>
+              <input id="cursor-dashboard-access-token" v-model="cursorCredentials.dashboard_access_token" type="password" autocomplete="new-password" class="input font-mono" :placeholder="t('admin.accounts.cursor.dashboardAccessTokenPlaceholder')" data-1p-ignore data-lpignore="true" data-bwignore="true" />
+            </div>
+            <div>
+              <label class="input-label" for="cursor-dashboard-refresh-token">{{ t('admin.accounts.cursor.dashboardRefreshToken') }}</label>
+              <input id="cursor-dashboard-refresh-token" v-model="cursorCredentials.dashboard_refresh_token" type="password" autocomplete="new-password" class="input font-mono" :placeholder="t('admin.accounts.cursor.dashboardRefreshTokenPlaceholder')" data-1p-ignore data-lpignore="true" data-bwignore="true" />
+            </div>
+          </div>
+          <p class="input-hint">{{ t('admin.accounts.cursor.dashboardTokenSourceHint') }}</p>
+        </div>
         <div class="border-t border-gray-200 pt-4 dark:border-dark-600" data-testid="cursor-model-sync-section">
           <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
           <p class="mb-3 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.modelCatalogHint') }}</p>
@@ -3884,7 +3901,7 @@ const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_acco
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
-const cursorCredentials = reactive({ api_key: '' })
+const cursorCredentials = reactive({ api_key: '', dashboard_access_token: '', dashboard_refresh_token: '' })
 const adobeCredentials = reactive({
   access_token: '', cookie: '', device_token: '', device_id: '', password: '', expires_at: ''
 })
@@ -4908,6 +4925,8 @@ const resetForm = () => {
   apiKeyBaseUrl.value = 'https://api.anthropic.com'
   apiKeyValue.value = ''
   cursorCredentials.api_key = ''
+  cursorCredentials.dashboard_access_token = ''
+  cursorCredentials.dashboard_refresh_token = ''
   Object.assign(adobeCredentials, { access_token: '', cookie: '', device_token: '', device_id: '', password: '', expires_at: '' })
   Object.assign(adobeTouched, { access_token: false, cookie: false, device_token: false, device_id: false, password: false })
   adobeValidationAttempted.value = false
@@ -4997,6 +5016,8 @@ const resetForm = () => {
 
 const handleClose = () => {
   cursorCredentials.api_key = ''
+  cursorCredentials.dashboard_access_token = ''
+  cursorCredentials.dashboard_refresh_token = ''
   Object.assign(adobeCredentials, { access_token: '', cookie: '', device_token: '', device_id: '', password: '', expires_at: '' })
   adobeValidationAttempted.value = false
   verifyingCredentials.value = false

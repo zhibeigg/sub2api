@@ -756,9 +756,10 @@ Sub2API 的 Cursor 接入文档现以 `https://api.cursor.com` 上的官方 Clou
 - 使用 `GET /v1/models` 获取可用模型 ID 与参数；需要 Cursor 账户默认模型时应省略 `model`。开启混合调度后，Cursor 账号可加入 Cursor、Anthropic、Gemini、OpenAI 与 Grok 分组，承接兼容的 `/v1/messages`、`/v1/chat/completions` 和 `/v1/responses` 请求；Gemini 原生 `generateContent` 不会调度到 Cursor。
 - 使用 `POST /v1/agents` 创建 Agent。同时省略 `repos` 和 `env`（或发送 `repos: []`）即可创建适合临时任务的无仓库 Agent；上下文不再需要时应显式删除。
 - Cloud Agents API 是官方 Beta，部分能力可能按账户灰度或返回 `feature_unavailable`，生产依赖前必须实际验证。
-- 管理后台账号列表展示 Sub2API 本地请求、Token、费用、缓存写入/读取 Token，以及已配置的本地日/周/总额度进度条；点击“刷新检测”会通过 `/v1/me` 验证当前 API Key，普通列表加载不会批量探测上游。
+- 管理后台账号列表会分开展示 Sub2API 本地请求、Token、费用、缓存写入/读取 Token与本地日/周/总额度；点击“刷新检测”仍通过 `/v1/me` 验证当前 Cloud Agents API Key，普通列表加载不会批量探测上游。
+- Cursor 账号可额外配置桌面登录的 `dashboard_access_token` / `dashboard_refresh_token`。配置后，强制刷新会调用 `api2.cursor.sh` 的 Dashboard Connect RPC，展示与 Cursor Spending 页面一致的 `Total / First-party / API` 官方套餐进度、包含金额和账期；401 时会自动刷新 Token 并加密回写。该接口未公开稳定承诺，失败时保留最后快照并继续显示本地用量。
 - Cursor Run 的 `cacheWriteTokens` 与 `cacheReadTokens` 会进入统一用量记录、计费、兼容协议响应和导出。
-- Cursor 套餐用量、模型用量、Cloud Agent 执行和按需超额费用属于 Cursor 官方账单；Sub2API 使用 Cursor 平台专属本地价格结算，不得把本地用量显示为 Cursor 官方 credits。
+- Cursor 套餐用量、模型用量、Cloud Agent 执行和按需超额费用属于 Cursor 官方账单；Sub2API 使用 Cursor 平台专属本地价格结算，并明确区分 Dashboard 官方套餐快照与 Sub2API 本地账单。
 
 认证、端点、服务账户、临时无仓库 Agent、Beta 边界与计费拆分详见 [Cursor 接入文档](docs/CURSOR_INTEGRATION.md)。
 

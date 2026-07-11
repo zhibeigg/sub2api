@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	cursorpkg "github.com/Wei-Shaw/sub2api/internal/pkg/cursor"
 	httppool "github.com/Wei-Shaw/sub2api/internal/pkg/httpclient"
 	openaipkg "github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
@@ -213,6 +214,132 @@ func AdobeCreditsInfoFromExtra(extra map[string]any) *AdobeCreditsInfo {
 	return info
 }
 
+func cursorPlanUsageFromExtra(extra map[string]any) *CursorPlanUsageInfo {
+	if extra == nil {
+		return nil
+	}
+	updatedAt := extraTimePointer(extra["cursor_dashboard_updated_at"])
+	if updatedAt == nil {
+		return nil
+	}
+	enabled, _ := extra["cursor_dashboard_enabled"].(bool)
+	return &CursorPlanUsageInfo{
+		Enabled:               enabled,
+		TotalPercentUsed:      extraFloatPointer(extra, "cursor_dashboard_total_percent_used"),
+		FirstPartyPercentUsed: extraFloatPointer(extra, "cursor_dashboard_first_party_percent_used"),
+		APIPercentUsed:        extraFloatPointer(extra, "cursor_dashboard_api_percent_used"),
+		LimitCents:            extraFloatPointer(extra, "cursor_dashboard_limit_cents"),
+		TotalSpendCents:       extraFloatPointer(extra, "cursor_dashboard_total_spend_cents"),
+		RemainingCents:        extraFloatPointer(extra, "cursor_dashboard_remaining_cents"),
+		BillingCycleStart:     extraTimePointer(extra["cursor_dashboard_billing_cycle_start"]),
+		BillingCycleEnd:       extraTimePointer(extra["cursor_dashboard_billing_cycle_end"]),
+		UpdatedAt:             updatedAt,
+	}
+}
+
+func cursorPlanUsageFromDashboard(raw *cursorpkg.DashboardUsage, now time.Time) *CursorPlanUsageInfo {
+	if raw == nil {
+		return nil
+	}
+	enabled := raw.Enabled == nil || *raw.Enabled
+	info := &CursorPlanUsageInfo{Enabled: enabled}
+	updatedAt := now.UTC()
+	info.UpdatedAt = &updatedAt
+	if raw.BillingCycleStart > 0 {
+		start := time.UnixMilli(raw.BillingCycleStart).UTC()
+		info.BillingCycleStart = &start
+	}
+	if raw.BillingCycleEnd > 0 {
+		end := time.UnixMilli(raw.BillingCycleEnd).UTC()
+		info.BillingCycleEnd = &end
+	}
+	if raw.PlanUsage != nil {
+		info.TotalPercentUsed = copyFloatPointer(raw.PlanUsage.TotalPercentUsed)
+		info.FirstPartyPercentUsed = copyFloatPointer(raw.PlanUsage.AutoPercentUsed)
+		info.APIPercentUsed = copyFloatPointer(raw.PlanUsage.APIPercentUsed)
+		info.LimitCents = copyFloatPointer(raw.PlanUsage.Limit)
+		info.TotalSpendCents = copyFloatPointer(raw.PlanUsage.TotalSpend)
+		info.RemainingCents = copyFloatPointer(raw.PlanUsage.Remaining)
+	}
+	return info
+}
+
+func cursorPlanUsageSnapshotUpdates(info *CursorPlanUsageInfo) map[string]any {
+	if info == nil || info.UpdatedAt == nil {
+		return nil
+	}
+	updates := map[string]any{
+		"cursor_dashboard_enabled":    info.Enabled,
+		"cursor_dashboard_updated_at": info.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+	putFloatPointer(updates, "cursor_dashboard_total_percent_used", info.TotalPercentUsed)
+	putFloatPointer(updates, "cursor_dashboard_first_party_percent_used", info.FirstPartyPercentUsed)
+	putFloatPointer(updates, "cursor_dashboard_api_percent_used", info.APIPercentUsed)
+	putFloatPointer(updates, "cursor_dashboard_limit_cents", info.LimitCents)
+	putFloatPointer(updates, "cursor_dashboard_total_spend_cents", info.TotalSpendCents)
+	putFloatPointer(updates, "cursor_dashboard_remaining_cents", info.RemainingCents)
+	updates["cursor_dashboard_billing_cycle_start"] = nil
+	updates["cursor_dashboard_billing_cycle_end"] = nil
+	if info.BillingCycleStart != nil {
+		updates["cursor_dashboard_billing_cycle_start"] = info.BillingCycleStart.UTC().Format(time.RFC3339)
+	}
+	if info.BillingCycleEnd != nil {
+		updates["cursor_dashboard_billing_cycle_end"] = info.BillingCycleEnd.UTC().Format(time.RFC3339)
+	}
+	return updates
+}
+
+func extraFloatPointer(extra map[string]any, key string) *float64 {
+	value, ok := extra[key]
+	if !ok || value == nil {
+		return nil
+	}
+	parsed := parseExtraFloat64(value)
+	return &parsed
+}
+
+func extraTimePointer(value any) *time.Time {
+	raw, ok := value.(string)
+	if !ok || strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parsed, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return nil
+	}
+	parsed = parsed.UTC()
+	return &parsed
+}
+
+func copyFloatPointer(value *float64) *float64 {
+	if value == nil {
+		return nil
+	}
+	copied := *value
+	return &copied
+}
+
+func putFloatPointer(target map[string]any, key string, value *float64) {
+	if value == nil {
+		target[key] = nil
+		return
+	}
+	target[key] = *value
+}
+
+type CursorPlanUsageInfo struct {
+	Enabled               bool       `json:"enabled"`
+	TotalPercentUsed      *float64   `json:"total_percent_used,omitempty"`
+	FirstPartyPercentUsed *float64   `json:"first_party_percent_used,omitempty"`
+	APIPercentUsed        *float64   `json:"api_percent_used,omitempty"`
+	LimitCents            *float64   `json:"limit_cents,omitempty"`
+	TotalSpendCents       *float64   `json:"total_spend_cents,omitempty"`
+	RemainingCents        *float64   `json:"remaining_cents,omitempty"`
+	BillingCycleStart     *time.Time `json:"billing_cycle_start,omitempty"`
+	BillingCycleEnd       *time.Time `json:"billing_cycle_end,omitempty"`
+	UpdatedAt             *time.Time `json:"updated_at,omitempty"`
+}
+
 // UsageInfo 账号使用量信息
 type UsageInfo struct {
 	Source             string         `json:"source,omitempty"`               // "passive" or "active"
@@ -234,13 +361,17 @@ type UsageInfo struct {
 	// Adobe Firefly credits；Known=false 与 Available=0 语义严格区分。
 	AdobeCredits *AdobeCreditsInfo `json:"adobe_credits,omitempty"`
 
-	// Cursor Cloud Agents does not currently expose subscription quota details.
-	// Show local forwarding statistics and whether an API key is configured.
-	CursorLocalUsage       *WindowStats `json:"cursor_local_usage,omitempty"`
-	CursorAPIKeyConfigured bool         `json:"cursor_api_key_configured,omitempty"`
-	CursorProbeState       string       `json:"cursor_probe_state,omitempty"` // configured/verified/missing/error
-	CursorProbeMessage     string       `json:"cursor_probe_message,omitempty"`
-	CursorCheckedAt        string       `json:"cursor_checked_at,omitempty"`
+	// Cursor Cloud Agents API Key status, local forwarding statistics, and optional
+	// desktop Dashboard plan snapshot are deliberately reported separately.
+	CursorLocalUsage          *WindowStats         `json:"cursor_local_usage,omitempty"`
+	CursorAPIKeyConfigured    bool                 `json:"cursor_api_key_configured,omitempty"`
+	CursorProbeState          string               `json:"cursor_probe_state,omitempty"` // configured/verified/missing/error
+	CursorProbeMessage        string               `json:"cursor_probe_message,omitempty"`
+	CursorCheckedAt           string               `json:"cursor_checked_at,omitempty"`
+	CursorDashboardConfigured bool                 `json:"cursor_dashboard_configured,omitempty"`
+	CursorDashboardState      string               `json:"cursor_dashboard_state,omitempty"` // configured/cached/verified/missing/stale/error
+	CursorDashboardMessage    string               `json:"cursor_dashboard_message,omitempty"`
+	CursorPlanUsage           *CursorPlanUsageInfo `json:"cursor_plan_usage,omitempty"`
 
 	// Grok / xAI 被动额度快照
 	GrokRequestQuota       *xai.QuotaWindow `json:"grok_request_quota,omitempty"`
@@ -346,6 +477,10 @@ type CursorUsageProber interface {
 	Probe(ctx context.Context, account *Account, model, protocol string) (string, error)
 }
 
+type CursorDashboardUsageFetcher interface {
+	FetchDashboardUsage(ctx context.Context, account *Account) (*CursorDashboardUsageResult, error)
+}
+
 // AccountUsageService 账号使用量查询服务
 type AccountUsageService struct {
 	accountRepo             AccountRepository
@@ -361,6 +496,7 @@ type AccountUsageService struct {
 	kiroUsageService        *KiroUsageService
 	adobeTokenProvider      *AdobeTokenProvider
 	cursorUsageProber       CursorUsageProber
+	cursorDashboardFetcher  CursorDashboardUsageFetcher
 }
 
 // SetKiroUsageService injects the Kiro usage service used for active probes.
@@ -375,6 +511,9 @@ func (s *AccountUsageService) SetAdobeTokenProvider(provider *AdobeTokenProvider
 
 func (s *AccountUsageService) SetCursorUsageProber(prober CursorUsageProber) {
 	s.cursorUsageProber = prober
+	if fetcher, ok := prober.(CursorDashboardUsageFetcher); ok {
+		s.cursorDashboardFetcher = fetcher
+	}
 }
 
 // NewAccountUsageService 创建AccountUsageService实例
@@ -429,11 +568,24 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 
 	if account.IsCursor() {
 		now := time.Now()
+		dashboardConfigured := strings.TrimSpace(account.GetCredential("dashboard_access_token")) != ""
 		usage := &UsageInfo{
-			Source:                 "local",
-			UpdatedAt:              &now,
-			CursorAPIKeyConfigured: strings.TrimSpace(account.GetCredential("api_key")) != "",
-			CursorProbeState:       "configured",
+			Source:                    "local",
+			UpdatedAt:                 &now,
+			CursorAPIKeyConfigured:    strings.TrimSpace(account.GetCredential("api_key")) != "",
+			CursorProbeState:          "configured",
+			CursorDashboardConfigured: dashboardConfigured,
+			CursorDashboardState:      "missing",
+			CursorPlanUsage:           cursorPlanUsageFromExtra(account.Extra),
+		}
+		if dashboardConfigured {
+			usage.CursorDashboardState = "configured"
+			if usage.CursorPlanUsage != nil {
+				usage.CursorDashboardState = "cached"
+			}
+		} else {
+			usage.CursorPlanUsage = nil
+			usage.CursorDashboardMessage = "Cursor Dashboard access token is missing"
 		}
 		if s.usageLogRepo != nil {
 			if stats, statsErr := s.usageLogRepo.GetAccountTodayStats(ctx, account.ID); statsErr == nil && stats != nil {
@@ -448,30 +600,34 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 			usage.Error = usage.CursorProbeMessage
 			return usage, nil
 		}
-		if forceProbe {
-			usage.Source = "active"
-			usage.CursorCheckedAt = now.UTC().Format(time.RFC3339)
-			if s.cursorUsageProber == nil {
-				usage.CursorProbeState = "error"
-				usage.CursorProbeMessage = "Cursor usage probe is not configured"
-				usage.ErrorCode = "cursor_probe_unavailable"
-				usage.Error = usage.CursorProbeMessage
-				return usage, nil
+		if !forceProbe {
+			return usage, nil
+		}
+
+		usage.Source = "active"
+		usage.CursorCheckedAt = now.UTC().Format(time.RFC3339)
+		if s.cursorUsageProber == nil {
+			usage.CursorProbeState = "error"
+			usage.CursorProbeMessage = "Cursor usage probe is not configured"
+			usage.ErrorCode = "cursor_probe_unavailable"
+			usage.Error = usage.CursorProbeMessage
+		} else if _, probeErr := s.cursorUsageProber.Probe(ctx, account, "", ""); probeErr != nil {
+			usage.CursorProbeState = "error"
+			usage.CursorProbeMessage = probeErr.Error()
+			usage.ErrorCode = "cursor_probe_failed"
+			usage.Error = probeErr.Error()
+			probeErrText := strings.ToLower(probeErr.Error())
+			if strings.Contains(probeErrText, "401") || strings.Contains(probeErrText, "unauthorized") || strings.Contains(probeErrText, "invalid api key") {
+				usage.NeedsReauth = true
+				usage.ErrorCode = errorCodeUnauthenticated
 			}
-			if _, probeErr := s.cursorUsageProber.Probe(ctx, account, "", ""); probeErr != nil {
-				usage.CursorProbeState = "error"
-				usage.CursorProbeMessage = probeErr.Error()
-				usage.ErrorCode = "cursor_probe_failed"
-				usage.Error = probeErr.Error()
-				probeErrText := strings.ToLower(probeErr.Error())
-				if strings.Contains(probeErrText, "401") || strings.Contains(probeErrText, "unauthorized") || strings.Contains(probeErrText, "invalid api key") {
-					usage.NeedsReauth = true
-					usage.ErrorCode = errorCodeUnauthenticated
-				}
-				return usage, nil
-			}
+		} else {
 			usage.CursorProbeState = "verified"
 			usage.CursorProbeMessage = "Cursor API key verified"
+		}
+
+		if dashboardConfigured {
+			s.refreshCursorDashboardUsage(ctx, account, usage, now)
 		}
 		return usage, nil
 	}
@@ -709,6 +865,69 @@ func (s *AccountUsageService) syncActiveToPassive(ctx context.Context, accountID
 	if usage.FiveHour != nil && usage.FiveHour.ResetsAt != nil {
 		if err := s.accountRepo.UpdateSessionWindowEnd(ctx, accountID, *usage.FiveHour.ResetsAt); err != nil {
 			slog.Warn("sync_active_to_passive_session_window_end_failed", "account_id", accountID, "error", err)
+		}
+	}
+}
+
+func (s *AccountUsageService) refreshCursorDashboardUsage(ctx context.Context, account *Account, usage *UsageInfo, now time.Time) {
+	if usage == nil || account == nil {
+		return
+	}
+	if s.cursorDashboardFetcher == nil {
+		usage.CursorDashboardState = "error"
+		usage.CursorDashboardMessage = "Cursor Dashboard usage fetcher is not configured"
+		if usage.CursorPlanUsage != nil {
+			usage.CursorDashboardState = "stale"
+		}
+		return
+	}
+	result, err := s.cursorDashboardFetcher.FetchDashboardUsage(ctx, account)
+	if err != nil {
+		usage.CursorDashboardState = "error"
+		usage.CursorDashboardMessage = err.Error()
+		if usage.CursorPlanUsage != nil {
+			usage.CursorDashboardState = "stale"
+		}
+		return
+	}
+	if result == nil || result.Usage == nil {
+		usage.CursorDashboardState = "error"
+		usage.CursorDashboardMessage = "Cursor Dashboard usage response is empty"
+		if usage.CursorPlanUsage != nil {
+			usage.CursorDashboardState = "stale"
+		}
+		return
+	}
+
+	planUsage := cursorPlanUsageFromDashboard(result.Usage, now)
+	if planUsage == nil || (planUsage.Enabled && result.Usage.PlanUsage == nil) {
+		usage.CursorDashboardState = "error"
+		usage.CursorDashboardMessage = "Cursor Dashboard usage response did not include planUsage"
+		if usage.CursorPlanUsage != nil {
+			usage.CursorDashboardState = "stale"
+		}
+		return
+	}
+
+	if result.RefreshedAccessToken != "" {
+		credentials := shallowCopyMap(account.Credentials)
+		credentials["dashboard_access_token"] = result.RefreshedAccessToken
+		if result.RefreshedRefreshToken != "" {
+			credentials["dashboard_refresh_token"] = result.RefreshedRefreshToken
+		}
+		if err := persistAccountCredentials(ctx, s.accountRepo, account, credentials); err != nil {
+			usage.CursorDashboardMessage = "Cursor Dashboard token refreshed but could not be persisted"
+		}
+	}
+
+	usage.CursorPlanUsage = planUsage
+	usage.CursorDashboardState = "verified"
+	updates := cursorPlanUsageSnapshotUpdates(planUsage)
+	if len(updates) > 0 {
+		if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {
+			usage.CursorDashboardMessage = "Cursor Dashboard usage refreshed but snapshot persistence failed"
+		} else {
+			mergeAccountExtra(account, updates)
 		}
 	}
 }

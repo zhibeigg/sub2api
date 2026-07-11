@@ -11,6 +11,7 @@ func TestLoadDefaultCursorConfig(t *testing.T) {
 	cfg, err := Load()
 	require.NoError(t, err)
 	require.Equal(t, "https://api.cursor.com", cfg.Cursor.BaseURL)
+	require.Equal(t, "https://api2.cursor.sh", cfg.Cursor.DashboardBaseURL)
 	require.Equal(t, 120, cfg.Cursor.RequestTimeoutSeconds)
 	require.Equal(t, 60, cfg.Cursor.StreamIdleTimeoutSeconds)
 	require.Equal(t, "auto", cfg.Cursor.DefaultModel)
@@ -18,5 +19,6 @@ func TestLoadDefaultCursorConfig(t *testing.T) {
 	require.Equal(t, 100, cfg.Cursor.MaxHistoryMessages)
 	require.Equal(t, 86400, cfg.Cursor.ResponsesTTLSeconds)
 	require.Contains(t, cfg.Security.URLAllowlist.UpstreamHosts, "api.cursor.com")
+	require.Contains(t, cfg.Security.URLAllowlist.UpstreamHosts, "api2.cursor.sh")
 	require.NotContains(t, cfg.Security.URLAllowlist.UpstreamHosts, "*.cursor.com")
 }

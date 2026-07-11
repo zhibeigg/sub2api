@@ -1101,12 +1101,27 @@ export interface AccountUsageInfo {
     minimum_balance?: number
   }> | null
   adobe_credits?: AdobeCreditsInfo | null
-  // Cursor 本地用量与 API Key 探测状态
+  // Cursor 本地用量、Cloud API Key 探测与官方套餐快照
   cursor_local_usage?: WindowStats | null
   cursor_api_key_configured?: boolean
   cursor_probe_state?: 'configured' | 'verified' | 'missing' | 'error'
   cursor_probe_message?: string
   cursor_checked_at?: string
+  cursor_dashboard_configured?: boolean
+  cursor_dashboard_state?: 'configured' | 'cached' | 'verified' | 'missing' | 'stale' | 'error'
+  cursor_dashboard_message?: string
+  cursor_plan_usage?: {
+    enabled: boolean
+    total_percent_used?: number | null
+    first_party_percent_used?: number | null
+    api_percent_used?: number | null
+    limit_cents?: number | null
+    total_spend_cents?: number | null
+    remaining_cents?: number | null
+    billing_cycle_start?: string | null
+    billing_cycle_end?: string | null
+    updated_at?: string | null
+  } | null
   // Antigravity 403 forbidden 状态
   is_forbidden?: boolean
   forbidden_reason?: string

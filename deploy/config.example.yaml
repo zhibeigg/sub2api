@@ -1161,6 +1161,11 @@ adobe:
 # Cursor-side costs; Sub2API billing only covers prices explicitly configured locally.
 cursor:
   base_url: "https://api.cursor.com"
+  # Undocumented Cursor desktop Dashboard usage RPC. Dashboard tokens are optional
+  # account credentials and are only sent to this exact HTTPS origin.
+  # 未公开稳定承诺的 Cursor 桌面 Dashboard 用量 RPC；Dashboard Token 为可选账号凭据，
+  # 且只会发送到这个固定 HTTPS 来源。
+  dashboard_base_url: "https://api2.cursor.sh"
   request_timeout_seconds: 120
   stream_idle_timeout_seconds: 60
 

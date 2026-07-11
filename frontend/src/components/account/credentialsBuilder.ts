@@ -1,9 +1,11 @@
-export const CURSOR_SENSITIVE_CREDENTIAL_KEYS = ['api_key'] as const
+export const CURSOR_SENSITIVE_CREDENTIAL_KEYS = ['api_key', 'dashboard_access_token', 'dashboard_refresh_token'] as const
 export type CursorSensitiveCredentialKey = typeof CURSOR_SENSITIVE_CREDENTIAL_KEYS[number]
 export type CursorCredentialAction = 'keep' | 'replace' | 'clear'
 
 export interface CursorCredentialInput {
   api_key?: string
+  dashboard_access_token?: string
+  dashboard_refresh_token?: string
 }
 
 export interface CursorCredentialEditField {
@@ -14,12 +16,18 @@ export interface CursorCredentialEditField {
 export type CursorCredentialEditState = Record<CursorSensitiveCredentialKey, CursorCredentialEditField>
 
 export function buildCursorCreateCredentials(input: CursorCredentialInput): Record<string, string> {
-  const apiKey = input.api_key?.trim()
-  return apiKey ? { api_key: apiKey } : {}
+  const credentials: Record<string, string> = {}
+  for (const key of CURSOR_SENSITIVE_CREDENTIAL_KEYS) {
+    const value = input[key]?.trim()
+    if (value) credentials[key] = value
+  }
+  return credentials
 }
 
 export function createCursorCredentialEditState(): CursorCredentialEditState {
-  return { api_key: { action: 'keep', value: '' } }
+  return Object.fromEntries(
+    CURSOR_SENSITIVE_CREDENTIAL_KEYS.map((key) => [key, { action: 'keep', value: '' }])
+  ) as CursorCredentialEditState
 }
 
 export function buildCursorCredentialUpdate(
@@ -27,9 +35,11 @@ export function buildCursorCredentialUpdate(
 ): { credentials?: Record<string, unknown>; clear_credentials?: string[] } {
   const credentials: Record<string, string> = {}
   const clearCredentials: string[] = []
-  const apiKey = state.api_key
-  if (apiKey.action === 'replace' && apiKey.value.trim()) credentials.api_key = apiKey.value.trim()
-  if (apiKey.action === 'clear') clearCredentials.push('api_key')
+  for (const key of CURSOR_SENSITIVE_CREDENTIAL_KEYS) {
+    const field = state[key]
+    if (field.action === 'replace' && field.value.trim()) credentials[key] = field.value.trim()
+    if (field.action === 'clear') clearCredentials.push(key)
+  }
   return {
     ...(Object.keys(credentials).length > 0 ? { credentials } : {}),
     ...(clearCredentials.length > 0 ? { clear_credentials: clearCredentials } : {})
@@ -37,8 +47,10 @@ export function buildCursorCredentialUpdate(
 }
 
 export function resetCursorCredentialEditState(state: CursorCredentialEditState): void {
-  state.api_key.action = 'keep'
-  state.api_key.value = ''
+  for (const key of CURSOR_SENSITIVE_CREDENTIAL_KEYS) {
+    state[key].action = 'keep'
+    state[key].value = ''
+  }
 }
 
 export const ADOBE_SENSITIVE_CREDENTIAL_KEYS = [

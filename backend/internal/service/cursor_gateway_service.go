@@ -52,6 +52,12 @@ type cursorCollected struct {
 	FinishReason string
 }
 
+type CursorDashboardUsageResult struct {
+	Usage                 *cursorpkg.DashboardUsage
+	RefreshedAccessToken  string
+	RefreshedRefreshToken string
+}
+
 func (s *CursorGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*ForwardResult, error) {
 	protocol := cursorpkg.ProtocolAnthropic
 	if isOpenAIInboundPath(c) {
@@ -89,6 +95,51 @@ func (s *CursorGatewayService) Probe(ctx context.Context, account *Account, _, _
 		return identity.APIKeyName, nil
 	}
 	return "Cursor API key verified", nil
+}
+
+func (s *CursorGatewayService) FetchDashboardUsage(ctx context.Context, account *Account) (*CursorDashboardUsageResult, error) {
+	if s == nil || s.httpUpstream == nil {
+		return nil, errors.New("cursor HTTP upstream is not configured")
+	}
+	if account == nil || !account.IsCursorAPIKey() {
+		return nil, errors.New("a Cursor API key account is required")
+	}
+	accessToken := strings.TrimSpace(account.GetCredential("dashboard_access_token"))
+	if accessToken == "" {
+		return nil, errors.New("Cursor Dashboard access token is missing")
+	}
+	client, err := s.newDashboardClient(ctx, account, accessToken)
+	if err != nil {
+		return nil, err
+	}
+	usage, err := client.FetchUsage(ctx)
+	if err == nil {
+		return &CursorDashboardUsageResult{Usage: usage}, nil
+	}
+	if !cursorpkg.IsKind(err, cursorpkg.ErrorUnauthorized) {
+		return nil, err
+	}
+	refreshToken := strings.TrimSpace(account.GetCredential("dashboard_refresh_token"))
+	if refreshToken == "" {
+		return nil, err
+	}
+	refreshed, refreshErr := client.RefreshAccessToken(ctx, refreshToken)
+	if refreshErr != nil {
+		return nil, refreshErr
+	}
+	retryClient, clientErr := s.newDashboardClient(ctx, account, refreshed.AccessToken)
+	if clientErr != nil {
+		return nil, clientErr
+	}
+	usage, err = retryClient.FetchUsage(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &CursorDashboardUsageResult{
+		Usage:                 usage,
+		RefreshedAccessToken:  refreshed.AccessToken,
+		RefreshedRefreshToken: refreshed.RefreshToken,
+	}, nil
 }
 
 func (s *CursorGatewayService) CountTokens(body []byte, protocol cursorpkg.Protocol) (int, error) {
@@ -227,15 +278,7 @@ func (s *CursorGatewayService) newCloudClient(ctx context.Context, account *Acco
 	if err != nil {
 		return nil, err
 	}
-	proxyURL := ""
-	if account.Proxy != nil {
-		proxyURL = account.Proxy.URL()
-	} else if account.ProxyID != nil && s.proxyRepo != nil {
-		if proxy, proxyErr := s.proxyRepo.GetByID(ctx, *account.ProxyID); proxyErr == nil && proxy != nil {
-			proxyURL = proxy.URL()
-		}
-	}
-	httpClient := &http.Client{Transport: &cursorRoundTripper{upstream: s.httpUpstream, proxyURL: proxyURL, accountID: account.ID, concurrency: account.Concurrency}}
+	httpClient := s.newCursorHTTPClient(ctx, account)
 	return cursorpkg.NewCloudClient(httpClient, account.GetCredential("api_key"), cursorpkg.CloudClientConfig{
 		BaseURL:           baseURL,
 		RequestTimeout:    durationSeconds(cfg.RequestTimeoutSeconds, 120),
@@ -244,11 +287,36 @@ func (s *CursorGatewayService) newCloudClient(ctx context.Context, account *Acco
 	})
 }
 
+func (s *CursorGatewayService) newDashboardClient(ctx context.Context, account *Account, accessToken string) (*cursorpkg.DashboardClient, error) {
+	cfg := s.cursorConfig()
+	baseURL, err := cursorDashboardEndpoint(cfg.DashboardBaseURL)
+	if err != nil {
+		return nil, err
+	}
+	return cursorpkg.NewDashboardClient(s.newCursorHTTPClient(ctx, account), accessToken, cursorpkg.DashboardClientConfig{
+		BaseURL:        baseURL,
+		RequestTimeout: durationSeconds(cfg.RequestTimeoutSeconds, 120),
+		MaxErrorBody:   8 << 10,
+	})
+}
+
+func (s *CursorGatewayService) newCursorHTTPClient(ctx context.Context, account *Account) *http.Client {
+	proxyURL := ""
+	if account.Proxy != nil {
+		proxyURL = account.Proxy.URL()
+	} else if account.ProxyID != nil && s.proxyRepo != nil {
+		if proxy, proxyErr := s.proxyRepo.GetByID(ctx, *account.ProxyID); proxyErr == nil && proxy != nil {
+			proxyURL = proxy.URL()
+		}
+	}
+	return &http.Client{Transport: &cursorRoundTripper{upstream: s.httpUpstream, proxyURL: proxyURL, accountID: account.ID, concurrency: account.Concurrency}}
+}
+
 func (s *CursorGatewayService) cursorConfig() config.CursorConfig {
 	if s != nil && s.cfg != nil {
 		return s.cfg.Cursor
 	}
-	return config.CursorConfig{BaseURL: cursorpkg.DefaultCloudBaseURL, DefaultModel: "auto", RequestTimeoutSeconds: 120, StreamIdleTimeoutSeconds: 60, MaxHistoryTokens: 24000, MaxHistoryMessages: 100}
+	return config.CursorConfig{BaseURL: cursorpkg.DefaultCloudBaseURL, DashboardBaseURL: cursorpkg.DefaultDashboardBaseURL, DefaultModel: "auto", RequestTimeoutSeconds: 120, StreamIdleTimeoutSeconds: 60, MaxHistoryTokens: 24000, MaxHistoryMessages: 100}
 }
 
 func durationSeconds(value, fallback int) time.Duration {
@@ -269,6 +337,24 @@ func cursorEndpoint(raw string) (string, error) {
 	}
 	if !strings.EqualFold(parsed.Hostname(), "api.cursor.com") {
 		return "", fmt.Errorf("Cursor base_url host must be api.cursor.com")
+	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String(), nil
+}
+
+func cursorDashboardEndpoint(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		raw = cursorpkg.DefaultDashboardBaseURL
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
+		return "", fmt.Errorf("Cursor dashboard_base_url must be a valid HTTPS URL")
+	}
+	if !strings.EqualFold(parsed.Hostname(), "api2.cursor.sh") {
+		return "", fmt.Errorf("Cursor dashboard_base_url host must be api2.cursor.sh")
 	}
 	parsed.Path = strings.TrimRight(parsed.Path, "/")
 	parsed.RawQuery = ""

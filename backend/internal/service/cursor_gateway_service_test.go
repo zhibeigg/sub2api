@@ -20,17 +20,19 @@ import (
 )
 
 type cursorGatewayUpstreamStub struct {
-	mu                  sync.Mutex
-	requests            []*http.Request
-	bodies              []string
-	outputs             []string
-	accountIDs          []int64
-	concurrencies       []int
-	nextAgent           int
-	streamStatus        int
-	streamWithoutResult bool
-	runPollCount        int
-	cleanupCh           chan string
+	mu                       sync.Mutex
+	requests                 []*http.Request
+	bodies                   []string
+	outputs                  []string
+	accountIDs               []int64
+	concurrencies            []int
+	nextAgent                int
+	streamStatus             int
+	streamWithoutResult      bool
+	runPollCount             int
+	dashboardRequiresRefresh bool
+	dashboardUsageCalls      int
+	cleanupCh                chan string
 }
 
 func (s *cursorGatewayUpstreamStub) Do(req *http.Request, _ string, accountID int64, accountConcurrency int) (*http.Response, error) {
@@ -51,6 +53,14 @@ func (s *cursorGatewayUpstreamStub) Do(req *http.Request, _ string, accountID in
 		return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(strings.NewReader(`{"apiKeyName":"test-key","userEmail":"cursor@example.com"}`))}, nil
 	case req.Method == http.MethodGet && req.URL.Path == "/v1/models":
 		return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(strings.NewReader(`{"items":[{"id":"model-b","displayName":"B"},{"id":"model-a","displayName":"A"}]}`))}, nil
+	case req.Method == http.MethodPost && req.URL.Path == "/aiserver.v1.DashboardService/GetCurrentPeriodUsage":
+		s.dashboardUsageCalls++
+		if s.dashboardRequiresRefresh && req.Header.Get("Authorization") == "Bearer old-access" {
+			return &http.Response{StatusCode: http.StatusUnauthorized, Header: header, Body: io.NopCloser(strings.NewReader(`{"error":"expired"}`))}, nil
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(strings.NewReader(`{"enabled":true,"planUsage":{"totalPercentUsed":1,"autoPercentUsed":0,"apiPercentUsed":1}}`))}, nil
+	case req.Method == http.MethodPost && req.URL.Path == "/oauth/token":
+		return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(strings.NewReader(`{"access_token":"new-access","refresh_token":"new-refresh"}`))}, nil
 	case req.Method == http.MethodPost && req.URL.Path == "/v1/agents":
 		s.nextAgent++
 		id := s.nextAgent
@@ -116,12 +126,36 @@ func newCursorGatewayTestContext(t *testing.T, path, body string, apiKeyID int64
 
 func newCursorGatewayForTest(upstream HTTPUpstream, redisClient *redis.Client) *CursorGatewayService {
 	return NewCursorGatewayService(upstream, nil, nil, redisClient, &config.Config{Cursor: config.CursorConfig{
-		BaseURL: "https://api.cursor.com", DefaultModel: "auto", RequestTimeoutSeconds: 10, StreamIdleTimeoutSeconds: 10, ResponsesTTLSeconds: 60,
+		BaseURL: "https://api.cursor.com", DashboardBaseURL: "https://api2.cursor.sh", DefaultModel: "auto", RequestTimeoutSeconds: 10, StreamIdleTimeoutSeconds: 10, ResponsesTTLSeconds: 60,
 	}})
 }
 
 func cursorAPIKeyAccount() *Account {
 	return &Account{ID: 1, Platform: PlatformCursor, Type: AccountTypeAPIKey, Concurrency: 1, Credentials: map[string]any{"api_key": "cursor-key"}}
+}
+
+func TestCursorGatewayFetchDashboardUsageRefreshesExpiredToken(t *testing.T) {
+	upstream := &cursorGatewayUpstreamStub{dashboardRequiresRefresh: true}
+	svc := newCursorGatewayForTest(upstream, nil)
+	account := cursorAPIKeyAccount()
+	account.Credentials["dashboard_access_token"] = "old-access"
+	account.Credentials["dashboard_refresh_token"] = "old-refresh"
+
+	result, err := svc.FetchDashboardUsage(context.Background(), account)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Usage)
+	require.Equal(t, "new-access", result.RefreshedAccessToken)
+	require.Equal(t, "new-refresh", result.RefreshedRefreshToken)
+	require.Equal(t, 2, upstream.dashboardUsageCalls)
+
+	requests, bodies, _, _ := upstream.snapshot()
+	require.Len(t, requests, 3)
+	require.Equal(t, "Bearer old-access", requests[0].Header.Get("Authorization"))
+	require.Equal(t, "{}", bodies[0])
+	require.Equal(t, "/oauth/token", requests[1].URL.Path)
+	require.Contains(t, bodies[1], `"refresh_token":"old-refresh"`)
+	require.Equal(t, "Bearer new-access", requests[2].Header.Get("Authorization"))
 }
 
 func TestCursorGatewayForwardAnthropicCloudAgent(t *testing.T) {

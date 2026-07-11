@@ -23,29 +23,39 @@ import {
 } from '../credentialsBuilder'
 
 describe('Cursor credentials', () => {
-  it('builds trimmed API Key create credentials', () => {
-    expect(buildCursorCreateCredentials({ api_key: '  cursor-key  ' })).toEqual({
-      api_key: 'cursor-key'
+  it('builds trimmed Cloud and optional Dashboard credentials', () => {
+    expect(buildCursorCreateCredentials({
+      api_key: '  cursor-key  ',
+      dashboard_access_token: ' access ',
+      dashboard_refresh_token: ' refresh '
+    })).toEqual({
+      api_key: 'cursor-key',
+      dashboard_access_token: 'access',
+      dashboard_refresh_token: 'refresh'
     })
     expect(buildCursorCreateCredentials({ api_key: '   ' })).toEqual({})
   })
 
-  it('keeps API Key by default and emits only replace or clear', () => {
+  it('keeps Cursor credentials by default and emits only replace or clear', () => {
     const state = createCursorCredentialEditState()
     expect(buildCursorCredentialUpdate(state)).toEqual({})
     state.api_key = { action: 'replace', value: ' new-key ' }
+    state.dashboard_access_token = { action: 'replace', value: ' access ' }
+    state.dashboard_refresh_token = { action: 'clear', value: 'ignored' }
     expect(buildCursorCredentialUpdate(state)).toEqual({
-      credentials: { api_key: 'new-key' }
+      credentials: { api_key: 'new-key', dashboard_access_token: 'access' },
+      clear_credentials: ['dashboard_refresh_token']
     })
-    state.api_key = { action: 'clear', value: 'ignored' }
-    expect(buildCursorCredentialUpdate(state)).toEqual({ clear_credentials: ['api_key'] })
   })
 
-  it('resets transient API Key edit state without exposing an existing value', () => {
+  it('resets transient Cursor credential edit state without exposing existing values', () => {
     const state = createCursorCredentialEditState()
     state.api_key = { action: 'replace', value: 'secret' }
+    state.dashboard_access_token = { action: 'replace', value: 'access' }
     resetCursorCredentialEditState(state)
     expect(state.api_key).toEqual({ action: 'keep', value: '' })
+    expect(state.dashboard_access_token).toEqual({ action: 'keep', value: '' })
+    expect(state.dashboard_refresh_token).toEqual({ action: 'keep', value: '' })
   })
 })
 

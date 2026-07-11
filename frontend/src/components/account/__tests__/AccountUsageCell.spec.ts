@@ -601,6 +601,55 @@ describe('AccountUsageCell', () => {
     expect(wrapper.text()).toContain('admin.accounts.cursor.apiKeyConfigured')
   })
 
+  it('Cursor 展示官方 Total、First-party 与 API 套餐进度并保留本地用量', async () => {
+    getUsage.mockResolvedValue({
+      source: 'local',
+      cursor_api_key_configured: true,
+      cursor_probe_state: 'configured',
+      cursor_dashboard_configured: true,
+      cursor_dashboard_state: 'cached',
+      cursor_plan_usage: {
+        enabled: true,
+        total_percent_used: 1,
+        first_party_percent_used: 0,
+        api_percent_used: 1,
+        limit_cents: 2000,
+        total_spend_cents: 20,
+        remaining_cents: 1980,
+        billing_cycle_end: '2099-08-10T00:00:00Z',
+        updated_at: '2026-08-01T00:00:00Z'
+      },
+      cursor_local_usage: { requests: 2, tokens: 100, cost: 0.02 }
+    })
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({
+          id: 2955,
+          platform: 'cursor',
+          type: 'apikey',
+          credentials_status: { has_api_key: true, has_dashboard_access_token: true }
+        })
+      },
+      global: {
+        stubs: {
+          UsageProgressBar: {
+            props: ['label', 'utilization', 'resetsAt'],
+            template: '<div class="official-bar">{{ label }}|{{ utilization }}|{{ resetsAt }}</div>'
+          },
+          AccountQuotaInfo: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Total|1|2099-08-10T00:00:00Z')
+    expect(wrapper.text()).toContain('admin.accounts.usageWindow.cursorFirstParty|0|')
+    expect(wrapper.text()).toContain('admin.accounts.usageWindow.cursorAPI|1|')
+    expect(wrapper.text()).toContain('admin.accounts.usageWindow.cursorPlanSpend')
+    expect(wrapper.text()).toContain('2 req')
+  })
+
   it('Cursor 刷新按钮与账号列表手动刷新都会强制检测 API Key', async () => {
     getUsage.mockResolvedValue({
       source: 'active',

@@ -31,20 +31,23 @@
           <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.accounts.cursor.editCredentialsTitle') }}</h3>
           <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.editCredentialsHint') }}</p>
         </div>
-        <div class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(9rem,0.7fr)_minmax(8rem,0.45fr)_minmax(12rem,1fr)] sm:items-end">
-          <div>
-            <span class="input-label">{{ t('admin.accounts.cursor.apiKey') }}</span>
-            <p class="text-xs text-gray-500 dark:text-gray-400">
-              {{ account.credentials_status?.has_api_key ? t('admin.accounts.cursor.configured') : t('admin.accounts.cursor.notConfigured') }}
-            </p>
+        <div class="space-y-3">
+          <div v-for="key in cursorCredentialKeys" :key="key" class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(9rem,0.7fr)_minmax(8rem,0.45fr)_minmax(12rem,1fr)] sm:items-end">
+            <div>
+              <span class="input-label">{{ cursorCredentialLabel(key) }}</span>
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                {{ account.credentials_status?.[`has_${key}`] ? t('admin.accounts.cursor.configured') : t('admin.accounts.cursor.notConfigured') }}
+              </p>
+            </div>
+            <select v-model="cursorCredentialState[key].action" class="input min-h-11" @change="onCursorCredentialActionChange(key)">
+              <option value="keep">{{ t('admin.accounts.cursor.keep') }}</option>
+              <option value="replace">{{ t('admin.accounts.cursor.replace') }}</option>
+              <option value="clear">{{ t('admin.accounts.cursor.clear') }}</option>
+            </select>
+            <input v-model="cursorCredentialState[key].value" type="password" autocomplete="new-password" class="input min-h-11 font-mono" :disabled="cursorCredentialState[key].action !== 'replace'" :placeholder="t('admin.accounts.cursor.replacePlaceholder')" :data-testid="`cursor-${key.replace(/_/g, '-')}-input`" data-1p-ignore data-lpignore="true" data-bwignore="true" />
           </div>
-          <select v-model="cursorCredentialState.api_key.action" class="input min-h-11" @change="onCursorCredentialActionChange">
-            <option value="keep">{{ t('admin.accounts.cursor.keep') }}</option>
-            <option value="replace">{{ t('admin.accounts.cursor.replace') }}</option>
-            <option value="clear">{{ t('admin.accounts.cursor.clear') }}</option>
-          </select>
-          <input v-model="cursorCredentialState.api_key.value" type="password" autocomplete="new-password" class="input min-h-11 font-mono" :disabled="cursorCredentialState.api_key.action !== 'replace'" :placeholder="t('admin.accounts.cursor.replacePlaceholder')" data-testid="cursor-api-key-input" data-1p-ignore data-lpignore="true" data-bwignore="true" />
         </div>
+        <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.dashboardTokenSourceHint') }}</p>
       </section>
 
       <section v-if="account.platform === 'adobe' && account.type === 'oauth'" class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600">
@@ -2594,6 +2597,7 @@ import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import {
   ADOBE_SENSITIVE_CREDENTIAL_KEYS,
+  CURSOR_SENSITIVE_CREDENTIAL_KEYS,
   applyAntigravityProjectID,
   buildCursorCredentialUpdate,
   createCursorCredentialEditState,
@@ -2610,6 +2614,7 @@ import {
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
   HEADER_OVERRIDES_CREDENTIAL_KEY,
   type AdobeSensitiveCredentialKey,
+  type CursorSensitiveCredentialKey,
   type HeaderOverrideRow
 } from '@/components/account/credentialsBuilder'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
@@ -2682,9 +2687,11 @@ interface TempUnschedRuleForm {
 const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
+const cursorCredentialKeys = CURSOR_SENSITIVE_CREDENTIAL_KEYS
 const cursorCredentialState = reactive(createCursorCredentialEditState())
-const onCursorCredentialActionChange = () => {
-  if (cursorCredentialState.api_key.action !== 'replace') cursorCredentialState.api_key.value = ''
+const cursorCredentialLabel = (key: CursorSensitiveCredentialKey) => t(`admin.accounts.cursor.${key}`)
+const onCursorCredentialActionChange = (key: CursorSensitiveCredentialKey) => {
+  if (cursorCredentialState[key].action !== 'replace') cursorCredentialState[key].value = ''
 }
 const adobeCredentialKeys = ADOBE_SENSITIVE_CREDENTIAL_KEYS
 const adobeCredentialState = reactive(createAdobeCredentialEditState())
@@ -4017,10 +4024,12 @@ const handleSubmit = async () => {
         appStore.showError(t('admin.accounts.cursor.apiKeyRequired'))
         return
       }
-      if (cursorCredentialState.api_key.action === 'clear' && !confirm(t('admin.accounts.cursor.clearConfirm'))) {
+      const cursorUpdate = buildCursorCredentialUpdate(cursorCredentialState)
+      if (cursorUpdate.clear_credentials?.length && !confirm(t('admin.accounts.cursor.clearConfirm', {
+        fields: cursorUpdate.clear_credentials.map((key) => cursorCredentialLabel(key as CursorSensitiveCredentialKey)).join(', ')
+      }))) {
         return
       }
-      const cursorUpdate = buildCursorCredentialUpdate(cursorCredentialState)
       const cursorModelMapping = buildModelRestrictionMapping()
       const currentCredentials = (props.account.credentials as Record<string, unknown>) || {}
       const credentials = { ...currentCredentials, ...(cursorUpdate.credentials || {}) }

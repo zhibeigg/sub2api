@@ -53,9 +53,12 @@ func TestCursorAccountDefaultMapping(t *testing.T) {
 
 func TestValidateCursorAccountCredentials(t *testing.T) {
 	t.Parallel()
-	require.NoError(t, ValidateCursorAccountCredentials(AccountTypeAPIKey, map[string]any{"api_key": "cursor-key"}))
+	require.NoError(t, ValidateCursorAccountCredentials(AccountTypeAPIKey, map[string]any{
+		"api_key": "cursor-key", "dashboard_access_token": "access", "dashboard_refresh_token": "refresh",
+	}))
 	require.Error(t, ValidateCursorAccountCredentials(AccountTypeOAuth, map[string]any{"api_key": "cursor-key"}))
 	require.Error(t, ValidateCursorAccountCredentials("cookie", map[string]any{"cookie": "_vcrcs=legacy"}))
 	require.Error(t, ValidateCursorAccountCredentials(AccountTypeAPIKey, map[string]any{"api_key": ""}))
 	require.Error(t, ValidateCursorAccountCredentials(AccountTypeAPIKey, map[string]any{"api_key": "cursor-key", "cookie": "legacy"}))
+	require.Error(t, ValidateCursorAccountCredentials(AccountTypeAPIKey, map[string]any{"api_key": "cursor-key", "dashboard_access_token": "bad\nvalue"}))
 }

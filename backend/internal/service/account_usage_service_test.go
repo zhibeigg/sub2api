@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	cursorpkg "github.com/Wei-Shaw/sub2api/internal/pkg/cursor"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
 )
 
@@ -23,6 +24,28 @@ type cursorUsageProberFunc func(context.Context, *Account, string, string) (stri
 
 func (f cursorUsageProberFunc) Probe(ctx context.Context, account *Account, model, protocol string) (string, error) {
 	return f(ctx, account, model, protocol)
+}
+
+type cursorDashboardFetcherFunc func(context.Context, *Account) (*CursorDashboardUsageResult, error)
+
+func (f cursorDashboardFetcherFunc) FetchDashboardUsage(ctx context.Context, account *Account) (*CursorDashboardUsageResult, error) {
+	return f(ctx, account)
+}
+
+type cursorDashboardAccountRepo struct {
+	stubOpenAIAccountRepo
+	updatedCredentials map[string]any
+	updatedExtra       map[string]any
+}
+
+func (r *cursorDashboardAccountRepo) UpdateCredentials(_ context.Context, _ int64, credentials map[string]any) error {
+	r.updatedCredentials = shallowCopyMap(credentials)
+	return nil
+}
+
+func (r *cursorDashboardAccountRepo) UpdateExtra(_ context.Context, _ int64, updates map[string]any) error {
+	r.updatedExtra = shallowCopyMap(updates)
+	return nil
 }
 
 func TestAccountUsageServiceCursorLocalUsageAndForcedProbe(t *testing.T) {
@@ -88,6 +111,138 @@ func TestAccountUsageServiceCursorProbeFailureIsDegraded(t *testing.T) {
 	}
 	if usage.CursorProbeState != "error" || usage.ErrorCode != errorCodeUnauthenticated || !usage.NeedsReauth {
 		t.Fatalf("degraded Cursor probe result = %#v", usage)
+	}
+}
+
+func TestAccountUsageServiceCursorDashboardCachedAndActiveRefresh(t *testing.T) {
+	t.Parallel()
+
+	account := Account{
+		ID:       6103,
+		Platform: PlatformCursor,
+		Type:     AccountTypeAPIKey,
+		Credentials: map[string]any{
+			"api_key":                 "cursor-key",
+			"dashboard_access_token":  "old-access",
+			"dashboard_refresh_token": "old-refresh",
+		},
+		Extra: map[string]any{
+			"cursor_dashboard_enabled":                  true,
+			"cursor_dashboard_total_percent_used":       1.0,
+			"cursor_dashboard_first_party_percent_used": 0.0,
+			"cursor_dashboard_api_percent_used":         1.0,
+			"cursor_dashboard_updated_at":               "2026-08-01T00:00:00Z",
+		},
+	}
+	repo := &cursorDashboardAccountRepo{stubOpenAIAccountRepo: stubOpenAIAccountRepo{accounts: []Account{account}}}
+	total, firstParty, api, limit, spend, remaining := 2.0, 1.0, 1.0, 2000.0, 40.0, 1960.0
+	enabled := true
+	svc := &AccountUsageService{
+		accountRepo: repo,
+		cursorUsageProber: cursorUsageProberFunc(func(context.Context, *Account, string, string) (string, error) {
+			return "cursor@example.com", nil
+		}),
+		cursorDashboardFetcher: cursorDashboardFetcherFunc(func(context.Context, *Account) (*CursorDashboardUsageResult, error) {
+			return &CursorDashboardUsageResult{
+				Usage: &cursorpkg.DashboardUsage{
+					Enabled:           &enabled,
+					BillingCycleStart: 1785542400000,
+					BillingCycleEnd:   1788220800000,
+					PlanUsage: &cursorpkg.DashboardPlanUsage{
+						TotalPercentUsed: &total,
+						AutoPercentUsed:  &firstParty,
+						APIPercentUsed:   &api,
+						Limit:            &limit,
+						TotalSpend:       &spend,
+						Remaining:        &remaining,
+					},
+				},
+				RefreshedAccessToken:  "new-access",
+				RefreshedRefreshToken: "new-refresh",
+			}, nil
+		}),
+	}
+
+	passive, err := svc.GetUsage(context.Background(), account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if passive.CursorDashboardState != "cached" || passive.CursorPlanUsage == nil || passive.CursorPlanUsage.TotalPercentUsed == nil || *passive.CursorPlanUsage.TotalPercentUsed != 1 {
+		t.Fatalf("passive dashboard usage = %#v", passive)
+	}
+
+	active, err := svc.GetUsage(context.Background(), account.ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active.CursorDashboardState != "verified" || active.CursorPlanUsage == nil || active.CursorPlanUsage.TotalPercentUsed == nil || *active.CursorPlanUsage.TotalPercentUsed != 2 {
+		t.Fatalf("active dashboard usage = %#v", active)
+	}
+	if repo.updatedCredentials["dashboard_access_token"] != "new-access" || repo.updatedCredentials["dashboard_refresh_token"] != "new-refresh" {
+		t.Fatalf("updated credentials = %#v", repo.updatedCredentials)
+	}
+	if repo.updatedExtra["cursor_dashboard_total_percent_used"] != 2.0 || repo.updatedExtra["cursor_dashboard_limit_cents"] != 2000.0 {
+		t.Fatalf("updated extra = %#v", repo.updatedExtra)
+	}
+}
+
+func TestCursorPlanUsageSnapshotUpdatesClearsMissingFields(t *testing.T) {
+	t.Parallel()
+	updatedAt := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	total := 1.0
+	updates := cursorPlanUsageSnapshotUpdates(&CursorPlanUsageInfo{
+		Enabled:          true,
+		TotalPercentUsed: &total,
+		UpdatedAt:        &updatedAt,
+	})
+	if updates["cursor_dashboard_total_percent_used"] != 1.0 {
+		t.Fatalf("total update = %#v", updates)
+	}
+	for _, key := range []string{
+		"cursor_dashboard_first_party_percent_used",
+		"cursor_dashboard_api_percent_used",
+		"cursor_dashboard_limit_cents",
+		"cursor_dashboard_total_spend_cents",
+		"cursor_dashboard_remaining_cents",
+		"cursor_dashboard_billing_cycle_start",
+		"cursor_dashboard_billing_cycle_end",
+	} {
+		value, ok := updates[key]
+		if !ok || value != nil {
+			t.Fatalf("%s should be explicitly cleared, updates = %#v", key, updates)
+		}
+	}
+}
+
+func TestAccountUsageServiceCursorDashboardFailureKeepsStaleSnapshot(t *testing.T) {
+	t.Parallel()
+
+	account := Account{
+		ID:          6104,
+		Platform:    PlatformCursor,
+		Type:        AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "cursor-key", "dashboard_access_token": "expired"},
+		Extra: map[string]any{
+			"cursor_dashboard_enabled":            true,
+			"cursor_dashboard_total_percent_used": 3.0,
+			"cursor_dashboard_updated_at":         "2026-08-01T00:00:00Z",
+		},
+	}
+	svc := &AccountUsageService{
+		accountRepo: &stubOpenAIAccountRepo{accounts: []Account{account}},
+		cursorUsageProber: cursorUsageProberFunc(func(context.Context, *Account, string, string) (string, error) {
+			return "cursor@example.com", nil
+		}),
+		cursorDashboardFetcher: cursorDashboardFetcherFunc(func(context.Context, *Account) (*CursorDashboardUsageResult, error) {
+			return nil, errors.New("dashboard unavailable")
+		}),
+	}
+	usage, err := svc.GetUsage(context.Background(), account.ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usage.CursorDashboardState != "stale" || usage.CursorPlanUsage == nil || usage.CursorDashboardMessage != "dashboard unavailable" {
+		t.Fatalf("stale dashboard usage = %#v", usage)
 	}
 }
 
