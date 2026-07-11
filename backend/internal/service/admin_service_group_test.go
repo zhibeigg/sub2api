@@ -157,14 +157,18 @@ func TestAdminService_UpdateAccount_CursorMixedSchedulingAllowsAnthropicGroup(t 
 	require.True(t, updated.IsMixedSchedulingEnabled())
 }
 
-func TestAdminService_ValidateAccountGroupPlatform_CursorMixedSchedulingAllowsAnthropic(t *testing.T) {
-	repo := &groupRepoStubForAdmin{
-		getByID: &Group{ID: 26, Name: "anthropic-messages", Platform: PlatformAnthropic},
-	}
-	svc := &adminServiceImpl{groupRepo: repo}
+func TestAdminService_ValidateAccountGroupPlatform_CursorMixedSchedulingAllowsModelPlatforms(t *testing.T) {
+	for _, platform := range []string{PlatformAnthropic, PlatformGemini, PlatformOpenAI, PlatformGrok, PlatformCursor} {
+		t.Run(platform, func(t *testing.T) {
+			repo := &groupRepoStubForAdmin{
+				getByID: &Group{ID: 26, Name: platform + "-models", Platform: platform},
+			}
+			svc := &adminServiceImpl{groupRepo: repo}
 
-	err := svc.validateAccountGroupPlatform(context.Background(), PlatformCursor, []int64{26}, true)
-	require.NoError(t, err)
+			err := svc.validateAccountGroupPlatform(context.Background(), PlatformCursor, []int64{26}, true)
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestAdminService_ValidateAccountGroupPlatform_CursorWithoutMixedSchedulingRejectsAnthropic(t *testing.T) {
@@ -180,9 +184,9 @@ func TestAdminService_ValidateAccountGroupPlatform_CursorWithoutMixedSchedulingR
 	require.Contains(t, infraerrors.Message(err), `account platform "cursor"`)
 }
 
-func TestAdminService_ValidateAccountGroupPlatform_CursorMixedSchedulingRejectsOtherPlatforms(t *testing.T) {
+func TestAdminService_ValidateAccountGroupPlatform_CursorMixedSchedulingRejectsUnsupportedPlatforms(t *testing.T) {
 	repo := &groupRepoStubForAdmin{
-		getByID: &Group{ID: 27, Name: "openai", Platform: PlatformOpenAI},
+		getByID: &Group{ID: 27, Name: "adobe", Platform: PlatformAdobe},
 	}
 	svc := &adminServiceImpl{groupRepo: repo}
 

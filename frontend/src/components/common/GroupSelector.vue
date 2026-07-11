@@ -73,7 +73,7 @@ interface Props {
   modelValue: number[]
   groups: AdminGroup[]
   platform?: GroupPlatform // Optional platform filter
-  mixedScheduling?: boolean // For antigravity accounts: allow anthropic/gemini groups
+  mixedScheduling?: boolean // Allow compatible cross-platform groups for mixed-scheduling accounts
   searchable?: boolean | 'auto'
   multiple?: boolean
 }
@@ -110,9 +110,14 @@ const filteredGroups = computed(() => {
         (g) => g.platform === 'kiro' || g.platform === 'anthropic' || g.platform === 'openai'
       )
     } else if (props.platform === 'cursor' && props.mixedScheduling) {
-      // Cursor Cloud Agents 通过兼容层参与 Anthropic /v1/messages 调度。
+      // Cursor Cloud Agents 模型目录覆盖 Claude、Gemini、OpenAI、Grok 及 Cursor 原生模型。
       result = result.filter(
-        (g) => g.platform === 'cursor' || g.platform === 'anthropic'
+        (g) =>
+          g.platform === 'cursor' ||
+          g.platform === 'anthropic' ||
+          g.platform === 'gemini' ||
+          g.platform === 'openai' ||
+          g.platform === 'grok'
       )
     } else {
       // 默认：只能选择同 platform 的分组

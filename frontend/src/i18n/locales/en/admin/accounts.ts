@@ -760,10 +760,10 @@ export default {
       expiresAt: 'Expires At',
       expiresAtHint: 'Leave empty for no expiration',
       higherPriorityFirst: 'Lower value means higher priority',
-      mixedScheduling: 'Use in /v1/messages',
-      mixedSchedulingHint: 'Enable participation in Anthropic /v1/messages group scheduling',
+      mixedScheduling: 'Enable cross-platform mixed scheduling',
+      mixedSchedulingHint: 'Allow this account to join compatible groups from other platforms',
       mixedSchedulingTooltip:
-        'When enabled, this account can serve /v1/messages requests from Anthropic groups. Session context and model capabilities may differ across upstream providers, so isolate accounts with groups and enable only models that were synchronized and verified.',
+        'When enabled, this account can participate in cross-platform group scheduling for compatible endpoints. Session context and model capabilities may differ across upstream providers, so isolate accounts with groups and enable only models that were synchronized and verified.',
       aiCreditsBalance: 'AI Credits',
       allowOverages: 'Allow Overages (AI Credits)',
       allowOveragesTooltip:

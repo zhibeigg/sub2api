@@ -753,7 +753,7 @@ Sub2API 将 Adobe 作为独立的 `adobe` 平台接入。Adobe 分组只调度 A
 Sub2API 的 Cursor 接入文档现以 `https://api.cursor.com` 上的官方 Cloud Agents API Beta 为准。认证使用 Cursor Dashboard 签发的用户 API Key 或 agent-scoped 团队服务账户 API Key，不再使用浏览器 Cookie 或旧登录助手扩展。
 
 - 使用 `GET /v1/me` 验证当前密钥；用户 Key 可返回所有者字段，服务账户/团队 Key 不返回个人所有者字段。
-- 使用 `GET /v1/models` 获取可用模型 ID 与参数；需要 Cursor 账户默认模型时应省略 `model`。
+- 使用 `GET /v1/models` 获取可用模型 ID 与参数；需要 Cursor 账户默认模型时应省略 `model`。开启混合调度后，Cursor 账号可加入 Cursor、Anthropic、Gemini、OpenAI 与 Grok 分组，承接兼容的 `/v1/messages`、`/v1/chat/completions` 和 `/v1/responses` 请求；Gemini 原生 `generateContent` 不会调度到 Cursor。
 - 使用 `POST /v1/agents` 创建 Agent。同时省略 `repos` 和 `env`（或发送 `repos: []`）即可创建适合临时任务的无仓库 Agent；上下文不再需要时应显式删除。
 - Cloud Agents API 是官方 Beta，部分能力可能按账户灰度或返回 `feature_unavailable`，生产依赖前必须实际验证。
 - 管理后台账号列表展示 Sub2API 本地请求、Token、费用、缓存写入/读取 Token，以及已配置的本地日/周/总额度进度条；点击“刷新检测”会通过 `/v1/me` 验证当前 API Key，普通列表加载不会批量探测上游。

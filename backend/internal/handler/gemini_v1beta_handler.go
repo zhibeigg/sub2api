@@ -375,6 +375,17 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 			}
 		}
 		account := selection.Account
+
+		// Cursor 兼容层支持 OpenAI/Anthropic 入站协议，但不直接接收 Gemini 原生
+		// generateContent 请求。Cursor 仍可在 Gemini 分组中承接 /v1/messages、
+		// /v1/chat/completions 与 /v1/responses；原生 Gemini 请求继续选择 Gemini/Antigravity。
+		if account.Platform == service.PlatformCursor {
+			if selection.ReleaseFunc != nil {
+				selection.ReleaseFunc()
+			}
+			fs.FailedAccountIDs[account.ID] = struct{}{}
+			continue
+		}
 		setOpsSelectedAccount(c, account.ID, account.Platform)
 
 		// 检测账号切换：如果粘性会话绑定的账号与当前选择的账号不同，清除 thoughtSignature

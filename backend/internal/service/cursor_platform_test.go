@@ -20,11 +20,16 @@ func TestCursorPlatformCapabilities(t *testing.T) {
 	require.Contains(t, AllowedQuotaPlatforms, PlatformCursor)
 }
 
-func TestCursorMixedSchedulingTargetsAnthropicMessagesOnly(t *testing.T) {
+func TestCursorMixedSchedulingTargetsSupportedModelGroupPlatforms(t *testing.T) {
 	t.Parallel()
-	require.Contains(t, MixedSchedulingCandidatePlatforms(PlatformAnthropic), PlatformCursor)
-	require.NotContains(t, MixedSchedulingCandidatePlatforms(PlatformGemini), PlatformCursor)
-	require.NotContains(t, MixedSchedulingCandidatePlatforms(PlatformOpenAI), PlatformCursor)
+	for _, platform := range []string{PlatformAnthropic, PlatformGemini, PlatformOpenAI, PlatformGrok} {
+		require.True(t, GroupPlatformSupportsMixedScheduling(platform), platform)
+		require.True(t, CursorSupportsGroupPlatform(platform), platform)
+		require.Contains(t, MixedSchedulingCandidatePlatforms(platform), PlatformCursor, platform)
+	}
+	require.True(t, CursorSupportsGroupPlatform(PlatformCursor))
+	require.False(t, CursorSupportsGroupPlatform(PlatformAdobe))
+	require.NotContains(t, MixedSchedulingCandidatePlatforms(PlatformAdobe), PlatformCursor)
 
 	account := &Account{
 		Platform: PlatformCursor,

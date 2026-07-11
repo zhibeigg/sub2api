@@ -1516,17 +1516,26 @@ func IsMixedSchedulingCapablePlatform(platform string) bool {
 	return platform == PlatformAntigravity || platform == PlatformKiro || platform == PlatformCursor
 }
 
-// GroupPlatformSupportsMixedScheduling 返回该分组平台是否启用混合调度候选加载
-// （anthropic/gemini/openai 分组可纳入启用了 mixed_scheduling 的跨平台账户）。
+// GroupPlatformSupportsMixedScheduling 返回该分组平台是否启用混合调度候选加载。
+// Anthropic、Gemini、OpenAI 与 Grok 分组可纳入启用了 mixed_scheduling 的兼容账户。
 func GroupPlatformSupportsMixedScheduling(platform string) bool {
-	return platform == PlatformAnthropic || platform == PlatformGemini || platform == PlatformOpenAI
+	return platform == PlatformAnthropic || platform == PlatformGemini || platform == PlatformOpenAI || platform == PlatformGrok
+}
+
+// CursorSupportsGroupPlatform 返回 Cursor Cloud Agents 模型目录可参与的分组平台。
+// Composer/default 等 Cursor 原生模型继续使用 Cursor 分组；跨平台模型按其产品族加入
+// Anthropic、Gemini、OpenAI 或 Grok 分组。
+func CursorSupportsGroupPlatform(platform string) bool {
+	return platform == PlatformCursor || platform == PlatformAnthropic || platform == PlatformGemini || platform == PlatformOpenAI || platform == PlatformGrok
 }
 
 // MixedSchedulingCandidatePlatforms 返回指定分组在混合调度模式下需要加载的账号平台。
-// Cursor 兼容层当前只加入 Anthropic /v1/messages 调度，不加入 Gemini 或 OpenAI 分组。
 func MixedSchedulingCandidatePlatforms(groupPlatform string) []string {
-	platforms := []string{groupPlatform, PlatformAntigravity, PlatformKiro}
-	if groupPlatform == PlatformAnthropic {
+	platforms := []string{groupPlatform}
+	if groupPlatform == PlatformAnthropic || groupPlatform == PlatformGemini || groupPlatform == PlatformOpenAI {
+		platforms = append(platforms, PlatformAntigravity, PlatformKiro)
+	}
+	if CursorSupportsGroupPlatform(groupPlatform) && groupPlatform != PlatformCursor {
 		platforms = append(platforms, PlatformCursor)
 	}
 	return platforms

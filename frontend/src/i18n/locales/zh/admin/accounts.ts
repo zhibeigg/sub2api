@@ -863,10 +863,10 @@ export default {
       expiresAt: '过期时间',
       expiresAtHint: '留空表示不过期',
       higherPriorityFirst: '数值越小优先级越高',
-      mixedScheduling: '在 /v1/messages 中使用',
-      mixedSchedulingHint: '启用后可参与 Anthropic /v1/messages 分组调度',
+      mixedScheduling: '启用跨平台混合调度',
+      mixedSchedulingHint: '启用后可加入账号能力支持的其他平台分组',
       mixedSchedulingTooltip:
-        '启用后，此账号可被 Anthropic 分组用于 /v1/messages。不同上游的会话上下文和模型能力可能不完全兼容，建议通过分组隔离账号，并仅启用已同步且验证可用的模型。',
+        '启用后，此账号可参与兼容端点的跨平台分组调度。不同上游的会话上下文和模型能力可能不完全兼容，建议通过分组隔离账号，并仅启用已同步且验证可用的模型。',
       aiCreditsBalance: 'AI Credits',
       allowOverages: '允许超量请求 (AI Credits)',
       allowOveragesTooltip:

@@ -1217,6 +1217,47 @@ func TestGatewayService_selectAccountWithMixedScheduling(t *testing.T) {
 		require.Equal(t, int64(2), acc.ID, "同优先级且未使用时应优先选择OAuth账户")
 	})
 
+	t.Run("混合调度-Cursor参与全部支持模型平台分组", func(t *testing.T) {
+		tests := []struct {
+			platform string
+			model    string
+		}{
+			{PlatformAnthropic, "claude-opus-4-8"},
+			{PlatformGemini, "gemini-3.5-flash"},
+			{PlatformOpenAI, "gpt-5.6-sol"},
+			{PlatformGrok, "grok-4.5"},
+		}
+		for _, test := range tests {
+			t.Run(test.platform, func(t *testing.T) {
+				repo := &mockAccountRepoForPlatform{
+					accounts: []Account{{
+						ID:          71,
+						Platform:    PlatformCursor,
+						Type:        AccountTypeAPIKey,
+						Status:      StatusActive,
+						Schedulable: true,
+						Priority:    1,
+						Credentials: map[string]any{
+							"api_key":       "cursor-key",
+							"model_mapping": map[string]any{test.model: test.model},
+						},
+						Extra: map[string]any{"mixed_scheduling": true},
+					}},
+					accountsByID: map[int64]*Account{},
+				}
+				for i := range repo.accounts {
+					repo.accountsByID[repo.accounts[i].ID] = &repo.accounts[i]
+				}
+				svc := &GatewayService{accountRepo: repo, cfg: testConfig()}
+
+				selected, err := svc.selectAccountWithMixedScheduling(ctx, nil, "", test.model, nil, test.platform)
+				require.NoError(t, err)
+				require.NotNil(t, selected)
+				require.Equal(t, PlatformCursor, selected.Platform)
+			})
+		}
+	})
+
 	t.Run("混合调度-包含启用mixed_scheduling的antigravity账户", func(t *testing.T) {
 		repo := &mockAccountRepoForPlatform{
 			accounts: []Account{
