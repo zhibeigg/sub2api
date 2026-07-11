@@ -2009,6 +2009,21 @@ func TestAccount_IsMixedSchedulingEnabled(t *testing.T) {
 	}
 }
 
+func TestExplicitGroupSelectionBypassesAutomaticMultiGroupResolution(t *testing.T) {
+	selected := &Group{ID: 20, Name: "selected", Platform: PlatformOpenAI}
+	other := &Group{ID: 10, Name: "other", Platform: PlatformAnthropic}
+	apiKey := &APIKey{
+		GroupID:                &selected.ID,
+		Group:                  selected,
+		GroupBindings:          []APIKeyGroupBinding{{GroupID: other.ID, Priority: 0, Group: other}},
+		ExplicitGroupSelection: true,
+	}
+
+	require.Same(t, selected, (&GatewayService{}).ResolveEffectiveGroupBinding(context.Background(), apiKey, "gpt-5.4"))
+	require.Same(t, selected, (&OpenAIGatewayService{}).ResolveEffectiveGroupBinding(context.Background(), apiKey, "gpt-5.4"))
+	require.Len(t, apiKey.GroupBindings, 1, "explicit routing must preserve the original binding context")
+}
+
 // mockConcurrencyService for testing
 type mockConcurrencyService struct {
 	accountLoads      map[int64]*AccountLoadInfo

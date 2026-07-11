@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -723,7 +724,7 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 
 func (s *adminServiceImpl) DeleteGroup(ctx context.Context, id int64) error {
 	var groupKeys []string
-	if s.authCacheInvalidator != nil {
+	if s.authCacheInvalidator != nil && s.apiKeyRepo != nil {
 		keys, err := s.apiKeyRepo.ListKeysByGroupID(ctx, id)
 		if err == nil {
 			groupKeys = keys
@@ -733,6 +734,10 @@ func (s *adminServiceImpl) DeleteGroup(ctx context.Context, id int64) error {
 	affectedUserIDs, err := s.groupRepo.DeleteCascade(ctx, id)
 	if err != nil {
 		return err
+	}
+	var clearBindingsErr error
+	if s.apiKeyRepo != nil {
+		_, clearBindingsErr = s.apiKeyRepo.ClearGroupIDByGroupID(ctx, id)
 	}
 	// 注意：user_group_rate_multipliers 表通过外键 ON DELETE CASCADE 自动清理
 
@@ -753,6 +758,9 @@ func (s *adminServiceImpl) DeleteGroup(ctx context.Context, id int64) error {
 		for _, key := range groupKeys {
 			s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, key)
 		}
+	}
+	if clearBindingsErr != nil {
+		return fmt.Errorf("clear deleted group api key bindings: %w", clearBindingsErr)
 	}
 
 	return nil
@@ -830,109 +838,161 @@ func (s *adminServiceImpl) UpdateGroupSortOrders(ctx context.Context, updates []
 	return s.groupRepo.UpdateSortOrders(ctx, updates)
 }
 
-// AdminUpdateAPIKeyGroupID 管理员修改 API Key 分组绑定
-// groupID: nil=不修改, 指向0=解绑, 指向正整数=绑定到目标分组
-func (s *adminServiceImpl) AdminUpdateAPIKeyGroupID(ctx context.Context, keyID int64, groupID *int64) (*AdminUpdateAPIKeyGroupIDResult, error) {
+// AdminUpdateAPIKeyGroupID 管理员修改 API Key 分组绑定。
+// groupID: nil=不修改, 指向0=解绑, 指向正整数=绑定到目标分组。
+// groupBindings: nil=保持旧多绑定, 空切片=清除, 非空=校验、排序并由最高优先级绑定派生 group_id。
+func (s *adminServiceImpl) AdminUpdateAPIKeyGroupID(ctx context.Context, keyID int64, groupID *int64, groupBindings *[]APIKeyGroupBindingInput) (*AdminUpdateAPIKeyGroupIDResult, error) {
 	apiKey, err := s.apiKeyRepo.GetByID(ctx, keyID)
 	if err != nil {
 		return nil, err
 	}
-
-	if groupID == nil {
-		// nil 表示不修改，直接返回
+	if groupID == nil && groupBindings == nil {
 		return &AdminUpdateAPIKeyGroupIDResult{APIKey: apiKey}, nil
 	}
 
-	if *groupID < 0 {
-		return nil, infraerrors.BadRequest("INVALID_GROUP_ID", "group_id must be non-negative")
-	}
-
 	result := &AdminUpdateAPIKeyGroupIDResult{}
+	grantGroups := make([]*Group, 0)
 
-	if *groupID == 0 {
-		// 0 表示解绑分组（不修改 user_allowed_groups，避免影响用户其他 Key）
-		apiKey.GroupID = nil
-		apiKey.Group = nil
-	} else {
-		// 验证目标分组存在且状态为 active
-		group, err := s.groupRepo.GetByID(ctx, *groupID)
-		if err != nil {
-			return nil, err
-		}
-		if group.Status != StatusActive {
-			return nil, infraerrors.BadRequest("GROUP_NOT_ACTIVE", "target group is not active")
-		}
-		// 订阅类型分组：用户须持有该分组的有效订阅才可绑定
-		if group.IsSubscriptionType() {
-			if s.userSubRepo == nil {
-				return nil, infraerrors.InternalServer("SUBSCRIPTION_REPOSITORY_UNAVAILABLE", "subscription repository is not configured")
-			}
-			if _, err := s.userSubRepo.GetActiveByUserIDAndGroupID(ctx, apiKey.UserID, *groupID); err != nil {
-				if errors.Is(err, ErrSubscriptionNotFound) {
-					return nil, infraerrors.BadRequest("SUBSCRIPTION_REQUIRED", "user does not have an active subscription for this group")
-				}
+	if groupBindings != nil {
+		if len(*groupBindings) == 0 {
+			apiKey.GroupBindings = []APIKeyGroupBinding{}
+			apiKey.GroupID = nil
+			apiKey.Group = nil
+		} else {
+			bindings, grants, err := s.resolveAdminAPIKeyGroupBindings(ctx, apiKey.UserID, *groupBindings)
+			if err != nil {
 				return nil, err
 			}
+			apiKey.GroupBindings = bindings
+			gid := bindings[0].GroupID
+			apiKey.GroupID = &gid
+			apiKey.Group = bindings[0].Group
+			grantGroups = grants
 		}
+		// group_bindings 只要显式提供就拥有最终解释权：空数组清除全部绑定，
+		// 非空数组由最高优先级项派生 group_id。
+		groupID = nil
+	}
 
-		gid := *groupID
-		apiKey.GroupID = &gid
-		apiKey.Group = group
-
-		// 专属标准分组：使用事务保证「添加分组权限」与「更新 API Key」的原子性
-		if group.IsExclusive && !group.IsSubscriptionType() {
-			opCtx := ctx
-			var tx *dbent.Tx
-			if s.entClient == nil {
-				logger.LegacyPrintf("service.admin", "Warning: entClient is nil, skipping transaction protection for exclusive group binding")
-			} else {
-				var txErr error
-				tx, txErr = s.entClient.Tx(ctx)
-				if txErr != nil {
-					return nil, fmt.Errorf("begin transaction: %w", txErr)
-				}
-				defer func() { _ = tx.Rollback() }()
-				opCtx = dbent.NewTxContext(ctx, tx)
+	if groupID != nil {
+		if *groupID < 0 {
+			return nil, infraerrors.BadRequest("INVALID_GROUP_ID", "group_id must be non-negative")
+		}
+		// 显式走单分组管理员更新时，必须同步清除旧多绑定。
+		apiKey.GroupBindings = []APIKeyGroupBinding{}
+		if *groupID == 0 {
+			apiKey.GroupID = nil
+			apiKey.Group = nil
+		} else {
+			group, autoGrant, err := s.validateAdminAPIKeyGroup(ctx, apiKey.UserID, *groupID)
+			if err != nil {
+				return nil, err
 			}
-
-			if addErr := s.userRepo.AddGroupToAllowedGroups(opCtx, apiKey.UserID, gid); addErr != nil {
-				return nil, fmt.Errorf("add group to user allowed groups: %w", addErr)
+			gid := group.ID
+			apiKey.GroupID = &gid
+			apiKey.Group = group
+			if autoGrant {
+				grantGroups = append(grantGroups, group)
 			}
-			if err := s.apiKeyRepo.Update(opCtx, apiKey); err != nil {
-				return nil, fmt.Errorf("update api key: %w", err)
-			}
-			if tx != nil {
-				if err := tx.Commit(); err != nil {
-					return nil, fmt.Errorf("commit transaction: %w", err)
-				}
-			}
-
-			result.AutoGrantedGroupAccess = true
-			result.GrantedGroupID = &gid
-			result.GrantedGroupName = group.Name
-
-			// 失效认证缓存（在事务提交后执行）
-			if s.authCacheInvalidator != nil {
-				s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, apiKey.Key)
-			}
-
-			result.APIKey = apiKey
-			return result, nil
 		}
 	}
 
-	// 非专属分组 / 解绑：无需事务，单步更新即可
-	if err := s.apiKeyRepo.Update(ctx, apiKey); err != nil {
+	opCtx := ctx
+	var tx *dbent.Tx
+	if len(grantGroups) > 0 {
+		if s.entClient == nil {
+			logger.LegacyPrintf("service.admin", "Warning: entClient is nil, skipping transaction protection for exclusive group binding")
+		} else {
+			tx, err = s.entClient.Tx(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("begin transaction: %w", err)
+			}
+			defer func() { _ = tx.Rollback() }()
+			opCtx = dbent.NewTxContext(ctx, tx)
+		}
+	}
+
+	for _, group := range grantGroups {
+		if err := s.userRepo.AddGroupToAllowedGroups(opCtx, apiKey.UserID, group.ID); err != nil {
+			return nil, fmt.Errorf("add group to user allowed groups: %w", err)
+		}
+	}
+	if err := s.apiKeyRepo.Update(opCtx, apiKey); err != nil {
 		return nil, fmt.Errorf("update api key: %w", err)
 	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return nil, fmt.Errorf("commit transaction: %w", err)
+		}
+	}
 
-	// 失效认证缓存
+	if len(grantGroups) > 0 {
+		gid := grantGroups[0].ID
+		result.AutoGrantedGroupAccess = true
+		result.GrantedGroupID = &gid
+		result.GrantedGroupName = grantGroups[0].Name
+	}
 	if s.authCacheInvalidator != nil {
 		s.authCacheInvalidator.InvalidateAuthCacheByKey(ctx, apiKey.Key)
 	}
 
 	result.APIKey = apiKey
 	return result, nil
+}
+
+func (s *adminServiceImpl) resolveAdminAPIKeyGroupBindings(ctx context.Context, userID int64, inputs []APIKeyGroupBindingInput) ([]APIKeyGroupBinding, []*Group, error) {
+	seen := make(map[int64]struct{}, len(inputs))
+	bindings := make([]APIKeyGroupBinding, 0, len(inputs))
+	grantGroups := make([]*Group, 0, len(inputs))
+	for _, input := range inputs {
+		if input.GroupID <= 0 {
+			return nil, nil, infraerrors.BadRequest("INVALID_GROUP_ID", "group_bindings group_id must be positive")
+		}
+		if _, exists := seen[input.GroupID]; exists {
+			continue
+		}
+		seen[input.GroupID] = struct{}{}
+		group, autoGrant, err := s.validateAdminAPIKeyGroup(ctx, userID, input.GroupID)
+		if err != nil {
+			return nil, nil, err
+		}
+		bindings = append(bindings, APIKeyGroupBinding{GroupID: group.ID, Priority: input.Priority, Group: group})
+		if autoGrant {
+			grantGroups = append(grantGroups, group)
+		}
+	}
+	sort.SliceStable(bindings, func(i, j int) bool {
+		if bindings[i].Priority != bindings[j].Priority {
+			return bindings[i].Priority < bindings[j].Priority
+		}
+		return bindings[i].GroupID < bindings[j].GroupID
+	})
+	for i := range bindings {
+		bindings[i].Priority = i
+	}
+	return bindings, grantGroups, nil
+}
+
+func (s *adminServiceImpl) validateAdminAPIKeyGroup(ctx context.Context, userID, groupID int64) (*Group, bool, error) {
+	group, err := s.groupRepo.GetByID(ctx, groupID)
+	if err != nil {
+		return nil, false, err
+	}
+	if group.Status != StatusActive {
+		return nil, false, infraerrors.BadRequest("GROUP_NOT_ACTIVE", "target group is not active")
+	}
+	if group.IsSubscriptionType() {
+		if s.userSubRepo == nil {
+			return nil, false, infraerrors.InternalServer("SUBSCRIPTION_REPOSITORY_UNAVAILABLE", "subscription repository is not configured")
+		}
+		if _, err := s.userSubRepo.GetActiveByUserIDAndGroupID(ctx, userID, groupID); err != nil {
+			if errors.Is(err, ErrSubscriptionNotFound) {
+				return nil, false, infraerrors.BadRequest("SUBSCRIPTION_REQUIRED", "user does not have an active subscription for this group")
+			}
+			return nil, false, err
+		}
+	}
+	return group, group.IsExclusive && !group.IsSubscriptionType(), nil
 }
 
 // AdminResetAPIKeyRateLimitUsage resets all API key rate-limit usage windows.

@@ -628,6 +628,10 @@ export interface ApiKeyGroupBindingInput {
   priority: number
 }
 
+export interface AdminUpdateApiKeyGroupBindingsRequest {
+  group_bindings: ApiKeyGroupBindingInput[]
+}
+
 export interface CreateApiKeyRequest {
   name: string
   group_id?: number | null

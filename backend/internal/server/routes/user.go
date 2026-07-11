@@ -55,6 +55,12 @@ func RegisterUserRoutes(
 			}
 		}
 
+		// 练习场（JWT 会话鉴权，响应不包含 API Key 明文）
+		playground := authenticated.Group("/playground")
+		{
+			playground.GET("/api-keys/:id/model-options", h.Playground.GetModelOptions)
+		}
+
 		// API Key管理
 		keys := authenticated.Group("/keys")
 		{

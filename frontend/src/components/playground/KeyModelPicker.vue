@@ -1,6 +1,5 @@
 <template>
   <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
-    <!-- API Key select -->
     <div class="min-w-0 flex-1">
       <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">
         {{ t('playground.apiKey') }}
@@ -11,126 +10,166 @@
         @change="onKeyChange(($event.target as HTMLSelectElement).value)"
       >
         <option value="" disabled>{{ t('playground.selectKey') }}</option>
-        <option v-for="k in keys" :key="k.id" :value="k.id">
-          {{ k.name }} · {{ platformLabel(k.group?.platform || '') }}
-        </option>
+        <option v-for="key in keys" :key="key.id" :value="key.id">{{ key.name }}</option>
       </select>
     </div>
 
-    <!-- Model select -->
     <div class="min-w-0 flex-1">
       <label class="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
         {{ t('playground.model') }}
-        <Icon v-if="modelsLoading" name="refresh" size="xs" class="animate-spin" />
+        <Icon v-if="optionsLoading" name="refresh" size="xs" class="animate-spin" />
       </label>
       <select
-        :value="model"
+        :value="option ? playgroundOptionKey(option) : ''"
         class="input"
-        :disabled="modelsLoading || models.length === 0"
-        @change="emit('update:model', ($event.target as HTMLSelectElement).value)"
+        :disabled="optionsLoading || compatibleOptions.length === 0"
+        @change="onOptionChange(($event.target as HTMLSelectElement).value)"
       >
         <option value="" disabled>
-          {{ models.length === 0 ? t('playground.noModels') : t('playground.selectModel') }}
+          {{ compatibleOptions.length === 0 ? t('playground.noModels') : t('playground.selectModel') }}
         </option>
-        <option v-for="m in models" :key="m.id" :value="m.id">{{ m.id }}</option>
+        <option v-for="item in compatibleOptions" :key="playgroundOptionKey(item)" :value="playgroundOptionKey(item)">
+          {{ item.model }} · {{ item.group_name || t('playground.groupFallback', { id: item.group_id }) }} · {{ platformLabel(item.platform) }}
+        </option>
       </select>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import keysAPI from '@/api/keys'
-import playgroundAPI, { type PlaygroundModel } from '@/api/playground'
+import playgroundAPI from '@/api/playground'
 import { platformLabel } from '@/utils/platformColors'
 import type { ApiKey } from '@/types'
+import {
+  playgroundOptionKey,
+  samePlaygroundOption,
+  type PlaygroundCapability,
+  type PlaygroundModelOption
+} from '@/types/playground'
 
 const props = defineProps<{
   keyId: number | null
-  model: string
+  option: PlaygroundModelOption | null
+  capability: PlaygroundCapability
 }>()
 
 const emit = defineEmits<{
-  (e: 'update:keyId', v: number | null): void
-  (e: 'update:model', v: string): void
-  (e: 'resolved-key', v: string): void
+  (event: 'update:keyId', value: number | null): void
+  (event: 'update:option', value: PlaygroundModelOption | null): void
+  (event: 'resolved-key', value: string): void
 }>()
 
 const { t } = useI18n()
-
 const keys = ref<ApiKey[]>([])
-const models = ref<PlaygroundModel[]>([])
-const modelsLoading = ref(false)
+const options = ref<PlaygroundModelOption[]>([])
+const optionsLoading = ref(false)
+const optionCache = new Map<number, PlaygroundModelOption[]>()
+let requestVersion = 0
+let optionsController: AbortController | null = null
 
-// Per-key model cache to avoid refetching when switching back and forth.
-const modelCache = new Map<number, PlaygroundModel[]>()
+const compatibleOptions = computed(() =>
+  options.value.filter((item) => item.capabilities.includes(props.capability))
+)
 
-function resolvedKeyValue(): string {
-  const k = keys.value.find((x) => x.id === props.keyId)
-  return k?.key ?? ''
+function resolvedKeyValue(keyId = props.keyId): string {
+  return keys.value.find((key) => key.id === keyId)?.key ?? ''
 }
 
 function onKeyChange(raw: string): void {
-  const id = raw ? Number(raw) : null
-  emit('update:keyId', id)
+  emit('update:keyId', raw ? Number(raw) : null)
+}
+
+function onOptionChange(value: string): void {
+  emit(
+    'update:option',
+    compatibleOptions.value.find((item) => playgroundOptionKey(item) === value) ?? null
+  )
 }
 
 async function loadKeys(): Promise<void> {
   try {
-    const res = await keysAPI.list(1, 100, { status: 'active' })
-    keys.value = res.items ?? []
-    // If no key selected yet, auto-pick the first active one.
-    if (props.keyId == null && keys.value.length > 0) {
-      emit('update:keyId', keys.value[0].id)
-    }
+    const pageSize = 100
+    const loaded: ApiKey[] = []
+    let page = 1
+    let pages = 1
+    do {
+      const response = await keysAPI.list(page, pageSize, { status: 'active' })
+      loaded.push(...(response.items ?? []))
+      pages = Math.max(1, response.pages || 1)
+      page += 1
+    } while (page <= pages)
+    keys.value = loaded
+    if (props.keyId == null && keys.value.length > 0) emit('update:keyId', keys.value[0].id)
   } catch {
     keys.value = []
   }
 }
 
-async function loadModels(): Promise<void> {
-  const apiKey = resolvedKeyValue()
-  if (!apiKey || props.keyId == null) {
-    models.value = []
-    return
-  }
+function ensureOptionSelected(): void {
+  const current = props.option
+  const exact = compatibleOptions.value.find((item) => samePlaygroundOption(item, current))
+  if (exact) return
+  const migrated = current?.group_id === 0
+    ? compatibleOptions.value.find((item) => item.model === current.model)
+    : undefined
+  emit('update:option', migrated ?? compatibleOptions.value[0] ?? null)
+}
+
+async function loadOptions(): Promise<void> {
+  const keyId = props.keyId
+  const apiKey = resolvedKeyValue(keyId)
   emit('resolved-key', apiKey)
+  optionsController?.abort()
+  const version = ++requestVersion
 
-  const cached = modelCache.get(props.keyId)
-  if (cached) {
-    models.value = cached
-    ensureModelSelected()
+  if (!keyId || !apiKey) {
+    options.value = []
+    emit('update:option', null)
     return
   }
 
-  modelsLoading.value = true
+  const cached = optionCache.get(keyId)
+  if (cached) {
+    options.value = cached
+    ensureOptionSelected()
+    return
+  }
+
+  // Prevent the previous key's group/model route from remaining sendable while
+  // the newly selected key's capability catalog is still loading.
+  options.value = []
+  emit('update:option', null)
+
+  const controller = new AbortController()
+  optionsController = controller
+  optionsLoading.value = true
   try {
-    const list = await playgroundAPI.listModels(apiKey)
-    models.value = list
-    modelCache.set(props.keyId, list)
-    ensureModelSelected()
-  } catch {
-    models.value = []
+    const list = await playgroundAPI.listModelOptions(keyId, controller.signal)
+    if (version !== requestVersion || keyId !== props.keyId) return
+    optionCache.set(keyId, list)
+    options.value = list
+    ensureOptionSelected()
+  } catch (error) {
+    if ((error as Error).name !== 'CanceledError' && (error as Error).name !== 'AbortError' && version === requestVersion) {
+      options.value = []
+      emit('update:option', null)
+    }
   } finally {
-    modelsLoading.value = false
+    if (version === requestVersion) optionsLoading.value = false
   }
 }
 
-function ensureModelSelected(): void {
-  if (models.value.length === 0) return
-  const exists = models.value.some((m) => m.id === props.model)
-  if (!exists) emit('update:model', models.value[0].id)
-}
-
-watch(
-  () => props.keyId,
-  () => loadModels()
-)
+watch(() => props.keyId, loadOptions)
+watch(() => props.capability, ensureOptionSelected)
 
 onMounted(async () => {
   await loadKeys()
-  await loadModels()
+  await loadOptions()
 })
+
+onBeforeUnmount(() => optionsController?.abort())
 </script>

@@ -269,6 +269,50 @@ func (s *APIKeyRepoSuite) TestListByGroupID() {
 	s.Require().NotNil(keys[0].User)
 }
 
+func (s *APIKeyRepoSuite) TestGroupQueriesIncludeLegacyAndMultiBindingsWithoutDuplicates() {
+	user := s.mustCreateUser("group-bindings-query@test.com")
+	target := s.mustCreateGroup("g-query-target")
+	primary := s.mustCreateGroup("g-query-primary")
+
+	legacy := s.mustCreateApiKey(user.ID, "sk-query-legacy", "Legacy", &target.ID)
+	multi := &service.APIKey{
+		UserID:  user.ID,
+		Key:     "sk-query-multi",
+		Name:    "Multi",
+		GroupID: &primary.ID,
+		Status:  service.StatusActive,
+		GroupBindings: []service.APIKeyGroupBinding{
+			{GroupID: primary.ID, Priority: 0},
+			{GroupID: target.ID, Priority: 1},
+		},
+	}
+	s.Require().NoError(s.repo.Create(s.ctx, multi))
+
+	keys, page, err := s.repo.ListByGroupID(s.ctx, target.ID, pagination.PaginationParams{Page: 1, PageSize: 10})
+	s.Require().NoError(err)
+	s.Require().Equal(int64(2), page.Total)
+	s.Require().Len(keys, 2)
+
+	count, err := s.repo.CountByGroupID(s.ctx, target.ID)
+	s.Require().NoError(err)
+	s.Require().Equal(int64(2), count)
+
+	keyStrings, err := s.repo.ListKeysByGroupID(s.ctx, target.ID)
+	s.Require().NoError(err)
+	s.Require().ElementsMatch([]string{legacy.Key, multi.Key}, keyStrings)
+
+	filterID := target.ID
+	filtered, filteredPage, err := s.repo.ListByUserID(
+		s.ctx,
+		user.ID,
+		pagination.PaginationParams{Page: 1, PageSize: 10},
+		service.APIKeyListFilters{GroupID: &filterID},
+	)
+	s.Require().NoError(err)
+	s.Require().Equal(int64(2), filteredPage.Total)
+	s.Require().Len(filtered, 2)
+}
+
 func (s *APIKeyRepoSuite) TestCountByGroupID() {
 	user := s.mustCreateUser("countgroup@test.com")
 	group := s.mustCreateGroup("g-count")
@@ -347,6 +391,62 @@ func (s *APIKeyRepoSuite) TestClearGroupIDByGroupID() {
 
 	count, _ := s.repo.CountByGroupID(s.ctx, group.ID)
 	s.Require().Zero(count)
+}
+
+func (s *APIKeyRepoSuite) TestClearGroupIDByGroupID_RemovesSecondaryBindingsAndDerivesNextPrimary() {
+	user := s.mustCreateUser("clear-multi-group@test.com")
+	removed := s.mustCreateGroup("g-clear-multi-removed")
+	remaining := s.mustCreateGroup("g-clear-multi-remaining")
+	key := &service.APIKey{
+		UserID:  user.ID,
+		Key:     "sk-clear-multi",
+		Name:    "Clear Multi",
+		GroupID: &removed.ID,
+		Status:  service.StatusActive,
+		GroupBindings: []service.APIKeyGroupBinding{
+			{GroupID: removed.ID, Priority: 0},
+			{GroupID: remaining.ID, Priority: 1},
+		},
+	}
+	s.Require().NoError(s.repo.Create(s.ctx, key))
+
+	affected, err := s.repo.ClearGroupIDByGroupID(s.ctx, removed.ID)
+	s.Require().NoError(err)
+	s.Require().Equal(int64(1), affected)
+
+	got, err := s.repo.GetByID(s.ctx, key.ID)
+	s.Require().NoError(err)
+	s.Require().Equal(remaining.ID, *got.GroupID)
+	s.Require().Len(got.GroupBindings, 1)
+	s.Require().Equal(remaining.ID, got.GroupBindings[0].GroupID)
+}
+
+func (s *APIKeyRepoSuite) TestUpdateGroupIDByUserAndGroup_MigratesSecondaryBindings() {
+	user := s.mustCreateUser("replace-multi-group@test.com")
+	primary := s.mustCreateGroup("g-replace-primary")
+	oldGroup := s.mustCreateGroup("g-replace-old")
+	newGroup := s.mustCreateGroup("g-replace-new")
+	key := &service.APIKey{
+		UserID:  user.ID,
+		Key:     "sk-replace-multi",
+		Name:    "Replace Multi",
+		GroupID: &primary.ID,
+		Status:  service.StatusActive,
+		GroupBindings: []service.APIKeyGroupBinding{
+			{GroupID: primary.ID, Priority: 0},
+			{GroupID: oldGroup.ID, Priority: 1},
+		},
+	}
+	s.Require().NoError(s.repo.Create(s.ctx, key))
+
+	_, err := s.repo.UpdateGroupIDByUserAndGroup(s.ctx, user.ID, oldGroup.ID, newGroup.ID)
+	s.Require().NoError(err)
+
+	got, err := s.repo.GetByID(s.ctx, key.ID)
+	s.Require().NoError(err)
+	s.Require().Equal(primary.ID, *got.GroupID)
+	s.Require().Len(got.GroupBindings, 2)
+	s.Require().Equal(newGroup.ID, got.GroupBindings[1].GroupID)
 }
 
 // --- Combined CRUD/Search/ClearGroupID (original test preserved as integration) ---

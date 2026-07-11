@@ -254,9 +254,11 @@ func (s *groupRepoStub) UpdateSortOrders(ctx context.Context, updates []GroupSor
 
 type deleteGroupAPIKeyRepoStub struct {
 	apiKeyRepoStubForGroupUpdate
-	keys         []string
-	listErr      error
-	listGroupIDs []int64
+	keys          []string
+	listErr       error
+	clearErr      error
+	listGroupIDs  []int64
+	clearGroupIDs []int64
 }
 
 func (s *deleteGroupAPIKeyRepoStub) ListKeysByGroupID(ctx context.Context, groupID int64) ([]string, error) {
@@ -265,6 +267,11 @@ func (s *deleteGroupAPIKeyRepoStub) ListKeysByGroupID(ctx context.Context, group
 		return nil, s.listErr
 	}
 	return s.keys, nil
+}
+
+func (s *deleteGroupAPIKeyRepoStub) ClearGroupIDByGroupID(ctx context.Context, groupID int64) (int64, error) {
+	s.clearGroupIDs = append(s.clearGroupIDs, groupID)
+	return 0, s.clearErr
 }
 
 type proxyRepoStub struct {
@@ -621,6 +628,7 @@ func TestAdminService_DeleteGroup_InvalidatesAuthCacheForBoundKeys(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, []int64{5}, repo.deleteCalls)
 	require.Equal(t, []int64{5}, apiKeyRepo.listGroupIDs)
+	require.Equal(t, []int64{5}, apiKeyRepo.clearGroupIDs)
 	require.Equal(t, []string{"k1", "k2"}, invalidator.keys)
 }
 

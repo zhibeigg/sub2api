@@ -13,6 +13,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
 	"github.com/Wei-Shaw/sub2api/ent/apikeygroup"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/predicate"
 	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -43,41 +44,63 @@ func (r *apiKeyRepository) activeQuery() *dbent.APIKeyQuery {
 }
 
 func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) error {
-	builder := r.client.APIKey.Create().
-		SetUserID(key.UserID).
-		SetKey(key.Key).
-		SetName(key.Name).
-		SetStatus(key.Status).
-		SetNillableGroupID(key.GroupID).
-		SetNillableLastUsedAt(key.LastUsedAt).
-		SetQuota(key.Quota).
-		SetQuotaUsed(key.QuotaUsed).
-		SetNillableExpiresAt(key.ExpiresAt).
-		SetRateLimit5h(key.RateLimit5h).
-		SetRateLimit1d(key.RateLimit1d).
-		SetRateLimit7d(key.RateLimit7d)
+	var created *dbent.APIKey
+	err := r.withAPIKeyWriteTransaction(ctx, func(txCtx context.Context, client *dbent.Client) error {
+		builder := client.APIKey.Create().
+			SetUserID(key.UserID).
+			SetKey(key.Key).
+			SetName(key.Name).
+			SetStatus(key.Status).
+			SetNillableGroupID(key.GroupID).
+			SetNillableLastUsedAt(key.LastUsedAt).
+			SetQuota(key.Quota).
+			SetQuotaUsed(key.QuotaUsed).
+			SetNillableExpiresAt(key.ExpiresAt).
+			SetRateLimit5h(key.RateLimit5h).
+			SetRateLimit1d(key.RateLimit1d).
+			SetRateLimit7d(key.RateLimit7d)
 
-	if len(key.IPWhitelist) > 0 {
-		builder.SetIPWhitelist(key.IPWhitelist)
-	}
-	if len(key.IPBlacklist) > 0 {
-		builder.SetIPBlacklist(key.IPBlacklist)
-	}
+		if len(key.IPWhitelist) > 0 {
+			builder.SetIPWhitelist(key.IPWhitelist)
+		}
+		if len(key.IPBlacklist) > 0 {
+			builder.SetIPBlacklist(key.IPBlacklist)
+		}
 
-	created, err := builder.Save(ctx)
+		var err error
+		created, err = builder.Save(txCtx)
+		if err != nil {
+			return translatePersistenceError(err, nil, service.ErrAPIKeyExists)
+		}
+		return replaceGroupBindings(txCtx, client, created.ID, key.GroupBindings)
+	})
 	if err != nil {
-		return translatePersistenceError(err, nil, service.ErrAPIKeyExists)
+		return err
 	}
 	key.ID = created.ID
 	key.LastUsedAt = created.LastUsedAt
 	key.CreatedAt = created.CreatedAt
 	key.UpdatedAt = created.UpdatedAt
+	return nil
+}
 
-	// Persist multi-group priority bindings (join rows), if any.
-	if err := replaceGroupBindings(ctx, clientFromContext(ctx, r.client), created.ID, key.GroupBindings); err != nil {
+func (r *apiKeyRepository) withAPIKeyWriteTransaction(ctx context.Context, fn func(context.Context, *dbent.Client) error) error {
+	if tx := dbent.TxFromContext(ctx); tx != nil {
+		return fn(ctx, tx.Client())
+	}
+	tx, err := r.client.Tx(ctx)
+	if errors.Is(err, dbent.ErrTxStarted) {
+		return fn(ctx, r.client)
+	}
+	if err != nil {
 		return err
 	}
-	return nil
+	defer func() { _ = tx.Rollback() }()
+	txCtx := dbent.NewTxContext(ctx, tx)
+	if err := fn(txCtx, tx.Client()); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // replaceGroupBindings replaces all api_key_groups rows for a key with the
@@ -258,12 +281,17 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 }
 
 func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey) error {
+	return r.withAPIKeyWriteTransaction(ctx, func(txCtx context.Context, client *dbent.Client) error {
+		return r.update(txCtx, client, key)
+	})
+}
+
+func (r *apiKeyRepository) update(ctx context.Context, client *dbent.Client, key *service.APIKey) error {
 	// 使用原子操作：将软删除检查与更新合并到同一语句，避免竞态条件。
 	// 之前的实现先检查 Exist 再 UpdateOneID，若在两步之间发生软删除，
 	// 则会更新已删除的记录。
 	// 这里选择 Update().Where()，确保只有未软删除记录能被更新。
 	// 同时显式设置 updated_at，避免二次查询带来的并发可见性问题。
-	client := clientFromContext(ctx, r.client)
 	now := time.Now()
 	builder := client.APIKey.Update().
 		Where(apikey.IDEQ(key.ID), apikey.DeletedAtIsNil()).
@@ -444,6 +472,13 @@ func (r *apiKeyRepository) deleteWithAudit(ctx context.Context, exec *dbent.Clie
 	return nil
 }
 
+func apiKeyBelongsToGroup(groupID int64) predicate.APIKey {
+	return apikey.Or(
+		apikey.GroupIDEQ(groupID),
+		apikey.HasAPIKeyGroupsWith(apikeygroup.GroupIDEQ(groupID)),
+	)
+}
+
 func (r *apiKeyRepository) apiKeyListByUserIDQuery(userID int64, filters service.APIKeyListFilters) *dbent.APIKeyQuery {
 	q := r.activeQuery().Where(apikey.UserIDEQ(userID))
 
@@ -460,7 +495,7 @@ func (r *apiKeyRepository) apiKeyListByUserIDQuery(userID int64, filters service
 		if *filters.GroupID == 0 {
 			q = q.Where(apikey.GroupIDIsNil())
 		} else {
-			q = q.Where(apikey.GroupIDEQ(*filters.GroupID))
+			q = q.Where(apiKeyBelongsToGroup(*filters.GroupID))
 		}
 	}
 
@@ -500,7 +535,7 @@ func (r *apiKeyRepository) ListByUserID(ctx context.Context, userID int64, param
 }
 
 func (r *apiKeyRepository) ListAllByUserID(ctx context.Context, userID int64, filters service.APIKeyListFilters) ([]service.APIKey, error) {
-	keys, err := r.apiKeyListByUserIDQuery(userID, filters).
+	keys, err := withAPIKeyGroupBindings(r.apiKeyListByUserIDQuery(userID, filters)).
 		WithGroup().
 		Order(dbent.Asc(apikey.FieldID)).
 		All(ctx)
@@ -630,15 +665,16 @@ func (r *apiKeyRepository) ExistsByKey(ctx context.Context, key string) (bool, e
 }
 
 func (r *apiKeyRepository) ListByGroupID(ctx context.Context, groupID int64, params pagination.PaginationParams) ([]service.APIKey, *pagination.PaginationResult, error) {
-	q := r.activeQuery().Where(apikey.GroupIDEQ(groupID))
+	q := r.activeQuery().Where(apiKeyBelongsToGroup(groupID))
 
 	total, err := q.Count(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	keysQuery := q.
+	keysQuery := withAPIKeyGroupBindings(q).
 		WithUser().
+		WithGroup().
 		Offset(params.Offset()).
 		Limit(params.Limit())
 	for _, order := range apiKeyListOrder(params) {
@@ -717,28 +753,120 @@ func (r *apiKeyRepository) SearchAPIKeys(ctx context.Context, userID int64, keyw
 	return outKeys, nil
 }
 
-// ClearGroupIDByGroupID 将指定分组的所有 API Key 的 group_id 设为 nil
+// ClearGroupIDByGroupID 清除指定分组的主绑定与多分组关联；若主绑定被清除后仍有
+// 其他多绑定，则按优先级重新派生 group_id。
 func (r *apiKeyRepository) ClearGroupIDByGroupID(ctx context.Context, groupID int64) (int64, error) {
-	n, err := r.client.APIKey.Update().
-		Where(apikey.GroupIDEQ(groupID), apikey.DeletedAtIsNil()).
-		ClearGroupID().
-		Save(ctx)
-	return int64(n), err
+	var affected int64
+	err := r.withAPIKeyWriteTransaction(ctx, func(txCtx context.Context, client *dbent.Client) error {
+		primaryKeyIDs, err := client.APIKey.Query().
+			Where(apikey.GroupIDEQ(groupID), apikey.DeletedAtIsNil()).
+			IDs(txCtx)
+		if err != nil {
+			return err
+		}
+		affected = int64(len(primaryKeyIDs))
+
+		if _, err := client.APIKeyGroup.Delete().
+			Where(apikeygroup.GroupIDEQ(groupID)).
+			Exec(txCtx); err != nil {
+			return err
+		}
+		for _, keyID := range primaryKeyIDs {
+			if err := setAPIKeyEffectiveGroupIDFromBindings(txCtx, client, keyID, nil); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return affected, err
 }
 
-// UpdateGroupIDByUserAndGroup 将用户下绑定 oldGroupID 的所有 Key 迁移到 newGroupID
+// UpdateGroupIDByUserAndGroup 将用户下绑定 oldGroupID 的所有 Key 迁移到 newGroupID，
+// 同时迁移 api_key_groups 中的次级绑定并重新派生主 group_id。
 func (r *apiKeyRepository) UpdateGroupIDByUserAndGroup(ctx context.Context, userID, oldGroupID, newGroupID int64) (int64, error) {
-	client := clientFromContext(ctx, r.client)
-	n, err := client.APIKey.Update().
-		Where(apikey.UserIDEQ(userID), apikey.GroupIDEQ(oldGroupID), apikey.DeletedAtIsNil()).
-		SetGroupID(newGroupID).
-		Save(ctx)
-	return int64(n), err
+	var affected int64
+	err := r.withAPIKeyWriteTransaction(ctx, func(txCtx context.Context, client *dbent.Client) error {
+		keyIDs, err := client.APIKey.Query().
+			Where(apikey.UserIDEQ(userID), apikey.DeletedAtIsNil(), apiKeyBelongsToGroup(oldGroupID)).
+			IDs(txCtx)
+		if err != nil {
+			return err
+		}
+		n, err := client.APIKey.Update().
+			Where(apikey.UserIDEQ(userID), apikey.GroupIDEQ(oldGroupID), apikey.DeletedAtIsNil()).
+			SetGroupID(newGroupID).
+			Save(txCtx)
+		if err != nil {
+			return err
+		}
+		affected = int64(n)
+
+		for _, keyID := range keyIDs {
+			hasOld, err := client.APIKeyGroup.Query().
+				Where(apikeygroup.APIKeyIDEQ(keyID), apikeygroup.GroupIDEQ(oldGroupID)).
+				Exist(txCtx)
+			if err != nil {
+				return err
+			}
+			if hasOld {
+				hasNew, err := client.APIKeyGroup.Query().
+					Where(apikeygroup.APIKeyIDEQ(keyID), apikeygroup.GroupIDEQ(newGroupID)).
+					Exist(txCtx)
+				if err != nil {
+					return err
+				}
+				if hasNew {
+					if _, err := client.APIKeyGroup.Delete().
+						Where(apikeygroup.APIKeyIDEQ(keyID), apikeygroup.GroupIDEQ(oldGroupID)).
+						Exec(txCtx); err != nil {
+						return err
+					}
+				} else if _, err := client.APIKeyGroup.Update().
+					Where(apikeygroup.APIKeyIDEQ(keyID), apikeygroup.GroupIDEQ(oldGroupID)).
+					SetGroupID(newGroupID).
+					Save(txCtx); err != nil {
+					return err
+				}
+			}
+			fallback := (*int64)(nil)
+			if current, err := client.APIKey.Query().Where(apikey.IDEQ(keyID)).Select(apikey.FieldGroupID).Only(txCtx); err == nil {
+				fallback = current.GroupID
+			} else {
+				return err
+			}
+			if err := setAPIKeyEffectiveGroupIDFromBindings(txCtx, client, keyID, fallback); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return affected, err
+}
+
+func setAPIKeyEffectiveGroupIDFromBindings(ctx context.Context, client *dbent.Client, keyID int64, fallback *int64) error {
+	binding, err := client.APIKeyGroup.Query().
+		Where(apikeygroup.APIKeyIDEQ(keyID)).
+		Order(apikeygroup.ByPriority(), dbent.Asc(apikeygroup.FieldGroupID)).
+		First(ctx)
+	builder := client.APIKey.UpdateOneID(keyID).Where(apikey.DeletedAtIsNil())
+	if err == nil {
+		builder.SetGroupID(binding.GroupID)
+	} else if dbent.IsNotFound(err) {
+		if fallback != nil {
+			builder.SetGroupID(*fallback)
+		} else {
+			builder.ClearGroupID()
+		}
+	} else {
+		return err
+	}
+	_, err = builder.Save(ctx)
+	return err
 }
 
 // CountByGroupID 获取分组的 API Key 数量
 func (r *apiKeyRepository) CountByGroupID(ctx context.Context, groupID int64) (int64, error) {
-	count, err := r.activeQuery().Where(apikey.GroupIDEQ(groupID)).Count(ctx)
+	count, err := r.activeQuery().Where(apiKeyBelongsToGroup(groupID)).Count(ctx)
 	return int64(count), err
 }
 
@@ -755,7 +883,7 @@ func (r *apiKeyRepository) ListKeysByUserID(ctx context.Context, userID int64) (
 
 func (r *apiKeyRepository) ListKeysByGroupID(ctx context.Context, groupID int64) ([]string, error) {
 	keys, err := r.activeQuery().
-		Where(apikey.GroupIDEQ(groupID)).
+		Where(apiKeyBelongsToGroup(groupID)).
 		Select(apikey.FieldKey).
 		Strings(ctx)
 	if err != nil {

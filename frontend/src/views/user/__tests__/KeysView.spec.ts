@@ -7,6 +7,7 @@ import KeysView from '../KeysView.vue'
 
 const {
   listKeys,
+  updateKey,
   getPublicSettings,
   getDashboardApiKeysUsage,
   getAvailableGroups,
@@ -18,6 +19,7 @@ const {
   nextStep,
 } = vi.hoisted(() => ({
   listKeys: vi.fn(),
+  updateKey: vi.fn(),
   getPublicSettings: vi.fn(),
   getDashboardApiKeysUsage: vi.fn(),
   getAvailableGroups: vi.fn(),
@@ -42,6 +44,11 @@ const messages: Record<string, string> = {
   'keys.created': 'Created',
   'keys.expiresAt': 'Expires',
   'keys.group': 'Group',
+  'keys.clickToChangeGroups': 'Edit ordered group bindings',
+  'keys.editGroupBindings': 'Edit group bindings',
+  'keys.groupBindingsSaved': 'Group bindings saved',
+  'keys.failedToSaveGroupBindings': 'Failed to save group bindings',
+  'keys.saveAndContinue': 'Save and keep editing',
   'keys.currentConcurrency': 'Current Concurrency',
   'keys.lastUsedAt': 'Last Used',
   'keys.lastUsedIP': 'Last Used IP',
@@ -58,7 +65,7 @@ vi.mock('@/api', () => ({
   keysAPI: {
     list: listKeys,
     create: vi.fn(),
-    update: vi.fn(),
+    update: updateKey,
     delete: vi.fn(),
     toggleStatus: vi.fn(),
   },
@@ -163,6 +170,7 @@ const DataTableStub = {
       </button>
       <div v-for="row in data" :key="row.id">
         <slot name="cell-name" :value="row.name" :row="row" />
+        <div data-test="group-cell"><slot name="cell-group" :value="row.group" :row="row" /></div>
         <div data-test="current-concurrency">
           <slot name="cell-current_concurrency" :value="row.current_concurrency" :row="row" />
         </div>
@@ -208,6 +216,14 @@ const IconStub = {
   template: '<span data-test="icon">{{ name }}</span>',
 }
 
+const SortableGroupBindingPickerStub = {
+  name: 'SortableGroupBindingPicker',
+  props: ['modelValue', 'groups', 'userGroupRates'],
+  emits: ['update:modelValue'],
+  methods: { focusSearch: vi.fn() },
+  template: '<div data-test="picker-stub">{{ JSON.stringify(modelValue) }}</div>',
+}
+
 const mountView = async () => {
   const wrapper = mount(KeysView, {
     global: {
@@ -224,8 +240,9 @@ const mountView = async () => {
         Icon: IconStub,
         UseKeyModal: true,
         EndpointPopover: true,
-        GroupBadge: true,
-        GroupOptionItem: true,
+        GroupMultiSelect: true,
+        SortableGroupBindingPicker: SortableGroupBindingPickerStub,
+        PlatformIcon: { props: ['platform'], template: '<span>{{ platform }}</span>' },
         Teleport: true,
       },
     },
@@ -254,6 +271,7 @@ describe('user KeysView column settings', () => {
     localStorage.clear()
 
     listKeys.mockReset()
+    updateKey.mockReset()
     getPublicSettings.mockReset()
     getDashboardApiKeysUsage.mockReset()
     getAvailableGroups.mockReset()
@@ -416,5 +434,47 @@ describe('user KeysView column settings', () => {
       },
       expect.objectContaining({ signal: expect.any(AbortSignal) })
     )
+  })
+
+  it('shows ordered binding overflow and saves the full draft without group_id', async () => {
+    const availableGroups = [
+      { id: 1, name: 'Claude', platform: 'anthropic', rate_multiplier: 1 },
+      { id: 2, name: 'Codex', platform: 'openai', rate_multiplier: 0.8 },
+      { id: 3, name: 'Gemini', platform: 'gemini', rate_multiplier: 1.2 },
+    ] as any[]
+    const key = {
+      ...createApiKey(),
+      group_id: 1,
+      group: availableGroups[0],
+      group_bindings: availableGroups.map((group, priority) => ({ group_id: group.id, priority, group })),
+    }
+    listKeys.mockResolvedValueOnce({ items: [key], total: 1, page: 1, page_size: 20, pages: 1 })
+    getAvailableGroups.mockResolvedValue(availableGroups)
+    updateKey.mockResolvedValue({ ...key, group_bindings: key.group_bindings })
+
+    const wrapper = await mountView()
+    expect(wrapper.get('[data-test="group-cell"]').text()).toContain('Claude')
+    expect(wrapper.get('[data-test="group-cell"]').text()).toContain('Codex')
+    expect(wrapper.get('[data-test="group-cell"]').text()).toContain('+1')
+
+    await wrapper.get('button[title="Edit ordered group bindings"]').trigger('click')
+    await nextTick()
+    const picker = wrapper.findComponent({ name: 'SortableGroupBindingPicker' })
+    picker.vm.$emit('update:modelValue', [
+      { group_id: 3, priority: 0 },
+      { group_id: 1, priority: 1 },
+    ])
+    await nextTick()
+    await wrapper.get('[data-test="save-group-bindings-continue"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="group-binding-popover"]').exists()).toBe(true)
+    expect(updateKey).toHaveBeenCalledWith(1, {
+      group_bindings: [
+        { group_id: 3, priority: 0 },
+        { group_id: 1, priority: 1 },
+      ],
+    })
+    expect(updateKey.mock.calls[0][1]).not.toHaveProperty('group_id')
   })
 })

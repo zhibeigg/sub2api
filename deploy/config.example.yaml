@@ -153,6 +153,11 @@ security:
 # 网关配置
 # =============================================================================
 gateway:
+  # Multi-group API keys use the fixed X-Sub2API-Group-ID request header to
+  # select one of their bound groups before routing, subscription, and billing.
+  # This security-sensitive header name is intentionally not configurable.
+  # 多分组 API Key 使用固定的 X-Sub2API-Group-ID 请求头，在路由、订阅和计费前
+  # 选择该密钥已绑定的分组；此安全相关请求头名称不提供配置覆盖。
   # Timeout for waiting upstream response headers (seconds)
   # 等待上游响应头超时时间（秒）
   response_header_timeout: 600

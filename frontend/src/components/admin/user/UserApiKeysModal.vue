@@ -5,119 +5,152 @@
         <div class="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/30">
           <span class="text-lg font-medium text-primary-700 dark:text-primary-300">{{ user.email.charAt(0).toUpperCase() }}</span>
         </div>
-        <div><p class="font-medium text-gray-900 dark:text-white">{{ user.email }}</p><p class="text-sm text-gray-500 dark:text-dark-400">{{ user.username }}</p></div>
+        <div class="min-w-0">
+          <p class="truncate font-medium text-gray-900 dark:text-white">{{ user.email }}</p>
+          <p class="truncate text-sm text-gray-500 dark:text-dark-400">{{ user.username }}</p>
+        </div>
       </div>
-      <div v-if="loading" class="flex justify-center py-8"><svg class="h-8 w-8 animate-spin text-primary-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>
-      <div v-else-if="apiKeys.length === 0" class="py-8 text-center"><p class="text-sm text-gray-500">{{ t('admin.users.noApiKeys') }}</p></div>
-      <div v-else ref="scrollContainerRef" class="max-h-96 space-y-3 overflow-y-auto" @scroll="closeGroupSelector">
-        <div v-for="key in apiKeys" :key="key.id" class="rounded-xl border border-gray-200 bg-white p-4 dark:border-dark-600 dark:bg-dark-800">
-          <div class="flex items-start justify-between">
+
+      <div v-if="loading" class="flex justify-center py-8">
+        <Icon name="refresh" size="xl" class="animate-spin text-primary-500" />
+      </div>
+      <div v-else-if="apiKeys.length === 0" class="py-8 text-center">
+        <p class="text-sm text-gray-500">{{ t('admin.users.noApiKeys') }}</p>
+      </div>
+      <div v-else ref="scrollContainerRef" class="max-h-96 space-y-3 overflow-y-auto" @scroll="closeGroupSelector(false)">
+        <article
+          v-for="key in apiKeys"
+          :key="key.id"
+          class="rounded-xl border border-gray-200 bg-white p-4 dark:border-dark-600 dark:bg-dark-800"
+        >
+          <div class="flex items-start justify-between gap-3">
             <div class="min-w-0 flex-1">
-              <div class="mb-1 flex items-center gap-2"><span class="font-medium text-gray-900 dark:text-white">{{ key.name }}</span><span :class="['badge text-xs', key.status === 'active' ? 'badge-success' : 'badge-danger']">{{ key.status }}</span></div>
+              <div class="mb-1 flex flex-wrap items-center gap-2">
+                <span class="font-medium text-gray-900 dark:text-white">{{ key.name }}</span>
+                <span :class="['badge text-xs', key.status === 'active' ? 'badge-success' : 'badge-danger']">{{ key.status }}</span>
+              </div>
               <p class="truncate font-mono text-sm text-gray-500">{{ key.key.substring(0, 20) }}...{{ key.key.substring(key.key.length - 8) }}</p>
             </div>
           </div>
-          <div class="mt-3 flex flex-wrap gap-4 text-xs text-gray-500">
-            <div class="flex items-center gap-1">
-              <span>{{ t('admin.users.group') }}:</span>
+
+          <div class="mt-3 flex flex-col gap-2 text-xs text-gray-500 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+            <div class="flex min-w-0 items-start gap-1.5">
+              <span class="flex-shrink-0 pt-1">{{ t('admin.users.group') }}:</span>
               <button
-                :ref="(el) => setGroupButtonRef(key.id, el)"
-                @click="openGroupSelector(key)"
-                class="-mx-1 -my-0.5 flex cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 transition-colors hover:bg-gray-100 dark:hover:bg-dark-700"
+                :ref="(element) => setGroupButtonRef(key.id, element)"
+                type="button"
+                class="group-binding-trigger flex min-w-0 flex-1 flex-wrap items-center gap-1.5 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:hover:bg-dark-700 sm:flex-none"
                 :disabled="updatingKeyIds.has(key.id)"
+                :aria-expanded="groupSelectorKeyId === key.id"
+                @click="openGroupSelector(key)"
               >
-                <GroupBadge
-                  v-if="key.group_id && key.group"
-                  :name="key.group.name"
-                  :platform="key.group.platform"
-                  :subscription-type="key.group.subscription_type"
-                  :rate-multiplier="key.group.rate_multiplier"
-                  :peak-rate-enabled="key.group.peak_rate_enabled"
-                  :peak-start="key.group.peak_start"
-                  :peak-end="key.group.peak_end"
-                  :peak-rate-multiplier="key.group.peak_rate_multiplier"
-                />
-                <span v-else class="text-gray-400 italic">{{ t('admin.users.none') }}</span>
-                <svg v-if="updatingKeyIds.has(key.id)" class="h-3 w-3 animate-spin text-primary-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                <svg v-else class="h-3 w-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>
+                <template v-if="orderedBindingsForKey(key).length">
+                  <span
+                    v-for="(binding, index) in visibleBindingsForKey(key)"
+                    :key="binding.group_id"
+                    class="inline-flex min-w-0 items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5 py-1 dark:border-dark-600 dark:bg-dark-800"
+                  >
+                    <span class="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-primary-100 text-[10px] font-semibold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">{{ index + 1 }}</span>
+                    <PlatformIcon v-if="groupForBinding(binding)" :platform="groupForBinding(binding)!.platform" size="xs" />
+                    <span class="max-w-24 truncate font-medium text-gray-800 dark:text-gray-100">{{ groupForBinding(binding)?.name || `#${binding.group_id}` }}</span>
+                    <span class="font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">{{ formatMultiplier(rateForGroup(groupForBinding(binding))) }}</span>
+                  </span>
+                  <span
+                    v-if="orderedBindingsForKey(key).length > GROUP_BINDING_PREVIEW_LIMIT"
+                    class="rounded-md bg-gray-100 px-1.5 py-1 font-semibold text-gray-600 dark:bg-dark-700 dark:text-gray-300"
+                  >+{{ orderedBindingsForKey(key).length - GROUP_BINDING_PREVIEW_LIMIT }}</span>
+                </template>
+                <span v-else class="italic text-gray-400">{{ t('admin.users.none') }}</span>
+                <Icon v-if="updatingKeyIds.has(key.id)" name="refresh" size="xs" class="animate-spin text-primary-500" />
+                <Icon v-else name="chevronDown" size="xs" class="text-gray-400" />
               </button>
             </div>
-            <div class="flex items-center gap-1"><span>{{ t('admin.users.columns.created') }}: {{ formatDateTime(key.created_at) }}</span></div>
+            <div>{{ t('admin.users.columns.created') }}: {{ formatDateTime(key.created_at) }}</div>
           </div>
-        </div>
+        </article>
       </div>
     </div>
   </BaseDialog>
 
-  <!-- Group Selector Dropdown -->
   <Teleport to="body">
-    <div
-      v-if="groupSelectorKeyId !== null && dropdownPosition"
+    <section
+      v-if="groupSelectorKeyId !== null && dropdownPosition && selectedKeyForGroup"
       ref="dropdownRef"
-      class="animate-in fade-in slide-in-from-top-2 fixed z-[100000020] w-64 overflow-hidden rounded-xl bg-white shadow-lg ring-1 ring-black/5 duration-200 dark:bg-dark-800 dark:ring-white/10"
-      :style="{ top: dropdownPosition.top + 'px', left: dropdownPosition.left + 'px' }"
+      role="dialog"
+      :aria-label="t('admin.users.editGroupBindings')"
+      class="fixed z-[100000020] flex max-h-[calc(100vh-24px)] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-dark-600 dark:bg-dark-800"
+      :style="{
+        top: dropdownPosition.top !== undefined ? dropdownPosition.top + 'px' : undefined,
+        bottom: dropdownPosition.bottom !== undefined ? dropdownPosition.bottom + 'px' : undefined,
+        left: dropdownPosition.left + 'px',
+        width: dropdownPosition.width + 'px'
+      }"
+      data-test="admin-group-binding-popover"
+      @click.stop
     >
-      <div class="max-h-64 overflow-y-auto p-1.5">
-        <!-- Unbind option -->
+      <header class="flex items-start justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-dark-700">
+        <div class="min-w-0">
+          <h3 class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.users.editGroupBindings') }}</h3>
+          <p class="truncate text-xs text-gray-500 dark:text-gray-400">{{ selectedKeyForGroup.name }}</p>
+        </div>
         <button
-          @click="changeGroup(selectedKeyForGroup!, null)"
-          :class="[
-            'flex w-full items-center rounded-lg px-3 py-2 text-sm transition-colors',
-            !selectedKeyForGroup?.group_id
-              ? 'bg-primary-50 dark:bg-primary-900/20'
-              : 'hover:bg-gray-100 dark:hover:bg-dark-700'
-          ]"
+          type="button"
+          class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:hover:bg-dark-700 dark:hover:text-gray-200"
+          :aria-label="t('common.close')"
+          @click="closeGroupSelector()"
         >
-          <span class="text-gray-500 italic">{{ t('admin.users.none') }}</span>
-          <svg
-            v-if="!selectedKeyForGroup?.group_id"
-            class="ml-auto h-4 w-4 shrink-0 text-primary-600 dark:text-primary-400"
-            fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
-          ><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+          <Icon name="x" size="sm" />
         </button>
-        <!-- Group options -->
-        <button
-          v-for="group in allGroups"
-          :key="group.id"
-          @click="changeGroup(selectedKeyForGroup!, group.id)"
-          :class="[
-            'flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors',
-            selectedKeyForGroup?.group_id === group.id
-              ? 'bg-primary-50 dark:bg-primary-900/20'
-              : 'hover:bg-gray-100 dark:hover:bg-dark-700'
-          ]"
-        >
-          <GroupOptionItem
-            :name="group.name"
-            :platform="group.platform"
-            :subscription-type="group.subscription_type"
-            :rate-multiplier="group.rate_multiplier"
-            :peak-rate-enabled="group.peak_rate_enabled"
-            :peak-start="group.peak_start"
-            :peak-end="group.peak_end"
-            :peak-rate-multiplier="group.peak_rate_multiplier"
-            :description="group.description"
-            :selected="selectedKeyForGroup?.group_id === group.id"
-          />
-        </button>
+      </header>
+      <div class="min-h-0 flex-1 overflow-y-auto p-4">
+        <SortableGroupBindingPicker
+          ref="bindingPickerRef"
+          v-model="draftGroupBindings"
+          :groups="allGroups"
+          :user-group-rates="userGroupRates"
+        />
       </div>
-    </div>
+      <footer class="flex flex-col-reverse gap-2 border-t border-gray-100 px-4 py-3 sm:flex-row sm:justify-end dark:border-dark-700">
+        <button type="button" class="btn btn-secondary" :disabled="savingGroupBindings" @click="closeGroupSelector()">
+          {{ t('common.cancel') }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          :disabled="savingGroupBindings"
+          data-test="admin-save-group-bindings-continue"
+          @click="saveGroupBindings(true)"
+        >
+          {{ t('keys.saveAndContinue') }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          :disabled="savingGroupBindings"
+          data-test="admin-save-group-bindings"
+          @click="saveGroupBindings(false)"
+        >
+          {{ savingGroupBindings ? t('keys.saving') : t('common.save') }}
+        </button>
+      </footer>
+    </section>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, type ComponentPublicInstance } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, type ComponentPublicInstance } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
 import { formatDateTime } from '@/utils/format'
-import type { AdminUser, AdminGroup, ApiKey } from '@/types'
+import type { AdminGroup, AdminUser, ApiKey, ApiKeyGroupBinding, ApiKeyGroupBindingInput, Group } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
-import GroupBadge from '@/components/common/GroupBadge.vue'
-import GroupOptionItem from '@/components/common/GroupOptionItem.vue'
+import PlatformIcon from '@/components/common/PlatformIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
+import SortableGroupBindingPicker from '@/components/keys/SortableGroupBindingPicker.vue'
 
 const props = defineProps<{ show: boolean; user: AdminUser | null }>()
-const emit = defineEmits(['close'])
+const emit = defineEmits<{ (event: 'close'): void }>()
 const { t } = useI18n()
 const appStore = useAppStore()
 
@@ -126,30 +159,51 @@ const allGroups = ref<AdminGroup[]>([])
 const loading = ref(false)
 const updatingKeyIds = ref(new Set<number>())
 const groupSelectorKeyId = ref<number | null>(null)
-const dropdownPosition = ref<{ top: number; left: number } | null>(null)
+const dropdownPosition = ref<{ top?: number; bottom?: number; left: number; width: number } | null>(null)
 const dropdownRef = ref<HTMLElement | null>(null)
+const bindingPickerRef = ref<InstanceType<typeof SortableGroupBindingPicker> | null>(null)
 const scrollContainerRef = ref<HTMLElement | null>(null)
 const groupButtonRefs = ref<Map<number, HTMLElement>>(new Map())
+const draftGroupBindings = ref<ApiKeyGroupBindingInput[]>([])
+const savingGroupBindings = ref(false)
+const GROUP_BINDING_PREVIEW_LIMIT = 2
 
 const selectedKeyForGroup = computed(() => {
   if (groupSelectorKeyId.value === null) return null
-  return apiKeys.value.find((k) => k.id === groupSelectorKeyId.value) || null
+  return apiKeys.value.find((key) => key.id === groupSelectorKeyId.value) ?? null
 })
+const userGroupRates = computed<Record<number, number>>(() => props.user?.group_rates ?? {})
 
-const setGroupButtonRef = (keyId: number, el: Element | ComponentPublicInstance | null) => {
-  if (el instanceof HTMLElement) {
-    groupButtonRefs.value.set(keyId, el)
-  } else {
-    groupButtonRefs.value.delete(keyId)
+const orderedBindingsForKey = (key: ApiKey): ApiKeyGroupBinding[] => {
+  if (key.group_bindings !== undefined) {
+    return [...key.group_bindings].sort((left, right) => left.priority - right.priority)
   }
+  if (key.group_id != null) {
+    return [{ group_id: key.group_id, priority: 0, group: key.group }]
+  }
+  return []
 }
 
-watch(() => props.show, (v) => {
-  if (v && props.user) {
-    load()
-    loadGroups()
+const visibleBindingsForKey = (key: ApiKey): ApiKeyGroupBinding[] =>
+  orderedBindingsForKey(key).slice(0, GROUP_BINDING_PREVIEW_LIMIT)
+
+const groupForBinding = (binding: ApiKeyGroupBinding): Group | undefined =>
+  binding.group ?? allGroups.value.find((group) => group.id === binding.group_id)
+
+const rateForGroup = (group?: Group): number => group ? (userGroupRates.value[group.id] ?? group.rate_multiplier) : 1
+const formatMultiplier = (rate: number): string => `${Number(rate.toFixed(3)).toString()}x`
+
+const setGroupButtonRef = (keyId: number, element: Element | ComponentPublicInstance | null) => {
+  if (element instanceof HTMLElement) groupButtonRefs.value.set(keyId, element)
+  else groupButtonRefs.value.delete(keyId)
+}
+
+watch(() => props.show, (visible) => {
+  if (visible && props.user) {
+    void load()
+    void loadGroups()
   } else {
-    closeGroupSelector()
+    closeGroupSelector(false)
   }
 })
 
@@ -158,8 +212,8 @@ const load = async () => {
   loading.value = true
   groupButtonRefs.value.clear()
   try {
-    const res = await adminAPI.users.getUserApiKeys(props.user.id)
-    apiKeys.value = res.items || []
+    const response = await adminAPI.users.getUserApiKeys(props.user.id)
+    apiKeys.value = response.items ?? []
   } catch (error) {
     console.error('Failed to load API keys:', error)
   } finally {
@@ -169,65 +223,96 @@ const load = async () => {
 
 const loadGroups = async () => {
   try {
-    const groups = await adminAPI.groups.getAll()
-    allGroups.value = groups
+    allGroups.value = await adminAPI.groups.getAll()
   } catch (error) {
     console.error('Failed to load groups:', error)
   }
 }
 
-const DROPDOWN_HEIGHT = 272 // max-h-64 = 16rem = 256px + padding
-const DROPDOWN_GAP = 4
-
-const openGroupSelector = (key: ApiKey) => {
-  if (groupSelectorKeyId.value === key.id) {
-    closeGroupSelector()
-  } else {
-    const buttonEl = groupButtonRefs.value.get(key.id)
-    if (buttonEl) {
-      const rect = buttonEl.getBoundingClientRect()
-      const spaceBelow = window.innerHeight - rect.bottom
-      const openUpward = spaceBelow < DROPDOWN_HEIGHT && rect.top > spaceBelow
-      dropdownPosition.value = {
-        top: openUpward ? rect.top - DROPDOWN_HEIGHT - DROPDOWN_GAP : rect.bottom + DROPDOWN_GAP,
-        left: rect.left
-      }
-    }
-    groupSelectorKeyId.value = key.id
+const closeGroupSelector = (restoreFocus = true) => {
+  const keyId = groupSelectorKeyId.value
+  groupSelectorKeyId.value = null
+  dropdownPosition.value = null
+  draftGroupBindings.value = []
+  if (restoreFocus && keyId !== null) {
+    nextTick(() => groupButtonRefs.value.get(keyId)?.focus())
   }
 }
 
-const closeGroupSelector = () => {
-  groupSelectorKeyId.value = null
-  dropdownPosition.value = null
+const openGroupSelector = async (key: ApiKey) => {
+  if (groupSelectorKeyId.value === key.id) {
+    closeGroupSelector()
+    return
+  }
+  const trigger = groupButtonRefs.value.get(key.id)
+  if (!trigger) return
+
+  const rect = trigger.getBoundingClientRect()
+  const viewportPadding = 12
+  const gap = 6
+  const width = Math.min(460, Math.max(1, window.innerWidth - viewportPadding * 2))
+  const left = Math.min(
+    Math.max(viewportPadding, rect.left),
+    Math.max(viewportPadding, window.innerWidth - width - viewportPadding)
+  )
+  const estimatedHeight = Math.min(620, window.innerHeight - viewportPadding * 2)
+  const spaceBelow = window.innerHeight - rect.bottom
+  const openUpward = spaceBelow < estimatedHeight && rect.top > spaceBelow
+
+  dropdownPosition.value = openUpward
+    ? { bottom: window.innerHeight - rect.top + gap, left, width }
+    : { top: rect.bottom + gap, left, width }
+  draftGroupBindings.value = orderedBindingsForKey(key).map((binding, priority) => ({
+    group_id: binding.group_id,
+    priority
+  }))
+  groupSelectorKeyId.value = key.id
+  await nextTick()
+  await bindingPickerRef.value?.focusSearch()
 }
 
-const changeGroup = async (key: ApiKey, newGroupId: number | null) => {
-  closeGroupSelector()
-  if (key.group_id === newGroupId || (!key.group_id && newGroupId === null)) return
+const saveGroupBindings = async (keepEditing: boolean) => {
+  const key = selectedKeyForGroup.value
+  if (!key) return
 
+  const orderedBindings = draftGroupBindings.value.map((binding, priority) => ({
+    group_id: binding.group_id,
+    priority
+  }))
+  savingGroupBindings.value = true
   updatingKeyIds.value.add(key.id)
   try {
-    const result = await adminAPI.apiKeys.updateApiKeyGroup(key.id, newGroupId)
-    // Update local data
-    const idx = apiKeys.value.findIndex((k) => k.id === key.id)
-    if (idx !== -1) {
-      apiKeys.value[idx] = result.api_key
+    const result = await adminAPI.apiKeys.updateApiKeyGroupBindings(key.id, orderedBindings)
+    const hydratedBindings: ApiKeyGroupBinding[] = orderedBindings.map((binding) => ({
+      ...binding,
+      group: allGroups.value.find((group) => group.id === binding.group_id)
+    }))
+    const index = apiKeys.value.findIndex((item) => item.id === key.id)
+    if (index !== -1) {
+      apiKeys.value[index] = {
+        ...key,
+        ...result.api_key,
+        group_bindings: result.api_key.group_bindings ?? hydratedBindings
+      }
     }
+    draftGroupBindings.value = orderedBindings
     if (result.auto_granted_group_access && result.granted_group_name) {
       appStore.showSuccess(t('admin.users.groupChangedWithGrant', { group: result.granted_group_name }))
     } else {
-      appStore.showSuccess(t('admin.users.groupChangedSuccess'))
+      appStore.showSuccess(t('admin.users.groupBindingsSaved'))
     }
+    if (!keepEditing) closeGroupSelector()
   } catch (error: any) {
     appStore.showError(error?.message || t('admin.users.groupChangeFailed'))
   } finally {
     updatingKeyIds.value.delete(key.id)
+    savingGroupBindings.value = false
   }
 }
 
 const handleKeyDown = (event: KeyboardEvent) => {
   if (event.key === 'Escape' && groupSelectorKeyId.value !== null) {
+    event.preventDefault()
     event.stopPropagation()
     closeGroupSelector()
   }
@@ -235,17 +320,15 @@ const handleKeyDown = (event: KeyboardEvent) => {
 
 const handleClickOutside = (event: MouseEvent) => {
   const target = event.target as HTMLElement
-  if (dropdownRef.value && !dropdownRef.value.contains(target)) {
-    // Check if the click is on one of the group trigger buttons
-    for (const el of groupButtonRefs.value.values()) {
-      if (el.contains(target)) return
-    }
-    closeGroupSelector()
+  if (groupSelectorKeyId.value === null || dropdownRef.value?.contains(target)) return
+  for (const element of groupButtonRefs.value.values()) {
+    if (element.contains(target)) return
   }
+  closeGroupSelector(false)
 }
 
 const handleClose = () => {
-  closeGroupSelector()
+  closeGroupSelector(false)
   emit('close')
 }
 

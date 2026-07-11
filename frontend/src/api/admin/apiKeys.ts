@@ -4,7 +4,11 @@
  */
 
 import { apiClient } from '../client'
-import type { ApiKey } from '@/types'
+import type {
+  AdminUpdateApiKeyGroupBindingsRequest,
+  ApiKey,
+  ApiKeyGroupBindingInput
+} from '@/types'
 
 export interface UpdateApiKeyGroupResult {
   api_key: ApiKey
@@ -26,8 +30,24 @@ export async function updateApiKeyGroup(id: number, groupId: number | null): Pro
   return data
 }
 
+/** Update the complete ordered group binding list without overwriting it via group_id. */
+export async function updateApiKeyGroupBindings(
+  id: number,
+  groupBindings: ApiKeyGroupBindingInput[]
+): Promise<UpdateApiKeyGroupResult> {
+  const payload: AdminUpdateApiKeyGroupBindingsRequest = {
+    group_bindings: groupBindings.map((binding, priority) => ({
+      group_id: binding.group_id,
+      priority
+    }))
+  }
+  const { data } = await apiClient.put<UpdateApiKeyGroupResult>(`/admin/api-keys/${id}`, payload)
+  return data
+}
+
 export const apiKeysAPI = {
-  updateApiKeyGroup
+  updateApiKeyGroup,
+  updateApiKeyGroupBindings
 }
 
 export default apiKeysAPI

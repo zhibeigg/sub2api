@@ -525,6 +525,8 @@ export default {
       noApiKeys: 'This user has no API keys',
       group: 'Group',
       none: 'None',
+      editGroupBindings: 'Edit group bindings',
+      groupBindingsSaved: 'Group bindings saved',
       groupChangedSuccess: 'Group updated successfully',
       groupChangedWithGrant: 'Group updated. User auto-granted access to "{group}"',
       groupChangeFailed: 'Failed to update group',

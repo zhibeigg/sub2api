@@ -1,0 +1,292 @@
+package service
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
+	"github.com/Wei-Shaw/sub2api/internal/provider/adobe/firefly"
+)
+
+const (
+	PlaygroundCapabilityChat  = "chat"
+	PlaygroundCapabilityImage = "image"
+	PlaygroundCapabilityVideo = "video"
+)
+
+type PlaygroundModelOption struct {
+	ID            string   `json:"id"`
+	GroupID       int64    `json:"group_id"`
+	GroupName     string   `json:"group_name"`
+	GroupPriority int      `json:"group_priority"`
+	Model         string   `json:"model"`
+	Platform      string   `json:"platform"`
+	Capabilities  []string `json:"capabilities"`
+}
+
+type PlaygroundAPIKeyReader interface {
+	GetByID(ctx context.Context, id int64) (*APIKey, error)
+}
+
+type PlaygroundModelLister interface {
+	GetAvailableModels(ctx context.Context, groupID *int64, platform string) []string
+}
+
+type PlaygroundRoutableModelLister interface {
+	GetAvailablePlaygroundModels(ctx context.Context, groupID *int64, platform string) ([]string, bool)
+}
+
+type PlaygroundGroupAccessChecker interface {
+	CanUserBindGroup(ctx context.Context, user *User, group *Group) bool
+}
+
+type PlaygroundService struct {
+	apiKeys PlaygroundAPIKeyReader
+	models  PlaygroundModelLister
+}
+
+func NewPlaygroundService(apiKeys PlaygroundAPIKeyReader, models PlaygroundModelLister) *PlaygroundService {
+	return &PlaygroundService{apiKeys: apiKeys, models: models}
+}
+
+func (s *PlaygroundService) GetModelOptions(ctx context.Context, userID, apiKeyID int64) ([]PlaygroundModelOption, error) {
+	apiKey, err := s.apiKeys.GetByID(ctx, apiKeyID)
+	if err != nil {
+		return nil, err
+	}
+	if apiKey == nil || apiKey.UserID != userID {
+		return nil, ErrAPIKeyNotFound
+	}
+
+	bindings := playgroundBindings(apiKey)
+	options := make([]PlaygroundModelOption, 0)
+	for _, binding := range bindings {
+		group := binding.Group
+		if group == nil || group.ID <= 0 || !group.IsActive() {
+			continue
+		}
+		if checker, ok := s.apiKeys.(PlaygroundGroupAccessChecker); ok && !checker.CanUserBindGroup(ctx, apiKey.User, group) {
+			continue
+		}
+		var models []string
+		if lister, ok := s.models.(PlaygroundRoutableModelLister); ok {
+			var routable bool
+			models, routable = lister.GetAvailablePlaygroundModels(ctx, &group.ID, group.Platform)
+			if !routable {
+				continue
+			}
+		} else {
+			models = s.models.GetAvailableModels(ctx, &group.ID, group.Platform)
+		}
+		models = playgroundModelsForGroup(group, models)
+		for _, model := range models {
+			capabilities := playgroundModelCapabilities(group, model)
+			if len(capabilities) == 0 {
+				continue
+			}
+			options = append(options, PlaygroundModelOption{
+				ID:            fmt.Sprintf("%d::%s", group.ID, model),
+				GroupID:       group.ID,
+				GroupName:     group.Name,
+				GroupPriority: binding.Priority,
+				Model:         model,
+				Platform:      group.Platform,
+				Capabilities:  capabilities,
+			})
+		}
+	}
+	return options, nil
+}
+
+func playgroundBindings(apiKey *APIKey) []APIKeyGroupBinding {
+	if apiKey == nil {
+		return nil
+	}
+	if len(apiKey.GroupBindings) > 0 {
+		bindings := append([]APIKeyGroupBinding(nil), apiKey.GroupBindings...)
+		sort.SliceStable(bindings, func(i, j int) bool {
+			if bindings[i].Priority != bindings[j].Priority {
+				return bindings[i].Priority < bindings[j].Priority
+			}
+			return bindings[i].GroupID < bindings[j].GroupID
+		})
+		return bindings
+	}
+	if apiKey.Group == nil || apiKey.GroupID == nil {
+		return nil
+	}
+	return []APIKeyGroupBinding{{GroupID: *apiKey.GroupID, Priority: 0, Group: apiKey.Group}}
+}
+
+func playgroundModelsForGroup(group *Group, available []string) []string {
+	if group == nil {
+		return nil
+	}
+	fallback := playgroundDefaultModelIDs(group.Platform)
+	source := available
+	if group.Platform == PlatformAnthropic && len(available) > 0 {
+		source = mergePlaygroundModelIDs(available, fallback)
+	}
+	if group.CustomModelsListEnabled() {
+		return filterPlaygroundCustomModels(source, fallback, group.ModelsListConfig.Models)
+	}
+	if len(source) == 0 {
+		return fallback
+	}
+	return normalizePlaygroundModels(source)
+}
+
+func filterPlaygroundCustomModels(available, fallback, selected []string) []string {
+	source := available
+	if len(source) == 0 {
+		source = fallback
+	}
+	allowed := normalizePlaygroundModels(source)
+	seen := make(map[string]struct{}, len(selected))
+	out := make([]string, 0, len(selected))
+	for _, model := range selected {
+		model = strings.TrimSpace(model)
+		if model == "" || !playgroundModelAllowed(allowed, model) {
+			continue
+		}
+		if _, ok := seen[model]; ok {
+			continue
+		}
+		seen[model] = struct{}{}
+		out = append(out, model)
+	}
+	return out
+}
+
+func playgroundModelAllowed(patterns []string, model string) bool {
+	for _, pattern := range patterns {
+		if pattern == model || (strings.HasSuffix(pattern, "*") && strings.HasPrefix(model, strings.TrimSuffix(pattern, "*"))) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizePlaygroundModels(models []string) []string {
+	seen := make(map[string]struct{}, len(models))
+	out := make([]string, 0, len(models))
+	for _, model := range models {
+		model = strings.TrimSpace(model)
+		if model == "" {
+			continue
+		}
+		if _, ok := seen[model]; ok {
+			continue
+		}
+		seen[model] = struct{}{}
+		out = append(out, model)
+	}
+	return out
+}
+
+func mergePlaygroundModelIDs(primary, secondary []string) []string {
+	return normalizePlaygroundModels(append(append([]string(nil), primary...), secondary...))
+}
+
+func playgroundDefaultModelIDs(platform string) []string {
+	switch NormalizePlatform(platform) {
+	case PlatformOpenAI:
+		return openai.DefaultModelIDs()
+	case PlatformGemini:
+		ids := make([]string, 0, len(geminicli.DefaultModels))
+		for _, model := range geminicli.DefaultModels {
+			ids = append(ids, model.ID)
+		}
+		return ids
+	case PlatformAntigravity:
+		models := antigravity.DefaultModels()
+		ids := make([]string, 0, len(models))
+		for _, model := range models {
+			ids = append(ids, model.ID)
+		}
+		return ids
+	case PlatformAnthropic:
+		ids := make([]string, 0, len(claude.DefaultModels)+len(antigravity.DefaultModels()))
+		for _, model := range claude.DefaultModels {
+			ids = append(ids, model.ID)
+		}
+		for _, model := range antigravity.DefaultModels() {
+			ids = append(ids, model.ID)
+		}
+		return normalizePlaygroundModels(ids)
+	case PlatformGrok:
+		return xai.DefaultModelIDs()
+	case PlatformAdobe:
+		return firefly.PublicModelIDs()
+	case PlatformCursor:
+		ids := make([]string, 0, len(domain.DefaultCursorModelMapping))
+		for id := range domain.DefaultCursorModelMapping {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		return ids
+	case PlatformKiro:
+		ids := make([]string, 0, len(domain.DefaultKiroModelMapping))
+		for id := range domain.DefaultKiroModelMapping {
+			ids = append(ids, id)
+		}
+		return mergePlaygroundModelIDs(ids, KiroDiscoveredModelIDs())
+	default:
+		return nil
+	}
+}
+
+func playgroundModelCapabilities(group *Group, model string) []string {
+	platform := NormalizePlatform(group.Platform)
+	modelLower := strings.ToLower(strings.TrimSpace(model))
+	if modelLower == "" {
+		return nil
+	}
+
+	isVideo := firefly.IsVideoAlias(modelLower) || strings.Contains(modelLower, "video") || strings.HasPrefix(modelLower, "veo") || strings.HasPrefix(modelLower, "sora") || strings.Contains(modelLower, "seedance")
+	isImage := firefly.IsImageAlias(modelLower) || strings.HasPrefix(modelLower, "gpt-image-") || strings.Contains(modelLower, "imagine-image") || strings.HasSuffix(modelLower, "-image") || strings.Contains(modelLower, "image-preview") || strings.Contains(modelLower, "imagine-edit") || modelLower == "grok-imagine"
+
+	switch platform {
+	case PlatformAdobe:
+		if isVideo && group.AllowImageGeneration {
+			return []string{PlaygroundCapabilityVideo}
+		}
+		if isImage && group.AllowImageGeneration {
+			return []string{PlaygroundCapabilityImage}
+		}
+		return nil
+	case PlatformGrok:
+		if isVideo && group.AllowImageGeneration {
+			return []string{PlaygroundCapabilityVideo}
+		}
+		if isImage && group.AllowImageGeneration {
+			return []string{PlaygroundCapabilityImage}
+		}
+		return []string{PlaygroundCapabilityChat}
+	case PlatformOpenAI:
+		if isVideo {
+			return []string{PlaygroundCapabilityVideo}
+		}
+		if isImage && group.AllowImageGeneration {
+			return []string{PlaygroundCapabilityImage}
+		}
+		if isImage {
+			return nil
+		}
+		return []string{PlaygroundCapabilityChat}
+	case PlatformAnthropic, PlatformGemini, PlatformAntigravity, PlatformCursor, PlatformKiro:
+		if isImage || isVideo {
+			return nil
+		}
+		return []string{PlaygroundCapabilityChat}
+	default:
+		return nil
+	}
+}

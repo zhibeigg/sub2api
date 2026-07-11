@@ -40,7 +40,7 @@
 
       <button
         class="btn btn-primary w-full"
-        :disabled="loading || !prompt.trim() || !resolvedKey || !model"
+        :disabled="loading || !prompt.trim() || !resolvedKey || !option"
         @click="generate"
       >
         <Icon v-if="loading" name="refresh" size="sm" class="animate-spin" />
@@ -107,15 +107,14 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import playgroundAPI from '@/api/playground'
-import { usePlaygroundSettings } from '@/composables/usePlaygroundSettings'
+import type { PlaygroundModelOption } from '@/types/playground'
 
 const props = defineProps<{
   resolvedKey: string
+  option: PlaygroundModelOption | null
 }>()
 
 const { t } = useI18n()
-const settings = usePlaygroundSettings()
-const model = settings.model
 
 const prompt = ref('')
 const size = ref('1024x1024')
@@ -126,14 +125,15 @@ const images = ref<string[]>([])
 const preview = ref('')
 
 async function generate(): Promise<void> {
-  if (!prompt.value.trim() || !props.resolvedKey || !model.value) return
+  if (!prompt.value.trim() || !props.resolvedKey || !props.option) return
   loading.value = true
   error.value = ''
   images.value = []
   try {
     const result = await playgroundAPI.generateImage({
       apiKey: props.resolvedKey,
-      model: model.value,
+      groupId: props.option.group_id,
+      model: props.option.model,
       prompt: prompt.value.trim(),
       size: size.value === 'auto' ? undefined : size.value,
       n: count.value

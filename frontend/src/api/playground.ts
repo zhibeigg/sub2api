@@ -5,7 +5,19 @@
  * JWT session token, and need streaming (ReadableStream) support.
  */
 
+import { apiClient } from './client'
 import { buildGatewayUrl } from './url'
+import type { PlaygroundModelOption } from '@/types/playground'
+
+const GROUP_HEADER = 'X-Sub2API-Group-ID'
+
+function gatewayHeaders(apiKey: string, groupId: number, contentType = false): Record<string, string> {
+  return {
+    Authorization: `Bearer ${apiKey}`,
+    [GROUP_HEADER]: String(groupId),
+    ...(contentType ? { 'Content-Type': 'application/json' } : {})
+  }
+}
 
 export interface PlaygroundModel {
   id: string
@@ -25,6 +37,7 @@ export interface ChatMessagePayload {
 
 export interface ChatStreamOptions {
   apiKey: string
+  groupId: number
   model: string
   messages: ChatMessagePayload[]
   temperature?: number
@@ -36,6 +49,7 @@ export interface ChatStreamOptions {
 
 export interface ImageGenerationOptions {
   apiKey: string
+  groupId: number
   model: string
   prompt: string
   size?: string
@@ -50,11 +64,20 @@ export interface GeneratedImage {
   revised_prompt?: string
 }
 
-/** List models available to the given API key (auto-routed by its group platform). */
-export async function listModels(apiKey: string, signal?: AbortSignal): Promise<PlaygroundModel[]> {
+/** List group-aware model options using the JWT session; no API key value is sent or returned. */
+export async function listModelOptions(apiKeyId: number, signal?: AbortSignal): Promise<PlaygroundModelOption[]> {
+  const { data } = await apiClient.get<PlaygroundModelOption[]>(
+    `/playground/api-keys/${apiKeyId}/model-options`,
+    { signal }
+  )
+  return Array.isArray(data) ? data : []
+}
+
+/** Legacy gateway model listing helper. */
+export async function listModels(apiKey: string, groupId: number, signal?: AbortSignal): Promise<PlaygroundModel[]> {
   const res = await fetch(buildGatewayUrl('/v1/models'), {
     method: 'GET',
-    headers: { Authorization: `Bearer ${apiKey}` },
+    headers: gatewayHeaders(apiKey, groupId),
     signal
   })
   if (!res.ok) {
@@ -77,10 +100,7 @@ export async function listModels(apiKey: string, signal?: AbortSignal): Promise<
 export async function streamChat(opts: ChatStreamOptions): Promise<void> {
   const res = await fetch(buildGatewayUrl('/v1/chat/completions'), {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${opts.apiKey}`,
-      'Content-Type': 'application/json'
-    },
+    headers: gatewayHeaders(opts.apiKey, opts.groupId, true),
     body: JSON.stringify({
       model: opts.model,
       messages: opts.messages,
@@ -138,10 +158,7 @@ function handleSseEvent(rawEvent: string, opts: ChatStreamOptions): void {
 export async function generateImage(opts: ImageGenerationOptions): Promise<GeneratedImage[]> {
   const res = await fetch(buildGatewayUrl('/v1/images/generations'), {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${opts.apiKey}`,
-      'Content-Type': 'application/json'
-    },
+    headers: gatewayHeaders(opts.apiKey, opts.groupId, true),
     body: JSON.stringify({
       model: opts.model,
       prompt: opts.prompt,
@@ -161,6 +178,7 @@ export async function generateImage(opts: ImageGenerationOptions): Promise<Gener
 
 export interface VideoGenerationOptions {
   apiKey: string
+  groupId: number
   model: string
   prompt: string
   seconds?: number
@@ -189,10 +207,7 @@ export interface VideoTaskStatus {
 export async function generateVideo(opts: VideoGenerationOptions): Promise<VideoSubmitResult> {
   const res = await fetch(buildGatewayUrl('/v1/videos/generations'), {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${opts.apiKey}`,
-      'Content-Type': 'application/json'
-    },
+    headers: gatewayHeaders(opts.apiKey, opts.groupId, true),
     body: JSON.stringify({
       model: opts.model,
       prompt: opts.prompt,
@@ -216,12 +231,13 @@ export async function generateVideo(opts: VideoGenerationOptions): Promise<Video
 /** Poll a video generation task's status by request_id. */
 export async function getVideoStatus(
   apiKey: string,
+  groupId: number,
   requestId: string,
   signal?: AbortSignal
 ): Promise<VideoTaskStatus> {
   const res = await fetch(buildGatewayUrl(`/v1/videos/${encodeURIComponent(requestId)}`), {
     method: 'GET',
-    headers: { Authorization: `Bearer ${apiKey}` },
+    headers: gatewayHeaders(apiKey, groupId),
     signal
   })
   if (!res.ok) {
@@ -256,6 +272,7 @@ async function extractError(res: Response): Promise<string> {
 }
 
 export const playgroundAPI = {
+  listModelOptions,
   listModels,
   streamChat,
   generateImage,

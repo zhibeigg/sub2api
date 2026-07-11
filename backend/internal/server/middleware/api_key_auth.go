@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -77,8 +78,17 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 			return
 		}
 
-		// apiKey 已加载（含 User/Group）。即便后续因分组停用/Key 停用/用户停用/
-		// IP 限制等早退中断，也让 Ops 错误日志能回退取到 user/group/platform。
+		selectedAPIKey, status, code, message := selectAPIKeyGroupFromHeader(c, apiKey)
+		if status != 0 {
+			// 保持已加载 Key 的 Ops 早退回退行为；未绑定请求没有可选择的分组。
+			SetOpsFallbackAPIKey(c, apiKey)
+			AbortWithError(c, status, code, message)
+			return
+		}
+		apiKey = selectedAPIKey
+
+		// apiKey 已加载（含 User/所选 Group）。即便后续因分组停用/Key 停用/用户停用/
+		// IP 限制等早退中断，也让 Ops 错误日志能回退取到所选 user/group/platform。
 		SetOpsFallbackAPIKey(c, apiKey)
 
 		// ── 3. 基础鉴权（始终执行） ─────────────────────────────────
@@ -284,6 +294,62 @@ func GetSubscriptionFromContext(c *gin.Context) (*service.UserSubscription, bool
 	}
 	subscription, ok := value.(*service.UserSubscription)
 	return subscription, ok
+}
+
+const apiKeyGroupIDHeader = "X-Sub2API-Group-ID"
+
+// selectAPIKeyGroupFromHeader applies an optional explicit group selection after
+// the key is loaded. The returned request-scoped clone preserves the original
+// bindings for context/auditing and marks the selected group as pinned so
+// downstream multi-group scheduling cannot choose a different group.
+func selectAPIKeyGroupFromHeader(c *gin.Context, apiKey *service.APIKey) (*service.APIKey, int, string, string) {
+	values := c.Request.Header.Values(apiKeyGroupIDHeader)
+	if len(values) == 0 {
+		return apiKey, 0, "", ""
+	}
+	if len(values) != 1 {
+		return apiKey, 400, "INVALID_GROUP_SELECTOR", apiKeyGroupIDHeader + " must contain exactly one positive integer"
+	}
+
+	rawGroupID := strings.TrimSpace(values[0])
+	if rawGroupID == "" {
+		return apiKey, 400, "INVALID_GROUP_SELECTOR", apiKeyGroupIDHeader + " must be a positive integer"
+	}
+	for _, ch := range rawGroupID {
+		if ch < '0' || ch > '9' {
+			return apiKey, 400, "INVALID_GROUP_SELECTOR", apiKeyGroupIDHeader + " must be a positive integer"
+		}
+	}
+	groupID, err := strconv.ParseInt(rawGroupID, 10, 64)
+	if err != nil || groupID <= 0 {
+		return apiKey, 400, "INVALID_GROUP_SELECTOR", apiKeyGroupIDHeader + " must be a positive integer"
+	}
+
+	var group *service.Group
+	bound := false
+	if apiKey != nil {
+		for _, binding := range apiKey.GroupBindings {
+			if binding.GroupID == groupID {
+				group = binding.Group
+				bound = true
+				break
+			}
+		}
+		if !bound && apiKey.GroupID != nil && *apiKey.GroupID == groupID {
+			group = apiKey.Group
+			bound = true
+		}
+	}
+	if !bound {
+		return apiKey, 403, "GROUP_NOT_BOUND_TO_API_KEY", "API key is not bound to the requested group"
+	}
+
+	selected := *apiKey
+	selectedGroupID := groupID
+	selected.GroupID = &selectedGroupID
+	selected.Group = group
+	selected.ExplicitGroupSelection = true
+	return &selected, 0, "", ""
 }
 
 func setGroupContext(c *gin.Context, group *service.Group) {

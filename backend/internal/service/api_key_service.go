@@ -342,6 +342,12 @@ func (s *APIKeyService) incrementAPIKeyErrorCount(ctx context.Context, userID in
 // canUserBindGroup 检查用户是否可以绑定指定分组
 // 对于订阅类型分组：检查用户是否有有效订阅
 // 对于标准类型分组：使用原有的 AllowedGroups 和 IsExclusive 逻辑
+// CanUserBindGroup reports whether the user can currently use a group, including
+// active subscription grants for subscription and exclusive groups.
+func (s *APIKeyService) CanUserBindGroup(ctx context.Context, user *User, group *Group) bool {
+	return s.canUserBindGroup(ctx, user, group)
+}
+
 func (s *APIKeyService) canUserBindGroup(ctx context.Context, user *User, group *Group) bool {
 	if user == nil || group == nil {
 		return false

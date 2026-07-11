@@ -239,6 +239,253 @@ func TestSimpleModeBypassesQuotaCheck(t *testing.T) {
 	})
 }
 
+func TestAPIKeyAuthExplicitGroupHeaderValidation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	group := &service.Group{ID: 10, Name: "legacy", Status: service.StatusActive, Hydrated: true}
+	user := &service.User{ID: 7, Role: service.RoleUser, Status: service.StatusActive, Balance: 10}
+	apiKey := &service.APIKey{ID: 100, UserID: user.ID, Key: "group-header-key", Status: service.StatusActive, User: user, GroupID: &group.ID, Group: group}
+	apiKeyService := service.NewAPIKeyService(&stubApiKeyRepo{getByKey: func(context.Context, string) (*service.APIKey, error) {
+		clone := *apiKey
+		return &clone, nil
+	}}, nil, nil, nil, nil, nil, &config.Config{RunMode: config.RunModeSimple})
+	router := newAuthTestRouter(apiKeyService, nil, &config.Config{RunMode: config.RunModeSimple})
+
+	tests := []struct {
+		name   string
+		values []string
+		status int
+		code   string
+	}{
+		{name: "empty", values: []string{""}, status: http.StatusBadRequest, code: "INVALID_GROUP_SELECTOR"},
+		{name: "whitespace", values: []string{"   "}, status: http.StatusBadRequest, code: "INVALID_GROUP_SELECTOR"},
+		{name: "non numeric", values: []string{"group-10"}, status: http.StatusBadRequest, code: "INVALID_GROUP_SELECTOR"},
+		{name: "signed", values: []string{"+10"}, status: http.StatusBadRequest, code: "INVALID_GROUP_SELECTOR"},
+		{name: "zero", values: []string{"0"}, status: http.StatusBadRequest, code: "INVALID_GROUP_SELECTOR"},
+		{name: "overflow", values: []string{"9223372036854775808"}, status: http.StatusBadRequest, code: "INVALID_GROUP_SELECTOR"},
+		{name: "multiple", values: []string{"10", "10"}, status: http.StatusBadRequest, code: "INVALID_GROUP_SELECTOR"},
+		{name: "unbound", values: []string{"11"}, status: http.StatusForbidden, code: "GROUP_NOT_BOUND_TO_API_KEY"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/t", nil)
+			req.Header.Set("x-api-key", apiKey.Key)
+			for _, value := range tt.values {
+				req.Header.Add(apiKeyGroupIDHeader, value)
+			}
+			router.ServeHTTP(w, req)
+
+			require.Equal(t, tt.status, w.Code)
+			require.Contains(t, w.Body.String(), tt.code)
+		})
+	}
+}
+
+func TestAPIKeyAuthExplicitGroupSelectionSimpleModeAndLegacyCompatibility(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	legacyGroup := &service.Group{ID: 10, Name: "legacy", Status: service.StatusActive, Platform: service.PlatformAnthropic, Hydrated: true}
+	selectedGroup := &service.Group{ID: 20, Name: "selected", Status: service.StatusActive, Platform: service.PlatformOpenAI, Hydrated: true}
+	user := &service.User{ID: 7, Role: service.RoleUser, Status: service.StatusActive, Balance: 10, Concurrency: 3}
+	apiKey := &service.APIKey{
+		ID: 100, UserID: user.ID, Key: "multi-group-key", Status: service.StatusActive,
+		User: user, GroupID: &legacyGroup.ID, Group: legacyGroup,
+		GroupBindings: []service.APIKeyGroupBinding{{GroupID: selectedGroup.ID, Priority: 0, Group: selectedGroup}},
+	}
+	apiKeyService := service.NewAPIKeyService(&stubApiKeyRepo{getByKey: func(context.Context, string) (*service.APIKey, error) {
+		clone := *apiKey
+		return &clone, nil
+	}}, nil, nil, nil, nil, nil, &config.Config{RunMode: config.RunModeSimple})
+
+	router := gin.New()
+	var fallback *service.APIKey
+	router.Use(func(c *gin.Context) {
+		c.Next()
+		fallback, _ = GetOpsFallbackAPIKey(c)
+	})
+	router.Use(gin.HandlerFunc(NewAPIKeyAuthMiddleware(apiKeyService, nil, &config.Config{RunMode: config.RunModeSimple})))
+	router.GET("/t", func(c *gin.Context) {
+		keyFromContext, ok := GetAPIKeyFromContext(c)
+		require.True(t, ok)
+		groupFromContext, _ := c.Request.Context().Value(ctxkey.Group).(*service.Group)
+		c.JSON(http.StatusOK, gin.H{
+			"group_id":      *keyFromContext.GroupID,
+			"context_group": groupFromContext.ID,
+			"bindings":      len(keyFromContext.GroupBindings),
+		})
+	})
+
+	t.Run("binding header pins selected group", func(t *testing.T) {
+		fallback = nil
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/t", nil)
+		req.Header.Set("x-api-key", apiKey.Key)
+		req.Header.Set(apiKeyGroupIDHeader, "20")
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Contains(t, w.Body.String(), `"group_id":20`)
+		require.Contains(t, w.Body.String(), `"context_group":20`)
+		require.Contains(t, w.Body.String(), `"bindings":1`)
+		require.NotNil(t, fallback)
+		require.Equal(t, selectedGroup.ID, *fallback.GroupID)
+		require.NotNil(t, fallback.Group)
+		require.Equal(t, selectedGroup.ID, fallback.Group.ID)
+		require.Equal(t, selectedGroup.Platform, fallback.Group.Platform)
+		require.Len(t, fallback.GroupBindings, 1)
+		require.True(t, fallback.ExplicitGroupSelection)
+		require.Equal(t, legacyGroup.ID, *apiKey.GroupID, "selection must not mutate the loaded API key")
+		require.Same(t, legacyGroup, apiKey.Group)
+	})
+
+	t.Run("legacy group id can be selected explicitly", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/t", nil)
+		req.Header.Set("x-api-key", apiKey.Key)
+		req.Header.Set(apiKeyGroupIDHeader, "10")
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Contains(t, w.Body.String(), `"group_id":10`)
+		require.Contains(t, w.Body.String(), `"context_group":10`)
+		require.Contains(t, w.Body.String(), `"bindings":1`)
+	})
+
+	t.Run("missing header preserves legacy behavior", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/t", nil)
+		req.Header.Set("x-api-key", apiKey.Key)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Contains(t, w.Body.String(), `"group_id":10`)
+		require.Contains(t, w.Body.String(), `"context_group":10`)
+		require.Contains(t, w.Body.String(), `"bindings":1`)
+	})
+}
+
+func TestAPIKeyAuthExplicitGroupSelectionDrivesAvailabilityAndOpsFallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	legacyGroup := &service.Group{ID: 10, Name: "legacy", Status: service.StatusActive, Platform: service.PlatformAnthropic, Hydrated: true}
+	disabledGroup := &service.Group{ID: 20, Name: "disabled", Status: service.StatusDisabled, Platform: service.PlatformOpenAI, Hydrated: true}
+	user := &service.User{ID: 7, Role: service.RoleUser, Status: service.StatusActive, Balance: 10}
+	apiKey := &service.APIKey{
+		ID: 100, UserID: user.ID, Key: "disabled-selected-key", Status: service.StatusActive,
+		User: user, GroupID: &legacyGroup.ID, Group: legacyGroup,
+		GroupBindings: []service.APIKeyGroupBinding{{GroupID: disabledGroup.ID, Group: disabledGroup}},
+	}
+	apiKeyService := service.NewAPIKeyService(&stubApiKeyRepo{getByKey: func(context.Context, string) (*service.APIKey, error) {
+		clone := *apiKey
+		return &clone, nil
+	}}, nil, nil, nil, nil, nil, &config.Config{RunMode: config.RunModeStandard})
+
+	router := gin.New()
+	var fallback *service.APIKey
+	router.Use(func(c *gin.Context) {
+		c.Next()
+		fallback, _ = GetOpsFallbackAPIKey(c)
+	})
+	router.Use(gin.HandlerFunc(NewAPIKeyAuthMiddleware(apiKeyService, nil, &config.Config{RunMode: config.RunModeStandard})))
+	router.GET("/t", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/t", nil)
+	req.Header.Set("x-api-key", apiKey.Key)
+	req.Header.Set(apiKeyGroupIDHeader, "20")
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.Contains(t, w.Body.String(), "GROUP_DISABLED")
+	require.NotNil(t, fallback)
+	require.Equal(t, disabledGroup.ID, *fallback.GroupID)
+	require.NotNil(t, fallback.Group)
+	require.Equal(t, disabledGroup.ID, fallback.Group.ID)
+	require.Equal(t, disabledGroup.Platform, fallback.Group.Platform)
+}
+
+func TestAPIKeyAuthExplicitGroupSelectionDrivesPermissionCheck(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	legacyGroup := &service.Group{ID: 10, Name: "legacy", Status: service.StatusActive, Hydrated: true}
+	exclusiveGroup := &service.Group{ID: 20, Name: "exclusive", Status: service.StatusActive, Hydrated: true, IsExclusive: true}
+	user := &service.User{
+		ID: 7, Role: service.RoleUser, Status: service.StatusActive, Balance: 10,
+		AllowedGroups: []int64{legacyGroup.ID},
+	}
+	apiKey := &service.APIKey{
+		ID: 100, UserID: user.ID, Key: "exclusive-selected-key", Status: service.StatusActive,
+		User: user, GroupID: &legacyGroup.ID, Group: legacyGroup,
+		GroupBindings: []service.APIKeyGroupBinding{{GroupID: exclusiveGroup.ID, Group: exclusiveGroup}},
+	}
+	cfg := &config.Config{RunMode: config.RunModeSimple}
+	apiKeyService := service.NewAPIKeyService(&stubApiKeyRepo{getByKey: func(context.Context, string) (*service.APIKey, error) {
+		clone := *apiKey
+		return &clone, nil
+	}}, nil, nil, nil, nil, nil, cfg)
+	router := newAuthTestRouter(apiKeyService, nil, cfg)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/t", nil)
+	req.Header.Set("x-api-key", apiKey.Key)
+	req.Header.Set(apiKeyGroupIDHeader, "20")
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.Contains(t, w.Body.String(), "GROUP_NOT_ALLOWED")
+}
+
+func TestAPIKeyAuthExplicitGroupSelectionDrivesSubscriptionAndBilling(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	legacyGroup := &service.Group{ID: 10, Name: "legacy", Status: service.StatusActive, Hydrated: true, SubscriptionType: service.SubscriptionTypeStandard}
+	selectedGroup := &service.Group{ID: 20, Name: "subscription", Status: service.StatusActive, Hydrated: true, SubscriptionType: service.SubscriptionTypeSubscription}
+	user := &service.User{ID: 7, Role: service.RoleUser, Status: service.StatusActive, Balance: 0, Concurrency: 3}
+	apiKey := &service.APIKey{
+		ID: 100, UserID: user.ID, Key: "subscription-selected-key", Status: service.StatusActive,
+		User: user, GroupID: &legacyGroup.ID, Group: legacyGroup,
+		GroupBindings: []service.APIKeyGroupBinding{{GroupID: selectedGroup.ID, Group: selectedGroup}},
+	}
+	cfg := &config.Config{RunMode: config.RunModeStandard}
+	apiKeyService := service.NewAPIKeyService(&stubApiKeyRepo{getByKey: func(context.Context, string) (*service.APIKey, error) {
+		clone := *apiKey
+		return &clone, nil
+	}}, nil, nil, nil, nil, nil, cfg)
+
+	queriedGroupID := int64(0)
+	now := time.Now()
+	subscriptionService := service.NewSubscriptionService(nil, &stubUserSubscriptionRepo{getActive: func(_ context.Context, userID, groupID int64) (*service.UserSubscription, error) {
+		queriedGroupID = groupID
+		return &service.UserSubscription{
+			ID: 55, UserID: userID, GroupID: groupID, Status: service.SubscriptionStatusActive,
+			ExpiresAt: now.Add(time.Hour), DailyWindowStart: &now,
+		}, nil
+	}}, nil, nil, cfg)
+
+	router := gin.New()
+	router.Use(gin.HandlerFunc(NewAPIKeyAuthMiddleware(apiKeyService, subscriptionService, cfg)))
+	router.GET("/t", func(c *gin.Context) {
+		keyFromContext, ok := GetAPIKeyFromContext(c)
+		require.True(t, ok)
+		subscription, ok := GetSubscriptionFromContext(c)
+		require.True(t, ok)
+		c.JSON(http.StatusOK, gin.H{"group_id": *keyFromContext.GroupID, "subscription_group_id": subscription.GroupID})
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/t", nil)
+	req.Header.Set("x-api-key", apiKey.Key)
+	req.Header.Set(apiKeyGroupIDHeader, "20")
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Equal(t, selectedGroup.ID, queriedGroupID)
+	require.Contains(t, w.Body.String(), `"group_id":20`)
+	require.Contains(t, w.Body.String(), `"subscription_group_id":20`)
+}
+
 func TestAPIKeyAuthSetsGroupContext(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

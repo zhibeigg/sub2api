@@ -48,6 +48,10 @@ type APIKey struct {
 	IPBlacklist []string
 	// GroupBindings holds multi-group priority bindings (empty = legacy single-group).
 	GroupBindings []APIKeyGroupBinding
+	// ExplicitGroupSelection marks a request-scoped clone pinned by the explicit
+	// group selector header. The original bindings remain available for auditing
+	// and response context, while gateway resolution must not auto-switch groups.
+	ExplicitGroupSelection bool
 	// 预编译的 IP 规则，用于认证热路径避免重复 ParseIP/ParseCIDR。
 	CompiledIPWhitelist *ip.CompiledIPRules `json:"-"`
 	CompiledIPBlacklist *ip.CompiledIPRules `json:"-"`

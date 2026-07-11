@@ -8,6 +8,7 @@
 
 import { ref, watch, type Ref } from 'vue'
 import type { ChatUsage } from '@/api/playground'
+import type { PlaygroundModelOption } from '@/types/playground'
 
 const STORAGE_KEY = 'playground_conversations_v1'
 const MAX_CONVERSATIONS = 50
@@ -20,13 +21,16 @@ export interface PlaygroundMessage {
   usage?: ChatUsage
   latencyMs?: number
   model?: string
+  option?: PlaygroundModelOption
 }
 
 export interface PlaygroundConversation {
   id: string
   title: string
   messages: PlaygroundMessage[]
+  apiKeyId?: number
   model?: string
+  option?: PlaygroundModelOption
   createdAt: number
   updatedAt: number
 }
@@ -39,7 +43,7 @@ interface ConversationsStore {
   conversations: Ref<PlaygroundConversation[]>
   activeId: Ref<string | null>
   activeConversation: () => PlaygroundConversation | null
-  create: (model?: string) => PlaygroundConversation
+  create: (option?: PlaygroundModelOption, apiKeyId?: number) => PlaygroundConversation
   remove: (id: string) => void
   rename: (id: string, title: string) => void
   touch: (id: string) => void
@@ -82,12 +86,14 @@ export function usePlaygroundConversations(): ConversationsStore {
     return conversations.value.find((c) => c.id === activeId.value) ?? null
   }
 
-  function create(model?: string): PlaygroundConversation {
+  function create(option?: PlaygroundModelOption, apiKeyId?: number): PlaygroundConversation {
     const conv: PlaygroundConversation = {
       id: uid(),
       title: '',
       messages: [],
-      model,
+      apiKeyId,
+      model: option?.model,
+      option,
       createdAt: Date.now(),
       updatedAt: Date.now()
     }

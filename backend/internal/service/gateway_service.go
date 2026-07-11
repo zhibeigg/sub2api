@@ -1168,6 +1168,41 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 	return cloneStringSlice(models)
 }
 
+// GetAvailablePlaygroundModels returns models from accounts that are currently
+// schedulable for the selected group, including mixed-scheduling candidates.
+// The boolean is false when the group has no routable account at all. A true
+// result with an empty model slice means routable accounts exist without an
+// explicit mapping, so the caller may use the platform's default catalog.
+func (s *GatewayService) GetAvailablePlaygroundModels(ctx context.Context, groupID *int64, platform string) ([]string, bool) {
+	accounts, useMixed, err := s.listSchedulableAccounts(ctx, groupID, platform, false)
+	if err != nil || len(accounts) == 0 {
+		return nil, false
+	}
+
+	modelSet := make(map[string]struct{})
+	hasRoutableAccount := false
+	for i := range accounts {
+		account := &accounts[i]
+		if !s.isAccountAllowedForPlatform(account, platform, useMixed) {
+			continue
+		}
+		hasRoutableAccount = true
+		for model := range account.GetModelMapping() {
+			modelSet[model] = struct{}{}
+		}
+	}
+	if !hasRoutableAccount {
+		return nil, false
+	}
+
+	models := make([]string, 0, len(modelSet))
+	for model := range modelSet {
+		models = append(models, model)
+	}
+	sort.Strings(models)
+	return models, true
+}
+
 func (s *GatewayService) InvalidateAvailableModelsCache(groupID *int64, platform string) {
 	if s == nil || s.modelsListCache == nil {
 		return

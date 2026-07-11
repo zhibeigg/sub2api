@@ -11,7 +11,8 @@
         <div class="flex items-center gap-2 border-b border-gray-100 p-2 dark:border-dark-700">
           <KeyModelPicker
             v-model:key-id="col.keyId"
-            v-model:model="col.model"
+            v-model:option="col.option"
+            capability="chat"
             class="min-w-0 flex-1"
             @resolved-key="(k) => (col.resolvedKey = k)"
           />
@@ -101,13 +102,14 @@ import Icon from '@/components/icons/Icon.vue'
 import KeyModelPicker from './KeyModelPicker.vue'
 import playgroundAPI, { type ChatUsage } from '@/api/playground'
 import { uid } from '@/composables/usePlaygroundConversations'
+import type { PlaygroundModelOption } from '@/types/playground'
 
 const { t } = useI18n()
 
 interface CompareColumn {
   id: string
   keyId: number | null
-  model: string
+  option: PlaygroundModelOption | null
   resolvedKey: string
   content: string
   streaming: boolean
@@ -121,7 +123,7 @@ function makeColumn(): CompareColumn {
   return reactive({
     id: uid(),
     keyId: null as number | null,
-    model: '',
+    option: null as PlaygroundModelOption | null,
     resolvedKey: '',
     content: '',
     streaming: false,
@@ -146,7 +148,7 @@ const gridStyle = computed(() => ({
 
 const anyStreaming = computed(() => columns.value.some((c) => c.streaming))
 const canSend = computed(
-  () => !!prompt.value.trim() && columns.value.some((c) => c.resolvedKey && c.model)
+  () => !!prompt.value.trim() && columns.value.some((column) => column.resolvedKey && column.option)
 )
 
 function setScrollRef(el: Element | null, idx: number): void {
@@ -172,7 +174,7 @@ function onKeydown(e: KeyboardEvent): void {
 }
 
 async function runColumn(col: CompareColumn, text: string): Promise<void> {
-  if (!col.resolvedKey || !col.model) return
+  if (!col.resolvedKey || !col.option) return
   col.content = ''
   col.error = false
   col.usage = null
@@ -182,9 +184,11 @@ async function runColumn(col: CompareColumn, text: string): Promise<void> {
   const started = performance.now()
   const idx = columns.value.indexOf(col)
   try {
+    const option = col.option
     await playgroundAPI.streamChat({
       apiKey: col.resolvedKey,
-      model: col.model,
+      groupId: option.group_id,
+      model: option.model,
       messages: [{ role: 'user', content: text }],
       signal: col.controller.signal,
       onDelta: (chunk) => {
@@ -217,7 +221,7 @@ function runAll(): void {
   const text = prompt.value.trim()
   if (!text || !canSend.value) return
   columns.value.forEach((col) => {
-    if (col.resolvedKey && col.model) runColumn(col, text)
+    if (col.resolvedKey && col.option) runColumn(col, text)
   })
 }
 

@@ -1285,6 +1285,9 @@ func (s *OpenAIGatewayService) schedulingConfig() config.GatewaySchedulingConfig
 // Returns nil when the key has no multi-group bindings. Read-only probe layered
 // on the existing single-group selection — no scheduling internals change.
 func (s *OpenAIGatewayService) ResolveEffectiveGroupBinding(ctx context.Context, apiKey *APIKey, requestedModel string) *Group {
+	if apiKey != nil && apiKey.ExplicitGroupSelection {
+		return apiKey.Group
+	}
 	if apiKey == nil || len(apiKey.GroupBindings) == 0 {
 		return nil
 	}

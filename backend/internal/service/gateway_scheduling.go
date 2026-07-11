@@ -2471,6 +2471,9 @@ func (s *GatewayService) isModelSupportedByAccount(account *Account, requestedMo
 // single-group selection logic: it does not change scheduling internals, so
 // billing/session/subscription all attribute to the returned group unchanged.
 func (s *GatewayService) ResolveEffectiveGroupBinding(ctx context.Context, apiKey *APIKey, requestedModel string) *Group {
+	if apiKey != nil && apiKey.ExplicitGroupSelection {
+		return apiKey.Group
+	}
 	if apiKey == nil || len(apiKey.GroupBindings) == 0 {
 		return nil
 	}

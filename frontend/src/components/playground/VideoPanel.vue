@@ -49,7 +49,7 @@
 
       <button
         class="btn btn-primary w-full"
-        :disabled="loading || !prompt.trim() || !resolvedKey || !model"
+        :disabled="loading || !prompt.trim() || !resolvedKey || !option"
         @click="generate"
       >
         <Icon v-if="loading" name="refresh" size="sm" class="animate-spin" />
@@ -98,15 +98,14 @@ import { ref, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import playgroundAPI from '@/api/playground'
-import { usePlaygroundSettings } from '@/composables/usePlaygroundSettings'
+import type { PlaygroundModelOption } from '@/types/playground'
 
 const props = defineProps<{
   resolvedKey: string
+  option: PlaygroundModelOption | null
 }>()
 
 const { t } = useI18n()
-const settings = usePlaygroundSettings()
-const model = settings.model
 
 const prompt = ref('')
 const resolution = ref('720p')
@@ -131,7 +130,7 @@ function stopPolling(): void {
 }
 
 async function generate(): Promise<void> {
-  if (!prompt.value.trim() || !props.resolvedKey || !model.value) return
+  if (!prompt.value.trim() || !props.resolvedKey || !props.option) return
   stopPolling()
   cancelled = false
   loading.value = true
@@ -140,23 +139,26 @@ async function generate(): Promise<void> {
   statusText.value = t('playground.videoSubmitting')
 
   try {
+    const option = props.option
+    const apiKey = props.resolvedKey
     const submit = await playgroundAPI.generateVideo({
-      apiKey: props.resolvedKey,
-      model: model.value,
+      apiKey,
+      groupId: option.group_id,
+      model: option.model,
       prompt: prompt.value.trim(),
       seconds: seconds.value,
       resolution: resolution.value,
       ratio: ratio.value
     })
     statusText.value = t('playground.videoGenerating')
-    pollStatus(submit.request_id, Date.now())
+    pollStatus(apiKey, option.group_id, submit.request_id, Date.now())
   } catch (err) {
     loading.value = false
     error.value = (err as Error).message || t('playground.requestFailed')
   }
 }
 
-function pollStatus(requestId: string, startedAt: number): void {
+function pollStatus(apiKey: string, groupId: number, requestId: string, startedAt: number): void {
   if (cancelled) return
   pollTimer = setTimeout(async () => {
     if (cancelled) return
@@ -166,7 +168,7 @@ function pollStatus(requestId: string, startedAt: number): void {
       return
     }
     try {
-      const task = await playgroundAPI.getVideoStatus(props.resolvedKey, requestId)
+      const task = await playgroundAPI.getVideoStatus(apiKey, groupId, requestId)
       if (cancelled) return
       if (task.status === 'completed') {
         const url = task.url || task.video_url || ''
@@ -186,7 +188,7 @@ function pollStatus(requestId: string, startedAt: number): void {
         return
       }
       statusText.value = t('playground.videoGenerating')
-      pollStatus(requestId, startedAt)
+      pollStatus(apiKey, groupId, requestId, startedAt)
     } catch (err) {
       loading.value = false
       error.value = (err as Error).message || t('playground.requestFailed')

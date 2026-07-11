@@ -114,15 +114,19 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import ChatMessage from './ChatMessage.vue'
 import playgroundAPI, { type ChatMessagePayload } from '@/api/playground'
+import { keysAPI } from '@/api/keys'
 import {
   usePlaygroundConversations,
   uid,
   type PlaygroundMessage
 } from '@/composables/usePlaygroundConversations'
 import { usePlaygroundSettings } from '@/composables/usePlaygroundSettings'
+import type { PlaygroundModelOption } from '@/types/playground'
 
 const props = defineProps<{
+  keyId: number | null
   resolvedKey: string
+  option: PlaygroundModelOption | null
 }>()
 
 const { t } = useI18n()
@@ -144,10 +148,10 @@ const examples = computed<string[]>(() => [
 
 const messages = computed<PlaygroundMessage[]>(() => convStore.activeConversation()?.messages ?? [])
 
-const canSend = computed(() => !!input.value.trim() && !!props.resolvedKey && !!settings.model.value)
+const canSend = computed(() => !!input.value.trim() && !!props.resolvedKey && !!props.option)
 
 function newConversation(): void {
-  convStore.create(settings.model.value)
+  convStore.create(props.option ?? undefined, props.keyId ?? undefined)
 }
 
 function removeConversation(id: string): void {
@@ -156,7 +160,7 @@ function removeConversation(id: string): void {
 
 function ensureConversation() {
   let conv = convStore.activeConversation()
-  if (!conv) conv = convStore.create(settings.model.value)
+  if (!conv) conv = convStore.create(props.option ?? undefined, props.keyId ?? undefined)
   return conv
 }
 
@@ -202,15 +206,20 @@ function buildPayload(conv: ReturnType<typeof ensureConversation>): ChatMessageP
 }
 
 async function runCompletion(conv: ReturnType<typeof ensureConversation>): Promise<void> {
-  // Snapshot the request payload from the current (user-terminated) history
-  // BEFORE appending the empty assistant placeholder.
+  const option = conv.option ?? props.option
+  if (!option) return
+  const routeKeyId = conv.apiKeyId ?? props.keyId
+  let routeKey = props.resolvedKey
+
+  // Snapshot the request payload and selected route before appending the assistant placeholder.
   const payload = buildPayload(conv)
 
   const assistant: PlaygroundMessage = {
     id: uid(),
     role: 'assistant',
     content: '',
-    model: settings.model.value
+    model: option.model,
+    option
   }
   conv.messages.push(assistant)
   streaming.value = true
@@ -219,9 +228,14 @@ async function runCompletion(conv: ReturnType<typeof ensureConversation>): Promi
   controller = new AbortController()
   const started = performance.now()
   try {
+    if (routeKeyId != null && routeKeyId !== props.keyId) {
+      routeKey = (await keysAPI.getById(routeKeyId)).key
+    }
+    if (!routeKey) throw new Error(t('playground.selectKey'))
     await playgroundAPI.streamChat({
-      apiKey: props.resolvedKey,
-      model: settings.model.value,
+      apiKey: routeKey,
+      groupId: option.group_id,
+      model: option.model,
       messages: payload,
       temperature: settings.temperature.value,
       maxTokens: settings.maxTokens.value,
@@ -260,7 +274,9 @@ async function send(): Promise<void> {
   if (!conv.title) {
     conv.title = text.slice(0, 24)
   }
-  conv.model = settings.model.value
+  conv.apiKeyId = props.keyId ?? undefined
+  conv.model = props.option?.model
+  conv.option = props.option ?? undefined
   input.value = ''
   nextTick(autoGrow)
 

@@ -35,8 +35,9 @@
         <KeyModelPicker
           v-if="mode !== 'compare'"
           v-model:key-id="settings.keyId.value"
-          v-model:model="settings.model.value"
-          @resolved-key="(k) => (resolvedKey = k)"
+          v-model:option="currentOption"
+          :capability="mode"
+          @resolved-key="(key) => (resolvedKey = key)"
         />
 
         <!-- Advanced params -->
@@ -76,9 +77,14 @@
 
       <!-- Panel -->
       <div class="min-h-0 flex-1">
-        <ChatPanel v-if="mode === 'chat'" :resolved-key="resolvedKey" />
-        <ImagePanel v-else-if="mode === 'image'" :resolved-key="resolvedKey" />
-        <VideoPanel v-else-if="mode === 'video'" :resolved-key="resolvedKey" />
+        <ChatPanel
+          v-if="mode === 'chat'"
+          :key-id="settings.keyId.value"
+          :resolved-key="resolvedKey"
+          :option="currentOption"
+        />
+        <ImagePanel v-else-if="mode === 'image'" :resolved-key="resolvedKey" :option="currentOption" />
+        <VideoPanel v-else-if="mode === 'video'" :resolved-key="resolvedKey" :option="currentOption" />
         <ComparePanel v-else />
       </div>
     </div>
@@ -96,6 +102,7 @@ import ImagePanel from '@/components/playground/ImagePanel.vue'
 import VideoPanel from '@/components/playground/VideoPanel.vue'
 import ComparePanel from '@/components/playground/ComparePanel.vue'
 import { usePlaygroundSettings } from '@/composables/usePlaygroundSettings'
+import type { PlaygroundModelOption } from '@/types/playground'
 
 const { t } = useI18n()
 const settings = usePlaygroundSettings()
@@ -104,6 +111,18 @@ type Mode = 'chat' | 'image' | 'video' | 'compare'
 const mode = ref<Mode>('chat')
 const showParams = ref(false)
 const resolvedKey = ref('')
+const currentOption = computed<PlaygroundModelOption | null>({
+  get: () => {
+    if (mode.value === 'image') return settings.imageOption.value
+    if (mode.value === 'video') return settings.videoOption.value
+    return settings.chatOption.value
+  },
+  set: (option) => {
+    if (mode.value === 'image') settings.imageOption.value = option
+    else if (mode.value === 'video') settings.videoOption.value = option
+    else settings.chatOption.value = option
+  }
+})
 
 const modes = computed<{ value: Mode; label: string; icon: string }[]>(() => [
   { value: 'chat', label: t('playground.modeChat'), icon: 'chat' },

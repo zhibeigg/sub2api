@@ -118,6 +118,62 @@ func TestAdminAPIKeyHandler_UpdateGroup_Unbind(t *testing.T) {
 	require.Nil(t, resp.Data.APIKey.GroupID)
 }
 
+func TestAdminAPIKeyHandler_UpdateGroupBindings_DerivesAndNormalizes(t *testing.T) {
+	router := setupAPIKeyHandler(newStubAdminService())
+	body := `{"group_id":99,"group_bindings":[{"group_id":20,"priority":8},{"group_id":10,"priority":2}]}`
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/api-keys/10", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp struct {
+		Data struct {
+			APIKey struct {
+				GroupID       *int64 `json:"group_id"`
+				GroupBindings []struct {
+					GroupID  int64 `json:"group_id"`
+					Priority int   `json:"priority"`
+				} `json:"group_bindings"`
+			} `json:"api_key"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, int64(10), *resp.Data.APIKey.GroupID)
+	require.Len(t, resp.Data.APIKey.GroupBindings, 2)
+	require.Equal(t, int64(10), resp.Data.APIKey.GroupBindings[0].GroupID)
+	require.Equal(t, 0, resp.Data.APIKey.GroupBindings[0].Priority)
+	require.Equal(t, int64(20), resp.Data.APIKey.GroupBindings[1].GroupID)
+	require.Equal(t, 1, resp.Data.APIKey.GroupBindings[1].Priority)
+}
+
+func TestAdminAPIKeyHandler_UpdateGroupBindings_EmptyClearsAllGroupState(t *testing.T) {
+	svc := newStubAdminService()
+	gid := int64(2)
+	svc.apiKeys[0].GroupID = &gid
+	svc.apiKeys[0].GroupBindings = []service.APIKeyGroupBinding{{GroupID: 2, Priority: 0}}
+	router := setupAPIKeyHandler(svc)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/api-keys/10", bytes.NewBufferString(`{"group_bindings":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp struct {
+		Data struct {
+			APIKey struct {
+				GroupID       *int64 `json:"group_id"`
+				GroupBindings []any  `json:"group_bindings"`
+			} `json:"api_key"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Nil(t, resp.Data.APIKey.GroupID)
+	require.Empty(t, resp.Data.APIKey.GroupBindings)
+}
+
 func TestAdminAPIKeyHandler_ResetRateLimitUsage(t *testing.T) {
 	svc := newStubAdminService()
 	now := time.Now()
@@ -237,6 +293,6 @@ type failingUpdateGroupService struct {
 	err error
 }
 
-func (f *failingUpdateGroupService) AdminUpdateAPIKeyGroupID(_ context.Context, _ int64, _ *int64) (*service.AdminUpdateAPIKeyGroupIDResult, error) {
+func (f *failingUpdateGroupService) AdminUpdateAPIKeyGroupID(_ context.Context, _ int64, _ *int64, _ *[]service.APIKeyGroupBindingInput) (*service.AdminUpdateAPIKeyGroupIDResult, error) {
 	return nil, f.err
 }

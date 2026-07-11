@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -630,11 +631,34 @@ func (s *stubAdminService) UpdateGroupSortOrders(ctx context.Context, updates []
 	return nil
 }
 
-func (s *stubAdminService) AdminUpdateAPIKeyGroupID(ctx context.Context, keyID int64, groupID *int64) (*service.AdminUpdateAPIKeyGroupIDResult, error) {
+func (s *stubAdminService) AdminUpdateAPIKeyGroupID(ctx context.Context, keyID int64, groupID *int64, groupBindings *[]service.APIKeyGroupBindingInput) (*service.AdminUpdateAPIKeyGroupIDResult, error) {
 	for i := range s.apiKeys {
 		if s.apiKeys[i].ID == keyID {
 			k := s.apiKeys[i]
+			if groupBindings != nil {
+				k.GroupBindings = make([]service.APIKeyGroupBinding, 0, len(*groupBindings))
+				for _, binding := range *groupBindings {
+					k.GroupBindings = append(k.GroupBindings, service.APIKeyGroupBinding{GroupID: binding.GroupID, Priority: binding.Priority})
+				}
+				sort.SliceStable(k.GroupBindings, func(i, j int) bool {
+					if k.GroupBindings[i].Priority != k.GroupBindings[j].Priority {
+						return k.GroupBindings[i].Priority < k.GroupBindings[j].Priority
+					}
+					return k.GroupBindings[i].GroupID < k.GroupBindings[j].GroupID
+				})
+				if len(k.GroupBindings) > 0 {
+					for i := range k.GroupBindings {
+						k.GroupBindings[i].Priority = i
+					}
+					gid := k.GroupBindings[0].GroupID
+					k.GroupID = &gid
+				} else {
+					k.GroupID = nil
+				}
+				groupID = nil
+			}
 			if groupID != nil {
+				k.GroupBindings = []service.APIKeyGroupBinding{}
 				if *groupID == 0 {
 					k.GroupID = nil
 				} else {
