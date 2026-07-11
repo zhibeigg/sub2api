@@ -580,6 +580,53 @@ func TestListModelNamesByProvider_CaseInsensitive(t *testing.T) {
 	require.Equal(t, []string{"gpt-4o"}, got2)
 }
 
+func TestListModelNamesByProviders_ReturnsAllGeminiProviderAliases(t *testing.T) {
+	svc := &PricingService{
+		pricingData: map[string]*LiteLLMModelPricing{
+			"gemini-2.5-pro":       {LiteLLMProvider: "vertex_ai-language-models"},
+			"gemini-flash-latest":  {LiteLLMProvider: "gemini"},
+			"gemini-embedding-001": {LiteLLMProvider: "vertex_ai-embedding-models"},
+			"gemini-legacy":        {LiteLLMProvider: "Google"},
+			"gpt-4o":               {LiteLLMProvider: "openai"},
+			"nil-pricing":          nil,
+		},
+	}
+
+	got := svc.ListModelNamesByProviders(
+		"google",
+		" GEMINI ",
+		"vertex_ai-language-models",
+		"vertex_ai-embedding-models",
+	)
+	require.Equal(t, []string{
+		"gemini-2.5-pro",
+		"gemini-embedding-001",
+		"gemini-flash-latest",
+		"gemini-legacy",
+	}, got)
+}
+
+func TestDefaultPricingGeminiProviderAliasesAreDiscoverable(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "resources", "model-pricing", "model_prices_and_context_window.json"))
+	require.NoError(t, err)
+
+	svc := &PricingService{}
+	pricingData, err := svc.parsePricingData(data)
+	require.NoError(t, err)
+	svc.pricingData = pricingData
+
+	models := svc.ListModelNamesByProviders(
+		"google",
+		"gemini",
+		"vertex_ai-language-models",
+		"vertex_ai-embedding-models",
+	)
+	require.NotEmpty(t, models)
+	require.Contains(t, models, "gemini-2.5-pro")
+	require.Contains(t, models, "gemini-flash-latest")
+	require.Contains(t, models, "gemini-embedding-001")
+}
+
 func TestListModelNamesByProvider_NoMatch(t *testing.T) {
 	svc := &PricingService{
 		pricingData: map[string]*LiteLLMModelPricing{

@@ -502,14 +502,15 @@ func (h *ChannelHandler) GetModelDefaultPricing(c *gin.Context) {
 	})
 }
 
-// platformToLiteLLMProvider maps a channel platform name to the corresponding
-// LiteLLM provider string used as the key in the pricing catalog.
-var platformToLiteLLMProvider = map[string]string{
-	service.PlatformAnthropic:   "anthropic",
-	service.PlatformOpenAI:      "openai",
-	service.PlatformGemini:      "google",
-	service.PlatformAntigravity: "anthropic",
-	service.PlatformGrok:        "xai",
+// platformToLiteLLMProviders maps a channel platform name to all corresponding
+// LiteLLM provider aliases used by the pricing catalog. Gemini pricing entries
+// are split across AI Studio, Vertex language, and Vertex embedding providers.
+var platformToLiteLLMProviders = map[string][]string{
+	service.PlatformAnthropic:   {"anthropic"},
+	service.PlatformOpenAI:      {"openai"},
+	service.PlatformGemini:      {"google", "gemini", "vertex_ai-language-models", "vertex_ai-embedding-models"},
+	service.PlatformAntigravity: {"anthropic"},
+	service.PlatformGrok:        {"xai"},
 }
 
 // SyncPricingModels 返回 LiteLLM 定价目录中指定平台的最新模型列表
@@ -522,7 +523,7 @@ func (h *ChannelHandler) SyncPricingModels(c *gin.Context) {
 		return
 	}
 
-	provider, ok := platformToLiteLLMProvider[platform]
+	providers, ok := platformToLiteLLMProviders[platform]
 	if !ok {
 		response.ErrorFrom(c, infraerrors.BadRequest("UNSUPPORTED_PLATFORM",
 			fmt.Sprintf("unsupported platform: %s", platform)).
@@ -530,6 +531,6 @@ func (h *ChannelHandler) SyncPricingModels(c *gin.Context) {
 		return
 	}
 
-	models := h.pricingService.ListModelNamesByProvider(provider)
+	models := h.pricingService.ListModelNamesByProviders(providers...)
 	response.Success(c, gin.H{"models": models})
 }

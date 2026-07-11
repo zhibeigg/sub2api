@@ -1037,13 +1037,32 @@ func (s *PricingService) getHashFilePath() string {
 // LiteLLMProvider matches the given provider string (case-insensitive).
 // The returned slice is sorted alphabetically.
 func (s *PricingService) ListModelNamesByProvider(provider string) []string {
+	return s.ListModelNamesByProviders(provider)
+}
+
+// ListModelNamesByProviders returns all model names matching any of the given
+// LiteLLM provider aliases. Some platform catalogs use multiple provider names;
+// for example, Gemini models may be tagged as gemini, vertex_ai-language-models,
+// or vertex_ai-embedding-models depending on the API and model mode.
+func (s *PricingService) ListModelNamesByProviders(providers ...string) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	provider = strings.ToLower(strings.TrimSpace(provider))
+	providerSet := make(map[string]struct{}, len(providers))
+	for _, provider := range providers {
+		provider = strings.ToLower(strings.TrimSpace(provider))
+		if provider != "" {
+			providerSet[provider] = struct{}{}
+		}
+	}
+
 	names := make([]string, 0)
-	for name, p := range s.pricingData {
-		if strings.ToLower(p.LiteLLMProvider) == provider {
+	for name, pricing := range s.pricingData {
+		if pricing == nil {
+			continue
+		}
+		provider := strings.ToLower(strings.TrimSpace(pricing.LiteLLMProvider))
+		if _, ok := providerSet[provider]; ok {
 			names = append(names, name)
 		}
 	}

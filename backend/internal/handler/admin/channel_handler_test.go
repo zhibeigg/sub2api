@@ -475,3 +475,12 @@ func TestSyncPricingModels_ValidPlatform_EmptyService(t *testing.T) {
 		require.NotNil(t, body.Data.Models, "models must not be null for platform=%s", platform)
 	}
 }
+
+func TestSyncPricingModels_GeminiUsesAllCatalogProviderAliases(t *testing.T) {
+	require.ElementsMatch(t, []string{
+		"google",
+		"gemini",
+		"vertex_ai-language-models",
+		"vertex_ai-embedding-models",
+	}, platformToLiteLLMProviders[service.PlatformGemini])
+}
