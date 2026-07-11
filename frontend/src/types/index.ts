@@ -1114,6 +1114,13 @@ export interface AccountUsageInfo {
   cursor_dashboard_configured?: boolean
   cursor_dashboard_state?: 'configured' | 'cached' | 'verified' | 'missing' | 'stale' | 'error'
   cursor_dashboard_message?: string
+  cursor_dashboard_session?: {
+    state: 'connected' | 'refresh_due' | 'reauth_required' | 'error' | 'missing'
+    expires_at?: string | null
+    last_verified_at?: string | null
+    last_refreshed_at?: string | null
+    error_code?: string
+  } | null
   cursor_plan_usage?: {
     enabled: boolean
     total_percent_used?: number | null

@@ -11,6 +11,7 @@ var cursorCredentialKeys = map[string]struct{}{
 	"dashboard_refresh_token": {},
 	"cursor_upstream_model":   {},
 	"cursor_model_params":     {},
+	"_token_version":          {},
 }
 
 // ValidateCursorAccountCredentials validates a Cursor Cloud Agents API key.

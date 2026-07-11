@@ -1,10 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
-const { updateAccountMock, checkMixedChannelRiskMock, authIsSimpleMode } = vi.hoisted(() => ({
+const {
+  updateAccountMock,
+  checkMixedChannelRiskMock,
+  getUsageMock,
+  startCursorDashboardAuthMock,
+  pollCursorDashboardAuthMock,
+  authIsSimpleMode
+} = vi.hoisted(() => ({
   updateAccountMock: vi.fn(),
   checkMixedChannelRiskMock: vi.fn(),
+  getUsageMock: vi.fn(),
+  startCursorDashboardAuthMock: vi.fn(),
+  pollCursorDashboardAuthMock: vi.fn(),
   authIsSimpleMode: { value: true }
 }))
 
@@ -28,7 +38,12 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
       update: updateAccountMock,
-      checkMixedChannelRisk: checkMixedChannelRiskMock
+      checkMixedChannelRisk: checkMixedChannelRiskMock,
+      getUsage: getUsageMock
+    },
+    cursor: {
+      startDashboardAuth: startCursorDashboardAuthMock,
+      pollDashboardAuth: pollCursorDashboardAuthMock
     },
     settings: {
       getWebSearchEmulationConfig: vi.fn().mockResolvedValue({ enabled: false, providers: [] }),
@@ -326,6 +341,17 @@ function mountModal(account = buildAccount()) {
 describe('EditAccountModal', () => {
   beforeEach(() => {
     authIsSimpleMode.value = true
+    getUsageMock.mockReset()
+    startCursorDashboardAuthMock.mockReset()
+    pollCursorDashboardAuthMock.mockReset()
+    getUsageMock.mockResolvedValue({
+      updated_at: null,
+      five_hour: null,
+      seven_day: null,
+      seven_day_sonnet: null,
+      cursor_dashboard_configured: true,
+      cursor_dashboard_state: 'verified'
+    })
   })
 
   it('reopening the same account rehydrates the OpenAI whitelist from props', async () => {
@@ -805,6 +831,96 @@ describe('EditAccountModal', () => {
       dashboard_access_token: 'new-access',
       dashboard_refresh_token: 'new-refresh'
     }))
+  })
+
+  it('starts standalone Cursor Dashboard authorization, polls, and force-checks usage after connection', async () => {
+    vi.useFakeTimers()
+    const account = buildCursorAccount()
+    startCursorDashboardAuthMock.mockResolvedValue({
+      session_id: 'cursor-session',
+      auth_url: 'https://cursor.example/authorize',
+      expires_at: '2099-01-01T00:00:00Z'
+    })
+    pollCursorDashboardAuthMock
+      .mockResolvedValueOnce({ status: 'pending', expires_at: '2099-01-01T00:00:00Z' })
+      .mockResolvedValueOnce({ status: 'connected', account_id: account.id })
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
+    const wrapper = mountModal(account)
+
+    await wrapper.get('[data-testid="cursor-dashboard-connect"]').trigger('click')
+    await flushPromises()
+    expect(startCursorDashboardAuthMock).toHaveBeenCalledWith(account.id)
+    expect(openSpy).toHaveBeenCalledWith('https://cursor.example/authorize', '_blank', 'noopener,noreferrer')
+
+    await vi.advanceTimersByTimeAsync(0)
+    await flushPromises()
+    expect(pollCursorDashboardAuthMock).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('[data-testid="cursor-dashboard-status"]').text()).toBe('admin.accounts.cursor.dashboardPending')
+
+    await vi.advanceTimersByTimeAsync(1500)
+    await flushPromises()
+    expect(pollCursorDashboardAuthMock).toHaveBeenLastCalledWith('cursor-session')
+    expect(getUsageMock).toHaveBeenCalledWith(account.id, 'active', true)
+    expect(wrapper.get('[data-testid="cursor-dashboard-status"]').text()).toBe('admin.accounts.cursor.dashboardConnected')
+
+    wrapper.unmount()
+    openSpy.mockRestore()
+    vi.useRealTimers()
+  })
+
+  it('force-checks Cursor Dashboard usage on demand', async () => {
+    const account = buildCursorAccount()
+    const wrapper = mountModal(account)
+
+    await wrapper.get('[data-testid="cursor-dashboard-check"]').trigger('click')
+    await flushPromises()
+
+    expect(getUsageMock).toHaveBeenCalledWith(account.id, 'active', true)
+    expect(wrapper.get('[data-testid="cursor-dashboard-status"]').text()).toBe('admin.accounts.cursor.dashboardConnected')
+  })
+
+  it('shows reauthorization state instead of reporting revoked Dashboard credentials as connected', async () => {
+    const account = buildCursorAccount()
+    account.credentials_status = { has_api_key: true, has_dashboard_access_token: true }
+    getUsageMock.mockResolvedValue({
+      updated_at: null,
+      cursor_dashboard_configured: true,
+      cursor_dashboard_state: 'stale',
+      cursor_dashboard_message: 'Cursor Dashboard session requires reauthorization',
+      cursor_dashboard_session: { state: 'reauth_required', error_code: 'reauth_required' }
+    })
+    const wrapper = mountModal(account)
+
+    await wrapper.get('[data-testid="cursor-dashboard-check"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="cursor-dashboard-status"]').text()).toBe('admin.accounts.cursor.dashboardError')
+    expect(wrapper.text()).toContain('Cursor Dashboard session requires reauthorization')
+  })
+
+  it('stages both Dashboard tokens for clearing through the existing account update flow', async () => {
+    const account = buildCursorAccount()
+    account.credentials_status = {
+      has_api_key: true,
+      has_dashboard_access_token: true,
+      has_dashboard_refresh_token: true
+    }
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const wrapper = mountModal(account)
+
+    await wrapper.get('[data-testid="cursor-dashboard-disconnect"]').trigger('click')
+    expect(wrapper.get('[data-testid="cursor-dashboard-status"]').text()).toBe('admin.accounts.cursor.dashboardDisconnectPending')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock.mock.calls[0]?.[1]?.clear_credentials).toEqual([
+      'dashboard_access_token',
+      'dashboard_refresh_token'
+    ])
+    confirmSpy.mockRestore()
   })
 
   it('clears the Cursor API Key when explicitly confirmed', async () => {

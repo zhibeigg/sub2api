@@ -118,6 +118,7 @@ type DashboardTokenRefresh struct {
 	RefreshToken string `json:"refresh_token,omitempty"`
 	TokenType    string `json:"token_type,omitempty"`
 	ExpiresIn    int64  `json:"expires_in,omitempty"`
+	ShouldLogout bool   `json:"shouldLogout,omitempty"`
 }
 
 func NewDashboardClient(httpClient *http.Client, accessToken string, config DashboardClientConfig) (*DashboardClient, error) {
@@ -182,8 +183,16 @@ func (c *DashboardClient) RefreshAccessToken(ctx context.Context, refreshToken s
 	}
 	result.AccessToken = strings.TrimSpace(result.AccessToken)
 	result.RefreshToken = strings.TrimSpace(result.RefreshToken)
+	if result.ShouldLogout {
+		return &result, nil
+	}
 	if result.AccessToken == "" {
 		return nil, protocolError("refresh dashboard token", fmt.Errorf("response did not include access_token"))
+	}
+	// Current Cursor desktop clients rotate the returned access_token into both
+	// storage slots when the endpoint omits refresh_token.
+	if result.RefreshToken == "" {
+		result.RefreshToken = result.AccessToken
 	}
 	return &result, nil
 }

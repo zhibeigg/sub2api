@@ -53,6 +53,9 @@ func RegisterAdminRoutes(
 		// Kiro OAuth
 		registerKiroOAuthRoutes(admin, h)
 
+		// Cursor Dashboard server-side auth
+		registerCursorDashboardAuthRoutes(admin, h)
+
 		// 代理管理
 		registerProxyRoutes(admin, h)
 
@@ -423,6 +426,14 @@ func registerKiroOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		kiro.POST("/accounts/:id/refresh", h.Admin.KiroOAuth.RefreshAccountToken)
 		kiro.GET("/accounts/:id/usage", h.Admin.KiroOAuth.QueryUsage)
 		kiro.POST("/accounts/:id/overage", h.Admin.KiroOAuth.SetOverage)
+	}
+}
+
+func registerCursorDashboardAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	cursor := admin.Group("/cursor")
+	{
+		cursor.POST("/dashboard-auth/start", h.Admin.CursorDashboardAuth.Start)
+		cursor.POST("/dashboard-auth/poll", h.Admin.CursorDashboardAuth.Poll)
 	}
 }
 

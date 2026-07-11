@@ -363,15 +363,16 @@ type UsageInfo struct {
 
 	// Cursor Cloud Agents API Key status, local forwarding statistics, and optional
 	// desktop Dashboard plan snapshot are deliberately reported separately.
-	CursorLocalUsage          *WindowStats         `json:"cursor_local_usage,omitempty"`
-	CursorAPIKeyConfigured    bool                 `json:"cursor_api_key_configured,omitempty"`
-	CursorProbeState          string               `json:"cursor_probe_state,omitempty"` // configured/verified/missing/error
-	CursorProbeMessage        string               `json:"cursor_probe_message,omitempty"`
-	CursorCheckedAt           string               `json:"cursor_checked_at,omitempty"`
-	CursorDashboardConfigured bool                 `json:"cursor_dashboard_configured,omitempty"`
-	CursorDashboardState      string               `json:"cursor_dashboard_state,omitempty"` // configured/cached/verified/missing/stale/error
-	CursorDashboardMessage    string               `json:"cursor_dashboard_message,omitempty"`
-	CursorPlanUsage           *CursorPlanUsageInfo `json:"cursor_plan_usage,omitempty"`
+	CursorLocalUsage          *WindowStats                `json:"cursor_local_usage,omitempty"`
+	CursorAPIKeyConfigured    bool                        `json:"cursor_api_key_configured,omitempty"`
+	CursorProbeState          string                      `json:"cursor_probe_state,omitempty"` // configured/verified/missing/error
+	CursorProbeMessage        string                      `json:"cursor_probe_message,omitempty"`
+	CursorCheckedAt           string                      `json:"cursor_checked_at,omitempty"`
+	CursorDashboardConfigured bool                        `json:"cursor_dashboard_configured,omitempty"`
+	CursorDashboardState      string                      `json:"cursor_dashboard_state,omitempty"` // configured/cached/verified/missing/stale/error
+	CursorDashboardMessage    string                      `json:"cursor_dashboard_message,omitempty"`
+	CursorDashboardSession    *CursorDashboardSessionInfo `json:"cursor_dashboard_session,omitempty"`
+	CursorPlanUsage           *CursorPlanUsageInfo        `json:"cursor_plan_usage,omitempty"`
 
 	// Grok / xAI 被动额度快照
 	GrokRequestQuota       *xai.QuotaWindow `json:"grok_request_quota,omitempty"`
@@ -516,6 +517,10 @@ func (s *AccountUsageService) SetCursorUsageProber(prober CursorUsageProber) {
 	}
 }
 
+func (s *AccountUsageService) SetCursorDashboardFetcher(fetcher CursorDashboardUsageFetcher) {
+	s.cursorDashboardFetcher = fetcher
+}
+
 // NewAccountUsageService 创建AccountUsageService实例
 func NewAccountUsageService(
 	accountRepo AccountRepository,
@@ -576,6 +581,7 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 			CursorProbeState:          "configured",
 			CursorDashboardConfigured: dashboardConfigured,
 			CursorDashboardState:      "missing",
+			CursorDashboardSession:    cursorDashboardSessionInfoFromAccount(account),
 			CursorPlanUsage:           cursorPlanUsageFromExtra(account.Extra),
 		}
 		if dashboardConfigured {
@@ -885,6 +891,13 @@ func (s *AccountUsageService) refreshCursorDashboardUsage(ctx context.Context, a
 	if err != nil {
 		usage.CursorDashboardState = "error"
 		usage.CursorDashboardMessage = err.Error()
+		if strings.Contains(strings.ToLower(err.Error()), "reauthor") {
+			if usage.CursorDashboardSession == nil {
+				usage.CursorDashboardSession = &CursorDashboardSessionInfo{}
+			}
+			usage.CursorDashboardSession.State = "reauth_required"
+			usage.CursorDashboardSession.ErrorCode = "reauth_required"
+		}
 		if usage.CursorPlanUsage != nil {
 			usage.CursorDashboardState = "stale"
 		}
@@ -922,6 +935,14 @@ func (s *AccountUsageService) refreshCursorDashboardUsage(ctx context.Context, a
 
 	usage.CursorPlanUsage = planUsage
 	usage.CursorDashboardState = "verified"
+	if usage.CursorDashboardSession == nil {
+		usage.CursorDashboardSession = &CursorDashboardSessionInfo{}
+	}
+	usage.CursorDashboardSession.State = "connected"
+	usage.CursorDashboardSession.LastVerifiedAt = &now
+	if metadata, metadataErr := cursorpkg.ParseDashboardTokenMetadata(account.GetCredential("dashboard_access_token")); metadataErr == nil {
+		usage.CursorDashboardSession.ExpiresAt = &metadata.ExpiresAt
+	}
 	updates := cursorPlanUsageSnapshotUpdates(planUsage)
 	if len(updates) > 0 {
 		if err := s.accountRepo.UpdateExtra(ctx, account.ID, updates); err != nil {

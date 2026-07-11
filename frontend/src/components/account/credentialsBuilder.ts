@@ -1,5 +1,7 @@
-export const CURSOR_SENSITIVE_CREDENTIAL_KEYS = ['api_key', 'dashboard_access_token', 'dashboard_refresh_token'] as const
+export const CURSOR_DASHBOARD_CREDENTIAL_KEYS = ['dashboard_access_token', 'dashboard_refresh_token'] as const
+export const CURSOR_SENSITIVE_CREDENTIAL_KEYS = ['api_key', ...CURSOR_DASHBOARD_CREDENTIAL_KEYS] as const
 export type CursorSensitiveCredentialKey = typeof CURSOR_SENSITIVE_CREDENTIAL_KEYS[number]
+export type CursorDashboardCredentialKey = typeof CURSOR_DASHBOARD_CREDENTIAL_KEYS[number]
 export type CursorCredentialAction = 'keep' | 'replace' | 'clear'
 
 export interface CursorCredentialInput {
@@ -43,6 +45,16 @@ export function buildCursorCredentialUpdate(
   return {
     ...(Object.keys(credentials).length > 0 ? { credentials } : {}),
     ...(clearCredentials.length > 0 ? { clear_credentials: clearCredentials } : {})
+  }
+}
+
+export function setCursorDashboardCredentialAction(
+  state: CursorCredentialEditState,
+  action: CursorCredentialAction
+): void {
+  for (const key of CURSOR_DASHBOARD_CREDENTIAL_KEYS) {
+    state[key].action = action
+    state[key].value = ''
   }
 }
 

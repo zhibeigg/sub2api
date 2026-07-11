@@ -65,19 +65,41 @@ curl --fail-with-body \
 
 ### Cursor Spending 官方套餐进度（可选）
 
-Cursor 的 Cloud Agents API Key 不能读取 Spending 页面中的套餐进度。若希望在 Sub2API 账号列表显示与 `https://cursor.com/dashboard/spending` 一致的 `Total / First-party / API` 进度，需要额外配置 Cursor 桌面登录凭据：
+Cursor 的 Cloud Agents API Key 不能读取 Spending 页面中的套餐进度。若希望在 Sub2API 账号列表显示与 `https://cursor.com/dashboard/spending` 一致的 `Total / First-party / API` 进度，应优先使用服务器一键 PKCE 授权，为该 Sub2API 账号建立一份**服务器独立 Dashboard 会话**。
+
+#### 推荐：服务器一键 PKCE 授权
+
+管理员在账号编辑页启动授权后，服务端生成短期 PKCE 登录事务并返回 Cursor 登录地址；浏览器完成登录后，前端只轮询授权状态：
+
+| 管理 API | 用途 |
+|---|---|
+| `POST /api/v1/admin/cursor/dashboard-auth/start` | 创建短期 PKCE 授权事务并返回待打开的 Cursor 登录 URL |
+| `POST /api/v1/admin/cursor/dashboard-auth/poll` | 轮询事务状态；成功时由服务端将 Dashboard 凭据加密绑定到目标账号 |
+
+授权码、PKCE verifier、Access Token 和 Refresh Token 全程由服务端处理。`start` 与 `poll` 不向前端返回 Dashboard Token，普通账号查询、导出和日志也不会包含这些凭据。登录事务默认仅短期有效，超时后必须重新发起。
+
+这份 Dashboard 会话由 Sub2API 使用独立 UUID/PKCE 流程创建，不再复用手工导入的 Cursor 桌面 Token：
+
+- 在 Sub2API 中授权或续期不会替换 Cursor 桌面的本地登录状态；
+- Cursor 桌面正常关闭、重启或自身 Token 轮换通常不会影响服务器会话；
+- Cursor 是否在 Sign Out 时仅撤销当前会话或执行账户级撤销由其服务端决定，Sub2API 不作绝对保证；
+- 在 Sub2API 中清除 Dashboard 凭据不会主动调用 Cursor `/auth/logout`，避免误撤销其他客户端；
+- 若 Cursor 服务端撤销了服务器会话，Sub2API 会保留最后快照并标记 `reauth_required`，等待管理员重新授权。
+
+服务端后台维护该独立会话：按配置周期检查凭据，在 JWT 到期前 **1272 小时**进入提前刷新窗口，并按较长周期主动探测 Dashboard 用量 RPC。刷新成功后会加密回写新凭据和最新套餐快照；这些后台动作不需要前端持有 Token。
+
+#### 高级兼容：手工导入桌面 Token
+
+仅当一键 PKCE 流程不可用、需要迁移既有部署或排查兼容问题时，才手工配置：
 
 - `dashboard_access_token`：Cursor 桌面登录 Access Token；
-- `dashboard_refresh_token`：对应的 Refresh Token，推荐同时配置以支持自动续期。
+- `dashboard_refresh_token`：对应的 Refresh Token，建议同时提供以支持续期。
 
-Windows 上这两个值来自 `%APPDATA%\\Cursor\\User\\globalStorage\\state.vscdb` 的 `ItemTable`：
+Windows 上可从 `%APPDATA%\\Cursor\\User\\globalStorage\\state.vscdb` 的 `ItemTable` 高级提取 `cursorAuth/accessToken` 与 `cursorAuth/refreshToken`。该方式依赖 Cursor 桌面内部存储结构，可能随客户端版本变化，不应作为常规接入步骤。
 
-- `cursorAuth/accessToken`
-- `cursorAuth/refreshToken`
+无论凭据来自 PKCE 还是手工兼容导入，Token 都只会加密保存在服务端，并只发送到配置项 `cursor.dashboard_base_url`（默认且强制限定为 `https://api2.cursor.sh`）；它不会参与 Cloud Agent 创建、模型同步或转发认证。
 
-这些 Token 作为敏感凭据加密保存在服务端，不会返回前端、写入日志或随普通账号响应导出。Dashboard Token 只会发送到配置项 `cursor.dashboard_base_url`，默认且强制限定为 `https://api2.cursor.sh`；它不会参与 Cloud Agent 创建、模型同步或转发认证。
-
-强制刷新会执行：
+强制刷新和后台探测会执行 Dashboard Connect RPC：
 
 ```http
 POST /aiserver.v1.DashboardService/GetCurrentPeriodUsage
@@ -88,20 +110,22 @@ Connect-Protocol-Version: 1
 {}
 ```
 
-响应中的 `planUsage.totalPercentUsed`、`planUsage.autoPercentUsed`、`planUsage.apiPercentUsed`、`limit`、`totalSpend`、`remaining` 和 `billingCycleStart/End` 会归一化为官方套餐快照。金额单位是美分。遇到 `401` 且存在 Refresh Token 时，服务端调用 `POST /oauth/token` 刷新凭据并重试一次。
+响应中的 `planUsage.totalPercentUsed`、`planUsage.autoPercentUsed`、`planUsage.apiPercentUsed`、`limit`、`totalSpend`、`remaining` 和 `billingCycleStart/End` 会归一化为官方套餐快照，金额单位是美分。遇到 `401` 且存在 Refresh Token 时，服务端尝试刷新凭据并重试一次。
 
 该 Dashboard RPC 未作为稳定第三方 API 发布，字段或路径可能变化。因此 Sub2API 使用以下降级策略：
 
-- 普通列表加载只读取账号 `Extra` 中最后成功快照；
-- 强制刷新成功后更新快照；
-- 刷新失败但存在旧快照时标记 `stale` 并继续显示；
-- Dashboard 错误不改变 Cloud Agents API Key 的验证状态，也不隐藏 Sub2API 本地用量。
+- 普通列表加载优先读取最后成功快照，不因展示页面而把 Token 下发到浏览器；
+- 探测失败但存在旧快照时标记 `stale` 并继续显示旧数据；
+- Refresh Token 失效、授权被撤销或无法恢复的认证错误标记 `reauth_required`，等待管理员重新执行 PKCE 授权；
+- `reauth_required` 或 `stale` 只降级 Dashboard 套餐展示，不改变 Cloud Agents API Key 的验证状态，也不隐藏 Sub2API 本地用量；
+- 无历史快照时保持明确的缺失/错误状态，不虚构零用量。
 
 管理接口为 `GET /api/v1/admin/accounts/{id}/usage?source=active&force=true`。Cursor 响应除本地字段外还可包含：
 
 - `cursor_dashboard_configured`
 - `cursor_dashboard_state`：`configured / cached / verified / missing / stale / error`
 - `cursor_dashboard_message`
+- `cursor_dashboard_session.state`：`connected / refresh_due / reauth_required / error / missing`
 - `cursor_plan_usage`：官方百分比、金额（美分）、账期和更新时间
 
 ## 获取模型：`GET /v1/models`

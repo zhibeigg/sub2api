@@ -127,6 +127,9 @@ func (s *CursorGatewayService) FetchDashboardUsage(ctx context.Context, account 
 	if refreshErr != nil {
 		return nil, refreshErr
 	}
+	if refreshed.ShouldLogout {
+		return nil, errCursorDashboardReauthRequired
+	}
 	retryClient, clientErr := s.newDashboardClient(ctx, account, refreshed.AccessToken)
 	if clientErr != nil {
 		return nil, clientErr
@@ -300,6 +303,24 @@ func (s *CursorGatewayService) newDashboardClient(ctx context.Context, account *
 	})
 }
 
+func (s *CursorGatewayService) newDashboardAuthClient(ctx context.Context, account *Account) (*cursorpkg.DashboardAuthClient, error) {
+	cfg := s.cursorConfig()
+	baseURL, err := cursorDashboardEndpoint(cfg.DashboardBaseURL)
+	if err != nil {
+		return nil, err
+	}
+	websiteURL, err := cursorDashboardWebsiteEndpoint(cfg.DashboardAuthWebsiteURL)
+	if err != nil {
+		return nil, err
+	}
+	return cursorpkg.NewDashboardAuthClient(s.newCursorHTTPClient(ctx, account), cursorpkg.DashboardAuthClientConfig{
+		BaseURL:        baseURL,
+		WebsiteURL:     websiteURL,
+		RequestTimeout: durationSeconds(cfg.RequestTimeoutSeconds, 120),
+		MaxErrorBody:   8 << 10,
+	})
+}
+
 func (s *CursorGatewayService) newCursorHTTPClient(ctx context.Context, account *Account) *http.Client {
 	proxyURL := ""
 	if account.Proxy != nil {
@@ -316,7 +337,7 @@ func (s *CursorGatewayService) cursorConfig() config.CursorConfig {
 	if s != nil && s.cfg != nil {
 		return s.cfg.Cursor
 	}
-	return config.CursorConfig{BaseURL: cursorpkg.DefaultCloudBaseURL, DashboardBaseURL: cursorpkg.DefaultDashboardBaseURL, DefaultModel: "auto", RequestTimeoutSeconds: 120, StreamIdleTimeoutSeconds: 60, MaxHistoryTokens: 24000, MaxHistoryMessages: 100}
+	return config.CursorConfig{BaseURL: cursorpkg.DefaultCloudBaseURL, DashboardBaseURL: cursorpkg.DefaultDashboardBaseURL, DashboardAuthWebsiteURL: cursorpkg.DefaultDashboardWebsiteURL, DashboardMaintenanceEnabled: true, DashboardMaintenanceIntervalMins: 30, DashboardProbeIntervalMins: 360, DashboardRefreshBeforeExpiryHours: 1272, DashboardLoginSessionTTLMins: 5, DefaultModel: "auto", RequestTimeoutSeconds: 120, StreamIdleTimeoutSeconds: 60, MaxHistoryTokens: 24000, MaxHistoryMessages: 100}
 }
 
 func durationSeconds(value, fallback int) time.Duration {
@@ -355,6 +376,24 @@ func cursorDashboardEndpoint(raw string) (string, error) {
 	}
 	if !strings.EqualFold(parsed.Hostname(), "api2.cursor.sh") {
 		return "", fmt.Errorf("Cursor dashboard_base_url host must be api2.cursor.sh")
+	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String(), nil
+}
+
+func cursorDashboardWebsiteEndpoint(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		raw = cursorpkg.DefaultDashboardWebsiteURL
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
+		return "", fmt.Errorf("Cursor dashboard_auth_website_url must be a valid HTTPS URL")
+	}
+	if !strings.EqualFold(parsed.Hostname(), "cursor.com") {
+		return "", fmt.Errorf("Cursor dashboard_auth_website_url host must be cursor.com")
 	}
 	parsed.Path = strings.TrimRight(parsed.Path, "/")
 	parsed.RawQuery = ""

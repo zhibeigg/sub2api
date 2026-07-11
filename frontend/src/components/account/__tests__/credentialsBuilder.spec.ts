@@ -15,6 +15,7 @@ import {
   buildCursorCredentialUpdate,
   createCursorCredentialEditState,
   resetCursorCredentialEditState,
+  setCursorDashboardCredentialAction,
   buildAdobeCreateCredentials,
   buildAdobeCredentialUpdate,
   createAdobeCredentialEditState,
@@ -46,6 +47,16 @@ describe('Cursor credentials', () => {
       credentials: { api_key: 'new-key', dashboard_access_token: 'access' },
       clear_credentials: ['dashboard_refresh_token']
     })
+  })
+
+  it('updates both Dashboard credential actions without touching the Cloud API Key', () => {
+    const state = createCursorCredentialEditState()
+    state.api_key = { action: 'replace', value: 'cloud-key' }
+    state.dashboard_access_token = { action: 'replace', value: 'access' }
+    setCursorDashboardCredentialAction(state, 'clear')
+    expect(state.api_key).toEqual({ action: 'replace', value: 'cloud-key' })
+    expect(state.dashboard_access_token).toEqual({ action: 'clear', value: '' })
+    expect(state.dashboard_refresh_token).toEqual({ action: 'clear', value: '' })
   })
 
   it('resets transient Cursor credential edit state without exposing existing values', () => {

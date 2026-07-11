@@ -31,23 +31,75 @@
           <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.accounts.cursor.editCredentialsTitle') }}</h3>
           <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.editCredentialsHint') }}</p>
         </div>
-        <div class="space-y-3">
-          <div v-for="key in cursorCredentialKeys" :key="key" class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(9rem,0.7fr)_minmax(8rem,0.45fr)_minmax(12rem,1fr)] sm:items-end">
-            <div>
-              <span class="input-label">{{ cursorCredentialLabel(key) }}</span>
-              <p class="text-xs text-gray-500 dark:text-gray-400">
-                {{ account.credentials_status?.[`has_${key}`] ? t('admin.accounts.cursor.configured') : t('admin.accounts.cursor.notConfigured') }}
+
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(9rem,0.7fr)_minmax(8rem,0.45fr)_minmax(12rem,1fr)] sm:items-end">
+          <div>
+            <span class="input-label">{{ cursorCredentialLabel('api_key') }}</span>
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              {{ account.credentials_status?.has_api_key ? t('admin.accounts.cursor.configured') : t('admin.accounts.cursor.notConfigured') }}
+            </p>
+          </div>
+          <select v-model="cursorCredentialState.api_key.action" class="input min-h-11" @change="onCursorCredentialActionChange('api_key')">
+            <option value="keep">{{ t('admin.accounts.cursor.keep') }}</option>
+            <option value="replace">{{ t('admin.accounts.cursor.replace') }}</option>
+            <option value="clear">{{ t('admin.accounts.cursor.clear') }}</option>
+          </select>
+          <input v-model="cursorCredentialState.api_key.value" type="password" autocomplete="new-password" class="input min-h-11 font-mono" :disabled="cursorCredentialState.api_key.action !== 'replace'" :placeholder="t('admin.accounts.cursor.replacePlaceholder')" data-testid="cursor-api-key-input" data-1p-ignore data-lpignore="true" data-bwignore="true" />
+        </div>
+
+        <div class="border-y border-gray-200 py-4 dark:border-dark-600" data-testid="cursor-dashboard-auth">
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span :class="cursorDashboardStatusDotClass" class="h-2 w-2 shrink-0 rounded-full" aria-hidden="true"></span>
+                <h4 class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.accounts.cursor.dashboardConnectionTitle') }}</h4>
+                <span class="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400" data-testid="cursor-dashboard-status">{{ cursorDashboardStatusLabel }}</span>
+              </div>
+              <p class="mt-2 max-w-2xl text-xs leading-5 text-gray-500 dark:text-gray-400">{{ cursorDashboardStatusDescription }}</p>
+              <p v-if="cursorDashboardExpiresAt" class="mt-1 text-[11px] text-gray-400 dark:text-gray-500">
+                {{ t('admin.accounts.cursor.dashboardAuthExpiresAt', { time: formatDateTime(cursorDashboardExpiresAt) }) }}
               </p>
+              <a v-if="cursorDashboardAuthUrl && cursorDashboardAuthPhase === 'pending'" :href="cursorDashboardAuthUrl" target="_blank" rel="noopener noreferrer" class="mt-2 inline-flex text-xs font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400" data-testid="cursor-dashboard-auth-link">
+                {{ t('admin.accounts.cursor.dashboardOpenAuthPage') }}
+              </a>
             </div>
-            <select v-model="cursorCredentialState[key].action" class="input min-h-11" @change="onCursorCredentialActionChange(key)">
-              <option value="keep">{{ t('admin.accounts.cursor.keep') }}</option>
-              <option value="replace">{{ t('admin.accounts.cursor.replace') }}</option>
-              <option value="clear">{{ t('admin.accounts.cursor.clear') }}</option>
-            </select>
-            <input v-model="cursorCredentialState[key].value" type="password" autocomplete="new-password" class="input min-h-11 font-mono" :disabled="cursorCredentialState[key].action !== 'replace'" :placeholder="t('admin.accounts.cursor.replacePlaceholder')" :data-testid="`cursor-${key.replace(/_/g, '-')}-input`" data-1p-ignore data-lpignore="true" data-bwignore="true" />
+            <div class="flex shrink-0 flex-wrap gap-2">
+              <button type="button" class="btn btn-primary btn-sm" :disabled="cursorDashboardAuthBusy" @click="startCursorDashboardAuth" data-testid="cursor-dashboard-connect">
+                {{ cursorDashboardAuthBusy ? t('admin.accounts.cursor.dashboardConnecting') : cursorDashboardConnectLabel }}
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" :disabled="cursorDashboardChecking || cursorDashboardAuthBusy" @click="checkCursorDashboardUsage()" data-testid="cursor-dashboard-check">
+                {{ cursorDashboardChecking ? t('admin.accounts.cursor.dashboardChecking') : t('admin.accounts.cursor.dashboardCheckNow') }}
+              </button>
+              <button v-if="cursorDashboardConfigured || cursorDashboardDisconnectPending" type="button" class="btn btn-secondary btn-sm" :disabled="cursorDashboardAuthBusy" @click="toggleCursorDashboardDisconnect" data-testid="cursor-dashboard-disconnect">
+                {{ cursorDashboardDisconnectPending ? t('admin.accounts.cursor.dashboardUndoDisconnect') : t('admin.accounts.cursor.dashboardDisconnect') }}
+              </button>
+            </div>
           </div>
         </div>
-        <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.dashboardTokenSourceHint') }}</p>
+
+        <details class="group" data-testid="cursor-dashboard-manual-fallback">
+          <summary class="cursor-pointer select-none text-xs font-medium text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white">
+            {{ t('admin.accounts.cursor.dashboardAdvancedFallback') }}
+          </summary>
+          <div class="mt-3 space-y-3 border-l border-gray-200 pl-4 dark:border-dark-600">
+            <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.dashboardAdvancedFallbackHint') }}</p>
+            <div v-for="key in cursorDashboardCredentialKeys" :key="key" class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(9rem,0.7fr)_minmax(8rem,0.45fr)_minmax(12rem,1fr)] sm:items-end">
+              <div>
+                <span class="input-label">{{ cursorCredentialLabel(key) }}</span>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ account.credentials_status?.[`has_${key}`] ? t('admin.accounts.cursor.configured') : t('admin.accounts.cursor.notConfigured') }}
+                </p>
+              </div>
+              <select v-model="cursorCredentialState[key].action" class="input min-h-11" @change="onCursorCredentialActionChange(key)">
+                <option value="keep">{{ t('admin.accounts.cursor.keep') }}</option>
+                <option value="replace">{{ t('admin.accounts.cursor.replace') }}</option>
+                <option value="clear">{{ t('admin.accounts.cursor.clear') }}</option>
+              </select>
+              <input v-model="cursorCredentialState[key].value" type="password" autocomplete="new-password" class="input min-h-11 font-mono" :disabled="cursorCredentialState[key].action !== 'replace'" :placeholder="t('admin.accounts.cursor.replacePlaceholder')" :data-testid="`cursor-${key.replace(/_/g, '-')}-input`" data-1p-ignore data-lpignore="true" data-bwignore="true" />
+            </div>
+            <p class="text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.dashboardTokenSourceHint') }}</p>
+          </div>
+        </details>
       </section>
 
       <section v-if="account.platform === 'adobe' && account.type === 'oauth'" class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600">
@@ -2571,7 +2623,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
@@ -2597,11 +2649,12 @@ import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import {
   ADOBE_SENSITIVE_CREDENTIAL_KEYS,
-  CURSOR_SENSITIVE_CREDENTIAL_KEYS,
+  CURSOR_DASHBOARD_CREDENTIAL_KEYS,
   applyAntigravityProjectID,
   buildCursorCredentialUpdate,
   createCursorCredentialEditState,
   resetCursorCredentialEditState,
+  setCursorDashboardCredentialAction,
   buildAdobeCredentialUpdate,
   createAdobeCredentialEditState,
   resetAdobeCredentialEditState,
@@ -2687,12 +2740,219 @@ interface TempUnschedRuleForm {
 const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
-const cursorCredentialKeys = CURSOR_SENSITIVE_CREDENTIAL_KEYS
+const cursorDashboardCredentialKeys = CURSOR_DASHBOARD_CREDENTIAL_KEYS
 const cursorCredentialState = reactive(createCursorCredentialEditState())
 const cursorCredentialLabel = (key: CursorSensitiveCredentialKey) => t(`admin.accounts.cursor.${key}`)
 const onCursorCredentialActionChange = (key: CursorSensitiveCredentialKey) => {
   if (cursorCredentialState[key].action !== 'replace') cursorCredentialState[key].value = ''
 }
+
+type CursorDashboardAuthPhase = 'idle' | 'starting' | 'pending' | 'connected' | 'expired' | 'error'
+const CURSOR_DASHBOARD_POLL_INTERVAL_MS = 1500
+const cursorDashboardAuthPhase = ref<CursorDashboardAuthPhase>('idle')
+const cursorDashboardSessionId = ref('')
+const cursorDashboardAuthUrl = ref('')
+const cursorDashboardExpiresAt = ref('')
+const cursorDashboardAuthMessage = ref('')
+const cursorDashboardConnected = ref(false)
+const cursorDashboardChecking = ref(false)
+let cursorDashboardPollTimer: ReturnType<typeof setTimeout> | null = null
+
+const cursorDashboardDisconnectPending = computed(() =>
+  CURSOR_DASHBOARD_CREDENTIAL_KEYS.every((key) => cursorCredentialState[key].action === 'clear')
+)
+const cursorDashboardConfigured = computed(() => {
+  if (cursorDashboardDisconnectPending.value) return false
+  if (cursorDashboardConnected.value) return true
+  return Boolean(props.account?.credentials_status?.has_dashboard_access_token)
+})
+const cursorDashboardAuthBusy = computed(() =>
+  cursorDashboardAuthPhase.value === 'starting' || cursorDashboardAuthPhase.value === 'pending'
+)
+const cursorDashboardConnectLabel = computed(() =>
+  cursorDashboardConfigured.value
+    ? t('admin.accounts.cursor.dashboardReconnect')
+    : t('admin.accounts.cursor.dashboardConnect')
+)
+const cursorDashboardStatusLabel = computed(() => {
+  if (cursorDashboardDisconnectPending.value) return t('admin.accounts.cursor.dashboardDisconnectPending')
+  switch (cursorDashboardAuthPhase.value) {
+    case 'starting': return t('admin.accounts.cursor.dashboardStarting')
+    case 'pending': return t('admin.accounts.cursor.dashboardPending')
+    case 'connected': return t('admin.accounts.cursor.dashboardConnected')
+    case 'expired': return t('admin.accounts.cursor.dashboardExpired')
+    case 'error': return t('admin.accounts.cursor.dashboardError')
+    default: return cursorDashboardConfigured.value
+      ? t('admin.accounts.cursor.dashboardConnected')
+      : t('admin.accounts.cursor.dashboardNotConnected')
+  }
+})
+const cursorDashboardStatusDescription = computed(() => {
+  if (cursorDashboardDisconnectPending.value) return t('admin.accounts.cursor.dashboardDisconnectPendingHint')
+  if (cursorDashboardAuthMessage.value) return cursorDashboardAuthMessage.value
+  switch (cursorDashboardAuthPhase.value) {
+    case 'starting': return t('admin.accounts.cursor.dashboardStartingHint')
+    case 'pending': return t('admin.accounts.cursor.dashboardPendingHint')
+    case 'connected': return t('admin.accounts.cursor.dashboardConnectedHint')
+    case 'expired': return t('admin.accounts.cursor.dashboardExpiredHint')
+    case 'error': return t('admin.accounts.cursor.dashboardErrorHint')
+    default: return cursorDashboardConfigured.value
+      ? t('admin.accounts.cursor.dashboardConfiguredHint')
+      : t('admin.accounts.cursor.dashboardNotConnectedHint')
+  }
+})
+const cursorDashboardStatusDotClass = computed(() => {
+  if (cursorDashboardDisconnectPending.value || cursorDashboardAuthPhase.value === 'expired' || cursorDashboardAuthPhase.value === 'error') {
+    return 'bg-amber-500'
+  }
+  if (cursorDashboardAuthBusy.value || cursorDashboardChecking.value) return 'bg-primary-500 animate-pulse'
+  if (cursorDashboardConfigured.value || cursorDashboardAuthPhase.value === 'connected') return 'bg-emerald-500'
+  return 'bg-gray-300 dark:bg-gray-600'
+})
+
+function stopCursorDashboardPolling(): void {
+  if (cursorDashboardPollTimer) {
+    clearTimeout(cursorDashboardPollTimer)
+    cursorDashboardPollTimer = null
+  }
+}
+
+function resetCursorDashboardAuthState(configured = false): void {
+  stopCursorDashboardPolling()
+  cursorDashboardAuthPhase.value = 'idle'
+  cursorDashboardSessionId.value = ''
+  cursorDashboardAuthUrl.value = ''
+  cursorDashboardExpiresAt.value = ''
+  cursorDashboardAuthMessage.value = ''
+  cursorDashboardConnected.value = configured
+  cursorDashboardChecking.value = false
+}
+
+function cursorDashboardSessionExpired(): boolean {
+  if (!cursorDashboardExpiresAt.value) return false
+  const expiresAt = Date.parse(cursorDashboardExpiresAt.value)
+  return Number.isFinite(expiresAt) && Date.now() >= expiresAt
+}
+
+function scheduleCursorDashboardPoll(delay = CURSOR_DASHBOARD_POLL_INTERVAL_MS): void {
+  stopCursorDashboardPolling()
+  cursorDashboardPollTimer = setTimeout(() => {
+    void pollCursorDashboardAuth()
+  }, delay)
+}
+
+async function pollCursorDashboardAuth(): Promise<void> {
+  const sessionId = cursorDashboardSessionId.value
+  if (!sessionId || cursorDashboardAuthPhase.value !== 'pending') return
+  if (cursorDashboardSessionExpired()) {
+    cursorDashboardAuthPhase.value = 'expired'
+    cursorDashboardAuthMessage.value = t('admin.accounts.cursor.dashboardExpiredHint')
+    return
+  }
+
+  try {
+    const result = await adminAPI.cursor.pollDashboardAuth(sessionId)
+    if (sessionId !== cursorDashboardSessionId.value) return
+    if (result.expires_at) cursorDashboardExpiresAt.value = result.expires_at
+    cursorDashboardAuthMessage.value = result.message || ''
+
+    if (result.status === 'pending') {
+      scheduleCursorDashboardPoll()
+      return
+    }
+    stopCursorDashboardPolling()
+    if (result.status === 'connected') {
+      cursorDashboardAuthPhase.value = 'connected'
+      cursorDashboardConnected.value = true
+      setCursorDashboardCredentialAction(cursorCredentialState, 'keep')
+      appStore.showSuccess(t('admin.accounts.cursor.dashboardAuthConnected'))
+      await checkCursorDashboardUsage(false, true)
+      return
+    }
+    cursorDashboardAuthPhase.value = result.status
+  } catch (error: any) {
+    stopCursorDashboardPolling()
+    cursorDashboardAuthPhase.value = 'error'
+    cursorDashboardAuthMessage.value = error?.message || t('admin.accounts.cursor.dashboardErrorHint')
+  }
+}
+
+async function startCursorDashboardAuth(): Promise<void> {
+  if (!props.account?.id || cursorDashboardAuthBusy.value) return
+  stopCursorDashboardPolling()
+  setCursorDashboardCredentialAction(cursorCredentialState, 'keep')
+  cursorDashboardAuthPhase.value = 'starting'
+  cursorDashboardAuthMessage.value = ''
+  cursorDashboardAuthUrl.value = ''
+  try {
+    const result = await adminAPI.cursor.startDashboardAuth(props.account.id)
+    cursorDashboardSessionId.value = result.session_id
+    cursorDashboardAuthUrl.value = result.auth_url
+    cursorDashboardExpiresAt.value = result.expires_at
+    cursorDashboardAuthPhase.value = 'pending'
+    const authWindow = window.open(result.auth_url, '_blank', 'noopener,noreferrer')
+    if (!authWindow) {
+      cursorDashboardAuthMessage.value = t('admin.accounts.cursor.dashboardPopupBlockedHint')
+    }
+    scheduleCursorDashboardPoll(0)
+  } catch (error: any) {
+    cursorDashboardAuthPhase.value = 'error'
+    cursorDashboardAuthMessage.value = error?.message || t('admin.accounts.cursor.dashboardStartFailed')
+    appStore.showError(cursorDashboardAuthMessage.value)
+  }
+}
+
+async function checkCursorDashboardUsage(announce = true, preserveConnected = false): Promise<void> {
+  if (!props.account?.id || cursorDashboardChecking.value) return
+  cursorDashboardChecking.value = true
+  try {
+    const usage = await adminAPI.accounts.getUsage(props.account.id, 'active', true)
+    const session = usage.cursor_dashboard_session
+    if (session?.expires_at) cursorDashboardExpiresAt.value = session.expires_at
+    if (session?.state === 'reauth_required' || session?.state === 'error') {
+      cursorDashboardConnected.value = false
+      cursorDashboardAuthPhase.value = 'error'
+      cursorDashboardAuthMessage.value = usage.cursor_dashboard_message || t('admin.accounts.cursor.dashboardCheckFailed')
+      if (announce) appStore.showError(cursorDashboardAuthMessage.value)
+      return
+    }
+    if (usage.cursor_dashboard_configured) {
+      cursorDashboardConnected.value = true
+      cursorDashboardAuthPhase.value = 'connected'
+      cursorDashboardAuthMessage.value = usage.cursor_dashboard_message || ''
+      if (announce) appStore.showSuccess(t('admin.accounts.cursor.dashboardCheckSuccess'))
+      return
+    }
+    if (usage.cursor_dashboard_state === 'error' || usage.cursor_dashboard_state === 'stale') {
+      cursorDashboardAuthMessage.value = usage.cursor_dashboard_message || t('admin.accounts.cursor.dashboardCheckFailed')
+      if (announce) appStore.showError(cursorDashboardAuthMessage.value)
+      return
+    }
+    if (!preserveConnected) {
+      cursorDashboardConnected.value = false
+      cursorDashboardAuthPhase.value = 'idle'
+    }
+    cursorDashboardAuthMessage.value = usage.cursor_dashboard_message || t('admin.accounts.cursor.dashboardCheckMissing')
+    if (announce) appStore.showInfo(cursorDashboardAuthMessage.value)
+  } catch (error: any) {
+    cursorDashboardAuthMessage.value = error?.message || t('admin.accounts.cursor.dashboardCheckFailed')
+    if (announce) appStore.showError(cursorDashboardAuthMessage.value)
+  } finally {
+    cursorDashboardChecking.value = false
+  }
+}
+
+function toggleCursorDashboardDisconnect(): void {
+  stopCursorDashboardPolling()
+  cursorDashboardAuthPhase.value = 'idle'
+  cursorDashboardAuthMessage.value = ''
+  if (cursorDashboardDisconnectPending.value) {
+    setCursorDashboardCredentialAction(cursorCredentialState, 'keep')
+    return
+  }
+  setCursorDashboardCredentialAction(cursorCredentialState, 'clear')
+}
+
 const adobeCredentialKeys = ADOBE_SENSITIVE_CREDENTIAL_KEYS
 const adobeCredentialState = reactive(createAdobeCredentialEditState())
 const adobeCredentialLabel = (key: AdobeSensitiveCredentialKey) => t(`admin.accounts.adobe.${key}`)
@@ -3229,6 +3489,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   antigravityMixedChannelConfirmed.value = false
   resetAdobeCredentialEditState(adobeCredentialState)
   resetCursorCredentialEditState(cursorCredentialState)
+  resetCursorDashboardAuthState(Boolean(newAccount.credentials_status?.has_dashboard_access_token))
   showMixedChannelWarning.value = false
   mixedChannelWarningDetails.value = null
   mixedChannelWarningRawMessage.value = ''
@@ -3544,6 +3805,10 @@ watch(
   },
   { immediate: true }
 )
+
+onBeforeUnmount(() => {
+  stopCursorDashboardPolling()
+})
 
 // Model mapping helpers
 const addModelMapping = () => {
@@ -3965,6 +4230,7 @@ const parseDateTimeLocal = parseDateTimeLocalInput
 const handleClose = () => {
   resetAdobeCredentialEditState(adobeCredentialState)
   resetCursorCredentialEditState(cursorCredentialState)
+  resetCursorDashboardAuthState()
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
   emit('close')

@@ -1171,6 +1171,23 @@ cursor:
   # 未公开稳定承诺的 Cursor 桌面 Dashboard 用量 RPC；Dashboard Token 为可选账号凭据，
   # 且只会发送到这个固定 HTTPS 来源。
   dashboard_base_url: "https://api2.cursor.sh"
+  # Browser login page used by the one-click server-owned PKCE flow exposed through
+  # POST /api/v1/admin/cursor/dashboard-auth/start and /poll. Tokens stay server-side.
+  # 一键服务器独立 PKCE 授权所使用的浏览器登录页，对应管理 API 的 start 与 poll；
+  # Dashboard Token 仅保存在服务端，不返回前端。
+  dashboard_auth_website_url: "https://cursor.com"
+  # Maintain the server-owned session without reusing imported Desktop tokens. Normal Desktop
+  # shutdown/restart should not affect it, but Cursor may still perform account-wide revocation.
+  # Failed probes may use stale snapshots; revoked credentials require reauthorization.
+  # 后台不复用手工导入的桌面 Token；桌面正常关闭或重启通常不影响服务器会话，但 Cursor
+  # 仍可能执行账户级撤销。探测失败可保留 stale 快照，凭据被撤销时等待重新授权。
+  dashboard_maintenance_enabled: true
+  dashboard_maintenance_interval_minutes: 30
+  dashboard_probe_interval_minutes: 360
+  # Match the current Cursor desktop client: refresh 1272 hours before JWT expiry.
+  # 与当前 Cursor 客户端一致：在 JWT 到期前 1272 小时轮换。
+  dashboard_refresh_before_expiry_hours: 1272
+  dashboard_login_session_ttl_minutes: 5
   request_timeout_seconds: 120
   stream_idle_timeout_seconds: 60
 

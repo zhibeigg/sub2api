@@ -80,6 +80,7 @@ func provideCleanup(
 	opsSystemLogSink *service.OpsSystemLogSink,
 	schedulerSnapshot *service.SchedulerSnapshotService,
 	tokenRefresh *service.TokenRefreshService,
+	cursorDashboardMaintenance *service.CursorDashboardMaintenanceService,
 	accountExpiry *service.AccountExpiryService,
 	proxyExpiry *service.ProxyExpiryService,
 	subscriptionExpiry *service.SubscriptionExpiryService,
@@ -183,6 +184,12 @@ func provideCleanup(
 			}},
 			{"TokenRefreshService", func() error {
 				tokenRefresh.Stop()
+				return nil
+			}},
+			{"CursorDashboardMaintenanceService", func() error {
+				if cursorDashboardMaintenance != nil {
+					cursorDashboardMaintenance.Stop()
+				}
 				return nil
 			}},
 			{"AccountExpiryService", func() error {

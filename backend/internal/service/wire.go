@@ -91,11 +91,19 @@ func ProvideAccountUsageService(
 	tlsFPProfileService *TLSFingerprintProfileService,
 	adobeTokenProvider *AdobeTokenProvider,
 	cursorGatewayService *CursorGatewayService,
+	cursorDashboardAuthService *CursorDashboardAuthService,
 ) *AccountUsageService {
 	service := NewAccountUsageService(accountRepo, usageLogRepo, usageFetcher, geminiQuotaService, antigravityQuotaFetcher, grokQuotaFetcher, openAIQuotaService, cache, identityCache, tlsFPProfileService)
 	service.SetAdobeTokenProvider(adobeTokenProvider)
 	service.SetCursorUsageProber(cursorGatewayService)
+	service.SetCursorDashboardFetcher(cursorDashboardAuthService)
 	return service
+}
+
+func ProvideCursorDashboardMaintenanceService(accountRepo AccountRepository, auth *CursorDashboardAuthService, cfg *config.Config) *CursorDashboardMaintenanceService {
+	svc := NewCursorDashboardMaintenanceService(accountRepo, auth, cfg)
+	svc.Start()
+	return svc
 }
 
 func ProvideAccountTestService(
@@ -709,6 +717,8 @@ var ProviderSet = wire.NewSet(
 	ProvideClaudeTokenProvider,
 	NewAntigravityGatewayService,
 	NewCursorGatewayService,
+	NewCursorDashboardAuthService,
+	ProvideCursorDashboardMaintenanceService,
 	NewKiroGatewayService,
 	ProvideRateLimitService,
 	ProvideAccountUsageService,

@@ -148,14 +148,20 @@ type AdobeConfig struct {
 
 // CursorConfig controls the official Cursor Cloud Agents API adapter.
 type CursorConfig struct {
-	BaseURL                  string `mapstructure:"base_url"`
-	DashboardBaseURL         string `mapstructure:"dashboard_base_url"`
-	RequestTimeoutSeconds    int    `mapstructure:"request_timeout_seconds"`
-	StreamIdleTimeoutSeconds int    `mapstructure:"stream_idle_timeout_seconds"`
-	DefaultModel             string `mapstructure:"default_model"`
-	MaxHistoryTokens         int    `mapstructure:"max_history_tokens"`
-	MaxHistoryMessages       int    `mapstructure:"max_history_messages"`
-	ResponsesTTLSeconds      int    `mapstructure:"responses_ttl_seconds"`
+	BaseURL                           string `mapstructure:"base_url"`
+	DashboardBaseURL                  string `mapstructure:"dashboard_base_url"`
+	DashboardAuthWebsiteURL           string `mapstructure:"dashboard_auth_website_url"`
+	DashboardMaintenanceEnabled       bool   `mapstructure:"dashboard_maintenance_enabled"`
+	DashboardMaintenanceIntervalMins  int    `mapstructure:"dashboard_maintenance_interval_minutes"`
+	DashboardProbeIntervalMins        int    `mapstructure:"dashboard_probe_interval_minutes"`
+	DashboardRefreshBeforeExpiryHours int    `mapstructure:"dashboard_refresh_before_expiry_hours"`
+	DashboardLoginSessionTTLMins      int    `mapstructure:"dashboard_login_session_ttl_minutes"`
+	RequestTimeoutSeconds             int    `mapstructure:"request_timeout_seconds"`
+	StreamIdleTimeoutSeconds          int    `mapstructure:"stream_idle_timeout_seconds"`
+	DefaultModel                      string `mapstructure:"default_model"`
+	MaxHistoryTokens                  int    `mapstructure:"max_history_tokens"`
+	MaxHistoryMessages                int    `mapstructure:"max_history_messages"`
+	ResponsesTTLSeconds               int    `mapstructure:"responses_ttl_seconds"`
 }
 
 // KiroConfig holds Kiro / AWS CodeWhisperer platform tuning: the spoofed IDE
@@ -1914,6 +1920,12 @@ func setDefaults() {
 	// Cursor official Cloud Agents API (user or service-account API Key)
 	viper.SetDefault("cursor.base_url", "https://api.cursor.com")
 	viper.SetDefault("cursor.dashboard_base_url", "https://api2.cursor.sh")
+	viper.SetDefault("cursor.dashboard_auth_website_url", "https://cursor.com")
+	viper.SetDefault("cursor.dashboard_maintenance_enabled", true)
+	viper.SetDefault("cursor.dashboard_maintenance_interval_minutes", 30)
+	viper.SetDefault("cursor.dashboard_probe_interval_minutes", 360)
+	viper.SetDefault("cursor.dashboard_refresh_before_expiry_hours", 1272)
+	viper.SetDefault("cursor.dashboard_login_session_ttl_minutes", 5)
 	viper.SetDefault("cursor.request_timeout_seconds", 120)
 	viper.SetDefault("cursor.stream_idle_timeout_seconds", 60)
 	viper.SetDefault("cursor.default_model", "auto")

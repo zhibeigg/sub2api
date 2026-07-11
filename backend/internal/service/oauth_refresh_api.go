@@ -19,6 +19,10 @@ type OAuthRefreshExecutor interface {
 	CacheKey(account *Account) string
 }
 
+type refreshTokenCredentialKeyProvider interface {
+	RefreshTokenCredentialKey() string
+}
+
 const defaultRefreshLockTTL = 60 * time.Second
 
 // OAuthRefreshResult 统一刷新结果
@@ -78,6 +82,24 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 	executor OAuthRefreshExecutor,
 	refreshWindow time.Duration,
 ) (*OAuthRefreshResult, error) {
+	return api.refresh(ctx, account, executor, refreshWindow, false)
+}
+
+func (api *OAuthRefreshAPI) ForceRefresh(
+	ctx context.Context,
+	account *Account,
+	executor OAuthRefreshExecutor,
+) (*OAuthRefreshResult, error) {
+	return api.refresh(ctx, account, executor, 0, true)
+}
+
+func (api *OAuthRefreshAPI) refresh(
+	ctx context.Context,
+	account *Account,
+	executor OAuthRefreshExecutor,
+	refreshWindow time.Duration,
+	force bool,
+) (*OAuthRefreshResult, error) {
 	cacheKey := executor.CacheKey(account)
 
 	// 0. 获取进程内互斥锁（防止同一进程内的并发刷新竞争）
@@ -119,7 +141,7 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 	}
 
 	// 3. 二次检查是否仍需刷新（另一条路径可能已刷新）
-	if !executor.NeedsRefresh(freshAccount, refreshWindow) {
+	if !force && !executor.NeedsRefresh(freshAccount, refreshWindow) {
 		return &OAuthRefreshResult{
 			Account: freshAccount,
 		}, nil
@@ -131,7 +153,7 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 		// 竞争恢复：invalid_grant 可能是另一个 worker 已消费了旧 refresh_token
 		// 重新读取 DB，如果 refresh_token 已更新则说明是竞争，返回成功
 		if isInvalidGrantError(refreshErr) {
-			if recoveredAccount, recovered := api.tryRecoverFromRefreshRace(ctx, freshAccount); recovered {
+			if recoveredAccount, recovered := api.tryRecoverFromRefreshRace(ctx, freshAccount, executor); recovered {
 				slog.Info("oauth_refresh_race_recovered",
 					"account_id", freshAccount.ID,
 					"platform", freshAccount.Platform,
@@ -172,7 +194,7 @@ func isInvalidGrantError(err error) bool {
 
 // tryRecoverFromRefreshRace 在 invalid_grant 错误后尝试竞争恢复
 // 重新读取 DB，如果 refresh_token 已改变（说明另一个 worker 成功刷新），则返回更新后的 account
-func (api *OAuthRefreshAPI) tryRecoverFromRefreshRace(ctx context.Context, usedAccount *Account) (*Account, bool) {
+func (api *OAuthRefreshAPI) tryRecoverFromRefreshRace(ctx context.Context, usedAccount *Account, executor OAuthRefreshExecutor) (*Account, bool) {
 	if api.accountRepo == nil {
 		return nil, false
 	}
@@ -180,8 +202,14 @@ func (api *OAuthRefreshAPI) tryRecoverFromRefreshRace(ctx context.Context, usedA
 	if err != nil || reReadAccount == nil {
 		return nil, false
 	}
-	usedRT := usedAccount.GetCredential("refresh_token")
-	currentRT := reReadAccount.GetCredential("refresh_token")
+	refreshTokenKey := "refresh_token"
+	if provider, ok := executor.(refreshTokenCredentialKeyProvider); ok {
+		if candidate := strings.TrimSpace(provider.RefreshTokenCredentialKey()); candidate != "" {
+			refreshTokenKey = candidate
+		}
+	}
+	usedRT := usedAccount.GetCredential(refreshTokenKey)
+	currentRT := reReadAccount.GetCredential(refreshTokenKey)
 	if usedRT == "" || currentRT == "" {
 		return nil, false
 	}
