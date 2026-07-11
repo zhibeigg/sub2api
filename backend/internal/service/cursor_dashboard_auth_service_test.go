@@ -118,5 +118,11 @@ func TestCursorDashboardAuthServiceStartAndPollPersistsTokensWithoutReturningThe
 	require.NotContains(t, poll.Message, token)
 	require.Equal(t, token, repo.updatedCredentials["dashboard_access_token"])
 	require.Equal(t, "refresh", repo.updatedCredentials["dashboard_refresh_token"])
+	_, ok := svc.sessions.Load(start.SessionID)
+	require.False(t, ok, "completed login session should be removed")
+	machineID, ok := repo.updatedCredentials["cursor_machine_id"].(string)
+	require.True(t, ok)
+	require.NotEmpty(t, machineID)
+	require.Contains(t, start.AuthURL, "uuid="+machineID)
 	require.Equal(t, "connected", repo.updatedExtra[cursorDashboardAuthStateKey])
 }

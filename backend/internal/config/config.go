@@ -1944,7 +1944,7 @@ func setDefaults() {
 	viper.SetDefault("cursor.base_url", "https://api.cursor.com")
 	viper.SetDefault("cursor.chat_base_url", "https://api2.cursor.sh")
 	viper.SetDefault("cursor.default_transport_mode", "auto")
-	viper.SetDefault("cursor.client_version", "3.1.0")
+	viper.SetDefault("cursor.client_version", "3.11.13")
 	viper.SetDefault("cursor.ghost_mode", false)
 	viper.SetDefault("cursor.new_onboarding_completed", false)
 	viper.SetDefault("cursor.max_frame_bytes", 8*1024*1024)

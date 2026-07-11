@@ -68,16 +68,20 @@ func (s *cursorIDEUpstreamStub) DoWithTLS(req *http.Request, proxyURL string, ac
 }
 
 func ideTestGateway(upstream HTTPUpstream) *CursorGatewayService {
+	if stub, ok := upstream.(*cursorIDEUpstreamStub); ok && len(stub.modelsBody) == 0 {
+		stub.modelsBody = cursorIDEFrames(appendProtoString(nil, 1, "claude-sonnet-5"))
+	}
 	return NewCursorGatewayService(upstream, nil, nil, nil, &config.Config{Cursor: config.CursorConfig{
 		BaseURL: "https://api.cursor.com", ChatBaseURL: "https://api2.cursor.sh", DashboardBaseURL: "https://api2.cursor.sh",
-		DefaultTransportMode: CursorTransportAuto, ClientVersion: "3.1.0", DefaultModel: "default",
+		DefaultTransportMode: CursorTransportAuto, ClientVersion: "3.11.13", DefaultModel: "default",
 		MaxFrameBytes: 8 << 20, MaxBufferedBytes: 16 << 20, IDEStreamIdleTimeoutSeconds: 5,
 	}})
 }
 
 func ideTestAccount() *Account {
 	return &Account{ID: 91, Platform: PlatformCursor, Type: AccountTypeAPIKey, Concurrency: 1, Credentials: map[string]any{
-		"dashboard_access_token": "cursor-session-token", "cursor_transport_mode": CursorTransportIDEChat,
+		"dashboard_access_token": "cursor-session-token", "cursor_machine_id": "11111111-1111-4111-8111-111111111111",
+		"cursor_transport_mode": CursorTransportIDEChat,
 	}}
 }
 
@@ -101,12 +105,13 @@ func TestCursorGatewayIDEAnthropicStreamsImmediately(t *testing.T) {
 
 	upstream.mu.Lock()
 	defer upstream.mu.Unlock()
-	require.Len(t, upstream.requests, 1)
-	require.Equal(t, cursorpkg.IDEChatPath, upstream.requests[0].URL.Path)
-	require.Equal(t, HTTPUpstreamProfileCursorH2, HTTPUpstreamProfileFromContext(upstream.requests[0].Context()))
-	require.Equal(t, "Bearer cursor-session-token", upstream.requests[0].Header.Get("Authorization"))
-	require.Equal(t, "application/connect+proto", upstream.requests[0].Header.Get("Content-Type"))
-	require.NotEmpty(t, upstream.bodies[0])
+	require.Len(t, upstream.requests, 2)
+	require.Equal(t, cursorpkg.IDEModelsPath, upstream.requests[0].URL.Path)
+	require.Equal(t, cursorpkg.IDEChatPath, upstream.requests[1].URL.Path)
+	require.Equal(t, HTTPUpstreamProfileCursorH2, HTTPUpstreamProfileFromContext(upstream.requests[1].Context()))
+	require.Equal(t, "Bearer cursor-session-token", upstream.requests[1].Header.Get("Authorization"))
+	require.Equal(t, "application/connect+proto", upstream.requests[1].Header.Get("Content-Type"))
+	require.NotEmpty(t, upstream.bodies[1])
 }
 
 func TestCursorGatewayIDENonStreamNativeToolCall(t *testing.T) {
@@ -164,7 +169,74 @@ func TestDecodeCursorIDEModelsResponseJSON(t *testing.T) {
 		MaxFrameBytes: 8 << 20, MaxBufferedBytes: 16 << 20,
 	})
 	require.NoError(t, err)
-	require.Equal(t, []string{"claude-4.6-sonnet-medium", "composer-2-fast"}, models)
+	require.Equal(t, []cursorIDEModel{
+		{Name: "display", ServerName: "claude-4.6-sonnet-medium"},
+		{Name: "composer-2-fast", ServerName: "composer-2-fast"},
+	}, models)
+}
+
+func TestCursorIDEModelResolutionUsesServerModelName(t *testing.T) {
+	upstream := &cursorIDEUpstreamStub{
+		modelsBody: []byte(`{"models":[{"name":"claude-sonnet-4-6","serverModelName":"claude-4.6-sonnet-medium"}]}`),
+		chatBody:   cursorIDEFrames(cursorIDETextPayload("ok")),
+	}
+	svc := ideTestGateway(upstream)
+	body := `{"model":"claude-sonnet-4-6","stream":false,"messages":[{"role":"user","content":"hi"}]}`
+	c, _ := newCursorGatewayTestContext(t, "/v1/messages", body, 3)
+
+	_, err := svc.Forward(context.Background(), c, ideTestAccount(), []byte(body))
+	require.NoError(t, err)
+
+	upstream.mu.Lock()
+	defer upstream.mu.Unlock()
+	require.Len(t, upstream.requests, 2)
+	frames, decodeErr := cursorpkg.NewConnectDecoder(8<<20, 16<<20).Feed(upstream.bodies[1])
+	require.NoError(t, decodeErr)
+	require.Len(t, frames, 1)
+	wrapper := firstServiceBytesField(t, frames[0].Payload, 1)
+	model := firstServiceBytesField(t, wrapper, 5)
+	require.Equal(t, "claude-4.6-sonnet-medium", firstServiceStringField(t, model, 1))
+}
+
+func TestCursorIDETransportAndMetadataCompatibility(t *testing.T) {
+	svc := ideTestGateway(&cursorIDEUpstreamStub{})
+	autoLegacy := &Account{ID: 1, Platform: PlatformCursor, Type: AccountTypeAPIKey, Credentials: map[string]any{
+		"api_key": "cloud-key", "dashboard_access_token": "dashboard-token",
+	}}
+	require.Equal(t, CursorTransportIDEChat, svc.cursorTransportMode(autoLegacy))
+	require.Equal(t, CursorTransportCloudAgent, svc.cursorForwardTransportMode(autoLegacy))
+	autoLegacy.Credentials["cursor_machine_id"] = "machine"
+	require.Equal(t, CursorTransportIDEChat, svc.cursorForwardTransportMode(autoLegacy))
+	require.Equal(t, "x64", cursorIDEClientArch("amd64"))
+	require.Equal(t, cursorpkg.IDEModeAgent, prepareCursorIDEMode(&cursorpkg.Dialogue{}))
+}
+
+func firstServiceBytesField(t *testing.T, payload []byte, wanted protowire.Number) []byte {
+	t.Helper()
+	for len(payload) > 0 {
+		number, wireType, n := protowire.ConsumeTag(payload)
+		require.GreaterOrEqual(t, n, 0)
+		payload = payload[n:]
+		if wireType == protowire.BytesType {
+			value, size := protowire.ConsumeBytes(payload)
+			require.GreaterOrEqual(t, size, 0)
+			payload = payload[size:]
+			if number == wanted {
+				return value
+			}
+			continue
+		}
+		size := protowire.ConsumeFieldValue(number, wireType, payload)
+		require.GreaterOrEqual(t, size, 0)
+		payload = payload[size:]
+	}
+	t.Fatalf("field %d not found", wanted)
+	return nil
+}
+
+func firstServiceStringField(t *testing.T, payload []byte, wanted protowire.Number) string {
+	t.Helper()
+	return string(firstServiceBytesField(t, payload, wanted))
 }
 
 func cursorIDEFrames(payloads ...[]byte) []byte {

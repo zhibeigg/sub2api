@@ -1187,14 +1187,15 @@ cursor:
   # Cursor IDE chat/composer upstream origin; keep this exact HTTPS host for the safety allowlist.
   # Cursor IDE chat/composer 上游来源；安全白名单要求保持为该固定 HTTPS 主机。
   chat_base_url: "https://api2.cursor.sh"
-  # Default account transport when cursor_transport_mode is omitted: auto prefers IDE Chat when a Dashboard token exists,
-  # otherwise it uses Cloud Agent. IDE requests use an isolated H2-only connection pool and never silently downgrade.
-  # 账号未设置 cursor_transport_mode 时的默认模式：auto 在存在 Dashboard Token 时优先 IDE Chat，
-  # 否则使用 Cloud Agent。IDE 请求使用独立且仅 H2 的连接池，不会静默降级。
+  # Default account transport when cursor_transport_mode is omitted: auto prefers IDE Chat when a Dashboard token and
+  # its login-bound machine ID exist; legacy sessions without that ID use Cloud Agent for chat until reauthorized.
+  # IDE requests use an isolated H2-only connection pool and never downgrade their codec or HTTP version.
+  # 账号未设置 cursor_transport_mode 时的默认模式：auto 在 Dashboard Token 与登录绑定的机器 ID 同时存在时优先 IDE Chat；
+  # 缺少该 ID 的旧会话在重新授权前仅将聊天回退到 Cloud Agent。IDE 请求不会降级 codec 或 HTTP 版本。
   default_transport_mode: "auto"
   # Cursor IDE client identity sent to the chat upstream.
   # 发送到聊天上游的 Cursor IDE 客户端版本标识。
-  client_version: "3.1.0"
+  client_version: "3.11.13"
   # Optional Cursor IDE request metadata flags.
   # 可选的 Cursor IDE 请求元数据标志。
   ghost_mode: false

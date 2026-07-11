@@ -13,7 +13,7 @@ func TestLoadDefaultCursorConfig(t *testing.T) {
 	require.Equal(t, "https://api.cursor.com", cfg.Cursor.BaseURL)
 	require.Equal(t, "https://api2.cursor.sh", cfg.Cursor.ChatBaseURL)
 	require.Equal(t, "auto", cfg.Cursor.DefaultTransportMode)
-	require.Equal(t, "3.1.0", cfg.Cursor.ClientVersion)
+	require.Equal(t, "3.11.13", cfg.Cursor.ClientVersion)
 	require.False(t, cfg.Cursor.GhostMode)
 	require.False(t, cfg.Cursor.NewOnboardingCompleted)
 	require.Equal(t, 8*1024*1024, cfg.Cursor.MaxFrameBytes)

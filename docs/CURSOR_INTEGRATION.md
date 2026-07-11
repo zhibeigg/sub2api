@@ -334,7 +334,7 @@ cursor:
   chat_base_url: "https://api2.cursor.sh"
   dashboard_base_url: "https://api2.cursor.sh"
   default_transport_mode: "auto"
-  client_version: "3.1.0"
+  client_version: "3.11.13"
   ghost_mode: false
   new_onboarding_completed: false
   max_frame_bytes: 8388608
@@ -346,6 +346,10 @@ cursor:
 ```
 
 API Key 与 Dashboard Token 都属于账号敏感凭据，不应写入共享配置模板。`base_url` 固定限制为 `api.cursor.com`，`chat_base_url` 与 `dashboard_base_url` 固定限制为 `api2.cursor.sh`，避免任一凭据被发送到非 Cursor 主机。单帧和累计缓冲上限用于拒绝异常 Connect 流，生产环境不应无限放大。
+
+Dashboard 登录成功后会同时保存该次 PKCE 流程的 UUID 作为 `cursor_machine_id`。Cursor IDE 聊天会把此值纳入请求校验；仅保存 Token 会导致模型发现成功、真实聊天却被上游误报为客户端版本不受支持。升级前已连接且缺少该值的账号，在 `auto` 模式下仍使用 IDE `AvailableModels` 探测，但真实聊天会暂时使用 Cloud Agent API Key；重新执行一次 Dashboard 授权后即可恢复 IDE Chat。显式设置 `cursor_transport_mode: ide_chat` 的账号缺少该值时会直接提示重新授权，不会伪造随机机器 ID。
+
+IDE 模型目录中的公开 `name` 与聊天 RPC 要求的 `serverModelName` 可能不同。网关会在发送聊天请求前根据实时 `AvailableModels` 目录完成映射，例如公开模型 `claude-sonnet-4-6` 会被转换为上游服务端名称，而不会把公开别名直接写入 Protobuf 请求。
 
 ## 迁移检查
 

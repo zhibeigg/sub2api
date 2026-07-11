@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,7 +21,76 @@ import (
 	"github.com/google/uuid"
 )
 
+type cursorIDEModel struct {
+	Name       string
+	ServerName string
+}
+
+type cursorIDEModelCatalogCache struct {
+	TokenHash [32]byte
+	ExpiresAt time.Time
+	Models    []cursorIDEModel
+}
+
+const cursorIDEModelCatalogTTL = 5 * time.Minute
+
+func (s *CursorGatewayService) cachedIDEModelCatalog(account *Account) ([]cursorIDEModel, bool) {
+	if s == nil || account == nil || account.ID <= 0 {
+		return nil, false
+	}
+	tokenHash := sha256.Sum256([]byte(strings.TrimSpace(account.GetCredential("dashboard_access_token"))))
+	s.ideModelMu.RLock()
+	cached, ok := s.ideModelCache[account.ID]
+	s.ideModelMu.RUnlock()
+	if !ok || cached.TokenHash != tokenHash || !time.Now().Before(cached.ExpiresAt) {
+		return nil, false
+	}
+	return append([]cursorIDEModel(nil), cached.Models...), true
+}
+
+func (s *CursorGatewayService) storeIDEModelCatalog(account *Account, models []cursorIDEModel) {
+	if s == nil || account == nil || account.ID <= 0 || len(models) == 0 {
+		return
+	}
+	entry := cursorIDEModelCatalogCache{
+		TokenHash: sha256.Sum256([]byte(strings.TrimSpace(account.GetCredential("dashboard_access_token")))),
+		ExpiresAt: time.Now().Add(cursorIDEModelCatalogTTL),
+		Models:    append([]cursorIDEModel(nil), models...),
+	}
+	s.ideModelMu.Lock()
+	if s.ideModelCache == nil {
+		s.ideModelCache = make(map[int64]cursorIDEModelCatalogCache)
+	}
+	s.ideModelCache[account.ID] = entry
+	s.ideModelMu.Unlock()
+}
+
 func (s *CursorGatewayService) FetchIDEModels(ctx context.Context, account *Account) ([]string, error) {
+	catalog, err := s.fetchIDEModelCatalog(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{}, len(catalog))
+	models := make([]string, 0, len(catalog))
+	for _, item := range catalog {
+		name := strings.TrimSpace(item.ServerName)
+		if name == "" {
+			continue
+		}
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		models = append(models, name)
+	}
+	sort.Strings(models)
+	if len(models) == 0 {
+		return nil, cursorpkg.HTTPError(http.StatusBadGateway, "IDE models request", "Cursor returned no IDE models")
+	}
+	return models, nil
+}
+
+func (s *CursorGatewayService) fetchIDEModelCatalog(ctx context.Context, account *Account) ([]cursorIDEModel, error) {
 	activeAccount := account
 	if s.dashboardAuth != nil && activeAccount != nil && activeAccount.ID > 0 {
 		refreshed, _, err := s.dashboardAuth.RefreshIfNeeded(ctx, activeAccount)
@@ -30,6 +100,9 @@ func (s *CursorGatewayService) FetchIDEModels(ctx context.Context, account *Acco
 		if refreshed != nil {
 			activeAccount = refreshed
 		}
+	}
+	if cached, ok := s.cachedIDEModelCatalog(activeAccount); ok {
+		return cached, nil
 	}
 	client, credential, err := s.newCursorIDEClient(ctx, activeAccount)
 	if err != nil {
@@ -61,31 +134,29 @@ func (s *CursorGatewayService) FetchIDEModels(ctx context.Context, account *Acco
 	if len(body) > cfg.MaxBufferedBytes {
 		return nil, cursorpkg.HTTPError(http.StatusBadGateway, "IDE models request", "model catalog response exceeds configured buffer limit")
 	}
-	parsedModels, err := decodeCursorIDEModelsResponse(resp.Header.Get("Content-Type"), body, cfg)
+	models, err := decodeCursorIDEModelsResponse(resp.Header.Get("Content-Type"), body, cfg)
 	if err != nil {
 		return nil, err
 	}
-	seen := make(map[string]struct{}, len(parsedModels))
-	models := make([]string, 0, len(parsedModels))
-	for _, item := range parsedModels {
-		name := strings.TrimSpace(item)
-		if name == "" {
-			continue
-		}
-		if _, exists := seen[name]; exists {
-			continue
-		}
-		seen[name] = struct{}{}
-		models = append(models, name)
-	}
-	sort.Strings(models)
-	if len(models) == 0 {
-		return nil, cursorpkg.HTTPError(http.StatusBadGateway, "IDE models request", "Cursor returned no IDE models")
-	}
+	s.storeIDEModelCatalog(activeAccount, models)
 	return models, nil
 }
 
-func decodeCursorIDEModelsResponse(contentType string, body []byte, cfg config.CursorConfig) ([]string, error) {
+func (s *CursorGatewayService) resolveCursorIDEModel(ctx context.Context, account *Account, requested string) (string, error) {
+	requested = strings.TrimSpace(requested)
+	catalog, err := s.fetchIDEModelCatalog(ctx, account)
+	if err != nil {
+		return requested, err
+	}
+	for _, item := range catalog {
+		if strings.EqualFold(requested, item.Name) || strings.EqualFold(requested, item.ServerName) {
+			return item.ServerName, nil
+		}
+	}
+	return requested, nil
+}
+
+func decodeCursorIDEModelsResponse(contentType string, body []byte, cfg config.CursorConfig) ([]cursorIDEModel, error) {
 	trimmed := bytes.TrimSpace(body)
 	if strings.Contains(strings.ToLower(contentType), "json") || (len(trimmed) > 0 && trimmed[0] == '{') {
 		var payload struct {
@@ -97,19 +168,34 @@ func decodeCursorIDEModelsResponse(contentType string, body []byte, cfg config.C
 		if err := json.Unmarshal(trimmed, &payload); err != nil {
 			return nil, cursorpkg.HTTPError(http.StatusBadGateway, "IDE models request", "invalid JSON model catalog response: "+err.Error())
 		}
-		models := make([]string, 0, len(payload.Models))
+		models := make([]cursorIDEModel, 0, len(payload.Models))
 		for _, item := range payload.Models {
-			name := strings.TrimSpace(item.ServerModelName)
+			name := strings.TrimSpace(item.Name)
+			serverName := strings.TrimSpace(item.ServerModelName)
 			if name == "" {
-				name = strings.TrimSpace(item.Name)
+				name = serverName
 			}
-			if name != "" {
-				models = append(models, name)
+			if serverName == "" {
+				serverName = name
+			}
+			if serverName != "" {
+				models = append(models, cursorIDEModel{Name: name, ServerName: serverName})
 			}
 		}
 		return models, nil
 	}
-	return cursorpkg.DecodeIDEAvailableModels(body, cfg.MaxFrameBytes, cfg.MaxBufferedBytes)
+	models, err := cursorpkg.DecodeIDEAvailableModels(body, cfg.MaxFrameBytes, cfg.MaxBufferedBytes)
+	if err != nil {
+		return nil, err
+	}
+	catalog := make([]cursorIDEModel, 0, len(models))
+	for _, name := range models {
+		name = strings.TrimSpace(name)
+		if name != "" {
+			catalog = append(catalog, cursorIDEModel{Name: name, ServerName: name})
+		}
+	}
+	return catalog, nil
 }
 
 func (s *CursorGatewayService) probeCursorIDE(ctx context.Context, account *Account) (string, error) {
@@ -127,6 +213,9 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 	}
 	if account == nil || !account.IsCursorAPIKey() {
 		return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte("a Cursor account is required")}
+	}
+	if strings.TrimSpace(cursorAccountSetting(account, "cursor_machine_id")) == "" {
+		return nil, &UpstreamFailoverError{StatusCode: http.StatusUnauthorized, ResponseBody: []byte("Cursor IDE session is missing its login-bound machine ID; reconnect the Dashboard session")}
 	}
 
 	var envelope cursorRequestEnvelope
@@ -162,6 +251,12 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 	trimCursorDialogue(dialogue, s.cursorConfig().MaxHistoryMessages, s.cursorConfig().MaxHistoryTokens)
 	mode := prepareCursorIDEMode(dialogue)
 	estimatedInput := estimateCursorDialogueTokens(dialogue)
+	resolvedModel, resolveErr := s.resolveCursorIDEModel(ctx, account, upstreamModel)
+	if resolveErr != nil {
+		slog.Warn("cursor_ide_model_resolution_failed", "account_id", account.ID, "model", upstreamModel, "error", resolveErr.Error())
+	} else if resolvedModel != "" {
+		upstreamModel = resolvedModel
+	}
 
 	activeAccount, resp, stream, err := s.openCursorIDEStream(ctx, account, dialogue, cursorpkg.IDEChatOptions{
 		Model: upstreamModel, ConversationID: uuid.NewString(), Mode: mode,
@@ -363,7 +458,7 @@ func (s *CursorGatewayService) newCursorIDEClient(ctx context.Context, account *
 	}
 	client, err := cursorpkg.NewIDEClient(s.newCursorIDEHTTPClient(ctx, account), cursorpkg.IDEClientConfig{
 		BaseURL: baseURL, ClientVersion: clientVersion,
-		ClientOS: runtime.GOOS, ClientArch: runtime.GOARCH,
+		ClientOS: runtime.GOOS, ClientArch: cursorIDEClientArch(runtime.GOARCH),
 		ClientOSVersion: cursorAccountSetting(account, "cursor_client_os_version"),
 		ConfigVersion:   cursorAccountSetting(account, "cursor_config_version"),
 		Timezone:        time.Now().Location().String(), GhostMode: cfg.GhostMode,
@@ -376,9 +471,18 @@ func (s *CursorGatewayService) newCursorIDEClient(ctx context.Context, account *
 	return client, cursorpkg.IDECredential{AccessToken: accessToken, MachineID: cursorAccountSetting(account, "cursor_machine_id")}, nil
 }
 
+func cursorIDEClientArch(goArch string) string {
+	switch strings.ToLower(strings.TrimSpace(goArch)) {
+	case "amd64":
+		return "x64"
+	default:
+		return strings.TrimSpace(goArch)
+	}
+}
+
 func prepareCursorIDEMode(dialogue *cursorpkg.Dialogue) cursorpkg.IDEMode {
 	if dialogue == nil {
-		return cursorpkg.IDEModeAsk
+		return cursorpkg.IDEModeAgent
 	}
 	mode := strings.ToLower(strings.TrimSpace(dialogue.ToolChoice.Mode))
 	if mode == "none" {
@@ -386,7 +490,7 @@ func prepareCursorIDEMode(dialogue *cursorpkg.Dialogue) cursorpkg.IDEMode {
 		return cursorpkg.IDEModeAsk
 	}
 	if len(dialogue.Tools) == 0 {
-		return cursorpkg.IDEModeAsk
+		return cursorpkg.IDEModeAgent
 	}
 	switch mode {
 	case "any", "required":

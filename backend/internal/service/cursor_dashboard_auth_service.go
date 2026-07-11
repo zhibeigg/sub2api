@@ -150,6 +150,11 @@ func (s *CursorDashboardAuthService) PollLogin(ctx context.Context, sessionID st
 	credentials := shallowCopyMap(account.Credentials)
 	credentials["dashboard_access_token"] = polled.AccessToken
 	credentials["dashboard_refresh_token"] = polled.RefreshToken
+	// Cursor binds IDE chat request checksums to the UUID used by the PKCE
+	// login flow. Model discovery does not enforce this binding, so omitting it
+	// produces a misleading state where AvailableModels works but chat is
+	// rejected as an unsupported client.
+	credentials["cursor_machine_id"] = session.Flow.UUID
 	credentials["_token_version"] = time.Now().UnixMilli()
 	if err := persistAccountCredentials(ctx, s.accountRepo, account, credentials); err != nil {
 		return nil, fmt.Errorf("persist Cursor Dashboard session: %w", err)

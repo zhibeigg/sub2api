@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -27,10 +28,15 @@ type CursorGatewayService struct {
 	redisClient   *redis.Client
 	cfg           *config.Config
 	dashboardAuth *CursorDashboardAuthService
+	ideModelMu    sync.RWMutex
+	ideModelCache map[int64]cursorIDEModelCatalogCache
 }
 
 func NewCursorGatewayService(httpUpstream HTTPUpstream, proxyRepo ProxyRepository, _ *TLSFingerprintProfileService, redisClient *redis.Client, cfg *config.Config) *CursorGatewayService {
-	return &CursorGatewayService{httpUpstream: httpUpstream, proxyRepo: proxyRepo, redisClient: redisClient, cfg: cfg}
+	return &CursorGatewayService{
+		httpUpstream: httpUpstream, proxyRepo: proxyRepo, redisClient: redisClient, cfg: cfg,
+		ideModelCache: make(map[int64]cursorIDEModelCatalogCache),
+	}
 }
 
 func (s *CursorGatewayService) SetDashboardAuthService(auth *CursorDashboardAuthService) {
@@ -165,7 +171,7 @@ func (s *CursorGatewayService) CountTokens(body []byte, protocol cursorpkg.Proto
 }
 
 func (s *CursorGatewayService) forward(ctx context.Context, c *gin.Context, account *Account, body []byte, protocol cursorpkg.Protocol) (*ForwardResult, error) {
-	if s.cursorTransportMode(account) == CursorTransportIDEChat {
+	if s.cursorForwardTransportMode(account) == CursorTransportIDEChat {
 		return s.forwardIDE(ctx, c, account, body, protocol)
 	}
 	return s.forwardCloud(ctx, c, account, body, protocol)
@@ -356,7 +362,7 @@ func (s *CursorGatewayService) cursorConfig() config.CursorConfig {
 	}
 	return config.CursorConfig{
 		BaseURL: cursorpkg.DefaultCloudBaseURL, ChatBaseURL: cursorpkg.DefaultDashboardBaseURL,
-		DefaultTransportMode: CursorTransportAuto, ClientVersion: "3.1.0",
+		DefaultTransportMode: CursorTransportAuto, ClientVersion: "3.11.13",
 		MaxFrameBytes: 8 << 20, MaxBufferedBytes: 16 << 20,
 		ResponseHeaderTimeoutSeconds: 60, IDEStreamIdleTimeoutSeconds: 60,
 		DashboardBaseURL: cursorpkg.DefaultDashboardBaseURL, DashboardAuthWebsiteURL: cursorpkg.DefaultDashboardWebsiteURL,
@@ -380,6 +386,26 @@ func (s *CursorGatewayService) cursorTransportMode(account *Account) string {
 		if account != nil && strings.TrimSpace(account.GetCredential("dashboard_access_token")) != "" {
 			return CursorTransportIDEChat
 		}
+		return CursorTransportCloudAgent
+	}
+	return mode
+}
+
+func (s *CursorGatewayService) cursorForwardTransportMode(account *Account) string {
+	mode := s.cursorTransportMode(account)
+	if mode != CursorTransportIDEChat || strings.TrimSpace(cursorAccountSetting(account, "cursor_machine_id")) != "" {
+		return mode
+	}
+	raw := cursorAccountSetting(account, "cursor_transport_mode")
+	if strings.TrimSpace(raw) == "" {
+		raw = s.cursorConfig().DefaultTransportMode
+	}
+	if NormalizeCursorTransportMode(raw) == CursorTransportAuto {
+		accountID := int64(0)
+		if account != nil {
+			accountID = account.ID
+		}
+		slog.Warn("cursor_ide_machine_id_missing_fallback", "account_id", accountID, "fallback", CursorTransportCloudAgent)
 		return CursorTransportCloudAgent
 	}
 	return mode
