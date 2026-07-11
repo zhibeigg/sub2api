@@ -176,7 +176,7 @@ curl --fail-with-body \
 - `parameters`：允许传入的参数和值；
 - `variants`：有效的 `id + params` 组合以及默认变体。
 
-Cloud Agent 转发会把账号级 `cursor_model_params` 作为默认参数，并允许请求中的思考配置覆盖其中的 `thinking` 和 `effort`。Anthropic 使用 `thinking.type` 与 `output_config.effort`，OpenAI Chat 使用 `reasoning_effort`，OpenAI Responses 使用 `reasoning.effort`；因此调用方只需请求逻辑模型，不需要拼接变体后缀。
+Cloud Agent 转发会把账号级 `cursor_model_params` 作为默认参数，并允许请求中的思考配置覆盖其中的 `thinking` 和 `effort`。网关以 `/v1/models` 标记的默认 variant 为基线，覆盖请求参数后选择一条完整有效的 `id + params` 组合，避免向 Cursor 发送不完整参数。Anthropic 使用 `thinking.type` 与 `output_config.effort`，OpenAI Chat 使用 `reasoning_effort`，OpenAI Responses 使用 `reasoning.effort`；因此调用方只需请求逻辑模型，不需要拼接变体后缀。
 
 Sub2API 内置的模型目录只是离线兼容快照，不替代上游发现结果。账号白名单优先使用官方 `/v1/models` 的逻辑模型 ID；IDE-only 账号使用 `legacySlugs` 折叠结果。重新同步 Cursor 账号时会用逻辑目录替换旧白名单，从而清理历史版本写入的 `*-thinking-*`、`*-fast`、`*-low/high/max` 执行变体。若调用方希望使用 Cursor 的账户默认模型，应完全省略 `model`，而不是发送空对象。
 

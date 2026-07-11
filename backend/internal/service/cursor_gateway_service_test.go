@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	cursorpkg "github.com/Wei-Shaw/sub2api/internal/pkg/cursor"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
@@ -323,6 +324,19 @@ func TestCursorVariantPreferenceAndCloudModelParams(t *testing.T) {
 		params[item.ID] = item.Value
 	}
 	require.Equal(t, map[string]string{"context": "1m", "effort": "high", "thinking": "true"}, params)
+
+	partialRef := &cursorpkg.ModelRef{ID: "claude-fable-5", Params: []cursorpkg.ModelParam{
+		{ID: "thinking", Value: "true"}, {ID: "effort", Value: "high"},
+	}}
+	completedRef, err := completeCursorCloudModelRef(partialRef, []cursorpkg.CloudModel{{
+		ID: "claude-fable-5",
+		Variants: []cursorpkg.CloudModelVariant{
+			{Params: []cursorpkg.ModelParam{{ID: "thinking", Value: "true"}, {ID: "context", Value: "1m"}, {ID: "effort", Value: "medium"}}, IsDefault: true},
+			{Params: []cursorpkg.ModelParam{{ID: "thinking", Value: "true"}, {ID: "context", Value: "1m"}, {ID: "effort", Value: "high"}}},
+		},
+	}})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"context": "1m", "effort": "high", "thinking": "true"}, cursorModelParamMap(completedRef.Params))
 
 	logicalModel, legacyPreference := normalizeCursorCloudModel("claude-4.7-opus-high-thinking-fast", cursorVariantPreference{})
 	require.Equal(t, "claude-opus-4-7", logicalModel)

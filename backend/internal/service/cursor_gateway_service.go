@@ -328,9 +328,20 @@ func (s *CursorGatewayService) forwardCloud(ctx context.Context, c *gin.Context,
 		return nil, mapCursorError(err)
 	}
 	estimatedInput := estimateCursorPayloadTokens(payload)
+	modelRef := cursorCloudModelRef(account, upstreamModel, variantPreference)
+	if modelRef != nil && len(modelRef.Params) > 0 {
+		models, listErr := client.ListModels(ctx)
+		if listErr != nil {
+			return nil, mapCursorError(listErr)
+		}
+		modelRef, err = completeCursorCloudModelRef(modelRef, models)
+		if err != nil {
+			return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte(err.Error())}
+		}
+	}
 	created, err := client.CreateAgent(ctx, cursorpkg.CreateAgentRequest{
 		Prompt: cursorpkg.CloudPrompt{Text: cursorpkg.RenderAgentPrompt(payload)},
-		Model:  cursorCloudModelRef(account, upstreamModel, variantPreference),
+		Model:  modelRef,
 		Name:   "Sub2API compatibility request",
 	})
 	if err != nil {
@@ -752,6 +763,87 @@ func cursorCloudModelRef(account *Account, model string, preference cursorVarian
 		ref.Params = append(ref.Params, cursorpkg.ModelParam{ID: key, Value: params[key]})
 	}
 	return ref
+}
+
+func completeCursorCloudModelRef(ref *cursorpkg.ModelRef, models []cursorpkg.CloudModel) (*cursorpkg.ModelRef, error) {
+	if ref == nil || len(ref.Params) == 0 {
+		return ref, nil
+	}
+	var selectedModel *cursorpkg.CloudModel
+	for index := range models {
+		model := &models[index]
+		if strings.EqualFold(strings.TrimSpace(model.ID), strings.TrimSpace(ref.ID)) {
+			selectedModel = model
+			break
+		}
+		for _, alias := range model.Aliases {
+			if strings.EqualFold(strings.TrimSpace(alias), strings.TrimSpace(ref.ID)) {
+				selectedModel = model
+				break
+			}
+		}
+		if selectedModel != nil {
+			break
+		}
+	}
+	if selectedModel == nil || len(selectedModel.Variants) == 0 {
+		return ref, nil
+	}
+
+	desired := make(map[string]string, len(ref.Params))
+	for _, param := range ref.Params {
+		desired[strings.TrimSpace(param.ID)] = strings.TrimSpace(param.Value)
+	}
+	base := selectedModel.Variants[0]
+	for _, variant := range selectedModel.Variants {
+		if variant.IsDefault {
+			base = variant
+			break
+		}
+	}
+	target := cursorModelParamMap(base.Params)
+	for key, value := range desired {
+		target[key] = value
+	}
+	for _, variant := range selectedModel.Variants {
+		if cursorModelParamMapsEqual(target, cursorModelParamMap(variant.Params)) {
+			return &cursorpkg.ModelRef{ID: selectedModel.ID, Params: append([]cursorpkg.ModelParam(nil), variant.Params...)}, nil
+		}
+	}
+	for _, variant := range selectedModel.Variants {
+		params := cursorModelParamMap(variant.Params)
+		matches := true
+		for key, value := range desired {
+			if params[key] != value {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return &cursorpkg.ModelRef{ID: selectedModel.ID, Params: append([]cursorpkg.ModelParam(nil), variant.Params...)}, nil
+		}
+	}
+	return nil, fmt.Errorf("Cursor model %q has no variant matching the requested parameters", ref.ID)
+}
+
+func cursorModelParamMap(params []cursorpkg.ModelParam) map[string]string {
+	result := make(map[string]string, len(params))
+	for _, param := range params {
+		result[strings.TrimSpace(param.ID)] = strings.TrimSpace(param.Value)
+	}
+	return result
+}
+
+func cursorModelParamMapsEqual(left, right map[string]string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for key, value := range left {
+		if right[key] != value {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *CursorGatewayService) cleanupCloudAgent(client *cursorpkg.CloudClient, agentID, runID string, cancelRun bool) {
