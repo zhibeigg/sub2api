@@ -75,6 +75,16 @@ html.dark .monolog-scope {
   --public-inverse-line: oklch(72% 0.014 128);
 }
 
+.monolog-scope.public-home {
+  --public-accent: oklch(78% 0.12 238);
+  --public-accent-soft: oklch(92% 0.045 238);
+}
+
+html.dark .monolog-scope.public-home {
+  --public-accent: oklch(80% 0.11 238);
+  --public-accent-soft: oklch(28% 0.055 238);
+}
+
 .monolog-scope,
 .monolog-scope * {
   box-sizing: border-box;
