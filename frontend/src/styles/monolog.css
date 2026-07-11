@@ -25,8 +25,8 @@
   --public-soft: oklch(56% 0.015 128);
   --public-line: oklch(82% 0.014 128);
   --public-line-strong: oklch(62% 0.018 128);
-  --public-accent: oklch(78% 0.14 118);
-  --public-accent-soft: oklch(91% 0.065 118);
+  --public-accent: oklch(78% 0.12 238);
+  --public-accent-soft: oklch(92% 0.045 238);
   --public-danger: oklch(56% 0.19 27);
   --public-inverse-bg: oklch(17% 0.014 128);
   --public-inverse-ink: oklch(94% 0.009 112);
@@ -66,23 +66,13 @@ html.dark .monolog-scope {
   --public-soft: oklch(55% 0.015 112);
   --public-line: oklch(29% 0.016 128);
   --public-line-strong: oklch(47% 0.018 128);
-  --public-accent: oklch(80% 0.13 118);
-  --public-accent-soft: oklch(27% 0.07 118);
+  --public-accent: oklch(80% 0.11 238);
+  --public-accent-soft: oklch(28% 0.055 238);
   --public-danger: oklch(68% 0.17 27);
   --public-inverse-bg: oklch(92% 0.012 112);
   --public-inverse-ink: oklch(18% 0.014 128);
   --public-inverse-muted: oklch(42% 0.018 128);
   --public-inverse-line: oklch(72% 0.014 128);
-}
-
-.monolog-scope.public-home {
-  --public-accent: oklch(78% 0.12 238);
-  --public-accent-soft: oklch(92% 0.045 238);
-}
-
-html.dark .monolog-scope.public-home {
-  --public-accent: oklch(80% 0.11 238);
-  --public-accent-soft: oklch(28% 0.055 238);
 }
 
 .monolog-scope,
