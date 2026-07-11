@@ -73,6 +73,14 @@ const ModelWhitelistSelectorStub = defineComponent({
     modelValue: {
       type: Array,
       default: () => []
+    },
+    platform: {
+      type: String,
+      default: ''
+    },
+    accountId: {
+      type: Number,
+      default: undefined
     }
   },
   emits: ['update:modelValue'],
@@ -88,6 +96,8 @@ const ModelWhitelistSelectorStub = defineComponent({
       <span data-testid="model-whitelist-value">
         {{ Array.isArray(modelValue) ? modelValue.join(',') : '' }}
       </span>
+      <span data-testid="model-sync-platform">{{ platform }}</span>
+      <span data-testid="model-sync-account-id">{{ accountId }}</span>
     </div>
   `
 })
@@ -734,6 +744,23 @@ describe('EditAccountModal', () => {
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).not.toHaveProperty('api_key')
     expect(updateAccountMock.mock.calls[0]?.[1]?.clear_credentials).toBeUndefined()
+  })
+
+  it('exposes Cursor upstream model sync and persists /v1/messages scheduling', async () => {
+    const account = buildCursorAccount()
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    expect(wrapper.get('[data-testid="model-sync-platform"]').text()).toBe('cursor')
+    expect(wrapper.get('[data-testid="model-sync-account-id"]').text()).toBe('6')
+    await wrapper.get('[data-testid="mixed-scheduling-checkbox"]').setValue(true)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).toEqual({ mixed_scheduling: true })
   })
 
   it('replaces the Cursor API Key when requested', async () => {

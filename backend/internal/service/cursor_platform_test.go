@@ -15,9 +15,22 @@ func TestCursorPlatformCapabilities(t *testing.T) {
 	require.False(t, PlatformSupportsVideoGeneration(PlatformCursor))
 	require.False(t, PlatformSupportsBatchImageGeneration(PlatformCursor))
 	require.True(t, PlatformSupportsUpstreamModelSync(PlatformCursor))
+	require.True(t, IsMixedSchedulingCapablePlatform(PlatformCursor))
 	require.Equal(t, 1, DefaultAccountConcurrency(PlatformCursor))
-	require.False(t, IsMixedSchedulingCapablePlatform(PlatformCursor))
 	require.Contains(t, AllowedQuotaPlatforms, PlatformCursor)
+}
+
+func TestCursorMixedSchedulingTargetsAnthropicMessagesOnly(t *testing.T) {
+	t.Parallel()
+	require.Contains(t, MixedSchedulingCandidatePlatforms(PlatformAnthropic), PlatformCursor)
+	require.NotContains(t, MixedSchedulingCandidatePlatforms(PlatformGemini), PlatformCursor)
+	require.NotContains(t, MixedSchedulingCandidatePlatforms(PlatformOpenAI), PlatformCursor)
+
+	account := &Account{
+		Platform: PlatformCursor,
+		Extra:    map[string]any{"mixed_scheduling": true},
+	}
+	require.True(t, account.IsMixedSchedulingEnabled())
 }
 
 func TestCursorAccountDefaultMapping(t *testing.T) {

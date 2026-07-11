@@ -21,7 +21,7 @@ export const PLATFORM_REGISTRY: Record<AccountPlatform & GroupPlatform, Platform
   antigravity: { value: 'antigravity', label: 'Antigravity', order: 40, capabilities: { quota: true, image: true, video: false, models: true, usage: true, modelSync: true } },
   grok: { value: 'grok', label: 'Grok', order: 50, capabilities: { quota: true, image: true, video: true, models: true, usage: true, modelSync: true } },
   adobe: { value: 'adobe', label: 'Adobe', order: 60, capabilities: { quota: true, image: true, video: true, models: true, usage: true, modelSync: false } },
-  cursor: { value: 'cursor', label: 'Cursor', order: 65, capabilities: { quota: true, image: false, video: false, models: true, usage: true, modelSync: false } },
+  cursor: { value: 'cursor', label: 'Cursor', order: 65, capabilities: { quota: true, image: false, video: false, models: true, usage: true, modelSync: true } },
   kiro: { value: 'kiro', label: 'Kiro', order: 70, capabilities: { quota: false, image: false, video: false, models: true, usage: true, modelSync: false } },
 }
 

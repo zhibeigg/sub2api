@@ -123,6 +123,25 @@ const PlainStub = defineComponent({
   template: '<div><slot /></div>'
 })
 
+const ModelWhitelistSelectorStub = defineComponent({
+  name: 'ModelWhitelistSelector',
+  props: {
+    modelValue: { type: Array, default: () => [] },
+    platform: { type: String, default: '' },
+    syncCredentials: { type: Object, default: undefined }
+  },
+  emits: ['update:modelValue'],
+  template: `
+    <div data-testid="model-whitelist-selector">
+      <span data-testid="model-sync-platform">{{ platform }}</span>
+      <span data-testid="model-sync-ready">{{ syncCredentials ? 'ready' : 'missing' }}</span>
+      <button type="button" data-testid="set-cursor-models" @click="$emit('update:modelValue', ['claude-sonnet-4-6'])">
+        sync models
+      </button>
+    </div>
+  `
+})
+
 const mountModal = () => mount(CreateAccountModal, {
   props: { show: true, proxies: [], groups: [] },
   global: {
@@ -135,7 +154,7 @@ const mountModal = () => mount(CreateAccountModal, {
       ProxySelector: PlainStub,
       ProxyAdBanner: PlainStub,
       GroupSelector: PlainStub,
-      ModelWhitelistSelector: PlainStub,
+      ModelWhitelistSelector: ModelWhitelistSelectorStub,
       QuotaLimitCard: PlainStub,
       OAuthAuthorizationFlow: PlainStub
     }
@@ -186,39 +205,59 @@ describe('CreateAccountModal Adobe/Cursor credential validation flow', () => {
     await selectPlatform(wrapper, 'Cursor')
 
     expect(wrapper.find('[data-testid="cursor-account-type"]').exists()).toBe(true)
-    expect(wrapper.findAll('[data-testid="credential-model-restriction"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-testid="credential-model-restriction"]')).toHaveLength(0)
+    expect(wrapper.find('[data-testid="mixed-scheduling-checkbox"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('admin.accounts.cursor.cloudAgentsApiKey')
-    expect(wrapper.text()).toContain('admin.accounts.mapRequestModels')
+    expect(wrapper.text()).not.toContain('admin.accounts.mapRequestModels')
     expect(wrapper.text()).not.toContain('admin.accounts.baseUrl')
     expect(wrapper.text()).not.toContain('admin.accounts.apiKeyHint')
   })
 
-  it('preserves Cursor model mapping when validating and creating the account', async () => {
+  it('uses the Cursor API Key for upstream model sync and preserves synchronized models', async () => {
     validateCredentialsMock.mockResolvedValue({ success: true, platform: 'cursor', message: 'ok' })
     const wrapper = mountModal()
     await selectPlatform(wrapper, 'Cursor')
-
-    const addMappingButton = wrapper.findAll('button').find(item => item.text().includes('admin.accounts.addMapping'))
-    expect(addMappingButton).toBeTruthy()
-    await addMappingButton!.trigger('click')
-    await wrapper.get('input[placeholder="admin.accounts.requestModel"]').setValue('claude-sonnet-5')
-    await wrapper.get('input[placeholder="admin.accounts.actualModel"]').setValue('claude-sonnet-4-6')
-
     await enterNameAndContinue(wrapper)
+
     await wrapper.get('[data-testid="cursor-api-key-input"]').setValue('cursor-api-key')
+    await nextTick()
+    expect(wrapper.get('[data-testid="model-sync-platform"]').text()).toBe('cursor')
+    expect(wrapper.get('[data-testid="model-sync-ready"]').text()).toBe('ready')
+    expect(wrapper.findComponent(ModelWhitelistSelectorStub).props('syncCredentials')).toEqual({
+      platform: 'cursor',
+      type: 'apikey',
+      api_key: 'cursor-api-key'
+    })
+    await wrapper.get('[data-testid="set-cursor-models"]').trigger('click')
+    await nextTick()
     await wrapper.get('#credential-validation-form').trigger('submit')
 
     expect(validateCredentialsMock).toHaveBeenCalledWith(expect.objectContaining({
       credentials: expect.objectContaining({
         api_key: 'cursor-api-key',
-        model_mapping: { 'claude-sonnet-5': 'claude-sonnet-4-6' }
+        model_mapping: { 'claude-sonnet-4-6': 'claude-sonnet-4-6' }
       })
     }))
     expect(createAccountMock).toHaveBeenCalledWith(expect.objectContaining({
       credentials: expect.objectContaining({
         api_key: 'cursor-api-key',
-        model_mapping: { 'claude-sonnet-5': 'claude-sonnet-4-6' }
+        model_mapping: { 'claude-sonnet-4-6': 'claude-sonnet-4-6' }
       })
+    }))
+  })
+
+  it('persists the Cursor /v1/messages scheduling switch when creating the account', async () => {
+    validateCredentialsMock.mockResolvedValue({ success: true, platform: 'cursor', message: 'ok' })
+    const wrapper = mountModal()
+    await selectPlatform(wrapper, 'Cursor')
+    await wrapper.get('[data-testid="mixed-scheduling-checkbox"]').setValue(true)
+    await enterNameAndContinue(wrapper)
+    await wrapper.get('[data-testid="cursor-api-key-input"]').setValue('cursor-api-key')
+    await wrapper.get('#credential-validation-form').trigger('submit')
+
+    expect(createAccountMock).toHaveBeenCalledWith(expect.objectContaining({
+      platform: 'cursor',
+      extra: { mixed_scheduling: true }
     }))
   })
 

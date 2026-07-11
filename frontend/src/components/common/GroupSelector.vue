@@ -109,6 +109,11 @@ const filteredGroups = computed(() => {
       result = result.filter(
         (g) => g.platform === 'kiro' || g.platform === 'anthropic' || g.platform === 'openai'
       )
+    } else if (props.platform === 'cursor' && props.mixedScheduling) {
+      // Cursor Cloud Agents 通过兼容层参与 Anthropic /v1/messages 调度。
+      result = result.filter(
+        (g) => g.platform === 'cursor' || g.platform === 'anthropic'
+      )
     } else {
       // 默认：只能选择同 platform 的分组
       result = result.filter((g) => g.platform === props.platform)

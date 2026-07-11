@@ -680,7 +680,7 @@ func (s *SchedulerSnapshotService) loadAccountsFromDB(ctx context.Context, bucke
 	}
 
 	if useMixed {
-		platforms := []string{bucket.Platform, PlatformAntigravity, PlatformKiro}
+		platforms := MixedSchedulingCandidatePlatforms(bucket.Platform)
 		var accounts []Account
 		var err error
 		if groupID > 0 {

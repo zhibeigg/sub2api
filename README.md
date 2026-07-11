@@ -685,7 +685,7 @@ See the [Adobe integration guide](docs/ADOBE_INTEGRATION.md) for credentials, co
 Sub2API documents Cursor integration against the official Cloud Agents API Beta at `https://api.cursor.com`. Authentication uses a Cursor Dashboard user API Key or an agent-scoped team service-account API Key; browser Cookies and the legacy login-helper extension are not used.
 
 - Verify the active key with `GET /v1/me`; user keys may return owner fields, while service-account/team keys omit personal owner fields.
-- Discover supported model IDs and parameters with `GET /v1/models`; omit `model` when the Cursor-configured default should be used.
+- Discover supported model IDs and parameters with `GET /v1/models`; the admin account form can synchronize these IDs into the model whitelist, and Cursor accounts may opt in to Anthropic `/v1/messages` group scheduling.
 - Create Agents with `POST /v1/agents`. Omitting both `repos` and `env` (or sending `repos: []`) creates a no-repository Agent suitable for temporary tasks; delete it explicitly when its context is no longer needed.
 - Cloud Agents API is an official Beta, and selected capabilities can be gated or return `feature_unavailable`. Do not rely on Beta fields until verified for the target account.
 - Cursor plan usage, model usage, Cloud Agent execution, and on-demand overage remain Cursor-side charges. Sub2API billing applies only to prices explicitly configured locally; local usage must not be presented as official Cursor credits.

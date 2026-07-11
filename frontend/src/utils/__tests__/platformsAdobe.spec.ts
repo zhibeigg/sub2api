@@ -15,7 +15,7 @@ describe('Cursor platform registry', () => {
       video: false,
       models: true,
       usage: true,
-      modelSync: false
+      modelSync: true
     })
     expect(QUOTA_PLATFORMS).toContain('cursor')
     expect(platformLabel('cursor')).toBe('Cursor')

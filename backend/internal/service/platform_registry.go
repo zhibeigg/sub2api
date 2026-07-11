@@ -54,6 +54,7 @@ var platformCapabilities = map[string]PlatformCapabilities{
 	},
 	PlatformCursor: {
 		AccountTypes:       accountTypeSet(AccountTypeAPIKey),
+		MixedScheduling:    true,
 		UpstreamModelSync:  true,
 		DefaultConcurrency: 1,
 	},

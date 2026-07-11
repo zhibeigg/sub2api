@@ -2439,18 +2439,19 @@
           <Select v-model="form.status" :options="statusOptions" />
         </div>
 
-        <!-- Mixed Scheduling: antigravity 编辑态只读；kiro 允许编辑（存量账号可开启） -->
-        <div v-if="account?.platform === 'antigravity' || account?.platform === 'kiro'" class="flex items-center gap-2">
+        <!-- Mixed Scheduling: antigravity 编辑态只读；kiro / cursor 允许编辑 -->
+        <div v-if="account?.platform === 'antigravity' || account?.platform === 'kiro' || account?.platform === 'cursor'" class="flex items-center gap-2">
           <label
             class="flex items-center gap-2"
-            :class="account?.platform === 'kiro' ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'"
+            :class="account?.platform === 'kiro' || account?.platform === 'cursor' ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'"
           >
             <input
               type="checkbox"
               v-model="mixedScheduling"
-              :disabled="account?.platform !== 'kiro'"
+              :disabled="account?.platform !== 'kiro' && account?.platform !== 'cursor'"
+              data-testid="mixed-scheduling-checkbox"
               class="h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
-              :class="account?.platform === 'kiro' ? '' : 'cursor-not-allowed'"
+              :class="account?.platform === 'kiro' || account?.platform === 'cursor' ? '' : 'cursor-not-allowed'"
             />
             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t('admin.accounts.mixedScheduling') }}
@@ -4331,8 +4332,8 @@ const handleSubmit = async () => {
       updatePayload.credentials = newCredentials
     }
 
-    // For antigravity / kiro accounts, handle mixed_scheduling and allow_overages in extra
-    if (props.account.platform === 'antigravity' || props.account.platform === 'kiro') {
+    // For /v1/messages-compatible accounts, persist mixed_scheduling in extra.
+    if (props.account.platform === 'antigravity' || props.account.platform === 'kiro' || props.account.platform === 'cursor') {
       const currentExtra = (props.account.extra as Record<string, unknown>) || {}
       const newExtra: Record<string, unknown> = { ...currentExtra }
       if (mixedScheduling.value) {
@@ -4340,10 +4341,12 @@ const handleSubmit = async () => {
       } else {
         delete newExtra.mixed_scheduling
       }
-      if (allowOverages.value) {
-        newExtra.allow_overages = true
-      } else {
-        delete newExtra.allow_overages
+      if (props.account.platform === 'antigravity' || props.account.platform === 'kiro') {
+        if (allowOverages.value) {
+          newExtra.allow_overages = true
+        } else {
+          delete newExtra.allow_overages
+        }
       }
       updatePayload.extra = newExtra
     }

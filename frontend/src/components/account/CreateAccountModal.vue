@@ -2028,7 +2028,7 @@
 
       <!-- Credential-based platforms use one dedicated model restriction section outside the generic API Key container. -->
       <div
-        v-if="form.platform === 'cursor' || ((form.platform === 'openai' || form.platform === 'grok' || form.platform === 'adobe' || form.platform === 'kiro') && accountCategory === 'oauth-based')"
+        v-if="(form.platform === 'openai' || form.platform === 'grok' || form.platform === 'adobe' || form.platform === 'kiro') && accountCategory === 'oauth-based'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
         data-testid="credential-model-restriction"
       >
@@ -3060,12 +3060,13 @@
       </div>
 
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
-        <!-- Mixed Scheduling (antigravity / kiro accounts) -->
-        <div v-if="form.platform === 'antigravity' || form.platform === 'kiro'" class="flex items-center gap-2">
+        <!-- Mixed Scheduling (/v1/messages compatible accounts) -->
+        <div v-if="form.platform === 'antigravity' || form.platform === 'kiro' || form.platform === 'cursor'" class="flex items-center gap-2">
           <label class="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
               v-model="mixedScheduling"
+              data-testid="mixed-scheduling-checkbox"
               class="h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
             />
             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -3159,6 +3160,18 @@
             data-bwignore="true"
           />
           <p class="input-hint">{{ t('admin.accounts.cursor.apiKeyHint') }}</p>
+        </div>
+        <div class="border-t border-gray-200 pt-4 dark:border-dark-600" data-testid="cursor-model-sync-section">
+          <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
+          <ModelWhitelistSelector
+            v-model="allowedModels"
+            platform="cursor"
+            :sync-credentials="syncPreviewCredentials"
+          />
+          <p class="text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.accounts.selectedModels', { count: allowedModels.length }) }}
+            <span v-if="allowedModels.length === 0">{{ t('admin.accounts.supportsAllModels') }}</span>
+          </p>
         </div>
       </section>
 
@@ -3902,6 +3915,15 @@ const credentialValidationSummary = computed(() => {
 })
 
 const syncPreviewCredentials = computed(() => {
+  if (form.platform === 'cursor') {
+    const apiKey = cursorCredentials.api_key.trim()
+    if (!apiKey) return undefined
+    return {
+      platform: 'cursor',
+      type: 'apikey',
+      api_key: apiKey
+    }
+  }
   if (!apiKeyValue.value) return undefined
   return {
     platform: form.platform,
@@ -4110,10 +4132,12 @@ const applyOpenAIEndpointCapabilities = (credentials: Record<string, unknown>) =
   credentials.openai_capabilities = capabilities
 }
 
-function buildAntigravityExtra(): Record<string, unknown> | undefined {
+function buildMixedSchedulingExtra(): Record<string, unknown> | undefined {
   const extra: Record<string, unknown> = {}
   if (mixedScheduling.value) extra.mixed_scheduling = true
-  if (allowOverages.value) extra.allow_overages = true
+  if ((form.platform === 'antigravity' || form.platform === 'kiro') && allowOverages.value) {
+    extra.allow_overages = true
+  }
   return Object.keys(extra).length > 0 ? extra : undefined
 }
 
@@ -4308,7 +4332,7 @@ const selectPlatform = (platform: AccountPlatform) => {
   if (platform === 'cursor') {
     accountCategory.value = 'oauth-based'
     addMethod.value = 'oauth'
-    modelRestrictionMode.value = 'mapping'
+    modelRestrictionMode.value = 'whitelist'
     allowedModels.value = []
     modelMappings.value = []
     form.type = 'apikey'
@@ -4455,7 +4479,7 @@ watch(
     if (newPlatform === 'cursor') {
       accountCategory.value = 'oauth-based'
       addMethod.value = 'oauth'
-      modelRestrictionMode.value = 'mapping'
+      modelRestrictionMode.value = 'whitelist'
       allowedModels.value = []
       modelMappings.value = []
       form.type = 'apikey'
@@ -5238,7 +5262,7 @@ const handleKiroBuilderIDStart = async () => {
   if (modelMapping) {
     creds.model_mapping = modelMapping
   }
-  await createAccountAndFinish('kiro', 'oauth' as AccountType, creds, buildAntigravityExtra())
+  await createAccountAndFinish('kiro', 'oauth' as AccountType, creds, buildMixedSchedulingExtra())
 }
 
 // Kiro IAM Identity Center: generate the authorize URL (completion happens in step 2).
@@ -5279,7 +5303,7 @@ const handleKiroComplete = async () => {
     credentials.model_mapping = modelMapping
   }
 
-  await createAccountAndFinish('kiro', 'oauth' as AccountType, credentials, buildAntigravityExtra())
+  await createAccountAndFinish('kiro', 'oauth' as AccountType, credentials, buildMixedSchedulingExtra())
 }
 
 const buildCredentialValidationCreatePayload = (): CreateAccountRequest | null => {
@@ -5300,6 +5324,7 @@ const buildCredentialValidationCreatePayload = (): CreateAccountRequest | null =
       type: 'apikey',
       concurrency: 1,
       credentials,
+      extra: buildMixedSchedulingExtra(),
       auto_pause_on_expired: autoPauseOnExpired.value
     }
   }
@@ -5484,7 +5509,7 @@ const handleSubmit = async () => {
 
     applyInterceptWarmup(credentials, interceptWarmupRequests.value, 'create')
 
-    const extra = buildAntigravityExtra()
+    const extra = buildMixedSchedulingExtra()
     await createAccountAndFinish(form.platform, 'apikey', credentials, extra)
     return
   }
@@ -6336,7 +6361,7 @@ const handleAntigravityExchange = async (authCode: string) => {
 		if (antigravityModelMapping) {
 			credentials.model_mapping = antigravityModelMapping
 		}
-		const extra = buildAntigravityExtra()
+		const extra = buildMixedSchedulingExtra()
 		await createAccountAndFinish('antigravity', 'oauth', credentials, extra)
   } catch (error: any) {
     antigravityOAuth.error.value = error.response?.data?.detail || t('admin.accounts.oauth.authFailed')

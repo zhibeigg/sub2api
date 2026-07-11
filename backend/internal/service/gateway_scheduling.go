@@ -931,7 +931,7 @@ func (s *GatewayService) listSchedulableAccounts(ctx context.Context, groupID *i
 	}
 	useMixed := GroupPlatformSupportsMixedScheduling(platform) && !hasForcePlatform
 	if useMixed {
-		platforms := []string{platform, PlatformAntigravity, PlatformKiro}
+		platforms := MixedSchedulingCandidatePlatforms(platform)
 		var accounts []Account
 		var err error
 		if groupID != nil {

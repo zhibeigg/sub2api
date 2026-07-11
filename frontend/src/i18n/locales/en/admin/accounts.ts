@@ -760,9 +760,9 @@ export default {
       expiresAtHint: 'Leave empty for no expiration',
       higherPriorityFirst: 'Lower value means higher priority',
       mixedScheduling: 'Use in /v1/messages',
-      mixedSchedulingHint: 'Enable to participate in Anthropic/Gemini group scheduling',
+      mixedSchedulingHint: 'Enable participation in Anthropic /v1/messages group scheduling',
       mixedSchedulingTooltip:
-        '!! WARNING !! Antigravity Claude and Anthropic Claude cannot be used in the same context. If you have both Anthropic and Antigravity accounts, enabling this option will cause frequent 400 errors. When enabled, please use the group feature to isolate Antigravity accounts from Anthropic accounts. Make sure you understand this before enabling!!',
+        'When enabled, this account can serve /v1/messages requests from Anthropic groups. Session context and model capabilities may differ across upstream providers, so isolate accounts with groups and enable only models that were synchronized and verified.',
       aiCreditsBalance: 'AI Credits',
       allowOverages: 'Allow Overages (AI Credits)',
       allowOveragesTooltip:

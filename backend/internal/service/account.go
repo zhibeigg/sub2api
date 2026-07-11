@@ -1510,16 +1510,26 @@ func (a *Account) IsOpenAITokenExpired() bool {
 }
 
 // IsMixedSchedulingCapablePlatform 返回该平台的账户是否可通过 mixed_scheduling
-// 参与其它平台分组的调度（antigravity / kiro——它们上游都提供 Claude 系
-// 及可透传的模型，可被 anthropic/gemini/openai 分组复用）。
+// 参与其它平台分组的调度。Antigravity、Kiro 与 Cursor 都提供可转换为
+// Anthropic Messages 的模型，因此可按账号显式开关参与兼容端点调度。
 func IsMixedSchedulingCapablePlatform(platform string) bool {
-	return platform == PlatformAntigravity || platform == PlatformKiro
+	return platform == PlatformAntigravity || platform == PlatformKiro || platform == PlatformCursor
 }
 
 // GroupPlatformSupportsMixedScheduling 返回该分组平台是否启用混合调度候选加载
 // （anthropic/gemini/openai 分组可纳入启用了 mixed_scheduling 的跨平台账户）。
 func GroupPlatformSupportsMixedScheduling(platform string) bool {
 	return platform == PlatformAnthropic || platform == PlatformGemini || platform == PlatformOpenAI
+}
+
+// MixedSchedulingCandidatePlatforms 返回指定分组在混合调度模式下需要加载的账号平台。
+// Cursor 兼容层当前只加入 Anthropic /v1/messages 调度，不加入 Gemini 或 OpenAI 分组。
+func MixedSchedulingCandidatePlatforms(groupPlatform string) []string {
+	platforms := []string{groupPlatform, PlatformAntigravity, PlatformKiro}
+	if groupPlatform == PlatformAnthropic {
+		platforms = append(platforms, PlatformCursor)
+	}
+	return platforms
 }
 
 // IsMixedSchedulingEnabled 检查账户是否启用混合调度
