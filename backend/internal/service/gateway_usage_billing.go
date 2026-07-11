@@ -695,8 +695,8 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		requestedModel = input.OriginalModel
 	}
 
-	// 计算费用
-	cost := s.calculateRecordUsageCost(ctx, result, apiKey, billingModel, multiplier, imageMultiplier, opts)
+	// 计算费用；账号平台用于选择 Cursor 等平台专属默认定价。
+	cost := s.calculateRecordUsageCost(ctx, result, apiKey, billingModel, account.Platform, multiplier, imageMultiplier, opts)
 
 	// 判断计费方式：订阅模式 vs 余额模式
 	isSubscriptionBilling := subscription != nil && apiKey.Group != nil
@@ -769,30 +769,31 @@ func (s *GatewayService) calculateRecordUsageCost(
 	result *ForwardResult,
 	apiKey *APIKey,
 	billingModel string,
+	pricingPlatform string,
 	multiplier float64,
 	imageMultiplier float64,
 	opts *recordUsageOpts,
 ) *CostBreakdown {
 	// 图片生成：渠道定价为 token 计费时走 token 路径，否则走图片计费
 	if result.ImageCount > 0 {
-		if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey); resolved != nil && resolved.Mode == BillingModeToken {
-			return s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, opts)
+		if resolved := s.resolveChannelPricing(ctx, billingModel, pricingPlatform, apiKey); resolved != nil && resolved.Mode == BillingModeToken {
+			return s.calculateTokenCost(ctx, result, apiKey, billingModel, pricingPlatform, multiplier, opts)
 		}
-		return s.calculateImageCost(ctx, result, apiKey, billingModel, imageMultiplier)
+		return s.calculateImageCost(ctx, result, apiKey, billingModel, pricingPlatform, imageMultiplier)
 	}
 
 	// Token 计费
-	return s.calculateTokenCost(ctx, result, apiKey, billingModel, multiplier, opts)
+	return s.calculateTokenCost(ctx, result, apiKey, billingModel, pricingPlatform, multiplier, opts)
 }
 
 // resolveChannelPricing 检查指定模型是否存在渠道级别定价。
 // 返回非 nil 的 ResolvedPricing 表示有渠道定价，nil 表示走默认定价路径。
-func (s *GatewayService) resolveChannelPricing(ctx context.Context, billingModel string, apiKey *APIKey) *ResolvedPricing {
+func (s *GatewayService) resolveChannelPricing(ctx context.Context, billingModel, pricingPlatform string, apiKey *APIKey) *ResolvedPricing {
 	if s.resolver == nil || apiKey.Group == nil {
 		return nil
 	}
 	gid := apiKey.Group.ID
-	resolved := s.resolver.Resolve(ctx, PricingInput{Model: billingModel, GroupID: &gid})
+	resolved := s.resolver.Resolve(ctx, PricingInput{Model: billingModel, Platform: pricingPlatform, GroupID: &gid})
 	if resolved.Source == PricingSourceChannel {
 		return resolved
 	}
@@ -805,6 +806,7 @@ func (s *GatewayService) calculateImageCost(
 	result *ForwardResult,
 	apiKey *APIKey,
 	billingModel string,
+	pricingPlatform string,
 	multiplier float64,
 ) *CostBreakdown {
 	sizeTier := NormalizeImageBillingTierOrDefault(result.ImageSize)
@@ -812,7 +814,7 @@ func (s *GatewayService) calculateImageCost(
 	if apiKeyHasConfiguredImagePrice(apiKey, sizeTier) {
 		return s.billingService.CalculateImageCost(billingModel, sizeTier, result.ImageCount, groupConfig, multiplier)
 	}
-	if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey); resolved != nil {
+	if resolved := s.resolveChannelPricing(ctx, billingModel, pricingPlatform, apiKey); resolved != nil {
 		tokens := UsageTokens{
 			InputTokens:       result.Usage.InputTokens,
 			OutputTokens:      result.Usage.OutputTokens,
@@ -822,6 +824,7 @@ func (s *GatewayService) calculateImageCost(
 		cost, err := s.billingService.CalculateCostUnified(CostInput{
 			Ctx:            ctx,
 			Model:          billingModel,
+			Platform:       pricingPlatform,
 			GroupID:        &gid,
 			Tokens:         tokens,
 			RequestCount:   result.ImageCount,
@@ -846,6 +849,7 @@ func (s *GatewayService) calculateTokenCost(
 	result *ForwardResult,
 	apiKey *APIKey,
 	billingModel string,
+	pricingPlatform string,
 	multiplier float64,
 	opts *recordUsageOpts,
 ) *CostBreakdown {
@@ -863,17 +867,29 @@ func (s *GatewayService) calculateTokenCost(
 	var err error
 
 	// 优先尝试渠道定价 → CalculateCostUnified
-	if resolved := s.resolveChannelPricing(ctx, billingModel, apiKey); resolved != nil {
+	if resolved := s.resolveChannelPricing(ctx, billingModel, pricingPlatform, apiKey); resolved != nil {
 		gid := apiKey.Group.ID
 		cost, err = s.billingService.CalculateCostUnified(CostInput{
 			Ctx:            ctx,
 			Model:          billingModel,
+			Platform:       pricingPlatform,
 			GroupID:        &gid,
 			Tokens:         tokens,
 			RequestCount:   1,
 			RateMultiplier: multiplier,
 			Resolver:       s.resolver,
 			Resolved:       resolved,
+		})
+	} else if strings.EqualFold(pricingPlatform, PlatformCursor) && s.resolver != nil {
+		// Cursor 使用平台专属价格目录，不能被同名模型的全局 LiteLLM 价格覆盖。
+		cost, err = s.billingService.CalculateCostUnified(CostInput{
+			Ctx:            ctx,
+			Model:          billingModel,
+			Platform:       pricingPlatform,
+			Tokens:         tokens,
+			RequestCount:   1,
+			RateMultiplier: multiplier,
+			Resolver:       s.resolver,
 		})
 	} else if opts.LongContextThreshold > 0 {
 		// 长上下文双倍计费（如 Gemini 200K 阈值）

@@ -261,6 +261,19 @@ func TestFillGlobalPricingFallback_NilPricing(t *testing.T) {
 	require.InDelta(t, 5e-6, *models[0].Pricing.InputPrice, 1e-12)
 }
 
+func TestFillGlobalPricingFallback_CursorUsesPlatformPricingWithoutLiteLLM(t *testing.T) {
+	svc := &ChannelService{}
+	models := []SupportedModel{{Name: "gpt-5.5", Platform: PlatformCursor}}
+
+	svc.fillGlobalPricingFallback(models)
+
+	require.NotNil(t, models[0].Pricing)
+	require.NotNil(t, models[0].Pricing.InputPrice)
+	require.NotNil(t, models[0].Pricing.OutputPrice)
+	require.InDelta(t, 5e-6, *models[0].Pricing.InputPrice, 1e-15)
+	require.InDelta(t, 30e-6, *models[0].Pricing.OutputPrice, 1e-15)
+}
+
 func TestFillGlobalPricingFallback_EmptyPricingFillsFromLiteLLM(t *testing.T) {
 	// 核心场景：admin UI 建了 pricing 条目（image 模式）但没填价，应走 LiteLLM 兜底。
 	pricingSvc := newStubPricingServiceFromMap(map[string]*LiteLLMModelPricing{

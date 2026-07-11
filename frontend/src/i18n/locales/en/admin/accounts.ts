@@ -30,6 +30,7 @@ export default {
         cloudAgentsApiKeyHint: 'Uses the official task-based Cursor API. The credential is validated in the next step.',
         credentialsTitle: 'Connect a Cursor Account',
         credentialsHint: 'Enter an official Cursor API Key. The credential is validated before the account is created.',
+        modelCatalogHint: '40 Cursor-compatible model IDs are prefilled. Sync /v1/models with the current API Key and treat the upstream result as authoritative.',
         apiKey: 'Cursor API Key',
         apiKeyPlaceholder: 'Enter an official Cursor API Key',
         apiKeyHint: 'The API Key is stored as a sensitive credential and is never prefilled after creation.',

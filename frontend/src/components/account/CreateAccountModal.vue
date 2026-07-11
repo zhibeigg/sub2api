@@ -3163,6 +3163,7 @@
         </div>
         <div class="border-t border-gray-200 pt-4 dark:border-dark-600" data-testid="cursor-model-sync-section">
           <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
+          <p class="mb-3 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.modelCatalogHint') }}</p>
           <ModelWhitelistSelector
             v-model="allowedModels"
             platform="cursor"
@@ -4333,7 +4334,7 @@ const selectPlatform = (platform: AccountPlatform) => {
     accountCategory.value = 'oauth-based'
     addMethod.value = 'oauth'
     modelRestrictionMode.value = 'whitelist'
-    allowedModels.value = []
+    allowedModels.value = [...getModelsByPlatform('cursor')]
     modelMappings.value = []
     form.type = 'apikey'
     form.concurrency = 1
@@ -4480,7 +4481,7 @@ watch(
       accountCategory.value = 'oauth-based'
       addMethod.value = 'oauth'
       modelRestrictionMode.value = 'whitelist'
-      allowedModels.value = []
+      allowedModels.value = [...getModelsByPlatform('cursor')]
       modelMappings.value = []
       form.type = 'apikey'
       form.concurrency = 1

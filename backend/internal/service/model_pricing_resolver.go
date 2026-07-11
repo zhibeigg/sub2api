@@ -8,6 +8,7 @@ import (
 // PricingSource 定价来源标识
 const (
 	PricingSourceChannel  = "channel"
+	PricingSourcePlatform = "platform"
 	PricingSourceLiteLLM  = "litellm"
 	PricingSourceFallback = "fallback"
 )
@@ -56,8 +57,9 @@ func NewModelPricingResolver(channelService *ChannelService, billingService *Bil
 
 // PricingInput 定价解析输入
 type PricingInput struct {
-	Model   string
-	GroupID *int64 // nil 表示不检查渠道
+	Model    string
+	Platform string // 可选：使用平台专属默认定价（如 Cursor）
+	GroupID  *int64 // nil 表示不检查渠道
 }
 
 // Resolve 解析模型定价。
@@ -84,8 +86,8 @@ func (r *ModelPricingResolver) Resolve(ctx context.Context, input PricingInput) 
 		}
 	}
 
-	// 1. 获取基础定价
-	basePricing, source := r.resolveBasePricing(input.Model)
+	// 1. 获取基础定价（平台专属 → LiteLLM → Fallback）
+	basePricing, source := r.resolveBasePricing(input.Model, input.Platform)
 
 	resolved := &ResolvedPricing{
 		Mode:                   BillingModeToken,
@@ -106,8 +108,11 @@ func (r *ModelPricingResolver) Resolve(ctx context.Context, input PricingInput) 
 	return resolved
 }
 
-// resolveBasePricing 从 LiteLLM 或 Fallback 获取基础定价
-func (r *ModelPricingResolver) resolveBasePricing(model string) (*ModelPricing, string) {
+// resolveBasePricing 从平台专属目录、LiteLLM 或 Fallback 获取基础定价。
+func (r *ModelPricingResolver) resolveBasePricing(model, platform string) (*ModelPricing, string) {
+	if pricing := r.billingService.GetPlatformModelPricing(platform, model); pricing != nil {
+		return pricing, PricingSourcePlatform
+	}
 	pricing, err := r.billingService.GetModelPricing(model)
 	if err != nil {
 		slog.Debug("failed to get model pricing from LiteLLM, using fallback",

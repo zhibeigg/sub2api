@@ -175,13 +175,62 @@ var DefaultAdobeModelMapping = map[string]string{
 	"sora-2-pro":      "sora-2-pro",
 }
 
-// DefaultCursorModelMapping maps the compatibility model names to Cursor's
-// automatic Cloud Agents model selection. Administrators can sync official
-// model IDs from /v1/models and replace this mapping per account.
-var DefaultCursorModelMapping = map[string]string{
-	"cursor-agent": "auto",
-	"cursor-chat":  "auto",
+// CursorSupportedModels 是 Cursor Cloud Agents 当前支持的显式模型目录。
+// 管理员仍可通过 /v1/models 同步上游返回的最新模型 ID；这里提供离线默认值。
+var CursorSupportedModels = []string{
+	"claude-4-sonnet",
+	"claude-4-sonnet-1m",
+	"claude-4.5-haiku",
+	"claude-4.5-opus",
+	"claude-4.5-sonnet",
+	"claude-4.6-opus",
+	"claude-4.6-sonnet",
+	"claude-4.7-opus",
+	"claude-fable-5",
+	"claude-4.7-opus-fast",
+	"claude-4.8-opus",
+	"claude-sonnet-5",
+	"composer-1",
+	"composer-2.5",
+	"gemini-2.5-flash",
+	"gemini-3-flash",
+	"gemini-3-pro",
+	"gemini-3-pro-image-preview",
+	"gemini-3.1-pro",
+	"gemini-3.5-flash",
+	"glm-5.2",
+	"gpt-5",
+	"gpt-5-fast",
+	"gpt-5-mini",
+	"gpt-5-codex",
+	"gpt-5.1-codex",
+	"gpt-5.1-codex-max",
+	"gpt-5.1-codex-mini",
+	"gpt-5.2",
+	"gpt-5.2-codex",
+	"gpt-5.3-codex",
+	"gpt-5.4",
+	"gpt-5.4-mini",
+	"gpt-5.4-nano",
+	"gpt-5.5",
+	"gpt-5.6-luna",
+	"gpt-5.6-sol",
+	"gpt-5.6-terra",
+	"grok-4.5",
+	"kimi-k2.7-code",
 }
+
+// DefaultCursorModelMapping 保留 auto 兼容别名，同时默认开放显式模型身份映射。
+var DefaultCursorModelMapping = func() map[string]string {
+	mapping := map[string]string{
+		"cursor-agent": "auto",
+		"cursor-chat":  "auto",
+	}
+	for _, model := range CursorSupportedModels {
+		mapping[model] = model
+	}
+	return mapping
+}()
 
 // DefaultKiroModelMapping 是 Kiro 平台的默认模型映射（模型白名单）。
 // Kiro 上游（AWS CodeWhisperer）提供 Claude 系列模型，pkg/kiro 的 MapModel

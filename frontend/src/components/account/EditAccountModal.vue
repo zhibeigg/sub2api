@@ -580,6 +580,7 @@
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
+        <p v-if="account.platform === 'cursor'" class="mb-3 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.modelCatalogHint') }}</p>
 
         <div
           v-if="isOpenAIModelRestrictionDisabled"

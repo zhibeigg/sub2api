@@ -30,6 +30,7 @@ export default {
         cloudAgentsApiKeyHint: '使用 Cursor 官方任务型 API，凭据将在下一步验证。',
         credentialsTitle: '连接 Cursor 账号',
         credentialsHint: '请输入 Cursor 官方 API Key。创建前会先验证凭据，验证成功后再保存账号。',
+        modelCatalogHint: '已预填 40 个 Cursor 模型兼容 ID；建议使用当前 API Key 同步 /v1/models，以实际可用模型为准。',
         apiKey: 'Cursor API Key',
         apiKeyPlaceholder: '输入 Cursor 官方 API Key',
         apiKeyHint: 'API Key 会作为敏感凭据保存，创建成功后不会在界面回填明文。',

@@ -43,6 +43,25 @@ export const claudeModels = [
   'claude-fable-5'
 ]
 
+// Cursor Cloud Agents（离线默认目录；联网时可通过 /v1/models 同步最新 ID）
+export const cursorModels = [
+  'cursor-agent', 'cursor-chat',
+  'claude-4-sonnet', 'claude-4-sonnet-1m',
+  'claude-4.5-haiku', 'claude-4.5-opus', 'claude-4.5-sonnet',
+  'claude-4.6-opus', 'claude-4.6-sonnet', 'claude-4.7-opus',
+  'claude-fable-5', 'claude-4.7-opus-fast', 'claude-4.8-opus', 'claude-sonnet-5',
+  'composer-1', 'composer-2.5',
+  'gemini-2.5-flash', 'gemini-3-flash', 'gemini-3-pro',
+  'gemini-3-pro-image-preview', 'gemini-3.1-pro', 'gemini-3.5-flash',
+  'glm-5.2',
+  'gpt-5', 'gpt-5-fast', 'gpt-5-mini', 'gpt-5-codex',
+  'gpt-5.1-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini',
+  'gpt-5.2', 'gpt-5.2-codex', 'gpt-5.3-codex',
+  'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-5.5',
+  'gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra',
+  'grok-4.5', 'kimi-k2.7-code'
+]
+
 // Google Gemini
 const geminiModels = [
   // Keep in sync with backend curated Gemini lists.
@@ -419,8 +438,8 @@ export function getModelsByPlatform(platform: string): string[] {
     case 'adobe': return adobeModels
     case 'anthropic':
     case 'claude':
-    case 'cursor':
     case 'kiro': return claudeModels
+    case 'cursor': return cursorModels
     case 'gemini': return geminiModels
     case 'antigravity': return antigravityModels
     case 'zhipu': return zhipuModels

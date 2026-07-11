@@ -41,8 +41,8 @@ type AvailableChannel struct {
 // ListAvailable 返回所有渠道的可用视图：每个渠道附带关联分组信息与支持模型列表。
 //
 // 支持模型通过 (*Channel).SupportedModels() 计算（mapping ∪ pricing 并联）。
-// 对于渠道未配置定价的模型，进一步用 PricingService 的全局 LiteLLM 数据合成
-// 一份展示用定价，让用户看到默认价格而非"未配置"。
+// 对于渠道未配置定价的模型，Cursor 先用平台专属目录，其它平台再用 PricingService
+// 的全局 LiteLLM 数据合成展示用定价，让用户看到默认价格而非"未配置"。
 //
 // 关联分组信息通过 groupRepo.ListActive 查询后按 ID 映射；渠道 GroupIDs 中未在活跃列表中
 // 的分组（已停用或删除）会被忽略。
@@ -117,13 +117,19 @@ func (s *ChannelService) ListAvailable(ctx context.Context) ([]AvailableChannel,
 //  1. Pricing == nil（渠道完全没声明该模型的定价条目）
 //  2. Pricing 非 nil 但所有价格字段为空（admin UI 建了条目但没填价格）
 //
-// 当 s.pricingService 为 nil（测试场景），跳过回落。
+// Cursor 平台优先使用内置平台价格；其它平台在 s.pricingService 为 nil 时跳过回落。
 func (s *ChannelService) fillGlobalPricingFallback(models []SupportedModel) {
-	if s.pricingService == nil {
-		return
-	}
 	for i := range models {
 		if !pricingNeedsFallback(models[i].Pricing) {
+			continue
+		}
+		if strings.EqualFold(models[i].Platform, PlatformCursor) {
+			if pricing := cursorModelPricing(models[i].Name); pricing != nil {
+				models[i].Pricing = synthesizePricingFromModelPricing(pricing, models[i].Pricing)
+				continue
+			}
+		}
+		if s.pricingService == nil {
 			continue
 		}
 		lp := s.pricingService.GetModelPricing(models[i].Name)
@@ -194,6 +200,24 @@ func synthesizePricingFromLiteLLM(lp *LiteLLMModelPricing, existing *ChannelMode
 		CacheWritePrice:  nonZeroPtr(lp.CacheCreationInputTokenCost),
 		CacheReadPrice:   nonZeroPtr(lp.CacheReadInputTokenCost),
 		ImageOutputPrice: nonZeroPtr(lp.OutputCostPerImageToken),
+	}
+}
+
+func synthesizePricingFromModelPricing(pricing *ModelPricing, existing *ChannelModelPricing) *ChannelModelPricing {
+	if pricing == nil {
+		return existing
+	}
+	mode := BillingModeToken
+	if existing != nil && existing.BillingMode != "" {
+		mode = existing.BillingMode
+	}
+	return &ChannelModelPricing{
+		BillingMode:      mode,
+		InputPrice:       nonZeroPtr(pricing.InputPricePerToken),
+		OutputPrice:      nonZeroPtr(pricing.OutputPricePerToken),
+		CacheWritePrice:  nonZeroPtr(pricing.CacheCreationPricePerToken),
+		CacheReadPrice:   nonZeroPtr(pricing.CacheReadPricePerToken),
+		ImageOutputPrice: nonZeroPtr(pricing.ImageOutputPricePerToken),
 	}
 }
 

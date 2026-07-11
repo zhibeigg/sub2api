@@ -43,6 +43,21 @@ describe('useModelWhitelist', () => {
     expect(getModelsByPlatform('antigravity')).toContain('claude-opus-4-8')
   })
 
+  it('Cursor 模型列表包含完整的离线默认目录', () => {
+    const models = getModelsByPlatform('cursor')
+
+    expect(models).toHaveLength(42)
+    expect(models).toContain('cursor-agent')
+    expect(models).toContain('claude-4-sonnet-1m')
+    expect(models).toContain('claude-4.7-opus-fast')
+    expect(models).toContain('composer-2.5')
+    expect(models).toContain('gemini-3-pro-image-preview')
+    expect(models).toContain('glm-5.2')
+    expect(models).toContain('gpt-5.6-terra')
+    expect(models).toContain('grok-4.5')
+    expect(models).toContain('kimi-k2.7-code')
+  })
+
   it('xAI 模型列表包含 Grok 4.5 官方模型和别名', () => {
     const models = getModelsByPlatform('grok')
 
