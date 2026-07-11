@@ -14,6 +14,7 @@ import {
   buildCursorCreateCredentials,
   buildCursorCredentialUpdate,
   createCursorCredentialEditState,
+  validateCursorCreateCredentials,
   resetCursorCredentialEditState,
   setCursorDashboardCredentialAction,
   buildAdobeCreateCredentials,
@@ -30,11 +31,29 @@ describe('Cursor credentials', () => {
       dashboard_access_token: ' access ',
       dashboard_refresh_token: ' refresh '
     })).toEqual({
+      cursor_transport_mode: 'auto',
       api_key: 'cursor-key',
       dashboard_access_token: 'access',
       dashboard_refresh_token: 'refresh'
     })
-    expect(buildCursorCreateCredentials({ api_key: '   ' })).toEqual({})
+    expect(buildCursorCreateCredentials({
+      cursor_transport_mode: 'ide_chat',
+      dashboard_access_token: ' access '
+    })).toEqual({
+      cursor_transport_mode: 'ide_chat',
+      dashboard_access_token: 'access'
+    })
+    expect(buildCursorCreateCredentials({ api_key: '   ' })).toEqual({ cursor_transport_mode: 'auto' })
+  })
+
+  it('validates required credential sets for each Cursor transport mode', () => {
+    expect(validateCursorCreateCredentials({ cursor_transport_mode: 'cloud_agent' })).toBe('api_key')
+    expect(validateCursorCreateCredentials({ cursor_transport_mode: 'cloud_agent', api_key: 'key' })).toBeNull()
+    expect(validateCursorCreateCredentials({ cursor_transport_mode: 'ide_chat' })).toBe('dashboard_access_token')
+    expect(validateCursorCreateCredentials({ cursor_transport_mode: 'ide_chat', dashboard_access_token: 'access' })).toBeNull()
+    expect(validateCursorCreateCredentials({ cursor_transport_mode: 'auto' })).toBe('credential_set')
+    expect(validateCursorCreateCredentials({ cursor_transport_mode: 'auto', api_key: 'key' })).toBeNull()
+    expect(validateCursorCreateCredentials({ cursor_transport_mode: 'auto', dashboard_access_token: 'access' })).toBeNull()
   })
 
   it('keeps Cursor credentials by default and emits only replace or clear', () => {

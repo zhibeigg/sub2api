@@ -32,6 +32,35 @@
           <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.editCredentialsHint') }}</p>
         </div>
 
+        <div>
+          <label class="input-label">{{ t('admin.accounts.cursor.transportMode') }}</label>
+          <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3" data-testid="cursor-transport-mode">
+            <button
+              v-for="mode in cursorTransportModes"
+              :key="mode"
+              type="button"
+              :data-testid="`cursor-transport-mode-${mode}`"
+              @click="cursorTransportMode = mode"
+              :class="[
+                'rounded-lg border-2 p-3 text-left transition-colors',
+                cursorTransportMode === mode
+                  ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20'
+                  : 'border-gray-200 hover:border-cyan-300 dark:border-dark-600 dark:hover:border-cyan-700'
+              ]"
+            >
+              <span class="block text-sm font-medium text-gray-900 dark:text-white">
+                {{ t(`admin.accounts.cursor.transportModes.${mode}.label`) }}
+              </span>
+              <span class="mt-1 block text-xs leading-5 text-gray-500 dark:text-gray-400">
+                {{ t(`admin.accounts.cursor.transportModes.${mode}.description`) }}
+              </span>
+            </button>
+          </div>
+          <p class="mt-2 rounded-lg bg-cyan-50 px-3 py-2 text-xs leading-5 text-cyan-800 dark:bg-cyan-900/20 dark:text-cyan-200" data-testid="cursor-transport-mode-hint">
+            {{ cursorTransportModeHint }}
+          </p>
+        </div>
+
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(9rem,0.7fr)_minmax(8rem,0.45fr)_minmax(12rem,1fr)] sm:items-end">
           <div>
             <span class="input-label">{{ cursorCredentialLabel('api_key') }}</span>
@@ -2636,7 +2665,8 @@ import type {
   CheckMixedChannelResponse,
   OpenAICompactMode,
   OpenAIResponsesMode,
-  OpenAIEndpointCapability
+  OpenAIEndpointCapability,
+  CursorTransportMode
 } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -2650,9 +2680,11 @@ import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import {
   ADOBE_SENSITIVE_CREDENTIAL_KEYS,
   CURSOR_DASHBOARD_CREDENTIAL_KEYS,
+  CURSOR_SENSITIVE_CREDENTIAL_KEYS,
   applyAntigravityProjectID,
   buildCursorCredentialUpdate,
   createCursorCredentialEditState,
+  normalizeCursorTransportMode,
   resetCursorCredentialEditState,
   setCursorDashboardCredentialAction,
   buildAdobeCredentialUpdate,
@@ -2740,6 +2772,11 @@ interface TempUnschedRuleForm {
 const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
+const cursorTransportModes: CursorTransportMode[] = ['auto', 'ide_chat', 'cloud_agent']
+const cursorTransportMode = ref<CursorTransportMode>('auto')
+const cursorTransportModeHint = computed(() =>
+  t(`admin.accounts.cursor.transportModes.${cursorTransportMode.value}.hint`)
+)
 const cursorDashboardCredentialKeys = CURSOR_DASHBOARD_CREDENTIAL_KEYS
 const cursorCredentialState = reactive(createCursorCredentialEditState())
 const cursorCredentialLabel = (key: CursorSensitiveCredentialKey) => t(`admin.accounts.cursor.${key}`)
@@ -3509,6 +3546,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 
   // Load intercept warmup requests setting (applies to all account types)
   const credentials = newAccount.credentials as Record<string, unknown> | undefined
+  cursorTransportMode.value = normalizeCursorTransportMode(credentials?.cursor_transport_mode)
   interceptWarmupRequests.value = credentials?.intercept_warmup_requests === true
   autoPauseOnExpired.value = newAccount.auto_pause_on_expired === true
   editVertexProjectId.value = ''
@@ -4260,6 +4298,33 @@ const submitUpdateAccount = async (accountID: number, updatePayload: Record<stri
   }
 }
 
+const hasEffectiveCursorCredential = (key: CursorSensitiveCredentialKey): boolean => {
+  const field = cursorCredentialState[key]
+  if (field.action === 'clear') return false
+  if (field.action === 'replace') return Boolean(field.value.trim())
+  if (key === 'dashboard_access_token' && cursorDashboardConnected.value) return true
+  const currentCredentials = (props.account?.credentials as Record<string, unknown>) || {}
+  return props.account?.credentials_status?.[`has_${key}`] ?? Boolean(currentCredentials[key])
+}
+
+const validateCursorTransportModeForEdit = (): boolean => {
+  const hasApiKey = hasEffectiveCursorCredential('api_key')
+  const hasDashboardAccessToken = hasEffectiveCursorCredential('dashboard_access_token')
+  if (cursorTransportMode.value === 'cloud_agent' && !hasApiKey) {
+    appStore.showError(t('admin.accounts.cursor.validation.api_key'))
+    return false
+  }
+  if (cursorTransportMode.value === 'ide_chat' && !hasDashboardAccessToken) {
+    appStore.showError(t('admin.accounts.cursor.validation.dashboard_access_token'))
+    return false
+  }
+  if (cursorTransportMode.value === 'auto' && !hasApiKey && !hasDashboardAccessToken) {
+    appStore.showError(t('admin.accounts.cursor.validation.credential_set'))
+    return false
+  }
+  return true
+}
+
 const handleSubmit = async () => {
   if (!props.account) return
   const accountID = props.account.id
@@ -4287,9 +4352,15 @@ const handleSubmit = async () => {
 
     if (props.account.platform === 'cursor' && props.account.type === 'apikey') {
       if (cursorCredentialState.api_key.action === 'replace' && !cursorCredentialState.api_key.value.trim()) {
-        appStore.showError(t('admin.accounts.cursor.apiKeyRequired'))
+        appStore.showError(t('admin.accounts.cursor.validation.api_key'))
         return
       }
+      if (cursorCredentialState.dashboard_access_token.action === 'replace' && !cursorCredentialState.dashboard_access_token.value.trim()) {
+        appStore.showError(t('admin.accounts.cursor.validation.dashboard_access_token'))
+        return
+      }
+      if (!validateCursorTransportModeForEdit()) return
+
       const cursorUpdate = buildCursorCredentialUpdate(cursorCredentialState)
       if (cursorUpdate.clear_credentials?.length && !confirm(t('admin.accounts.cursor.clearConfirm', {
         fields: cursorUpdate.clear_credentials.map((key) => cursorCredentialLabel(key as CursorSensitiveCredentialKey)).join(', ')
@@ -4298,11 +4369,10 @@ const handleSubmit = async () => {
       }
       const cursorModelMapping = buildModelRestrictionMapping()
       const currentCredentials = (props.account.credentials as Record<string, unknown>) || {}
-      const credentials = { ...currentCredentials, ...(cursorUpdate.credentials || {}) }
-      delete credentials.api_key
-      if (cursorCredentialState.api_key.action === 'replace') {
-        credentials.api_key = cursorCredentialState.api_key.value.trim()
-      }
+      const credentials: Record<string, unknown> = { ...currentCredentials }
+      for (const key of CURSOR_SENSITIVE_CREDENTIAL_KEYS) delete credentials[key]
+      Object.assign(credentials, cursorUpdate.credentials || {})
+      credentials.cursor_transport_mode = cursorTransportMode.value
       if (cursorModelMapping) {
         credentials.model_mapping = cursorModelMapping
       } else {

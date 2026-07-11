@@ -93,13 +93,20 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 	}
 	if account.Platform == PlatformCursor {
 		if account.Type != AccountTypeAPIKey {
-			return nil, newUpstreamModelSyncUnsupportedError("Cursor Cloud Agents model sync requires an API key account", nil)
+			return nil, newUpstreamModelSyncUnsupportedError("Cursor model sync requires a Cursor account", nil)
 		}
 		if s.cursorGatewayService == nil {
 			return nil, newUpstreamModelSyncConfigError("Cursor gateway service is not configured", nil)
 		}
 		if err := ValidateCursorAccountCredentials(account.Type, account.Credentials); err != nil {
-			return nil, newUpstreamModelSyncConfigError("Invalid Cursor API key credentials", err)
+			return nil, newUpstreamModelSyncConfigError("Invalid Cursor credentials", err)
+		}
+		if s.cursorGatewayService.cursorTransportMode(account) == CursorTransportIDEChat {
+			models, err := s.cursorGatewayService.FetchIDEModels(ctx, account)
+			if err != nil {
+				return nil, newUpstreamModelSyncUpstreamError("Failed to request Cursor IDE model list", err)
+			}
+			return models, nil
 		}
 		client, err := s.cursorGatewayService.newCloudClient(ctx, account)
 		if err != nil {

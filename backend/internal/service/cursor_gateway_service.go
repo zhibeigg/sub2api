@@ -22,14 +22,21 @@ import (
 // CursorGatewayService adapts Anthropic Messages, OpenAI Chat Completions and
 // OpenAI Responses requests to Cursor's asynchronous Cloud Agents API.
 type CursorGatewayService struct {
-	httpUpstream HTTPUpstream
-	proxyRepo    ProxyRepository
-	redisClient  *redis.Client
-	cfg          *config.Config
+	httpUpstream  HTTPUpstream
+	proxyRepo     ProxyRepository
+	redisClient   *redis.Client
+	cfg           *config.Config
+	dashboardAuth *CursorDashboardAuthService
 }
 
 func NewCursorGatewayService(httpUpstream HTTPUpstream, proxyRepo ProxyRepository, _ *TLSFingerprintProfileService, redisClient *redis.Client, cfg *config.Config) *CursorGatewayService {
 	return &CursorGatewayService{httpUpstream: httpUpstream, proxyRepo: proxyRepo, redisClient: redisClient, cfg: cfg}
+}
+
+func (s *CursorGatewayService) SetDashboardAuthService(auth *CursorDashboardAuthService) {
+	if s != nil {
+		s.dashboardAuth = auth
+	}
 }
 
 type cursorRequestEnvelope struct {
@@ -47,6 +54,7 @@ type cursorStoredResponse struct {
 type cursorCollected struct {
 	Text         string
 	CleanText    string
+	Reasoning    string
 	Actions      []cursorpkg.Action
 	Usage        cursorpkg.Usage
 	FinishReason string
@@ -75,10 +83,13 @@ func (s *CursorGatewayService) Probe(ctx context.Context, account *Account, _, _
 		return "", errors.New("cursor HTTP upstream is not configured")
 	}
 	if account == nil || !account.IsCursorAPIKey() {
-		return "", errors.New("a Cursor API key account is required")
+		return "", errors.New("a Cursor account is required")
 	}
 	if err := ValidateCursorAccountCredentials(account.Type, account.Credentials); err != nil {
 		return "", err
+	}
+	if s.cursorTransportMode(account) == CursorTransportIDEChat {
+		return s.probeCursorIDE(ctx, account)
 	}
 	client, err := s.newCloudClient(ctx, account)
 	if err != nil {
@@ -94,7 +105,7 @@ func (s *CursorGatewayService) Probe(ctx context.Context, account *Account, _, _
 	if identity.APIKeyName != "" {
 		return identity.APIKeyName, nil
 	}
-	return "Cursor API key verified", nil
+	return "Cursor Cloud Agent API key verified", nil
 }
 
 func (s *CursorGatewayService) FetchDashboardUsage(ctx context.Context, account *Account) (*CursorDashboardUsageResult, error) {
@@ -150,19 +161,17 @@ func (s *CursorGatewayService) CountTokens(body []byte, protocol cursorpkg.Proto
 	if err != nil {
 		return 0, err
 	}
-	model := "cursor-chat"
-	var envelope cursorRequestEnvelope
-	if err := json.Unmarshal(body, &envelope); err == nil && strings.TrimSpace(envelope.Model) != "" {
-		model = envelope.Model
-	}
-	payload, err := cursorpkg.BuildPayload(dialogue, cursorpkg.BuildOptions{Model: model})
-	if err != nil {
-		return 0, err
-	}
-	return estimateCursorPayloadTokens(payload), nil
+	return estimateCursorDialogueTokens(dialogue), nil
 }
 
 func (s *CursorGatewayService) forward(ctx context.Context, c *gin.Context, account *Account, body []byte, protocol cursorpkg.Protocol) (*ForwardResult, error) {
+	if s.cursorTransportMode(account) == CursorTransportIDEChat {
+		return s.forwardIDE(ctx, c, account, body, protocol)
+	}
+	return s.forwardCloud(ctx, c, account, body, protocol)
+}
+
+func (s *CursorGatewayService) forwardCloud(ctx context.Context, c *gin.Context, account *Account, body []byte, protocol cursorpkg.Protocol) (*ForwardResult, error) {
 	start := time.Now()
 	if s == nil || s.httpUpstream == nil {
 		return nil, errors.New("cursor HTTP upstream is not configured")
@@ -322,6 +331,14 @@ func (s *CursorGatewayService) newDashboardAuthClient(ctx context.Context, accou
 }
 
 func (s *CursorGatewayService) newCursorHTTPClient(ctx context.Context, account *Account) *http.Client {
+	return s.newCursorHTTPClientWithProfile(ctx, account, HTTPUpstreamProfileDefault)
+}
+
+func (s *CursorGatewayService) newCursorIDEHTTPClient(ctx context.Context, account *Account) *http.Client {
+	return s.newCursorHTTPClientWithProfile(ctx, account, HTTPUpstreamProfileCursorH2)
+}
+
+func (s *CursorGatewayService) newCursorHTTPClientWithProfile(ctx context.Context, account *Account, profile HTTPUpstreamProfile) *http.Client {
 	proxyURL := ""
 	if account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
@@ -330,14 +347,42 @@ func (s *CursorGatewayService) newCursorHTTPClient(ctx context.Context, account 
 			proxyURL = proxy.URL()
 		}
 	}
-	return &http.Client{Transport: &cursorRoundTripper{upstream: s.httpUpstream, proxyURL: proxyURL, accountID: account.ID, concurrency: account.Concurrency}}
+	return &http.Client{Transport: &cursorRoundTripper{upstream: s.httpUpstream, proxyURL: proxyURL, accountID: account.ID, concurrency: account.Concurrency, profile: profile}}
 }
 
 func (s *CursorGatewayService) cursorConfig() config.CursorConfig {
 	if s != nil && s.cfg != nil {
 		return s.cfg.Cursor
 	}
-	return config.CursorConfig{BaseURL: cursorpkg.DefaultCloudBaseURL, DashboardBaseURL: cursorpkg.DefaultDashboardBaseURL, DashboardAuthWebsiteURL: cursorpkg.DefaultDashboardWebsiteURL, DashboardMaintenanceEnabled: true, DashboardMaintenanceIntervalMins: 30, DashboardProbeIntervalMins: 360, DashboardRefreshBeforeExpiryHours: 1272, DashboardLoginSessionTTLMins: 5, DefaultModel: "auto", RequestTimeoutSeconds: 120, StreamIdleTimeoutSeconds: 60, MaxHistoryTokens: 24000, MaxHistoryMessages: 100}
+	return config.CursorConfig{
+		BaseURL: cursorpkg.DefaultCloudBaseURL, ChatBaseURL: cursorpkg.DefaultDashboardBaseURL,
+		DefaultTransportMode: CursorTransportAuto, ClientVersion: "3.1.0",
+		MaxFrameBytes: 8 << 20, MaxBufferedBytes: 16 << 20,
+		ResponseHeaderTimeoutSeconds: 60, IDEStreamIdleTimeoutSeconds: 60,
+		DashboardBaseURL: cursorpkg.DefaultDashboardBaseURL, DashboardAuthWebsiteURL: cursorpkg.DefaultDashboardWebsiteURL,
+		DashboardMaintenanceEnabled: true, DashboardMaintenanceIntervalMins: 30, DashboardProbeIntervalMins: 360,
+		DashboardRefreshBeforeExpiryHours: 1272, DashboardLoginSessionTTLMins: 5,
+		DefaultModel: "auto", RequestTimeoutSeconds: 120, StreamIdleTimeoutSeconds: 60,
+		MaxHistoryTokens: 24000, MaxHistoryMessages: 100, ResponsesTTLSeconds: 86400,
+	}
+}
+
+func (s *CursorGatewayService) cursorTransportMode(account *Account) string {
+	raw := cursorAccountSetting(account, "cursor_transport_mode")
+	if strings.TrimSpace(raw) == "" {
+		raw = s.cursorConfig().DefaultTransportMode
+	}
+	mode := NormalizeCursorTransportMode(raw)
+	if mode == "" {
+		mode = CursorTransportAuto
+	}
+	if mode == CursorTransportAuto {
+		if account != nil && strings.TrimSpace(account.GetCredential("dashboard_access_token")) != "" {
+			return CursorTransportIDEChat
+		}
+		return CursorTransportCloudAgent
+	}
+	return mode
 }
 
 func durationSeconds(value, fallback int) time.Duration {
@@ -366,16 +411,24 @@ func cursorEndpoint(raw string) (string, error) {
 }
 
 func cursorDashboardEndpoint(raw string) (string, error) {
+	return cursorAPI2Endpoint(raw, "dashboard_base_url")
+}
+
+func cursorChatEndpoint(raw string) (string, error) {
+	return cursorAPI2Endpoint(raw, "chat_base_url")
+}
+
+func cursorAPI2Endpoint(raw, configKey string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		raw = cursorpkg.DefaultDashboardBaseURL
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
-		return "", fmt.Errorf("Cursor dashboard_base_url must be a valid HTTPS URL")
+		return "", fmt.Errorf("Cursor %s must be a valid HTTPS URL", configKey)
 	}
 	if !strings.EqualFold(parsed.Hostname(), "api2.cursor.sh") {
-		return "", fmt.Errorf("Cursor dashboard_base_url host must be api2.cursor.sh")
+		return "", fmt.Errorf("Cursor %s host must be api2.cursor.sh", configKey)
 	}
 	parsed.Path = strings.TrimRight(parsed.Path, "/")
 	parsed.RawQuery = ""
@@ -406,9 +459,16 @@ type cursorRoundTripper struct {
 	proxyURL    string
 	accountID   int64
 	concurrency int
+	profile     HTTPUpstreamProfile
 }
 
 func (t *cursorRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if t.upstream == nil {
+		return nil, errors.New("cursor HTTP upstream is not configured")
+	}
+	if req != nil && t.profile != HTTPUpstreamProfileDefault {
+		req = req.Clone(WithHTTPUpstreamProfile(req.Context(), t.profile))
+	}
 	return t.upstream.Do(req, t.proxyURL, t.accountID, t.concurrency)
 }
 

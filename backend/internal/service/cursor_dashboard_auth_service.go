@@ -62,6 +62,9 @@ type CursorDashboardAuthService struct {
 func NewCursorDashboardAuthService(accountRepo AccountRepository, gateway *CursorGatewayService, refreshAPI *OAuthRefreshAPI, cfg *config.Config) *CursorDashboardAuthService {
 	service := &CursorDashboardAuthService{accountRepo: accountRepo, gateway: gateway, refreshAPI: refreshAPI, cfg: cfg}
 	service.refresher = NewCursorDashboardTokenRefresher(gateway, cfg)
+	if gateway != nil {
+		gateway.SetDashboardAuthService(service)
+	}
 	return service
 }
 
@@ -223,6 +226,7 @@ func (s *CursorDashboardAuthService) RefreshIfNeeded(ctx context.Context, accoun
 		if err := persistAccountCredentials(ctx, s.accountRepo, account, credentials); err != nil {
 			return account, false, err
 		}
+		account.Credentials = credentials
 		return account, true, nil
 	}
 	result, err := s.refreshAPI.RefreshIfNeeded(ctx, account, s.refresher, 0)
@@ -247,6 +251,7 @@ func (s *CursorDashboardAuthService) forceRefresh(ctx context.Context, account *
 		if err := persistAccountCredentials(ctx, s.accountRepo, account, credentials); err != nil {
 			return account, err
 		}
+		account.Credentials = credentials
 		return account, nil
 	}
 	result, err := s.refreshAPI.ForceRefresh(ctx, account, s.refresher)

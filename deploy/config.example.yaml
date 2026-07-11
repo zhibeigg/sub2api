@@ -1184,10 +1184,35 @@ adobe:
 # Cursor-side costs; Sub2API billing only covers prices explicitly configured locally.
 cursor:
   base_url: "https://api.cursor.com"
-  # Undocumented Cursor desktop Dashboard usage RPC. Dashboard tokens are optional
-  # account credentials and are only sent to this exact HTTPS origin.
-  # 未公开稳定承诺的 Cursor 桌面 Dashboard 用量 RPC；Dashboard Token 为可选账号凭据，
-  # 且只会发送到这个固定 HTTPS 来源。
+  # Cursor IDE chat/composer upstream origin; keep this exact HTTPS host for the safety allowlist.
+  # Cursor IDE chat/composer 上游来源；安全白名单要求保持为该固定 HTTPS 主机。
+  chat_base_url: "https://api2.cursor.sh"
+  # Default account transport when cursor_transport_mode is omitted: auto prefers IDE Chat when a Dashboard token exists,
+  # otherwise it uses Cloud Agent. IDE requests use an isolated H2-only connection pool and never silently downgrade.
+  # 账号未设置 cursor_transport_mode 时的默认模式：auto 在存在 Dashboard Token 时优先 IDE Chat，
+  # 否则使用 Cloud Agent。IDE 请求使用独立且仅 H2 的连接池，不会静默降级。
+  default_transport_mode: "auto"
+  # Cursor IDE client identity sent to the chat upstream.
+  # 发送到聊天上游的 Cursor IDE 客户端版本标识。
+  client_version: "3.1.0"
+  # Optional Cursor IDE request metadata flags.
+  # 可选的 Cursor IDE 请求元数据标志。
+  ghost_mode: false
+  new_onboarding_completed: false
+  # Maximum decoded frame size and total buffered stream bytes.
+  # 单帧解码与流式累计缓冲的最大字节数。
+  max_frame_bytes: 8388608
+  max_buffered_bytes: 16777216
+  # Timeout while waiting for IDE upstream response headers (seconds).
+  # 等待 IDE 上游响应头的超时时间（秒）。
+  response_header_timeout_seconds: 60
+  # Maximum idle interval between IDE stream frames (seconds).
+  # IDE 流式帧之间允许的最大空闲间隔（秒）。
+  ide_stream_idle_timeout_seconds: 60
+  # Cursor Dashboard RPC origin. Dashboard tokens are used by IDE Chat/model discovery and optional plan probes,
+  # and are only sent to the allowlisted api2.cursor.sh origins above.
+  # Cursor Dashboard RPC 来源。Dashboard Token 用于 IDE Chat、模型发现和可选套餐探测，
+  # 且只会发送到上述白名单限定的 api2.cursor.sh 来源。
   dashboard_base_url: "https://api2.cursor.sh"
   # Browser login page used by the one-click server-owned PKCE flow exposed through
   # POST /api/v1/admin/cursor/dashboard-auth/start and /poll. Tokens stay server-side.

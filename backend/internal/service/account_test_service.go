@@ -202,10 +202,14 @@ func (s *AccountTestService) ValidateTransientCredentials(ctx context.Context, i
 		if err != nil {
 			return nil, err
 		}
+		message := "Cursor Cloud Agent API key verified"
+		if s.cursorGatewayService.cursorTransportMode(account) == CursorTransportIDEChat {
+			message = "Cursor IDE chat session verified"
+		}
 		return &TransientCredentialValidationResult{
 			Success:     true,
 			Platform:    PlatformCursor,
-			Message:     "Cursor API key verified",
+			Message:     message,
 			DisplayName: identity,
 			Summary:     identity,
 		}, nil
@@ -339,15 +343,23 @@ func (s *AccountTestService) testCursorAccountConnection(c *gin.Context, account
 	c.Writer.Header().Set("Connection", "keep-alive")
 	c.Writer.Header().Set("X-Accel-Buffering", "no")
 	c.Writer.Flush()
+	transportMode := s.cursorGatewayService.cursorTransportMode(account)
 	if strings.TrimSpace(modelID) == "" {
-		modelID = "cloud-agents-api"
+		if transportMode == CursorTransportIDEChat {
+			modelID = "cursor-ide-chat"
+		} else {
+			modelID = "cloud-agents-api"
+		}
 	}
 	s.sendEvent(c, TestEvent{Type: "test_start", Model: modelID})
 	text, err := s.cursorGatewayService.Probe(c.Request.Context(), account, modelID, prompt)
 	if err != nil {
-		return s.sendErrorAndEnd(c, fmt.Sprintf("Cursor Cloud Agents API check failed: %s", err.Error()))
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Cursor connection check failed: %s", err.Error()))
 	}
 	message := "Cursor Cloud Agents API key healthy"
+	if transportMode == CursorTransportIDEChat {
+		message = "Cursor IDE chat session healthy"
+	}
 	if strings.TrimSpace(text) != "" {
 		message += ": " + strings.TrimSpace(text)
 	}

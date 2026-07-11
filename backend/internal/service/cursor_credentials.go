@@ -5,18 +5,63 @@ import (
 	"strings"
 )
 
+const (
+	CursorTransportAuto       = "auto"
+	CursorTransportIDEChat    = "ide_chat"
+	CursorTransportCloudAgent = "cloud_agent"
+)
+
 var cursorCredentialKeys = map[string]struct{}{
-	"api_key":                 {},
-	"dashboard_access_token":  {},
-	"dashboard_refresh_token": {},
-	"cursor_upstream_model":   {},
-	"cursor_model_params":     {},
-	"_token_version":          {},
+	"api_key":                  {},
+	"dashboard_access_token":   {},
+	"dashboard_refresh_token":  {},
+	"cursor_transport_mode":    {},
+	"cursor_machine_id":        {},
+	"cursor_client_version":    {},
+	"cursor_client_os_version": {},
+	"cursor_config_version":    {},
+	"cursor_upstream_model":    {},
+	"cursor_model_params":      {},
+	"_token_version":           {},
 }
 
-// ValidateCursorAccountCredentials validates a Cursor Cloud Agents API key.
-// User API keys and service-account API keys are both accepted; the live /v1/me
-// probe is responsible for checking authorization and revocation status.
+func NormalizeCursorTransportMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", CursorTransportAuto:
+		return CursorTransportAuto
+	case CursorTransportIDEChat:
+		return CursorTransportIDEChat
+	case CursorTransportCloudAgent:
+		return CursorTransportCloudAgent
+	default:
+		return ""
+	}
+}
+
+func CursorAccountTransportMode(account *Account) string {
+	mode := CursorTransportAuto
+	if account != nil {
+		mode = NormalizeCursorTransportMode(cursorAccountSetting(account, "cursor_transport_mode"))
+	}
+	if mode == "" {
+		return CursorTransportAuto
+	}
+	return mode
+}
+
+func CursorAccountUsesIDEChat(account *Account) bool {
+	switch CursorAccountTransportMode(account) {
+	case CursorTransportIDEChat:
+		return true
+	case CursorTransportCloudAgent:
+		return false
+	default:
+		return account != nil && strings.TrimSpace(account.GetCredential("dashboard_access_token")) != ""
+	}
+}
+
+// ValidateCursorAccountCredentials validates the two supported Cursor transports:
+// the low-latency IDE chat session and the official Cloud Agents API.
 func ValidateCursorAccountCredentials(accountType string, credentials map[string]any) error {
 	if strings.TrimSpace(accountType) != AccountTypeAPIKey {
 		return fmt.Errorf("Cursor accounts must use type %q", AccountTypeAPIKey)
@@ -32,27 +77,53 @@ func ValidateCursorAccountCredentials(accountType string, credentials map[string
 		}
 	}
 
+	modeRaw := credentialString(credentials, "cursor_transport_mode")
+	mode := NormalizeCursorTransportMode(modeRaw)
+	if mode == "" {
+		return fmt.Errorf("Cursor transport mode must be %q, %q, or %q", CursorTransportAuto, CursorTransportIDEChat, CursorTransportCloudAgent)
+	}
 	apiKey := strings.TrimSpace(credentialString(credentials, "api_key"))
-	if apiKey == "" {
-		return fmt.Errorf("Cursor credentials require a non-empty API key")
+	accessToken := strings.TrimSpace(credentialString(credentials, "dashboard_access_token"))
+	switch mode {
+	case CursorTransportIDEChat:
+		if accessToken == "" {
+			return fmt.Errorf("Cursor IDE chat credentials require a Dashboard access token")
+		}
+	case CursorTransportCloudAgent:
+		if apiKey == "" {
+			return fmt.Errorf("Cursor Cloud Agent credentials require a non-empty API key")
+		}
+	default:
+		if apiKey == "" && accessToken == "" {
+			return fmt.Errorf("Cursor credentials require an IDE access token or Cloud Agent API key")
+		}
 	}
-	if len(apiKey) > 8192 {
-		return fmt.Errorf("Cursor API key exceeds 8192 characters")
-	}
-	if strings.ContainsAny(apiKey, "\r\n\x00") {
-		return fmt.Errorf("Cursor API key contains invalid control characters")
+
+	if err := validateCursorCredentialText("API key", apiKey, 8192); err != nil {
+		return err
 	}
 	for _, key := range []string{"dashboard_access_token", "dashboard_refresh_token"} {
-		value := strings.TrimSpace(credentialString(credentials, key))
-		if value == "" {
-			continue
+		if err := validateCursorCredentialText(key, strings.TrimSpace(credentialString(credentials, key)), 65536); err != nil {
+			return err
 		}
-		if len(value) > 65536 {
-			return fmt.Errorf("Cursor %s exceeds 65536 characters", key)
+	}
+	for _, key := range []string{"cursor_machine_id", "cursor_client_version", "cursor_config_version"} {
+		if err := validateCursorCredentialText(key, strings.TrimSpace(credentialString(credentials, key)), 1024); err != nil {
+			return err
 		}
-		if strings.ContainsAny(value, "\r\n\x00") {
-			return fmt.Errorf("Cursor %s contains invalid control characters", key)
-		}
+	}
+	return nil
+}
+
+func validateCursorCredentialText(label, value string, maxLength int) error {
+	if value == "" {
+		return nil
+	}
+	if len(value) > maxLength {
+		return fmt.Errorf("Cursor %s exceeds %d characters", label, maxLength)
+	}
+	if strings.ContainsAny(value, "\r\n\x00") {
+		return fmt.Errorf("Cursor %s contains invalid control characters", label)
 	}
 	return nil
 }

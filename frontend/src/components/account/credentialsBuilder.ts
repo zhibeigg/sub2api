@@ -1,10 +1,14 @@
+import type { CursorTransportMode } from '@/types'
+
 export const CURSOR_DASHBOARD_CREDENTIAL_KEYS = ['dashboard_access_token', 'dashboard_refresh_token'] as const
 export const CURSOR_SENSITIVE_CREDENTIAL_KEYS = ['api_key', ...CURSOR_DASHBOARD_CREDENTIAL_KEYS] as const
 export type CursorSensitiveCredentialKey = typeof CURSOR_SENSITIVE_CREDENTIAL_KEYS[number]
 export type CursorDashboardCredentialKey = typeof CURSOR_DASHBOARD_CREDENTIAL_KEYS[number]
 export type CursorCredentialAction = 'keep' | 'replace' | 'clear'
+export type CursorCreateValidationError = 'api_key' | 'dashboard_access_token' | 'credential_set'
 
 export interface CursorCredentialInput {
+  cursor_transport_mode?: CursorTransportMode
   api_key?: string
   dashboard_access_token?: string
   dashboard_refresh_token?: string
@@ -17,8 +21,27 @@ export interface CursorCredentialEditField {
 
 export type CursorCredentialEditState = Record<CursorSensitiveCredentialKey, CursorCredentialEditField>
 
+export function normalizeCursorTransportMode(value: unknown): CursorTransportMode {
+  return value === 'ide_chat' || value === 'cloud_agent' ? value : 'auto'
+}
+
+export function validateCursorCreateCredentials(
+  input: CursorCredentialInput
+): CursorCreateValidationError | null {
+  const mode = normalizeCursorTransportMode(input.cursor_transport_mode)
+  const hasApiKey = Boolean(input.api_key?.trim())
+  const hasDashboardAccessToken = Boolean(input.dashboard_access_token?.trim())
+
+  if (mode === 'cloud_agent' && !hasApiKey) return 'api_key'
+  if (mode === 'ide_chat' && !hasDashboardAccessToken) return 'dashboard_access_token'
+  if (mode === 'auto' && !hasApiKey && !hasDashboardAccessToken) return 'credential_set'
+  return null
+}
+
 export function buildCursorCreateCredentials(input: CursorCredentialInput): Record<string, string> {
-  const credentials: Record<string, string> = {}
+  const credentials: Record<string, string> = {
+    cursor_transport_mode: normalizeCursorTransportMode(input.cursor_transport_mode)
+  }
   for (const key of CURSOR_SENSITIVE_CREDENTIAL_KEYS) {
     const value = input[key]?.trim()
     if (value) credentials[key] = value

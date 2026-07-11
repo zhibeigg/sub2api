@@ -173,8 +173,8 @@ Sub2API is an AI API gateway platform designed to distribute and manage API quot
 
 ## Features
 
-- **Multi-Account Management** - Support multiple upstream account types (OAuth, API Key, service account); native integration for Anthropic, OpenAI, Gemini, Antigravity, Grok, Kiro (AWS CodeWhisperer, serving Claude models), Adobe Firefly, and the official Cursor Cloud Agents API
-- **Cursor Cloud Agents API (Beta)** - Uses `https://api.cursor.com` for Agents and adds a server-owned one-click PKCE Dashboard session for Spending meters, encrypted token maintenance, 1272-hour early refresh, periodic probes, and `stale` / `reauth_required` fallback without exposing Dashboard tokens to the frontend; Cursor-side plan/on-demand charges remain separate from Sub2API billing ([Integration Guide](docs/CURSOR_INTEGRATION.md))
+- **Multi-Account Management** - Support multiple upstream account types (OAuth, API Key, service account); native integration for Anthropic, OpenAI, Gemini, Antigravity, Grok, Kiro (AWS CodeWhisperer, serving Claude models), Adobe Firefly, and Cursor IDE Chat / Cloud Agent
+- **Cursor IDE Chat + Cloud Agent** - Proxies ordinary Anthropic Messages, OpenAI Chat Completions, and OpenAI Responses traffic through Cursor's low-latency HTTP/2 Connect-Protobuf IDE stream with real-time text, reasoning, and native tool calls, while retaining the official Cloud Agents API as an explicit task mode. Dashboard tokens stay encrypted server-side and support automatic renewal ([Integration Guide](docs/CURSOR_INTEGRATION.md))
 - **Native Kiro Integration** - Built-in AWS Builder ID device code, IAM Identity Center (PKCE), SSO token import, and credentials-JSON login; automatic token refresh, subscription/usage/overage queries, health checks, dynamic model discovery, and compact daily request/token plus account-billed/user-billed statistics in the usage window
 - **Native Adobe Firefly Integration** - Two-step credential preflight before account creation, secure IMS credential lifecycle, automatic access-token renewal, profile and credits visibility, synchronous OpenAI-compatible image generation/editing, Redis-backed asynchronous video tasks, and idempotent media billing ([Integration Guide](docs/ADOBE_INTEGRATION.md))
 - **API Key Distribution** - Generate and manage API Keys for users
@@ -693,20 +693,18 @@ See the [Adobe integration guide](docs/ADOBE_INTEGRATION.md) for credentials, co
 
 ---
 
-## Cursor Cloud Agents API Support
+## Cursor IDE Chat and Cloud Agent Support
 
-Sub2API documents Cursor integration against the official Cloud Agents API Beta at `https://api.cursor.com`. Authentication uses a Cursor Dashboard user API Key or an agent-scoped team service-account API Key; browser Cookies and the legacy login-helper extension are not used.
+Cursor accounts support `auto`, `ide_chat`, and `cloud_agent` transport modes. Ordinary `/v1/messages`, `/v1/chat/completions`, and `/v1/responses` requests use Cursor IDE's HTTP/2 `StreamUnifiedChatWithTools` path when IDE Chat is selected; the official `https://api.cursor.com/v1/agents` API remains available as a separate explicit task mode.
 
-- Verify the active key with `GET /v1/me`; user keys may return owner fields, while service-account/team keys omit personal owner fields.
-- Discover supported model IDs and parameters with `GET /v1/models`; the admin account form starts with a 40-model offline fallback catalog and can merge synchronized upstream IDs into the whitelist. With mixed scheduling enabled, Cursor accounts can join Cursor, Anthropic, Gemini, OpenAI, and Grok groups for compatible `/v1/messages`, `/v1/chat/completions`, and `/v1/responses` traffic; native Gemini `generateContent` remains excluded.
-- Create Agents with `POST /v1/agents`. Omitting both `repos` and `env` (or sending `repos: []`) creates a no-repository Agent suitable for temporary tasks; delete it explicitly when its context is no longer needed.
-- Cloud Agents API is an official Beta, and selected capabilities can be gated or return `feature_unavailable`. Do not rely on Beta fields until verified for the target account.
-- The admin account list separates Sub2API-local request/token/cost statistics, cache-write/cache-read tokens, and local daily/weekly/total quota bars. A manual refresh still validates the Cloud Agents API Key through `/v1/me`; normal list loading does not fan out upstream probes.
-- Cursor accounts can create a server-owned, independent Dashboard session through one-click PKCE authorization. The admin UI starts and polls the flow through `POST /api/v1/admin/cursor/dashboard-auth/start` and `/poll`; Dashboard tokens are encrypted server-side and never returned to the frontend. Background maintenance refreshes credentials 1272 hours before JWT expiry and periodically probes the undocumented `api2.cursor.sh` usage RPC. This session is created independently from the imported Desktop token, so normal Desktop shutdown, restart, or token rotation should not affect it. Cursor may still apply account-wide or server-side revocation; if that happens, Sub2API marks the session `reauth_required`. Manual token extraction from `state.vscdb` remains an advanced compatibility path only. Failed probes retain a `stale` snapshot, while revoked or unrecoverable credentials become `reauth_required`; neither state hides local usage or changes the Cloud Agents API Key status.
-- Cursor Run usage maps `cacheWriteTokens` and `cacheReadTokens` into the unified usage log, billing, compatible protocol responses, and exports.
-- Cursor plan usage, model usage, Cloud Agent execution, and on-demand overage remain Cursor-side charges. Sub2API clearly separates the Dashboard plan snapshot from its Cursor-specific local billing.
+- IDE Chat uses encrypted Dashboard Access/Refresh Tokens, an isolated HTTP/2-only connection pool, Connect-Protobuf framing, and real-time downstream SSE for text, reasoning, and native MCP tool calls. Requests without tools use Ask mode; tool-enabled requests use Agent mode.
+- `auto` prefers IDE Chat when a Dashboard Access Token exists and otherwise uses Cloud Agent. A failed IDE request is not silently replayed through Cloud Agent.
+- Saved Dashboard sessions are renewed before expiry and retried once after `401`. One-click server-owned PKCE authorization is available through `POST /api/v1/admin/cursor/dashboard-auth/start` and `/poll`; manual `state.vscdb` token import remains an advanced compatibility path.
+- IDE model discovery uses the Connect-Protobuf `AiService/AvailableModels` RPC. Cloud Agent model discovery continues to use `GET /v1/models`, and API Key verification uses `GET /v1/me`.
+- Cloud Agents API is still an official Beta. Repository tasks, persistent Agents, runs, cancellation, and cleanup continue to use `/v1/agents` and related run endpoints.
+- The admin UI separates Cursor's Dashboard plan snapshot from Sub2API-local requests, tokens, quota, and billing. Cursor plan usage, model usage, Cloud Agent execution, and on-demand overage remain Cursor-side charges.
 
-See the [Cursor integration guide](docs/CURSOR_INTEGRATION.md) for authentication, endpoints, service accounts, no-repository Agents, Beta boundaries, and billing separation.
+See the [Cursor integration guide](docs/CURSOR_INTEGRATION.md) for transport modes, authentication, streaming semantics, model discovery, Cloud Agents, operational limits, and billing separation.
 
 ---
 

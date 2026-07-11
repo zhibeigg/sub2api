@@ -83,6 +83,58 @@ func (s *HTTPUpstreamSuite) TestGetOrCreateClient_InvalidURLReturnsError() {
 	require.Error(s.T(), err, "expected error for invalid proxy URL")
 }
 
+func (s *HTTPUpstreamSuite) TestCursorH2ProfileUsesDedicatedHTTP2Pool() {
+	s.cfg.Gateway = config.GatewayConfig{
+		ResponseHeaderTimeout: 60,
+		OpenAIHTTP2: config.GatewayOpenAIHTTP2Config{
+			Enabled:                   true,
+			AllowProxyFallbackToHTTP1: true,
+		},
+	}
+	s.cfg.Cursor.ResponseHeaderTimeoutSeconds = 60
+	svc := s.newService()
+
+	defaultEntry, err := svc.getClientEntry("", 1, 1, service.HTTPUpstreamProfileDefault, false, false)
+	require.NoError(s.T(), err)
+	openAIEntry, err := svc.getClientEntry("", 1, 1, service.HTTPUpstreamProfileOpenAI, false, false)
+	require.NoError(s.T(), err)
+	cursorEntry, err := svc.getClientEntry("", 1, 1, service.HTTPUpstreamProfileCursorH2, false, false)
+	require.NoError(s.T(), err)
+
+	transport, ok := cursorEntry.client.Transport.(*http.Transport)
+	require.True(s.T(), ok, "expected *http.Transport")
+	require.True(s.T(), transport.ForceAttemptHTTP2, "Cursor H2 profile must force HTTP/2 attempts")
+	require.Equal(s.T(), 60*time.Second, transport.ResponseHeaderTimeout)
+	require.Equal(s.T(), upstreamProtocolModeCursorH2, cursorEntry.protocolMode)
+	require.NotSame(s.T(), defaultEntry, cursorEntry)
+	require.NotSame(s.T(), openAIEntry, cursorEntry)
+	require.NotEqual(s.T(), defaultEntry.poolKey, cursorEntry.poolKey)
+	require.NotEqual(s.T(), openAIEntry.poolKey, cursorEntry.poolKey)
+}
+
+func (s *HTTPUpstreamSuite) TestCursorH2ProfileDoesNotUseOpenAIFallback() {
+	s.cfg.Gateway = config.GatewayConfig{
+		OpenAIHTTP2: config.GatewayOpenAIHTTP2Config{
+			Enabled:                   true,
+			AllowProxyFallbackToHTTP1: true,
+			FallbackErrorThreshold:    1,
+			FallbackWindowSeconds:     60,
+			FallbackTTLSeconds:        600,
+		},
+	}
+	svc := s.newService()
+	proxyURL := "http://proxy.local:8080"
+	svc.recordOpenAIHTTP2Failure(service.HTTPUpstreamProfileOpenAI, upstreamProtocolModeOpenAIH2, proxyURL, errors.New("http2: protocol error"))
+	require.True(s.T(), svc.isOpenAIHTTP2FallbackActive(proxyURL))
+
+	entry, err := svc.getClientEntry(proxyURL, 1, 1, service.HTTPUpstreamProfileCursorH2, false, false)
+	require.NoError(s.T(), err)
+	transport, ok := entry.client.Transport.(*http.Transport)
+	require.True(s.T(), ok, "expected *http.Transport")
+	require.True(s.T(), transport.ForceAttemptHTTP2)
+	require.Equal(s.T(), upstreamProtocolModeCursorH2, entry.protocolMode)
+}
+
 func (s *HTTPUpstreamSuite) TestOpenAIProfileDefaultsToHTTP2AndNoHeaderTimeout() {
 	s.cfg.Gateway = config.GatewayConfig{
 		ResponseHeaderTimeout: 600,

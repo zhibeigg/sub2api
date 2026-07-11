@@ -199,6 +199,7 @@ function buildCursorAccount() {
     platform: 'cursor',
     type: 'apikey',
     credentials: {
+      cursor_transport_mode: 'auto',
       model_mapping: { 'cursor-small': 'cursor-small' }
     },
     credentials_status: { has_api_key: true }
@@ -923,8 +924,13 @@ describe('EditAccountModal', () => {
     confirmSpy.mockRestore()
   })
 
-  it('clears the Cursor API Key when explicitly confirmed', async () => {
+  it('clears the Cursor API Key when another credential set remains available', async () => {
     const account = buildCursorAccount()
+    account.credentials_status = {
+      has_api_key: true,
+      has_dashboard_access_token: true,
+      has_dashboard_refresh_token: true
+    }
     updateAccountMock.mockReset()
     checkMixedChannelRiskMock.mockReset()
     checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
@@ -937,7 +943,45 @@ describe('EditAccountModal', () => {
 
     expect(updateAccountMock.mock.calls[0]?.[1]?.clear_credentials).toEqual(['api_key'])
     expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).not.toHaveProperty('api_key')
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.cursor_transport_mode).toBe('auto')
     confirmSpy.mockRestore()
+  })
+
+  it('switches Cursor mode while keeping both sensitive credential sets untouched', async () => {
+    const account = buildCursorAccount()
+    account.credentials_status = {
+      has_api_key: true,
+      has_dashboard_access_token: true,
+      has_dashboard_refresh_token: true
+    }
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    await wrapper.get('[data-testid="cursor-transport-mode-ide_chat"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    const payload = updateAccountMock.mock.calls[0]?.[1]
+    expect(payload?.credentials?.cursor_transport_mode).toBe('ide_chat')
+    expect(payload?.credentials).not.toHaveProperty('api_key')
+    expect(payload?.credentials).not.toHaveProperty('dashboard_access_token')
+    expect(payload?.credentials).not.toHaveProperty('dashboard_refresh_token')
+    expect(payload?.clear_credentials).toBeUndefined()
+  })
+
+  it('blocks a Cursor mode switch when its effective credential would be missing', async () => {
+    const account = buildCursorAccount()
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+
+    const wrapper = mountModal(account)
+    await wrapper.get('[data-testid="cursor-transport-mode-ide_chat"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).not.toHaveBeenCalled()
   })
 
   it('allows saving apikey account when backend redacted api_key but credentials_status reports it exists', async () => {

@@ -14,6 +14,9 @@ func writeCursorJSON(c *gin.Context, protocol cursorpkg.Protocol, responseID, mo
 	switch protocol {
 	case cursorpkg.ProtocolOpenAIChat:
 		message := gin.H{"role": "assistant", "content": nullableCursorText(result.CleanText)}
+		if result.Reasoning != "" {
+			message["reasoning_content"] = result.Reasoning
+		}
 		if len(result.Actions) > 0 {
 			message["tool_calls"] = cursorOpenAIToolCalls(result.Actions)
 		}
@@ -23,7 +26,10 @@ func writeCursorJSON(c *gin.Context, protocol cursorpkg.Protocol, responseID, mo
 			"usage":   cursorOpenAIUsage(result.Usage),
 		})
 	case cursorpkg.ProtocolResponses:
-		output := make([]gin.H, 0, 1+len(result.Actions))
+		output := make([]gin.H, 0, 2+len(result.Actions))
+		if result.Reasoning != "" {
+			output = append(output, gin.H{"id": "rs_" + responseID, "type": "reasoning", "summary": []gin.H{{"type": "summary_text", "text": result.Reasoning}}})
+		}
 		if result.CleanText != "" {
 			output = append(output, gin.H{"id": "msg_" + responseID, "type": "message", "role": "assistant", "status": "completed", "content": []gin.H{{"type": "output_text", "text": result.CleanText, "annotations": []any{}}}})
 		}
@@ -36,7 +42,10 @@ func writeCursorJSON(c *gin.Context, protocol cursorpkg.Protocol, responseID, mo
 			"output": output, "previous_response_id": emptyToNil(previousResponseID), "usage": cursorResponsesUsage(result.Usage), "error": nil,
 		})
 	default:
-		content := make([]gin.H, 0, 1+len(result.Actions))
+		content := make([]gin.H, 0, 2+len(result.Actions))
+		if result.Reasoning != "" {
+			content = append(content, gin.H{"type": "thinking", "thinking": result.Reasoning, "signature": ""})
+		}
 		if result.CleanText != "" {
 			content = append(content, gin.H{"type": "text", "text": result.CleanText})
 		}

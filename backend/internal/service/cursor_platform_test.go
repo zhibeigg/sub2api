@@ -56,9 +56,31 @@ func TestValidateCursorAccountCredentials(t *testing.T) {
 	require.NoError(t, ValidateCursorAccountCredentials(AccountTypeAPIKey, map[string]any{
 		"api_key": "cursor-key", "dashboard_access_token": "access", "dashboard_refresh_token": "refresh",
 	}))
+	require.NoError(t, ValidateCursorAccountCredentials(AccountTypeAPIKey, map[string]any{
+		"cursor_transport_mode": CursorTransportIDEChat, "dashboard_access_token": "access", "dashboard_refresh_token": "refresh",
+	}))
+	require.NoError(t, ValidateCursorAccountCredentials(AccountTypeAPIKey, map[string]any{
+		"cursor_transport_mode": CursorTransportCloudAgent, "api_key": "cursor-key",
+	}))
 	require.Error(t, ValidateCursorAccountCredentials(AccountTypeOAuth, map[string]any{"api_key": "cursor-key"}))
 	require.Error(t, ValidateCursorAccountCredentials("cookie", map[string]any{"cookie": "_vcrcs=legacy"}))
 	require.Error(t, ValidateCursorAccountCredentials(AccountTypeAPIKey, map[string]any{"api_key": ""}))
+	require.Error(t, ValidateCursorAccountCredentials(AccountTypeAPIKey, map[string]any{"cursor_transport_mode": CursorTransportIDEChat, "api_key": "cursor-key"}))
+	require.Error(t, ValidateCursorAccountCredentials(AccountTypeAPIKey, map[string]any{"cursor_transport_mode": CursorTransportCloudAgent, "dashboard_access_token": "access"}))
+	require.Error(t, ValidateCursorAccountCredentials(AccountTypeAPIKey, map[string]any{"cursor_transport_mode": "invalid", "api_key": "cursor-key"}))
 	require.Error(t, ValidateCursorAccountCredentials(AccountTypeAPIKey, map[string]any{"api_key": "cursor-key", "cookie": "legacy"}))
 	require.Error(t, ValidateCursorAccountCredentials(AccountTypeAPIKey, map[string]any{"api_key": "cursor-key", "dashboard_access_token": "bad\nvalue"}))
+}
+
+func TestCursorAccountTransportMode(t *testing.T) {
+	t.Parallel()
+	cloud := &Account{Credentials: map[string]any{"api_key": "key"}}
+	require.Equal(t, CursorTransportAuto, CursorAccountTransportMode(cloud))
+	require.False(t, CursorAccountUsesIDEChat(cloud))
+
+	ide := &Account{Credentials: map[string]any{"dashboard_access_token": "token"}}
+	require.True(t, CursorAccountUsesIDEChat(ide))
+
+	explicitCloud := &Account{Credentials: map[string]any{"dashboard_access_token": "token", "cursor_transport_mode": CursorTransportCloudAgent}}
+	require.False(t, CursorAccountUsesIDEChat(explicitCloud))
 }

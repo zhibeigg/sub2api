@@ -157,6 +157,15 @@ type AdobeConfig struct {
 // CursorConfig controls the official Cursor Cloud Agents API adapter.
 type CursorConfig struct {
 	BaseURL                           string `mapstructure:"base_url"`
+	ChatBaseURL                       string `mapstructure:"chat_base_url"`
+	DefaultTransportMode              string `mapstructure:"default_transport_mode"`
+	ClientVersion                     string `mapstructure:"client_version"`
+	GhostMode                         bool   `mapstructure:"ghost_mode"`
+	NewOnboardingCompleted            bool   `mapstructure:"new_onboarding_completed"`
+	MaxFrameBytes                     int    `mapstructure:"max_frame_bytes"`
+	MaxBufferedBytes                  int    `mapstructure:"max_buffered_bytes"`
+	ResponseHeaderTimeoutSeconds      int    `mapstructure:"response_header_timeout_seconds"`
+	IDEStreamIdleTimeoutSeconds       int    `mapstructure:"ide_stream_idle_timeout_seconds"`
 	DashboardBaseURL                  string `mapstructure:"dashboard_base_url"`
 	DashboardAuthWebsiteURL           string `mapstructure:"dashboard_auth_website_url"`
 	DashboardMaintenanceEnabled       bool   `mapstructure:"dashboard_maintenance_enabled"`
@@ -1933,6 +1942,15 @@ func setDefaults() {
 
 	// Cursor official Cloud Agents API (user or service-account API Key)
 	viper.SetDefault("cursor.base_url", "https://api.cursor.com")
+	viper.SetDefault("cursor.chat_base_url", "https://api2.cursor.sh")
+	viper.SetDefault("cursor.default_transport_mode", "auto")
+	viper.SetDefault("cursor.client_version", "3.1.0")
+	viper.SetDefault("cursor.ghost_mode", false)
+	viper.SetDefault("cursor.new_onboarding_completed", false)
+	viper.SetDefault("cursor.max_frame_bytes", 8*1024*1024)
+	viper.SetDefault("cursor.max_buffered_bytes", 16*1024*1024)
+	viper.SetDefault("cursor.response_header_timeout_seconds", 60)
+	viper.SetDefault("cursor.ide_stream_idle_timeout_seconds", 60)
 	viper.SetDefault("cursor.dashboard_base_url", "https://api2.cursor.sh")
 	viper.SetDefault("cursor.dashboard_auth_website_url", "https://cursor.com")
 	viper.SetDefault("cursor.dashboard_maintenance_enabled", true)

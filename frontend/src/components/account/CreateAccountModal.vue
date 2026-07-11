@@ -3145,12 +3145,39 @@
           <p class="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.credentialsHint') }}</p>
         </div>
         <div>
+          <label class="input-label">{{ t('admin.accounts.cursor.transportMode') }}</label>
+          <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3" data-testid="cursor-transport-mode">
+            <button
+              v-for="mode in cursorTransportModes"
+              :key="mode"
+              type="button"
+              :data-testid="`cursor-transport-mode-${mode}`"
+              @click="cursorCredentials.cursor_transport_mode = mode"
+              :class="[
+                'rounded-lg border-2 p-3 text-left transition-colors',
+                cursorCredentials.cursor_transport_mode === mode
+                  ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20'
+                  : 'border-gray-200 hover:border-cyan-300 dark:border-dark-600 dark:hover:border-cyan-700'
+              ]"
+            >
+              <span class="block text-sm font-medium text-gray-900 dark:text-white">
+                {{ t(`admin.accounts.cursor.transportModes.${mode}.label`) }}
+              </span>
+              <span class="mt-1 block text-xs leading-5 text-gray-500 dark:text-gray-400">
+                {{ t(`admin.accounts.cursor.transportModes.${mode}.description`) }}
+              </span>
+            </button>
+          </div>
+          <p class="mt-2 rounded-lg bg-cyan-50 px-3 py-2 text-xs leading-5 text-cyan-800 dark:bg-cyan-900/20 dark:text-cyan-200" data-testid="cursor-transport-mode-hint">
+            {{ cursorTransportModeHint }}
+          </p>
+        </div>
+        <div>
           <label class="input-label" for="cursor-api-key">{{ t('admin.accounts.cursor.apiKey') }}</label>
           <input
             id="cursor-api-key"
             v-model="cursorCredentials.api_key"
             type="password"
-            required
             autocomplete="new-password"
             class="input font-mono"
             :placeholder="t('admin.accounts.cursor.apiKeyPlaceholder')"
@@ -3391,7 +3418,7 @@
           v-if="isCredentialValidationFlow"
           type="submit"
           form="credential-validation-form"
-          :disabled="verifyingCredentials || submitting || (form.platform === 'cursor' && !cursorCredentials.api_key.trim())"
+          :disabled="verifyingCredentials || submitting"
           class="btn btn-primary"
           data-testid="validate-and-create-button"
         >
@@ -3733,7 +3760,8 @@ import type {
   CodexSessionImportMessage,
   OpenAICompactMode,
   OpenAIResponsesMode,
-  OpenAIEndpointCapability
+  OpenAIEndpointCapability,
+  CursorTransportMode
 } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
@@ -3748,6 +3776,7 @@ import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import {
   applyAntigravityProjectID,
   buildCursorCreateCredentials,
+  validateCursorCreateCredentials,
   buildAdobeCreateCredentials,
   validateAdobeCredentialSource,
   applyHeaderOverride,
@@ -3901,7 +3930,16 @@ const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_acco
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
-const cursorCredentials = reactive({ api_key: '', dashboard_access_token: '', dashboard_refresh_token: '' })
+const cursorTransportModes: CursorTransportMode[] = ['auto', 'ide_chat', 'cloud_agent']
+const cursorCredentials = reactive({
+  cursor_transport_mode: 'auto' as CursorTransportMode,
+  api_key: '',
+  dashboard_access_token: '',
+  dashboard_refresh_token: ''
+})
+const cursorTransportModeHint = computed(() =>
+  t(`admin.accounts.cursor.transportModes.${cursorCredentials.cursor_transport_mode}.hint`)
+)
 const adobeCredentials = reactive({
   access_token: '', cookie: '', device_token: '', device_id: '', password: '', expires_at: ''
 })
@@ -3934,12 +3972,11 @@ const credentialValidationSummary = computed(() => {
 
 const syncPreviewCredentials = computed(() => {
   if (form.platform === 'cursor') {
-    const apiKey = cursorCredentials.api_key.trim()
-    if (!apiKey) return undefined
+    if (validateCursorCreateCredentials(cursorCredentials)) return undefined
     return {
       platform: 'cursor',
       type: 'apikey',
-      api_key: apiKey
+      credentials: buildCursorCreateCredentials(cursorCredentials)
     }
   }
   if (!apiKeyValue.value) return undefined
@@ -4924,6 +4961,7 @@ const resetForm = () => {
   addMethod.value = 'oauth'
   apiKeyBaseUrl.value = 'https://api.anthropic.com'
   apiKeyValue.value = ''
+  cursorCredentials.cursor_transport_mode = 'auto'
   cursorCredentials.api_key = ''
   cursorCredentials.dashboard_access_token = ''
   cursorCredentials.dashboard_refresh_token = ''
@@ -5015,6 +5053,7 @@ const resetForm = () => {
 }
 
 const handleClose = () => {
+  cursorCredentials.cursor_transport_mode = 'auto'
   cursorCredentials.api_key = ''
   cursorCredentials.dashboard_access_token = ''
   cursorCredentials.dashboard_refresh_token = ''
@@ -5330,8 +5369,9 @@ const handleKiroComplete = async () => {
 
 const buildCredentialValidationCreatePayload = (): CreateAccountRequest | null => {
   if (form.platform === 'cursor') {
-    if (!cursorCredentials.api_key.trim()) {
-      appStore.showError(t('admin.accounts.cursor.apiKeyRequired'))
+    const validationError = validateCursorCreateCredentials(cursorCredentials)
+    if (validationError) {
+      appStore.showError(t(`admin.accounts.cursor.validation.${validationError}`))
       return null
     }
     const credentials: Record<string, unknown> = buildCursorCreateCredentials(cursorCredentials)

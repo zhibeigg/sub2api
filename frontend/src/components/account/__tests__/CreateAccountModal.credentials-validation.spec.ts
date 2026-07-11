@@ -213,7 +213,7 @@ describe('CreateAccountModal Adobe/Cursor credential validation flow', () => {
     expect(wrapper.text()).not.toContain('admin.accounts.apiKeyHint')
   })
 
-  it('uses the Cursor API Key for upstream model sync and preserves synchronized models', async () => {
+  it('uses the selected Cursor transport credentials for model sync and preserves synchronized models', async () => {
     validateCredentialsMock.mockResolvedValue({ success: true, platform: 'cursor', message: 'ok' })
     const wrapper = mountModal()
     await selectPlatform(wrapper, 'Cursor')
@@ -226,7 +226,10 @@ describe('CreateAccountModal Adobe/Cursor credential validation flow', () => {
     expect(wrapper.findComponent(ModelWhitelistSelectorStub).props('syncCredentials')).toEqual({
       platform: 'cursor',
       type: 'apikey',
-      api_key: 'cursor-api-key'
+      credentials: {
+        cursor_transport_mode: 'auto',
+        api_key: 'cursor-api-key'
+      }
     })
     await wrapper.get('[data-testid="set-cursor-models"]').trigger('click')
     await nextTick()
@@ -337,7 +340,7 @@ describe('CreateAccountModal Adobe/Cursor credential validation flow', () => {
     }))
   })
 
-  it('requires a Cursor API Key before validation', async () => {
+  it('requires at least one Cursor credential set in auto mode', async () => {
     const wrapper = mountModal()
     await selectPlatform(wrapper, 'Cursor')
     await enterNameAndContinue(wrapper)
@@ -346,7 +349,53 @@ describe('CreateAccountModal Adobe/Cursor credential validation flow', () => {
 
     expect(validateCredentialsMock).not.toHaveBeenCalled()
     expect(createAccountMock).not.toHaveBeenCalled()
-    expect(showErrorMock).toHaveBeenCalledWith('admin.accounts.cursor.apiKeyRequired')
+    expect(showErrorMock).toHaveBeenCalledWith('admin.accounts.cursor.validation.credential_set')
+  })
+
+  it('creates an IDE Chat account with Dashboard access token and no API Key', async () => {
+    validateCredentialsMock.mockResolvedValue({ success: true, platform: 'cursor', message: 'ok' })
+    const wrapper = mountModal()
+    await selectPlatform(wrapper, 'Cursor')
+    await enterNameAndContinue(wrapper)
+
+    await wrapper.get('[data-testid="cursor-transport-mode-ide_chat"]').trigger('click')
+    await wrapper.get('#cursor-dashboard-access-token').setValue('dashboard-access')
+    await nextTick()
+    expect(wrapper.findComponent(ModelWhitelistSelectorStub).props('syncCredentials')).toEqual({
+      platform: 'cursor',
+      type: 'apikey',
+      credentials: {
+        cursor_transport_mode: 'ide_chat',
+        dashboard_access_token: 'dashboard-access'
+      }
+    })
+    await wrapper.get('#credential-validation-form').trigger('submit')
+
+    expect(createAccountMock).toHaveBeenCalledWith(expect.objectContaining({
+      credentials: expect.objectContaining({
+        cursor_transport_mode: 'ide_chat',
+        dashboard_access_token: 'dashboard-access'
+      })
+    }))
+    expect(createAccountMock.mock.calls[0]?.[0]?.credentials).not.toHaveProperty('api_key')
+  })
+
+  it('requires the credential selected by the explicit Cursor mode', async () => {
+    const wrapper = mountModal()
+    await selectPlatform(wrapper, 'Cursor')
+    await enterNameAndContinue(wrapper)
+
+    await wrapper.get('[data-testid="cursor-transport-mode-cloud_agent"]').trigger('click')
+    await wrapper.get('#cursor-dashboard-access-token').setValue('dashboard-access')
+    await wrapper.get('#credential-validation-form').trigger('submit')
+    expect(showErrorMock).toHaveBeenLastCalledWith('admin.accounts.cursor.validation.api_key')
+
+    await wrapper.get('[data-testid="cursor-transport-mode-ide_chat"]').trigger('click')
+    await wrapper.get('#cursor-dashboard-access-token').setValue('')
+    await wrapper.get('[data-testid="cursor-api-key-input"]').setValue('cursor-key')
+    await wrapper.get('#credential-validation-form').trigger('submit')
+    expect(showErrorMock).toHaveBeenLastCalledWith('admin.accounts.cursor.validation.dashboard_access_token')
+    expect(validateCredentialsMock).not.toHaveBeenCalled()
   })
 
   it('preserves sensitive input when returning to step 1 and showing step 2 again', async () => {
