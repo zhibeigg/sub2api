@@ -47,6 +47,9 @@ function createPublicSettings(overrides: Partial<PublicSettings> = {}): PublicSe
     github_oauth_enabled: false,
     google_oauth_enabled: false,
     backend_mode_enabled: false,
+    chatwoot_enabled: false,
+    chatwoot_base_url: '',
+    chatwoot_website_token: '',
     version: '1.0.0',
     balance_low_notify_enabled: false,
     account_quota_notify_enabled: false,
@@ -348,6 +351,28 @@ describe('useAppStore', () => {
       ])
       expect(store.publicSettingsLoaded).toBe(true)
       expect(store.cachedPublicSettings?.payment_enabled).toBe(true)
+    })
+
+    it('缓存并同步 Chatwoot 公共配置到运行时注入配置', async () => {
+      const settings = createPublicSettings({
+        chatwoot_enabled: true,
+        chatwoot_base_url: 'https://support.example.com',
+        chatwoot_website_token: 'website-token',
+      })
+      vi.mocked(getPublicSettings).mockResolvedValue(settings)
+      const store = useAppStore()
+
+      await store.fetchPublicSettings()
+
+      expect(store.cachedPublicSettings).toEqual(expect.objectContaining({
+        chatwoot_enabled: true,
+        chatwoot_base_url: 'https://support.example.com',
+        chatwoot_website_token: 'website-token',
+      }))
+      expect(window.__APP_CONFIG__).toEqual(expect.objectContaining({
+        chatwoot_enabled: true,
+        chatwoot_website_token: 'website-token',
+      }))
     })
 
     it('force 在无活动请求时绕过缓存，刷新期间的普通调用等待刷新结果', async () => {

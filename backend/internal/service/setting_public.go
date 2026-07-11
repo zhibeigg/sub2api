@@ -172,6 +172,9 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		SettingKeyTurnstileSiteKey,
 		SettingKeyTurnstileEndpoint,
 		SettingKeyAPIKeyACLTrustForwardedIP,
+		SettingKeyChatwootEnabled,
+		SettingKeyChatwootBaseURL,
+		SettingKeyChatwootWebsiteToken,
 		SettingKeySiteName,
 		SettingKeySiteLogo,
 		SettingKeySiteSubtitle,
@@ -260,6 +263,8 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 	gitHubEnabled := s.emailOAuthPublicEnabled(settings, "github")
 	googleEnabled := s.emailOAuthPublicEnabled(settings, "google")
 	weChatEnabled, weChatOpenEnabled, weChatMPEnabled, weChatMobileEnabled := s.weChatOAuthCapabilitiesFromSettings(settings)
+	chatwoot := s.resolveChatwootSettings(settings)
+	chatwoot.Enabled = chatwoot.Enabled && chatwoot.BaseURL != "" && chatwoot.WebsiteToken != ""
 
 	// Password reset requires email verification to be enabled
 	emailVerifyEnabled := settings[SettingKeyEmailVerifyEnabled] == "true"
@@ -299,6 +304,9 @@ func (s *SettingService) GetPublicSettings(ctx context.Context) (*PublicSettings
 		TurnstileEnabled:                 settings[SettingKeyTurnstileEnabled] == "true",
 		TurnstileSiteKey:                 settings[SettingKeyTurnstileSiteKey],
 		TurnstileEndpoint:                settings[SettingKeyTurnstileEndpoint],
+		ChatwootEnabled:                  chatwoot.Enabled,
+		ChatwootBaseURL:                  chatwoot.BaseURL,
+		ChatwootWebsiteToken:             chatwoot.WebsiteToken,
 		SiteName:                         s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
 		SiteLogo:                         settings[SettingKeySiteLogo],
 		SiteSubtitle:                     s.getStringOrDefault(settings, SettingKeySiteSubtitle, "Subscription to API Conversion Platform"),
@@ -458,6 +466,9 @@ type PublicSettingsInjectionPayload struct {
 	TurnstileEnabled                 bool                     `json:"turnstile_enabled"`
 	TurnstileSiteKey                 string                   `json:"turnstile_site_key"`
 	TurnstileEndpoint                string                   `json:"turnstile_endpoint"`
+	ChatwootEnabled                  bool                     `json:"chatwoot_enabled"`
+	ChatwootBaseURL                  string                   `json:"chatwoot_base_url"`
+	ChatwootWebsiteToken             string                   `json:"chatwoot_website_token"`
 	SiteName                         string                   `json:"site_name"`
 	SiteLogo                         string                   `json:"site_logo"`
 	SiteSubtitle                     string                   `json:"site_subtitle"`
@@ -529,6 +540,9 @@ func (s *SettingService) GetPublicSettingsForInjection(ctx context.Context) (any
 		TurnstileEnabled:                 settings.TurnstileEnabled,
 		TurnstileSiteKey:                 settings.TurnstileSiteKey,
 		TurnstileEndpoint:                settings.TurnstileEndpoint,
+		ChatwootEnabled:                  settings.ChatwootEnabled,
+		ChatwootBaseURL:                  settings.ChatwootBaseURL,
+		ChatwootWebsiteToken:             settings.ChatwootWebsiteToken,
 		SiteName:                         settings.SiteName,
 		SiteLogo:                         settings.SiteLogo,
 		SiteSubtitle:                     settings.SiteSubtitle,

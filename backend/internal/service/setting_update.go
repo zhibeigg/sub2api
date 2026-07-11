@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
@@ -102,6 +103,19 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	}
 	settings.GoogleOAuthRedirectURL = strings.TrimSpace(settings.GoogleOAuthRedirectURL)
 	settings.GoogleOAuthFrontendRedirectURL = strings.TrimSpace(settings.GoogleOAuthFrontendRedirectURL)
+	chatwootBaseURL, err := config.NormalizeChatwootBaseURL(settings.ChatwootBaseURL)
+	if err != nil {
+		return nil, infraerrors.BadRequest("INVALID_CHATWOOT_BASE_URL", err.Error())
+	}
+	settings.ChatwootBaseURL = chatwootBaseURL
+	settings.ChatwootWebsiteToken = strings.TrimSpace(settings.ChatwootWebsiteToken)
+	settings.ChatwootIdentityValidationSecret = strings.TrimSpace(settings.ChatwootIdentityValidationSecret)
+	if settings.ChatwootEnabled && settings.ChatwootBaseURL == "" {
+		return nil, infraerrors.BadRequest("CHATWOOT_BASE_URL_REQUIRED", "Chatwoot base URL is required when Chatwoot is enabled")
+	}
+	if settings.ChatwootEnabled && settings.ChatwootWebsiteToken == "" {
+		return nil, infraerrors.BadRequest("CHATWOOT_WEBSITE_TOKEN_REQUIRED", "Chatwoot website token is required when Chatwoot is enabled")
+	}
 	if settings.GoogleOAuthFrontendRedirectURL == "" {
 		settings.GoogleOAuthFrontendRedirectURL = defaultGoogleOAuthFrontend
 	}
@@ -154,6 +168,13 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 		updates[SettingKeyTurnstileSecretKey] = settings.TurnstileSecretKey
 	}
 	updates[SettingKeyAPIKeyACLTrustForwardedIP] = strconv.FormatBool(settings.APIKeyACLTrustForwardedIP)
+
+	updates[SettingKeyChatwootEnabled] = strconv.FormatBool(settings.ChatwootEnabled)
+	updates[SettingKeyChatwootBaseURL] = settings.ChatwootBaseURL
+	updates[SettingKeyChatwootWebsiteToken] = settings.ChatwootWebsiteToken
+	if settings.ChatwootIdentityValidationSecret != "" {
+		updates[SettingKeyChatwootIdentityValidationSecret] = settings.ChatwootIdentityValidationSecret
+	}
 
 	// LinuxDo Connect OAuth 登录
 	updates[SettingKeyLinuxDoConnectEnabled] = strconv.FormatBool(settings.LinuxDoConnectEnabled)
@@ -573,6 +594,13 @@ func (s *SettingService) refreshCachedSettings(settings *SystemSettings) {
 	if s.cfg != nil {
 		s.cfg.SetTrustForwardedIPForAPIKeyACL(settings.APIKeyACLTrustForwardedIP)
 	}
+	chatwoot := ChatwootSettings{
+		Enabled:                  settings.ChatwootEnabled,
+		BaseURL:                  settings.ChatwootBaseURL,
+		WebsiteToken:             settings.ChatwootWebsiteToken,
+		IdentityValidationSecret: settings.ChatwootIdentityValidationSecret,
+	}
+	s.chatwootSettingsCache.Store(&chatwoot)
 	// codex_cli_only 加固策略缓存：设置更新后强制下次重载（涉及 4 个键 + JSON 解析，直接置过期）。
 	s.codexRestrictionPolicySF.Forget("codex_restriction_policy")
 	s.codexRestrictionPolicyCache.Store(&cachedCodexRestrictionPolicy{expiresAt: 0})

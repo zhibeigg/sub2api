@@ -41,6 +41,12 @@ type SystemSettings struct {
 	TurnstileEndpoint            string
 	APIKeyACLTrustForwardedIP    bool
 
+	ChatwootEnabled                            bool
+	ChatwootBaseURL                            string
+	ChatwootWebsiteToken                       string
+	ChatwootIdentityValidationSecret           string
+	ChatwootIdentityValidationSecretConfigured bool
+
 	// LinuxDo Connect OAuth 登录
 	LinuxDoConnectEnabled                bool
 	LinuxDoConnectClientID               string
@@ -285,6 +291,9 @@ type PublicSettings struct {
 	TurnstileEnabled                 bool
 	TurnstileSiteKey                 string
 	TurnstileEndpoint                string
+	ChatwootEnabled                  bool
+	ChatwootBaseURL                  string
+	ChatwootWebsiteToken             string
 	SiteName                         string
 	SiteLogo                         string
 	SiteSubtitle                     string

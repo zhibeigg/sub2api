@@ -439,6 +439,11 @@ export interface SystemSettings {
   backend_mode_enabled: boolean;
   custom_menu_items: CustomMenuItem[];
   custom_endpoints: CustomEndpoint[];
+  // Chatwoot support widget
+  chatwoot_enabled: boolean;
+  chatwoot_base_url: string;
+  chatwoot_website_token: string;
+  chatwoot_identity_validation_secret_configured: boolean;
   // SMTP settings
   smtp_host: string;
   smtp_port: number;
@@ -738,6 +743,10 @@ export interface UpdateSettingsRequest {
   backend_mode_enabled?: boolean;
   custom_menu_items?: CustomMenuItem[];
   custom_endpoints?: CustomEndpoint[];
+  chatwoot_enabled?: boolean;
+  chatwoot_base_url?: string;
+  chatwoot_website_token?: string;
+  chatwoot_identity_validation_secret?: string;
   smtp_host?: string;
   smtp_port?: number;
   smtp_username?: string;

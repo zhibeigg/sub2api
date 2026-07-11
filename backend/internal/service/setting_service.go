@@ -58,6 +58,7 @@ type SettingService struct {
 	openAICodexUASF             singleflight.Group
 	codexRestrictionPolicyCache atomic.Value // *cachedCodexRestrictionPolicy
 	codexRestrictionPolicySF    singleflight.Group
+	chatwootSettingsCache       atomic.Value // *ChatwootSettings
 
 	cyberSessionBlockRuntimeCache atomic.Value // *cachedCyberSessionBlockRuntime
 	cyberSessionBlockRuntimeSF    singleflight.Group

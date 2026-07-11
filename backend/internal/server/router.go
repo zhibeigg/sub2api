@@ -17,7 +17,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const frameSrcRefreshTimeout = 5 * time.Second
+const dynamicCSPRefreshTimeout = 5 * time.Second
 
 // SetupRouter 配置路由器中间件和路由
 func SetupRouter(
@@ -33,29 +33,28 @@ func SetupRouter(
 	cfg *config.Config,
 	redisClient *redis.Client,
 ) *gin.Engine {
-	// 缓存 iframe 页面的 origin 列表，用于动态注入 CSP frame-src
-	var cachedFrameOrigins atomic.Pointer[[]string]
-	emptyOrigins := []string{}
-	cachedFrameOrigins.Store(&emptyOrigins)
+	// 缓存动态 CSP 来源；保留自定义 iframe，并按 Chatwoot 配置扩展脚本、frame 与连接来源。
+	var cachedDynamicCSPSources atomic.Pointer[service.DynamicCSPSources]
+	emptySources := service.DynamicCSPSources{}
+	cachedDynamicCSPSources.Store(&emptySources)
 
-	refreshFrameOrigins := func() {
-		ctx, cancel := context.WithTimeout(context.Background(), frameSrcRefreshTimeout)
+	refreshDynamicCSPSources := func() {
+		ctx, cancel := context.WithTimeout(context.Background(), dynamicCSPRefreshTimeout)
 		defer cancel()
-		origins, err := settingService.GetFrameSrcOrigins(ctx)
+		sources, err := settingService.GetDynamicCSPSources(ctx)
 		if err != nil {
-			// 获取失败时保留已有缓存，避免 frame-src 被意外清空
 			return
 		}
-		cachedFrameOrigins.Store(&origins)
+		cachedDynamicCSPSources.Store(&sources)
 	}
-	refreshFrameOrigins() // 启动时初始化
+	refreshDynamicCSPSources() // 启动时初始化
 
 	// 应用中间件
 	r.Use(middleware2.RequestLogger())
 	r.Use(middleware2.Logger())
 	r.Use(middleware2.CORS(cfg.CORS))
-	r.Use(middleware2.SecurityHeaders(cfg.Security.CSP, func() []string {
-		if p := cachedFrameOrigins.Load(); p != nil {
+	r.Use(middleware2.SecurityHeaders(cfg.Security.CSP, func() map[string][]string {
+		if p := cachedDynamicCSPSources.Load(); p != nil {
 			return *p
 		}
 		return nil
@@ -67,17 +66,17 @@ func SetupRouter(
 		if err != nil {
 			log.Printf("Warning: Failed to create frontend server with settings injection: %v, using legacy mode", err)
 			r.Use(web.ServeEmbeddedFrontend())
-			settingService.SetOnUpdateCallback(refreshFrameOrigins)
+			settingService.SetOnUpdateCallback(refreshDynamicCSPSources)
 		} else {
-			// Register combined callback: invalidate HTML cache + refresh frame origins
+			// Register combined callback: invalidate HTML cache + refresh dynamic CSP sources
 			settingService.SetOnUpdateCallback(func() {
 				frontendServer.InvalidateCache()
-				refreshFrameOrigins()
+				refreshDynamicCSPSources()
 			})
 			r.Use(frontendServer.Middleware())
 		}
 	} else {
-		settingService.SetOnUpdateCallback(refreshFrameOrigins)
+		settingService.SetOnUpdateCallback(refreshDynamicCSPSources)
 	}
 
 	// 注册路由

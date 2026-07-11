@@ -8,6 +8,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
+	servermiddleware "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -60,6 +61,9 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 		TurnstileEnabled:                 settings.TurnstileEnabled,
 		TurnstileSiteKey:                 settings.TurnstileSiteKey,
 		TurnstileEndpoint:                settings.TurnstileEndpoint,
+		ChatwootEnabled:                  settings.ChatwootEnabled,
+		ChatwootBaseURL:                  settings.ChatwootBaseURL,
+		ChatwootWebsiteToken:             settings.ChatwootWebsiteToken,
 		SiteName:                         settings.SiteName,
 		SiteLogo:                         settings.SiteLogo,
 		SiteSubtitle:                     settings.SiteSubtitle,
@@ -110,6 +114,22 @@ func (h *SettingHandler) GetPublicSettings(c *gin.Context) {
 
 // UnsubscribeNotificationEmail handles optional notification email opt-outs.
 // GET /api/v1/settings/email-unsubscribe?token=...
+// GetChatwootIdentity returns the authenticated user's stable Chatwoot identity.
+// GET /api/v1/settings/chatwoot/identity
+func (h *SettingHandler) GetChatwootIdentity(c *gin.Context) {
+	subject, ok := servermiddleware.GetAuthSubjectFromContext(c)
+	if !ok || subject.UserID <= 0 {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	identity, err := h.settingService.BuildChatwootIdentity(c.Request.Context(), subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, identity)
+}
+
 func (h *SettingHandler) UnsubscribeNotificationEmail(c *gin.Context) {
 	if h.notificationEmailService == nil {
 		response.InternalError(c, "notification email service is not configured")

@@ -336,6 +336,24 @@ export async function getPublicSettings(): Promise<PublicSettings> {
   return data
 }
 
+export interface ChatwootIdentity {
+  identifier: string
+  identifier_hash?: string
+  name?: string
+  email?: string
+  avatar_url?: string
+}
+
+/**
+ * Get the server-signed Chatwoot identity for the authenticated user.
+ * The endpoint is unavailable when identity validation is not configured;
+ * callers should keep the widget anonymous in that case.
+ */
+export async function getChatwootIdentity(): Promise<ChatwootIdentity> {
+  const { data } = await apiClient.get<ChatwootIdentity>('/settings/chatwoot/identity')
+  return data
+}
+
 export type WeChatOAuthMode = 'open' | 'mp'
 export type WeChatOAuthUnavailableReason =
   | 'not_configured'
@@ -673,6 +691,7 @@ export const authAPI = {
   getTokenExpiresAt,
   clearAuthToken,
   getPublicSettings,
+  getChatwootIdentity,
   sendVerifyCode,
   sendPendingOAuthVerifyCode,
   validatePromoCode,

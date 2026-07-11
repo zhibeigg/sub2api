@@ -50,6 +50,11 @@ type UpdateSettingsRequest struct {
 	// API Key IP 访问控制设置
 	APIKeyACLTrustForwardedIP *bool `json:"api_key_acl_trust_forwarded_ip"`
 
+	ChatwootEnabled                  *bool   `json:"chatwoot_enabled"`
+	ChatwootBaseURL                  *string `json:"chatwoot_base_url"`
+	ChatwootWebsiteToken             *string `json:"chatwoot_website_token"`
+	ChatwootIdentityValidationSecret *string `json:"chatwoot_identity_validation_secret"`
+
 	// LinuxDo Connect OAuth 登录
 	LinuxDoConnectEnabled      bool   `json:"linuxdo_connect_enabled"`
 	LinuxDoConnectClientID     string `json:"linuxdo_connect_client_id"`
@@ -1200,6 +1205,30 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.APIKeyACLTrustForwardedIP
 		}(),
+		ChatwootEnabled: func() bool {
+			if req.ChatwootEnabled != nil {
+				return *req.ChatwootEnabled
+			}
+			return previousSettings.ChatwootEnabled
+		}(),
+		ChatwootBaseURL: func() string {
+			if req.ChatwootBaseURL != nil {
+				return strings.TrimSpace(*req.ChatwootBaseURL)
+			}
+			return previousSettings.ChatwootBaseURL
+		}(),
+		ChatwootWebsiteToken: func() string {
+			if req.ChatwootWebsiteToken != nil {
+				return strings.TrimSpace(*req.ChatwootWebsiteToken)
+			}
+			return previousSettings.ChatwootWebsiteToken
+		}(),
+		ChatwootIdentityValidationSecret: func() string {
+			if req.ChatwootIdentityValidationSecret != nil && strings.TrimSpace(*req.ChatwootIdentityValidationSecret) != "" {
+				return strings.TrimSpace(*req.ChatwootIdentityValidationSecret)
+			}
+			return previousSettings.ChatwootIdentityValidationSecret
+		}(),
 		LinuxDoConnectEnabled:                  req.LinuxDoConnectEnabled,
 		LinuxDoConnectClientID:                 req.LinuxDoConnectClientID,
 		LinuxDoConnectClientSecret:             req.LinuxDoConnectClientSecret,
@@ -1685,31 +1714,35 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	}
 
 	payload := dto.SystemSettings{
-		RegistrationEnabled:                                    updatedSettings.RegistrationEnabled,
-		EmailVerifyEnabled:                                     updatedSettings.EmailVerifyEnabled,
-		RegistrationEmailSuffixWhitelist:                       updatedSettings.RegistrationEmailSuffixWhitelist,
-		PromoCodeEnabled:                                       updatedSettings.PromoCodeEnabled,
-		PasswordResetEnabled:                                   updatedSettings.PasswordResetEnabled,
-		FrontendURL:                                            updatedSettings.FrontendURL,
-		InvitationCodeEnabled:                                  updatedSettings.InvitationCodeEnabled,
-		TotpEnabled:                                            updatedSettings.TotpEnabled,
-		TotpEncryptionKeyConfigured:                            h.settingService.IsTotpEncryptionKeyConfigured(),
-		LoginAgreementEnabled:                                  updatedSettings.LoginAgreementEnabled,
-		LoginAgreementMode:                                     updatedSettings.LoginAgreementMode,
-		LoginAgreementUpdatedAt:                                updatedSettings.LoginAgreementUpdatedAt,
-		LoginAgreementDocuments:                                loginAgreementDocumentsToDTO(updatedSettings.LoginAgreementDocuments),
-		SMTPHost:                                               updatedSettings.SMTPHost,
-		SMTPPort:                                               updatedSettings.SMTPPort,
-		SMTPUsername:                                           updatedSettings.SMTPUsername,
-		SMTPPasswordConfigured:                                 updatedSettings.SMTPPasswordConfigured,
-		SMTPFrom:                                               updatedSettings.SMTPFrom,
-		SMTPFromName:                                           updatedSettings.SMTPFromName,
-		SMTPUseTLS:                                             updatedSettings.SMTPUseTLS,
-		TurnstileEnabled:                                       updatedSettings.TurnstileEnabled,
-		TurnstileSiteKey:                                       updatedSettings.TurnstileSiteKey,
-		TurnstileSecretKeyConfigured:                           updatedSettings.TurnstileSecretKeyConfigured,
-		TurnstileEndpoint:                                      updatedSettings.TurnstileEndpoint,
-		APIKeyACLTrustForwardedIP:                              updatedSettings.APIKeyACLTrustForwardedIP,
+		RegistrationEnabled:              updatedSettings.RegistrationEnabled,
+		EmailVerifyEnabled:               updatedSettings.EmailVerifyEnabled,
+		RegistrationEmailSuffixWhitelist: updatedSettings.RegistrationEmailSuffixWhitelist,
+		PromoCodeEnabled:                 updatedSettings.PromoCodeEnabled,
+		PasswordResetEnabled:             updatedSettings.PasswordResetEnabled,
+		FrontendURL:                      updatedSettings.FrontendURL,
+		InvitationCodeEnabled:            updatedSettings.InvitationCodeEnabled,
+		TotpEnabled:                      updatedSettings.TotpEnabled,
+		TotpEncryptionKeyConfigured:      h.settingService.IsTotpEncryptionKeyConfigured(),
+		LoginAgreementEnabled:            updatedSettings.LoginAgreementEnabled,
+		LoginAgreementMode:               updatedSettings.LoginAgreementMode,
+		LoginAgreementUpdatedAt:          updatedSettings.LoginAgreementUpdatedAt,
+		LoginAgreementDocuments:          loginAgreementDocumentsToDTO(updatedSettings.LoginAgreementDocuments),
+		SMTPHost:                         updatedSettings.SMTPHost,
+		SMTPPort:                         updatedSettings.SMTPPort,
+		SMTPUsername:                     updatedSettings.SMTPUsername,
+		SMTPPasswordConfigured:           updatedSettings.SMTPPasswordConfigured,
+		SMTPFrom:                         updatedSettings.SMTPFrom,
+		SMTPFromName:                     updatedSettings.SMTPFromName,
+		SMTPUseTLS:                       updatedSettings.SMTPUseTLS,
+		TurnstileEnabled:                 updatedSettings.TurnstileEnabled,
+		TurnstileSiteKey:                 updatedSettings.TurnstileSiteKey,
+		TurnstileSecretKeyConfigured:     updatedSettings.TurnstileSecretKeyConfigured,
+		TurnstileEndpoint:                updatedSettings.TurnstileEndpoint,
+		APIKeyACLTrustForwardedIP:        updatedSettings.APIKeyACLTrustForwardedIP,
+		ChatwootEnabled:                  updatedSettings.ChatwootEnabled,
+		ChatwootBaseURL:                  updatedSettings.ChatwootBaseURL,
+		ChatwootWebsiteToken:             updatedSettings.ChatwootWebsiteToken,
+		ChatwootIdentityValidationSecretConfigured:             updatedSettings.ChatwootIdentityValidationSecretConfigured,
 		LinuxDoConnectEnabled:                                  updatedSettings.LinuxDoConnectEnabled,
 		LinuxDoConnectClientID:                                 updatedSettings.LinuxDoConnectClientID,
 		LinuxDoConnectClientSecretConfigured:                   updatedSettings.LinuxDoConnectClientSecretConfigured,

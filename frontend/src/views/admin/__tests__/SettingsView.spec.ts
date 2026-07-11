@@ -180,6 +180,27 @@ vi.mock("vue-i18n", async () => {
     "admin.settings.openaiExperimentalScheduler.sessionStickyWeight": "session_hash 粘性",
     "admin.settings.site.uploadImage": "上传图片",
     "admin.settings.site.remove": "移除",
+    "admin.settings.site.chatwoot.title": "在线客服",
+    "admin.settings.site.chatwoot.description": "接入 Chatwoot Website Widget",
+    "admin.settings.site.chatwoot.enabled": "已启用",
+    "admin.settings.site.chatwoot.disabled": "已关闭",
+    "admin.settings.site.chatwoot.baseUrl": "Chatwoot Base URL",
+    "admin.settings.site.chatwoot.baseUrlPlaceholder": "https://app.chatwoot.com",
+    "admin.settings.site.chatwoot.baseUrlHint": "实例地址",
+    "admin.settings.site.chatwoot.websiteToken": "Website Token",
+    "admin.settings.site.chatwoot.websiteTokenPlaceholder": "Inbox Website Token",
+    "admin.settings.site.chatwoot.websiteTokenHint": "公开标识",
+    "admin.settings.site.chatwoot.identitySecret": "Identity Validation Secret",
+    "admin.settings.site.chatwoot.identitySecretPlaceholder": "可选",
+    "admin.settings.site.chatwoot.identitySecretConfiguredPlaceholder": "密钥已配置，留空以保留当前值。",
+    "admin.settings.site.chatwoot.identitySecretHint": "匿名访客",
+    "admin.settings.site.chatwoot.identitySecretConfiguredHint": "服务端身份签名已配置",
+    "admin.settings.site.chatwoot.identityConfigured": "身份验证已配置",
+    "admin.settings.site.chatwoot.identityAnonymous": "匿名模式",
+    "admin.settings.site.chatwoot.securityTitle": "安全边界",
+    "admin.settings.site.chatwoot.securityHint": "密钥仅保存于服务端",
+    "admin.settings.site.chatwoot.incompleteError": "启用 Chatwoot 前必须填写有效的 Base URL 和 Website Token。",
+    "admin.settings.site.chatwoot.invalidBaseUrlError": "Chatwoot Base URL 必须是有效的 http(s) 地址。",
     "admin.settings.platformQuota.platform": "平台",
     "admin.settings.platformQuota.daily": "日限额 (USD)",
     "admin.settings.platformQuota.weekly": "周限额 (USD)",
@@ -331,6 +352,10 @@ const baseSettingsResponse = {
   backend_mode_enabled: false,
   custom_menu_items: [],
   custom_endpoints: [],
+  chatwoot_enabled: false,
+  chatwoot_base_url: "",
+  chatwoot_website_token: "",
+  chatwoot_identity_validation_secret_configured: false,
   frontend_url: "",
   smtp_host: "",
   smtp_port: 587,
@@ -595,6 +620,46 @@ describe("admin SettingsView payment visible method controls", () => {
     });
     fetchPublicSettings.mockResolvedValue(undefined);
     adminSettingsFetch.mockResolvedValue(undefined);
+  });
+
+  it("loads and saves Chatwoot settings while preserving a configured identity secret", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      chatwoot_enabled: true,
+      chatwoot_base_url: "https://support.example.com/",
+      chatwoot_website_token: "website-token",
+      chatwoot_identity_validation_secret_configured: true,
+    });
+
+    const wrapper = mountView();
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="chatwoot-settings-card"]').text()).toContain("身份验证已配置");
+    expect((wrapper.get('[data-testid="chatwoot-enabled"]').element as HTMLInputElement).checked).toBe(true);
+    expect((wrapper.get('[data-testid="chatwoot-base-url"]').element as HTMLInputElement).value).toBe("https://support.example.com/");
+    expect(wrapper.get('[data-testid="chatwoot-identity-secret"]').attributes("placeholder")).toContain("密钥已配置");
+
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({
+      chatwoot_enabled: true,
+      chatwoot_base_url: "https://support.example.com",
+      chatwoot_website_token: "website-token",
+      chatwoot_identity_validation_secret: undefined,
+    }));
+  });
+
+  it("blocks enabling Chatwoot until Base URL and Website Token are complete", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+
+    await wrapper.get('[data-testid="chatwoot-enabled"]').setValue(true);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalledWith("启用 Chatwoot 前必须填写有效的 Base URL 和 Website Token。");
   });
 
   it("does not render legacy visible payment method controls", async () => {

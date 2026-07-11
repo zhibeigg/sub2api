@@ -4,6 +4,7 @@ import { onMounted, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Toast from '@/components/common/Toast.vue'
 import NavigationProgress from '@/components/common/NavigationProgress.vue'
+import ChatwootSupport from '@/components/common/ChatwootSupport.vue'
 import AdminComplianceDialog from '@/components/admin/AdminComplianceDialog.vue'
 import { applyRouteSEO, resolveRouteSEO } from '@/router/title'
 import AnnouncementPopup from '@/components/common/AnnouncementPopup.vue'
@@ -165,6 +166,7 @@ onMounted(async () => {
 
 <template>
   <NavigationProgress />
+  <ChatwootSupport />
   <RouterView />
   <Toast />
   <AnnouncementPopup />

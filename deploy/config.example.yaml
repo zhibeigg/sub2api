@@ -1069,6 +1069,20 @@ turnstile:
   required: false
 
 # =============================================================================
+# Chatwoot Customer Support Widget
+# Chatwoot 客服组件
+# =============================================================================
+chatwoot:
+  enabled: false
+  # Chatwoot installation base URL, without query/fragment/trailing slash
+  # Chatwoot 实例基础地址，不含 query/fragment/末尾斜杠
+  base_url: "https://app.chatwoot.com"
+  website_token: ""
+  # Identity validation secret; never exposed by admin/public APIs
+  # Identity Validation Secret；管理/公开 API 均不会回传明文
+  identity_validation_secret: ""
+
+# =============================================================================
 # Gemini OAuth (Required for Gemini accounts)
 # Gemini OAuth 配置（Gemini 账户必需）
 # =============================================================================

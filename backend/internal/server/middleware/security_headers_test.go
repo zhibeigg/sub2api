@@ -273,6 +273,31 @@ func TestSecurityHeaders(t *testing.T) {
 			nonces[nonce] = true
 		}
 	})
+
+	t.Run("injects_dynamic_chatwoot_sources_by_directive", func(t *testing.T) {
+		cfg := config.CSPConfig{
+			Enabled: true,
+			Policy:  "default-src 'self'; script-src 'self' __CSP_NONCE__; frame-src 'self'; connect-src 'self'",
+		}
+		middleware := SecurityHeaders(cfg, func() map[string][]string {
+			return map[string][]string{
+				"script-src":  {"https://chat.example.com"},
+				"frame-src":   {"https://chat.example.com"},
+				"connect-src": {"https://chat.example.com", "wss://chat.example.com"},
+			}
+		})
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+		middleware(c)
+
+		policy := w.Header().Get("Content-Security-Policy")
+		assert.Equal(t, 1, countDirectiveValue(policy, "script-src", "https://chat.example.com"))
+		assert.Equal(t, 1, countDirectiveValue(policy, "frame-src", "https://chat.example.com"))
+		assert.Equal(t, 1, countDirectiveValue(policy, "connect-src", "https://chat.example.com"))
+		assert.Equal(t, 1, countDirectiveValue(policy, "connect-src", "wss://chat.example.com"))
+	})
 }
 
 func TestCSPNonceKey(t *testing.T) {

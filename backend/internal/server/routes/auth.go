@@ -223,6 +223,7 @@ func RegisterAuthRoutes(
 	authenticated.Use(servermiddleware.BackendModeUserGuard(settingService))
 	{
 		authenticated.GET("/auth/me", h.Auth.GetCurrentUser)
+		authenticated.GET("/settings/chatwoot/identity", h.Setting.GetChatwootIdentity)
 		// 撤销所有会话（需要认证）
 		authenticated.POST("/auth/revoke-all-sessions", h.Auth.RevokeAllSessions)
 		authenticated.POST("/auth/oauth/bind-token", h.Auth.PrepareOAuthBindAccessTokenCookie)

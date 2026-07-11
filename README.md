@@ -190,6 +190,17 @@ Sub2API is an AI API gateway platform designed to distribute and manage API quot
 - **Trustworthy Editorial Public Entrance** - Home uses a three-scene, scroll-driven editorial stage for genuine models, protocol access, and traceable billing; login and registration share the same route-aware protocol orbit, while the documentation homepage provides matching Base URL and toolchain shortcuts. Motion uses only lightweight CSS/SVG and transform/opacity effects, automatically becomes static with `prefers-reduced-motion` or constrained pointer/data settings, and does not copy third-party artwork or brand assets. The privacy boundary remains explicit: only account, routing, billing, and security data required to run the service is processed; full API request bodies are not retained by default, while enabled risk-control auditing stores only necessary redacted and truncated excerpts; data is not sold or used for model training
 - **Admin Dashboard** - Web interface for monitoring and management
 - **External System Integration** - Embed external systems (e.g. ticketing) via iframe to extend the admin dashboard
+- **Chatwoot Online Support** - Administrators can enable the official Chatwoot Website Widget globally, use Chatwoot Cloud or a self-hosted instance, serve anonymous visitors, and optionally bind signed logged-in identities without exposing the identity-validation secret
+
+## Chatwoot Online Support
+
+Configure Chatwoot from **Admin → Settings → Site → Online Support**. Enabling the widget requires a Chatwoot Base URL and Website Token. The Website Token is intentionally exposed through public settings because the browser needs it to load the widget; never place a Chatwoot API access token in this field.
+
+For verified logged-in identities, copy the inbox's Identity Validation Secret into the dedicated secret field. Sub2API keeps this value server-side and returns only an HMAC-SHA256 identifier hash from the authenticated `GET /api/v1/settings/chatwoot/identity` endpoint. If the secret is omitted, visitors can still chat anonymously and Sub2API does not perform an insecure client-only `setUser` binding.
+
+The public settings response exposes only `chatwoot_enabled`, `chatwoot_base_url`, and `chatwoot_website_token`. When configuration is incomplete the effective enabled value is `false`. The CSP middleware automatically adds the validated Chatwoot origin to the required script, frame, HTTPS, and WebSocket directives, including self-hosted origins, without requiring a server restart after an administrator update.
+
+The equivalent startup defaults are available under `chatwoot` in `config.yaml`; database values saved by the administrator take precedence. Keep the feature disabled until the inbox URL and token are ready, use HTTPS in production, and leave the secret input empty on later saves to preserve the existing secret.
 
 ## Ecosystem
 

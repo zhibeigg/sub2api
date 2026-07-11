@@ -55,6 +55,11 @@ type SystemSettings struct {
 	TurnstileEndpoint            string `json:"turnstile_endpoint"`
 	APIKeyACLTrustForwardedIP    bool   `json:"api_key_acl_trust_forwarded_ip"`
 
+	ChatwootEnabled                            bool   `json:"chatwoot_enabled"`
+	ChatwootBaseURL                            string `json:"chatwoot_base_url"`
+	ChatwootWebsiteToken                       string `json:"chatwoot_website_token"`
+	ChatwootIdentityValidationSecretConfigured bool   `json:"chatwoot_identity_validation_secret_configured"`
+
 	LinuxDoConnectEnabled                bool   `json:"linuxdo_connect_enabled"`
 	LinuxDoConnectClientID               string `json:"linuxdo_connect_client_id"`
 	LinuxDoConnectClientSecretConfigured bool   `json:"linuxdo_connect_client_secret_configured"`
@@ -320,6 +325,9 @@ type PublicSettings struct {
 	TurnstileEnabled                 bool                     `json:"turnstile_enabled"`
 	TurnstileSiteKey                 string                   `json:"turnstile_site_key"`
 	TurnstileEndpoint                string                   `json:"turnstile_endpoint"`
+	ChatwootEnabled                  bool                     `json:"chatwoot_enabled"`
+	ChatwootBaseURL                  string                   `json:"chatwoot_base_url"`
+	ChatwootWebsiteToken             string                   `json:"chatwoot_website_token"`
 	SiteName                         string                   `json:"site_name"`
 	SiteLogo                         string                   `json:"site_logo"`
 	SiteSubtitle                     string                   `json:"site_subtitle"`

@@ -5107,6 +5107,104 @@
 	                <Toggle v-model="form.backend_mode_enabled" />
 	              </div>
 
+              <!-- Chatwoot Support -->
+              <section
+                data-testid="chatwoot-settings-card"
+                class="overflow-hidden rounded-xl border border-gray-950 bg-white dark:border-white dark:bg-dark-900"
+              >
+                <div class="flex flex-col gap-4 border-b border-gray-200 bg-gray-950 px-5 py-4 text-white dark:border-dark-600 dark:bg-white dark:text-gray-950 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div class="mb-1 flex items-center gap-2">
+                      <span class="font-mono text-[10px] uppercase tracking-[0.24em] text-gray-400 dark:text-gray-500">Support / Chatwoot</span>
+                      <span
+                        class="rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider"
+                        :class="form.chatwoot_identity_validation_secret_configured
+                          ? 'border-sky-300 text-sky-200 dark:border-sky-600 dark:text-sky-700'
+                          : 'border-gray-600 text-gray-300 dark:border-gray-400 dark:text-gray-600'"
+                      >
+                        {{ form.chatwoot_identity_validation_secret_configured
+                          ? t('admin.settings.site.chatwoot.identityConfigured')
+                          : t('admin.settings.site.chatwoot.identityAnonymous') }}
+                      </span>
+                    </div>
+                    <h3 class="text-base font-semibold">{{ t("admin.settings.site.chatwoot.title") }}</h3>
+                    <p class="mt-1 max-w-2xl text-xs leading-5 text-gray-300 dark:text-gray-600">
+                      {{ t("admin.settings.site.chatwoot.description") }}
+                    </p>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <span class="font-mono text-xs uppercase tracking-wider">
+                      {{ form.chatwoot_enabled ? t('admin.settings.site.chatwoot.enabled') : t('admin.settings.site.chatwoot.disabled') }}
+                    </span>
+                    <Toggle v-model="form.chatwoot_enabled" data-testid="chatwoot-enabled" />
+                  </div>
+                </div>
+
+                <div class="space-y-5 p-5">
+                  <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
+                    <div>
+                      <label class="mb-2 block text-sm font-medium text-gray-900 dark:text-white">
+                        {{ t("admin.settings.site.chatwoot.baseUrl") }}
+                      </label>
+                      <input
+                        v-model="form.chatwoot_base_url"
+                        data-testid="chatwoot-base-url"
+                        type="url"
+                        class="input font-mono text-sm"
+                        :placeholder="t('admin.settings.site.chatwoot.baseUrlPlaceholder')"
+                      />
+                      <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        {{ t("admin.settings.site.chatwoot.baseUrlHint") }}
+                      </p>
+                    </div>
+                    <div>
+                      <label class="mb-2 block text-sm font-medium text-gray-900 dark:text-white">
+                        {{ t("admin.settings.site.chatwoot.websiteToken") }}
+                      </label>
+                      <input
+                        v-model="form.chatwoot_website_token"
+                        data-testid="chatwoot-website-token"
+                        type="text"
+                        autocomplete="off"
+                        class="input font-mono text-sm"
+                        :placeholder="t('admin.settings.site.chatwoot.websiteTokenPlaceholder')"
+                      />
+                      <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        {{ t("admin.settings.site.chatwoot.websiteTokenHint") }}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="mb-2 block text-sm font-medium text-gray-900 dark:text-white">
+                      {{ t("admin.settings.site.chatwoot.identitySecret") }}
+                    </label>
+                    <input
+                      v-model="form.chatwoot_identity_validation_secret"
+                      data-testid="chatwoot-identity-secret"
+                      type="password"
+                      autocomplete="new-password"
+                      class="input font-mono text-sm"
+                      :placeholder="form.chatwoot_identity_validation_secret_configured
+                        ? t('admin.settings.site.chatwoot.identitySecretConfiguredPlaceholder')
+                        : t('admin.settings.site.chatwoot.identitySecretPlaceholder')"
+                    />
+                    <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                      {{ form.chatwoot_identity_validation_secret_configured
+                        ? t('admin.settings.site.chatwoot.identitySecretConfiguredHint')
+                        : t('admin.settings.site.chatwoot.identitySecretHint') }}
+                    </p>
+                  </div>
+
+                  <div class="border-l-2 border-gray-950 bg-gray-50 px-4 py-3 text-xs leading-5 text-gray-600 dark:border-white dark:bg-dark-800 dark:text-gray-300">
+                    <p class="font-semibold uppercase tracking-wide text-gray-900 dark:text-white">
+                      {{ t("admin.settings.site.chatwoot.securityTitle") }}
+                    </p>
+                    <p class="mt-1">{{ t("admin.settings.site.chatwoot.securityHint") }}</p>
+                  </div>
+                </div>
+              </section>
+
 	              <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div>
                   <label
@@ -8117,6 +8215,7 @@ type SettingsForm = Omit<
   oidc_connect_client_secret: string;
   github_oauth_client_secret: string;
   google_oauth_client_secret: string;
+  chatwoot_identity_validation_secret: string;
   force_email_on_third_party_signup: boolean;
   openai_advanced_scheduler_enabled: boolean;
   openai_advanced_scheduler_sticky_weighted_enabled: boolean;
@@ -8209,6 +8308,11 @@ const form = reactive<SettingsForm>({
     endpoint: string;
     description: string;
   }>,
+  chatwoot_enabled: false,
+  chatwoot_base_url: "",
+  chatwoot_website_token: "",
+  chatwoot_identity_validation_secret: "",
+  chatwoot_identity_validation_secret_configured: false,
   frontend_url: "",
   smtp_host: "",
   smtp_port: 587,
@@ -9188,6 +9292,7 @@ async function loadSettings() {
     form.dingtalk_connect_client_secret = "";
     form.github_oauth_client_secret = "";
     form.google_oauth_client_secret = "";
+    form.chatwoot_identity_validation_secret = "";
     form.wechat_connect_app_secret = "";
     form.wechat_connect_open_app_secret = "";
     form.wechat_connect_mp_app_secret = "";
@@ -9343,9 +9448,39 @@ function findDuplicateDefaultSubscription(
   });
 }
 
+function normalizeChatwootBaseUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
 async function saveSettings() {
   saving.value = true;
   try {
+    const normalizedChatwootBaseUrl = normalizeChatwootBaseUrl(
+      form.chatwoot_base_url,
+    );
+    if (
+      form.chatwoot_enabled &&
+      (!normalizedChatwootBaseUrl || !form.chatwoot_website_token.trim())
+    ) {
+      appStore.showError(t("admin.settings.site.chatwoot.incompleteError"));
+      return;
+    }
+    if (normalizedChatwootBaseUrl === null) {
+      appStore.showError(t("admin.settings.site.chatwoot.invalidBaseUrlError"));
+      return;
+    }
+    form.chatwoot_base_url = normalizedChatwootBaseUrl;
+    form.chatwoot_website_token = form.chatwoot_website_token.trim();
+
     const normalizedTableDefaultPageSize = Math.floor(
       Number(form.table_default_page_size),
     );
@@ -9530,6 +9665,11 @@ async function saveSettings() {
       table_page_size_options: form.table_page_size_options,
       custom_menu_items: form.custom_menu_items,
       custom_endpoints: form.custom_endpoints,
+      chatwoot_enabled: form.chatwoot_enabled,
+      chatwoot_base_url: form.chatwoot_base_url,
+      chatwoot_website_token: form.chatwoot_website_token,
+      chatwoot_identity_validation_secret:
+        form.chatwoot_identity_validation_secret || undefined,
       frontend_url: form.frontend_url,
       smtp_host: form.smtp_host,
       smtp_port: form.smtp_port,
@@ -9814,6 +9954,7 @@ async function saveSettings() {
     form.dingtalk_connect_client_secret = "";
     form.github_oauth_client_secret = "";
     form.google_oauth_client_secret = "";
+    form.chatwoot_identity_validation_secret = "";
     form.wechat_connect_app_secret = "";
     form.wechat_connect_open_app_secret = "";
     form.wechat_connect_mp_app_secret = "";

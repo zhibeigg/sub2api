@@ -194,6 +194,17 @@ Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的
 - **真实可信的动态编辑式公开入口** - 主页以三幕滚动分镜讲清真实模型、协议接入和透明账单；登录、注册共享路由感知的协议轨道，文档主页同步提供 Base URL 与工具链速查。动效仅使用轻量 CSS/SVG 及 transform/opacity，并在 `prefers-reduced-motion`、粗指针或省流量环境下自动静态降级；不复制第三方插画、摄影或品牌素材。隐私边界保持明确：仅处理账户、路由、计费和安全所必需的数据；默认不留存完整 API 请求正文，启用风控审计时仅保存脱敏、截断后的必要摘要；不出售数据或用于模型训练
 - **管理后台** - Web 界面进行监控和管理
 - **外部系统集成** - 支持通过 iframe 嵌入外部系统（如工单等），扩展管理后台功能
+- **Chatwoot 在线客服** - 管理员可全局启用 Chatwoot 官方 Website Widget，兼容 Chatwoot Cloud 与自建实例，为匿名访客提供咨询，并可在不暴露身份验证密钥的前提下安全绑定登录用户
+
+## Chatwoot 在线客服
+
+在 **管理后台 → 系统设置 → 站点设置 → 在线客服** 中配置 Chatwoot。启用时必须填写 Chatwoot Base URL 与 Website Token。Website Token 是浏览器加载 Widget 所需的公开标识，会通过公共设置下发；不要在该字段填写 Chatwoot API Access Token。
+
+如需可信地识别登录用户，请将 Chatwoot Inbox 的 Identity Validation Secret 填入专用密钥字段。Sub2API 只在服务端保存该值，并由需要登录的 `GET /api/v1/settings/chatwoot/identity` 接口返回 HMAC-SHA256 身份签名。未配置密钥时，访客仍可匿名咨询，系统不会执行可被客户端伪造的 `setUser` 绑定。
+
+公共设置只暴露 `chatwoot_enabled`、`chatwoot_base_url` 与 `chatwoot_website_token`；配置不完整时有效启用状态为 `false`。CSP 中间件会自动把校验后的 Chatwoot 来源加入脚本、iframe、HTTPS 与 WebSocket 指令，自建实例也无需管理员手工放宽 CSP，保存设置后无需重启。
+
+`config.yaml` 的 `chatwoot` 段可提供启动默认值，管理员保存到数据库的设置优先。生产环境应使用 HTTPS；后续保存时将密钥输入框留空即可保留原密钥。
 
 ## 生态项目
 

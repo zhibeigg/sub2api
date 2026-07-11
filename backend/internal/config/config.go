@@ -65,6 +65,7 @@ type Config struct {
 	Security                SecurityConfig                `mapstructure:"security"`
 	Billing                 BillingConfig                 `mapstructure:"billing"`
 	Turnstile               TurnstileConfig               `mapstructure:"turnstile"`
+	Chatwoot                ChatwootConfig                `mapstructure:"chatwoot"`
 	Database                DatabaseConfig                `mapstructure:"database"`
 	Redis                   RedisConfig                   `mapstructure:"redis"`
 	Ops                     OpsConfig                     `mapstructure:"ops"`
@@ -97,6 +98,13 @@ type Config struct {
 	Update                  UpdateConfig                  `mapstructure:"update"`
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
 	BatchImage              BatchImageConfig              `mapstructure:"batch_image"`
+}
+
+type ChatwootConfig struct {
+	Enabled                  bool   `mapstructure:"enabled"`
+	BaseURL                  string `mapstructure:"base_url"`
+	WebsiteToken             string `mapstructure:"website_token"`
+	IdentityValidationSecret string `mapstructure:"identity_validation_secret"`
 }
 
 type LogConfig struct {
@@ -1763,6 +1771,12 @@ func setDefaults() {
 	// Turnstile
 	viper.SetDefault("turnstile.required", false)
 
+	// Chatwoot 客服组件
+	viper.SetDefault("chatwoot.enabled", false)
+	viper.SetDefault("chatwoot.base_url", "https://app.chatwoot.com")
+	viper.SetDefault("chatwoot.website_token", "")
+	viper.SetDefault("chatwoot.identity_validation_secret", "")
+
 	// LinuxDo Connect OAuth 登录
 	viper.SetDefault("linuxdo_connect.enabled", false)
 	viper.SetDefault("linuxdo_connect.client_id", "")
@@ -2317,6 +2331,21 @@ func (c *Config) Validate() error {
 	}
 	if c.Security.CSP.Enabled && strings.TrimSpace(c.Security.CSP.Policy) == "" {
 		return fmt.Errorf("security.csp.policy is required when CSP is enabled")
+	}
+	if raw := strings.TrimSpace(c.Chatwoot.BaseURL); raw != "" {
+		normalized, err := NormalizeChatwootBaseURL(raw)
+		if err != nil {
+			return fmt.Errorf("chatwoot.base_url invalid: %w", err)
+		}
+		c.Chatwoot.BaseURL = normalized
+	}
+	c.Chatwoot.WebsiteToken = strings.TrimSpace(c.Chatwoot.WebsiteToken)
+	c.Chatwoot.IdentityValidationSecret = strings.TrimSpace(c.Chatwoot.IdentityValidationSecret)
+	if c.Chatwoot.Enabled && c.Chatwoot.BaseURL == "" {
+		return fmt.Errorf("chatwoot.base_url is required when chatwoot.enabled=true")
+	}
+	if c.Chatwoot.Enabled && c.Chatwoot.WebsiteToken == "" {
+		return fmt.Errorf("chatwoot.website_token is required when chatwoot.enabled=true")
 	}
 	if c.LinuxDo.Enabled {
 		if strings.TrimSpace(c.LinuxDo.ClientID) == "" {
@@ -3171,6 +3200,42 @@ func GetServerAddress() string {
 	host := v.GetString("server.host")
 	port := v.GetInt("server.port")
 	return fmt.Sprintf("%s:%d", host, port)
+}
+
+// NormalizeChatwootBaseURL validates and canonicalizes a Chatwoot installation URL.
+// It accepts only a clean absolute HTTP(S) base URL without credentials, query, or fragment.
+func NormalizeChatwootBaseURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	if strings.ContainsAny(raw, "\r\n\t\\") {
+		return "", fmt.Errorf("contains invalid characters")
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", err
+	}
+	if !u.IsAbs() || !isHTTPScheme(u.Scheme) {
+		return "", fmt.Errorf("must be an absolute http(s) URL")
+	}
+	if u.Opaque != "" || u.User != nil {
+		return "", fmt.Errorf("credentials and opaque URLs are not allowed")
+	}
+	if strings.TrimSpace(u.Host) == "" || strings.TrimSpace(u.Hostname()) == "" {
+		return "", fmt.Errorf("missing host")
+	}
+	if u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return "", fmt.Errorf("query and fragment are not allowed")
+	}
+	if strings.Contains(u.Path, "/../") || strings.HasSuffix(u.Path, "/..") || strings.Contains(u.Path, "/./") || strings.HasSuffix(u.Path, "/.") {
+		return "", fmt.Errorf("path traversal segments are not allowed")
+	}
+	u.Scheme = strings.ToLower(u.Scheme)
+	u.Host = strings.ToLower(u.Host)
+	u.Path = strings.TrimRight(u.Path, "/")
+	u.RawPath = strings.TrimRight(u.RawPath, "/")
+	return u.String(), nil
 }
 
 // ValidateAbsoluteHTTPURL 验证是否为有效的绝对 HTTP(S) URL
