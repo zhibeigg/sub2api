@@ -254,10 +254,36 @@ type ResponsesTool struct {
 	Description string          `json:"description,omitempty"`
 	Parameters  json.RawMessage `json:"parameters,omitempty"`
 	Strict      *bool           `json:"strict,omitempty"`
+	Container   json.RawMessage `json:"container,omitempty"`
 
 	// type=namespace 的子工具列表（tools 与 children 二选一，语义相同）。
 	Tools    []ResponsesTool `json:"tools,omitempty"`
 	Children []ResponsesTool `json:"children,omitempty"`
+
+	// 原生 Responses 工具会持续增加按类型区分的字段。保留未识别字段，避免
+	// code_interpreter、code_execution 等工具在解析并重新序列化时丢失配置。
+	ExtraFields map[string]json.RawMessage `json:"-"`
+}
+
+func (t ResponsesTool) MarshalJSON() ([]byte, error) {
+	type alias ResponsesTool
+	known, err := json.Marshal(alias(t))
+	if err != nil {
+		return nil, err
+	}
+	if len(t.ExtraFields) == 0 {
+		return known, nil
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(known, &object); err != nil {
+		return nil, err
+	}
+	for key, value := range t.ExtraFields {
+		if _, exists := object[key]; !exists {
+			object[key] = value
+		}
+	}
+	return json.Marshal(object)
 }
 
 // UnmarshalJSON 容忍字符串形式的工具声明：codex 会以 "name" 简写声明 custom 工具，
@@ -272,7 +298,17 @@ func (t *ResponsesTool) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &a); err != nil {
 		return err
 	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for _, key := range []string{"type", "name", "description", "parameters", "strict", "container", "tools", "children"} {
+		delete(fields, key)
+	}
 	*t = ResponsesTool(a)
+	if len(fields) > 0 {
+		t.ExtraFields = fields
+	}
 	return nil
 }
 

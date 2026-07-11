@@ -103,6 +103,11 @@ import KeyModelPicker from './KeyModelPicker.vue'
 import playgroundAPI, { type ChatUsage } from '@/api/playground'
 import { uid } from '@/composables/usePlaygroundConversations'
 import type { PlaygroundModelOption } from '@/types/playground'
+import type { PlaygroundParameterValues } from './playgroundUiTypes'
+
+const props = defineProps<{
+  parameters: PlaygroundParameterValues
+}>()
 
 const { t } = useI18n()
 
@@ -189,7 +194,14 @@ async function runColumn(col: CompareColumn, text: string): Promise<void> {
       apiKey: col.resolvedKey,
       groupId: option.group_id,
       model: option.model,
-      messages: [{ role: 'user', content: text }],
+      messages: [
+        ...(props.parameters.systemPrompt.trim() ? [{ role: 'system' as const, content: props.parameters.systemPrompt.trim() }] : []),
+        { role: 'user' as const, content: text }
+      ],
+      temperature: props.parameters.temperature,
+      topP: props.parameters.topP,
+      maxTokens: props.parameters.maxTokens,
+      reasoningEffort: !props.parameters.reasoningEffort || props.parameters.reasoningEffort === 'none' ? undefined : props.parameters.reasoningEffort,
       signal: col.controller.signal,
       onDelta: (chunk) => {
         col.content += chunk
@@ -201,6 +213,9 @@ async function runColumn(col: CompareColumn, text: string): Promise<void> {
       onUsage: (usage) => {
         col.usage = usage
       }
+    } as Parameters<typeof playgroundAPI.streamChat>[0] & {
+      topP?: number
+      reasoningEffort?: string
     })
     col.latencyMs = performance.now() - started
   } catch (err) {

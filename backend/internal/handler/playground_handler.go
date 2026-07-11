@@ -2,6 +2,7 @@ package handler
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
@@ -15,6 +16,30 @@ type PlaygroundHandler struct {
 
 func NewPlaygroundHandler(playgroundService *service.PlaygroundService) *PlaygroundHandler {
 	return &PlaygroundHandler{service: playgroundService}
+}
+
+// FetchURL retrieves public textual URLs for authenticated playground sessions.
+func (h *PlaygroundHandler) FetchURL(c *gin.Context) {
+	if _, ok := middleware2.GetAuthSubjectFromContext(c); !ok {
+		response.Unauthorized(c, "User not authenticated")
+		return
+	}
+	var req service.PlaygroundFetchURLRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request body")
+		return
+	}
+	urls := req.RequestedURLs()
+	results, err := h.service.FetchURLsWithLimit(c.Request.Context(), urls, req.ResponseLimit())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if strings.TrimSpace(req.URL) != "" && len(req.URLs) == 0 {
+		response.Success(c, results[0])
+		return
+	}
+	response.Success(c, gin.H{"results": results})
 }
 
 // GetModelOptions returns credential-free, group-aware model choices for one owned API key.

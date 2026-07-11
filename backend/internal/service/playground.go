@@ -21,14 +21,23 @@ const (
 	PlaygroundCapabilityVideo = "video"
 )
 
+type PlaygroundModelFeatures struct {
+	ImageInput    bool `json:"image_input"`
+	Responses     bool `json:"responses"`
+	WebSearch     bool `json:"web_search"`
+	CodeExecution bool `json:"code_execution"`
+	WebFetch      bool `json:"web_fetch"`
+}
+
 type PlaygroundModelOption struct {
-	ID            string   `json:"id"`
-	GroupID       int64    `json:"group_id"`
-	GroupName     string   `json:"group_name"`
-	GroupPriority int      `json:"group_priority"`
-	Model         string   `json:"model"`
-	Platform      string   `json:"platform"`
-	Capabilities  []string `json:"capabilities"`
+	ID            string                  `json:"id"`
+	GroupID       int64                   `json:"group_id"`
+	GroupName     string                  `json:"group_name"`
+	GroupPriority int                     `json:"group_priority"`
+	Model         string                  `json:"model"`
+	Platform      string                  `json:"platform"`
+	Capabilities  []string                `json:"capabilities"`
+	Features      PlaygroundModelFeatures `json:"features"`
 }
 
 type PlaygroundAPIKeyReader interface {
@@ -48,12 +57,13 @@ type PlaygroundGroupAccessChecker interface {
 }
 
 type PlaygroundService struct {
-	apiKeys PlaygroundAPIKeyReader
-	models  PlaygroundModelLister
+	apiKeys    PlaygroundAPIKeyReader
+	models     PlaygroundModelLister
+	urlFetcher *PlaygroundURLFetcher
 }
 
 func NewPlaygroundService(apiKeys PlaygroundAPIKeyReader, models PlaygroundModelLister) *PlaygroundService {
-	return &PlaygroundService{apiKeys: apiKeys, models: models}
+	return &PlaygroundService{apiKeys: apiKeys, models: models, urlFetcher: newPlaygroundURLFetcher()}
 }
 
 func (s *PlaygroundService) GetModelOptions(ctx context.Context, userID, apiKeyID int64) ([]PlaygroundModelOption, error) {
@@ -99,6 +109,7 @@ func (s *PlaygroundService) GetModelOptions(ctx context.Context, userID, apiKeyI
 				Model:         model,
 				Platform:      group.Platform,
 				Capabilities:  capabilities,
+				Features:      playgroundModelFeatures(group, model, capabilities),
 			})
 		}
 	}
@@ -241,6 +252,50 @@ func playgroundDefaultModelIDs(platform string) []string {
 	default:
 		return nil
 	}
+}
+
+func playgroundModelFeatures(group *Group, model string, capabilities []string) PlaygroundModelFeatures {
+	features := PlaygroundModelFeatures{}
+	if group == nil || len(capabilities) != 1 || capabilities[0] != PlaygroundCapabilityChat {
+		return features
+	}
+
+	platform := NormalizePlatform(group.Platform)
+	modelLower := strings.ToLower(strings.TrimSpace(model))
+	features.WebFetch = true
+
+	switch platform {
+	case PlatformOpenAI:
+		features.Responses = true
+		features.ImageInput = hasAnyModelPrefix(modelLower,
+			"gpt-4o", "gpt-4.1", "gpt-5", "chatgpt-4o", "o1", "o3", "o4")
+		features.WebSearch = hasAnyModelPrefix(modelLower, "gpt-4.1", "gpt-5", "o3", "o4")
+		features.CodeExecution = features.WebSearch
+	case PlatformAnthropic:
+		features.Responses = true
+		features.WebSearch = true
+		features.ImageInput = strings.HasPrefix(modelLower, "claude-3") ||
+			strings.Contains(modelLower, "claude-sonnet-4") ||
+			strings.Contains(modelLower, "claude-opus-4") ||
+			strings.Contains(modelLower, "claude-haiku-4")
+	case PlatformGemini, PlatformAntigravity:
+		features.ImageInput = strings.HasPrefix(modelLower, "gemini-")
+	case PlatformGrok:
+		features.Responses = true
+		features.WebSearch = true
+		features.CodeExecution = true
+		features.ImageInput = strings.Contains(modelLower, "vision")
+	}
+	return features
+}
+
+func hasAnyModelPrefix(model string, prefixes ...string) bool {
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(model, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func playgroundModelCapabilities(group *Group, model string) []string {

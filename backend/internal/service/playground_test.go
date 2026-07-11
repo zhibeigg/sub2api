@@ -70,10 +70,10 @@ func TestPlaygroundServiceGetModelOptionsAggregatesBindingsByPriority(t *testing
 	require.NoError(t, err)
 	require.Equal(t, []int64{20, 10}, models.calls)
 	require.Equal(t, []PlaygroundModelOption{
-		{ID: "20::grok-4.5", GroupID: 20, GroupName: "media", GroupPriority: 1, Model: "grok-4.5", Platform: PlatformGrok, Capabilities: []string{"chat"}},
+		{ID: "20::grok-4.5", GroupID: 20, GroupName: "media", GroupPriority: 1, Model: "grok-4.5", Platform: PlatformGrok, Capabilities: []string{"chat"}, Features: PlaygroundModelFeatures{Responses: true, WebSearch: true, CodeExecution: true, WebFetch: true}},
 		{ID: "20::grok-imagine-image", GroupID: 20, GroupName: "media", GroupPriority: 1, Model: "grok-imagine-image", Platform: PlatformGrok, Capabilities: []string{"image"}},
 		{ID: "20::grok-imagine-video-1.5", GroupID: 20, GroupName: "media", GroupPriority: 1, Model: "grok-imagine-video-1.5", Platform: PlatformGrok, Capabilities: []string{"video"}},
-		{ID: "10::claude-sonnet-custom", GroupID: 10, GroupName: "chat", GroupPriority: 5, Model: "claude-sonnet-custom", Platform: PlatformAnthropic, Capabilities: []string{"chat"}},
+		{ID: "10::claude-sonnet-custom", GroupID: 10, GroupName: "chat", GroupPriority: 5, Model: "claude-sonnet-custom", Platform: PlatformAnthropic, Capabilities: []string{"chat"}, Features: PlaygroundModelFeatures{Responses: true, WebSearch: true, WebFetch: true}},
 	}, options)
 }
 
@@ -90,7 +90,7 @@ func TestPlaygroundServiceGetModelOptionsSupportsLegacyGroupAndCustomList(t *tes
 	require.NoError(t, err)
 	require.Equal(t, []PlaygroundModelOption{
 		{ID: "9::gpt-image-2", GroupID: groupID, GroupName: "custom", GroupPriority: 0, Model: "gpt-image-2", Platform: PlatformOpenAI, Capabilities: []string{"image"}},
-		{ID: "9::gpt-5.4", GroupID: groupID, GroupName: "custom", GroupPriority: 0, Model: "gpt-5.4", Platform: PlatformOpenAI, Capabilities: []string{"chat"}},
+		{ID: "9::gpt-5.4", GroupID: groupID, GroupName: "custom", GroupPriority: 0, Model: "gpt-5.4", Platform: PlatformOpenAI, Capabilities: []string{"chat"}, Features: PlaygroundModelFeatures{ImageInput: true, Responses: true, WebSearch: true, CodeExecution: true, WebFetch: true}},
 	}, options)
 }
 
@@ -103,7 +103,7 @@ func TestPlaygroundServiceGetModelOptionsHidesUnsupportedCompatibilityModels(t *
 	options, err := svc.GetModelOptions(context.Background(), 6, 5)
 	require.NoError(t, err)
 	require.Equal(t, []PlaygroundModelOption{
-		{ID: "4::gemini-2.5-flash", GroupID: groupID, GroupName: "gemini", GroupPriority: 0, Model: "gemini-2.5-flash", Platform: PlatformGemini, Capabilities: []string{"chat"}},
+		{ID: "4::gemini-2.5-flash", GroupID: groupID, GroupName: "gemini", GroupPriority: 0, Model: "gemini-2.5-flash", Platform: PlatformGemini, Capabilities: []string{"chat"}, Features: PlaygroundModelFeatures{ImageInput: true, WebFetch: true}},
 	}, options)
 }
 
@@ -146,6 +146,30 @@ func TestPlaygroundServiceGetModelOptionsSkipsGroupsWithoutCurrentAccess(t *test
 	require.Len(t, options, 1)
 	require.Equal(t, int64(1), options[0].GroupID)
 	require.Equal(t, []int64{1}, models.calls)
+}
+
+func TestPlaygroundModelFeaturesConservativeMatrix(t *testing.T) {
+	tests := []struct {
+		name         string
+		platform     string
+		model        string
+		capabilities []string
+		want         PlaygroundModelFeatures
+	}{
+		{name: "openai modern responses model", platform: PlatformOpenAI, model: "gpt-5.4", capabilities: []string{PlaygroundCapabilityChat}, want: PlaygroundModelFeatures{ImageInput: true, Responses: true, WebSearch: true, CodeExecution: true, WebFetch: true}},
+		{name: "openai unknown custom model", platform: PlatformOpenAI, model: "company-text-model", capabilities: []string{PlaygroundCapabilityChat}, want: PlaygroundModelFeatures{Responses: true, WebFetch: true}},
+		{name: "anthropic vision", platform: PlatformAnthropic, model: "claude-sonnet-4-5", capabilities: []string{PlaygroundCapabilityChat}, want: PlaygroundModelFeatures{ImageInput: true, Responses: true, WebSearch: true, WebFetch: true}},
+		{name: "gemini vision", platform: PlatformGemini, model: "gemini-2.5-flash", capabilities: []string{PlaygroundCapabilityChat}, want: PlaygroundModelFeatures{ImageInput: true, WebFetch: true}},
+		{name: "grok tool-capable", platform: PlatformGrok, model: "grok-4.5", capabilities: []string{PlaygroundCapabilityChat}, want: PlaygroundModelFeatures{Responses: true, WebSearch: true, CodeExecution: true, WebFetch: true}},
+		{name: "media model has no chat features", platform: PlatformOpenAI, model: "gpt-image-2", capabilities: []string{PlaygroundCapabilityImage}, want: PlaygroundModelFeatures{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			group := &Group{Platform: tt.platform}
+			require.Equal(t, tt.want, playgroundModelFeatures(group, tt.model, tt.capabilities))
+		})
+	}
 }
 
 func TestPlaygroundServiceGetModelOptionsRejectsForeignKey(t *testing.T) {

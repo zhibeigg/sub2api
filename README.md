@@ -179,6 +179,7 @@ Sub2API is an AI API gateway platform designed to distribute and manage API quot
 - **Native Adobe Firefly Integration** - Two-step credential preflight before account creation, secure IMS credential lifecycle, automatic access-token renewal, profile and credits visibility, synchronous OpenAI-compatible image generation/editing, Redis-backed asynchronous video tasks, and idempotent media billing ([Integration Guide](docs/ADOBE_INTEGRATION.md))
 - **API Key Distribution** - Generate and manage API Keys for users
 - **Priority Multi-Group API Keys** - Bind one key to multiple model groups, search and reorder them by failover priority, display effective rate multipliers, and explicitly target a bound group with `X-Sub2API-Group-ID`. The Playground discovers route-aware model options across all bindings so Chat, Compare, Image, and Video do not silently fall back to the key's primary group ([API Guide](docs/API_KEY_MULTI_GROUP.md))
+- **Multimodal Playground Workbench** - Chat supports image and text/code attachments, temperature / top_p / max_tokens / reasoning controls, model-gated web search and code execution, plus SSRF-protected public URL fetching. Conversations stay in the browser, can be created, renamed, switched, deleted with undo, and exported as Markdown or self-contained JSON without persisting API key values
 - **Precise Billing** - Token-level usage tracking and cost calculation
 - **Smart Scheduling** - Intelligent account selection with sticky sessions
 - **Concurrency Control** - Per-user and per-account concurrency limits

@@ -99,12 +99,63 @@ Authorization: Bearer <session JWT>
     "group_name": "Claude",
     "group_priority": 1,
     "platform": "anthropic",
-    "capabilities": ["chat"]
+    "capabilities": ["chat"],
+    "features": {
+      "image_input": true,
+      "responses": true,
+      "web_search": true,
+      "code_execution": false,
+      "web_fetch": true
+    }
   }
 ]
 ```
 
-同名模型位于不同分组时会保留为不同选项。练习场的 Chat、Compare、Image 与 Video 只展示当前模式可调用的选项，并在实际请求及视频状态轮询中自动携带对应的 `X-Sub2API-Group-ID`。
+同名模型位于不同分组时会保留为不同选项。练习场的 Chat、Compare、Image 与 Video 只展示当前模式可调用的选项，并在实际请求及视频状态轮询中自动携带对应的 `X-Sub2API-Group-ID`。`features` 是向后兼容的能力提示，前端只在服务端明确标记时开启图片输入、Responses 联网搜索或上游代码执行；普通采样参数仍按兼容协议发送。
+
+## 练习场附件、高级参数与会话
+
+- 图片附件支持 PNG、JPEG、WebP、GIF，单个最多 5 MB；文本/代码附件单个最多 512 KB；每轮最多 4 个附件，总负载最多 12 MB。
+- 原始附件保存在浏览器 IndexedDB，会话 localStorage 只保存附件元数据和引用；API Key 明文不会写入会话或设置存储。
+- 图片通过 OpenAI Chat `image_url` content part 发送；切换到 `/v1/responses` 时会转换为 `input_image`。文本/代码附件会带文件名边界作为文本上下文发送。
+- Chat 支持 `temperature`、`top_p`、`max_tokens` 和 reasoning effort。Compare 对所有列应用相同采样参数；联网搜索、代码执行和网页抓取仅在 Chat 中启用。
+- 联网搜索使用上游 `/v1/responses` `web_search` 工具；代码执行只对模型选项明确声明的上游原生能力开放，不在 Sub2API 主机或浏览器中执行任意模型代码。
+- 会话支持新建、切换、重命名、删除撤销、清空，以及 Markdown / 自包含 JSON 导出。导出可内嵌附件，但不包含 API Key 明文。
+
+## 安全网页抓取 API
+
+登录用户可让练习场读取当前消息中明确出现的公开 URL：
+
+```http
+POST /api/v1/playground/fetch-url
+Authorization: Bearer <session JWT>
+Content-Type: application/json
+
+{
+  "urls": ["https://example.com/docs"]
+}
+```
+
+成功响应的 `data.results` 包含原始 URL、最终 URL、状态码、Content-Type、可读文本和截断标记：
+
+```json
+{
+  "results": [
+    {
+      "url": "https://example.com/docs",
+      "final_url": "https://www.example.com/docs",
+      "status_code": 200,
+      "content_type": "text/html",
+      "content": "Readable page text...",
+      "truncated": false
+    }
+  ]
+}
+```
+
+安全边界固定为：每次最多 3 个 URL、请求总超时 10 秒、单响应最多读取 1 MB、注入模型的可读文本最多约 100 KB、最多跟随 5 次重定向；仅允许 HTTP/HTTPS 文本内容。服务端会在初始解析、DNS 解析、每次重定向和实际拨号前阻断 localhost、URL 凭据、私网、链路本地、保留地址和非全局单播地址。该接口使用登录 JWT，不接收也不转发用户 API Key。
+
+该能力使用内置安全上限，无需新增部署配置；`deploy/config.example.yaml` 记录了这一默认边界。
 
 ## 多端点与浏览器测速
 

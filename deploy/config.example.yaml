@@ -32,6 +32,10 @@ server:
   # Applies to all requests, especially important for h2c first request memory protection
   # 适用于所有请求，对 h2c 第一请求的内存保护尤为重要
   max_request_body_size: 268435456
+  # Playground URL fetch uses fixed security limits (3 public URLs, 10s timeout,
+  # 1MB response body, text content only) and requires no extra configuration.
+  # 练习场网页抓取使用固定安全上限（3 个公开 URL、10 秒超时、
+  # 1MB 响应体、仅文本内容），无需额外配置。
   # HTTP/2 Cleartext (h2c) configuration
   # HTTP/2 Cleartext (h2c) 配置
   h2c:

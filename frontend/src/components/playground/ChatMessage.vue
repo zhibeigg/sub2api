@@ -18,6 +18,23 @@
         class="inline-block max-w-full rounded-2xl px-4 py-2.5 text-sm leading-relaxed"
         :class="bubbleClass"
       >
+        <div v-if="attachments.length" class="mb-2 grid gap-2" :class="attachments.length > 1 ? 'sm:grid-cols-2' : ''">
+          <div
+            v-for="attachment in attachments"
+            :key="attachment.id"
+            class="flex min-h-11 min-w-0 items-center gap-2 rounded-lg border px-2 py-1.5"
+            :class="attachment.missing ? 'border-red-300 bg-red-50/60 text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300' : 'border-black/10 bg-black/5 dark:border-white/10 dark:bg-white/5'"
+          >
+            <img v-if="attachment.imageUrl" :src="attachment.imageUrl" :alt="attachment.name" class="h-10 w-10 flex-shrink-0 rounded-md object-cover" />
+            <span v-else class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md bg-black/5 dark:bg-white/10">
+              <Icon :name="attachment.missing ? 'exclamationTriangle' : 'document'" size="sm" />
+            </span>
+            <span class="min-w-0">
+              <span class="block truncate text-xs font-medium">{{ attachment.name }}</span>
+              <span class="block truncate text-[11px] opacity-70">{{ attachment.missing ? t('playground.attachmentMissing') : attachment.label }}</span>
+            </span>
+          </div>
+        </div>
         <template v-if="message.error">
           <div class="flex items-start gap-2 text-red-600 dark:text-red-400">
             <Icon name="exclamationTriangle" size="sm" class="mt-0.5 flex-shrink-0" />
@@ -25,7 +42,7 @@
           </div>
         </template>
         <template v-else-if="isUser">
-          <p class="whitespace-pre-wrap break-words">{{ message.content }}</p>
+          <p v-if="message.content" class="whitespace-pre-wrap break-words">{{ message.content }}</p>
         </template>
         <template v-else-if="!message.content && streaming">
           <span class="inline-flex gap-1">
@@ -35,6 +52,17 @@
           </span>
         </template>
         <div v-else class="pk-markdown break-words" v-html="rendered"></div>
+      </div>
+
+      <div v-if="toolActivities.length" class="mt-2 flex flex-wrap gap-2" role="status" aria-live="polite">
+        <span
+          v-for="activity in toolActivities"
+          :key="activity.id"
+          class="inline-flex min-h-7 items-center gap-1.5 rounded-full border border-gray-200 bg-white px-2.5 text-[11px] text-gray-600 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-300"
+        >
+          <span class="h-1.5 w-1.5 rounded-full" :class="activityStatusClass(activity.status)"></span>
+          {{ activity.label }}
+        </span>
       </div>
 
       <!-- Meta + actions -->
@@ -60,12 +88,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import Icon from '@/components/icons/Icon.vue'
 import type { PlaygroundMessage } from '@/composables/usePlaygroundConversations'
+import type { PlaygroundAttachment, PlaygroundToolActivity } from '@/types/playground'
+import { readPlaygroundAttachment } from '@/utils/playgroundAttachments'
 
 const props = defineProps<{
   message: PlaygroundMessage
@@ -79,6 +109,61 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const isUser = computed(() => props.message.role === 'user')
+
+interface AttachmentView {
+  id: string
+  name: string
+  imageUrl?: string
+  label: string
+  missing: boolean
+}
+
+const attachmentPayloads = ref<Record<string, { imageUrl?: string; missing: boolean }>>({})
+const attachments = computed<AttachmentView[]>(() => {
+  const raw = ((props.message as PlaygroundMessage & { attachments?: PlaygroundAttachment[] }).attachments ?? [])
+  return raw.map((attachment) => {
+    const mimeType = attachment.type || attachment.mimeType || ''
+    const payload = attachmentPayloads.value[attachment.id]
+    return {
+      id: attachment.id,
+      name: attachment.name,
+      imageUrl: payload?.imageUrl,
+      missing: attachment.status === 'missing' || attachment.status === 'error' || payload?.missing === true,
+      label: attachment.status === 'reading' ? t('playground.attachmentReading') : mimeType || t('playground.attachment')
+    }
+  })
+})
+
+async function loadAttachmentPayloads(): Promise<void> {
+  const raw = props.message.attachments ?? []
+  const payloads: Record<string, { imageUrl?: string; missing: boolean }> = {}
+  await Promise.all(raw.map(async (attachment) => {
+    const payload = await readPlaygroundAttachment(attachment.id).catch(() => null)
+    payloads[attachment.id] = {
+      imageUrl: payload?.encoding === 'data-url' ? payload.data : undefined,
+      missing: !payload
+    }
+  }))
+  attachmentPayloads.value = payloads
+}
+
+watch(() => props.message.attachments?.map((attachment) => attachment.id).join('|') ?? '', () => {
+  void loadAttachmentPayloads()
+}, { immediate: true })
+
+const toolActivities = computed(() => {
+  const raw = (props.message as PlaygroundMessage & { toolActivities?: Array<PlaygroundToolActivity & { type?: string; name?: string }> }).toolActivities ?? []
+  return raw.map((activity) => ({
+    ...activity,
+    label: activity.label || activity.name || activity.type || t('playground.toolActivity')
+  }))
+})
+
+function activityStatusClass(status: string): string {
+  if (status === 'error' || status === 'failed') return 'bg-red-500'
+  if (status === 'done' || status === 'completed') return 'bg-emerald-500'
+  return 'bg-amber-500 motion-safe:animate-pulse'
+}
 
 const bubbleClass = computed(() => {
   if (props.message.error) return 'bg-red-500/5 border border-red-500/20'

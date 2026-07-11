@@ -222,6 +222,33 @@ func TestChatCompletionsToResponses_LegacyFunctionDefaultsStrictFalse(t *testing
 	assert.Contains(t, string(payload), `"strict":false`)
 }
 
+func TestResponsesToolPreservesNativeCodeExecutionFields(t *testing.T) {
+	input := `{"model":"gpt-5.4","input":"run it","tools":[{"type":"code_interpreter","container":{"type":"auto","file_ids":["file-1"]},"environment":"python"},{"type":"code_execution","container":"container-123","timeout_ms":5000}]}`
+	var req ResponsesRequest
+	require.NoError(t, json.Unmarshal([]byte(input), &req))
+	require.Len(t, req.Tools, 2)
+	assert.JSONEq(t, `{"type":"auto","file_ids":["file-1"]}`, string(req.Tools[0].Container))
+	assert.JSONEq(t, `"python"`, string(req.Tools[0].ExtraFields["environment"]))
+	assert.JSONEq(t, `"container-123"`, string(req.Tools[1].Container))
+	assert.JSONEq(t, `5000`, string(req.Tools[1].ExtraFields["timeout_ms"]))
+
+	payload, err := json.Marshal(req)
+	require.NoError(t, err)
+	assert.JSONEq(t, input, string(payload))
+}
+
+func TestResponsesToolNativeFieldsDoNotBreakExistingChatToolConversion(t *testing.T) {
+	tools := []ResponsesTool{
+		{Type: "code_interpreter", Container: json.RawMessage(`{"type":"auto"}`)},
+		{Type: "function", Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`)},
+	}
+	converted, err := responsesToolsToChatTools(tools)
+	require.NoError(t, err)
+	require.Len(t, converted, 1)
+	require.Equal(t, "lookup", converted[0].Function.Name)
+	assert.JSONEq(t, `{"type":"object"}`, string(converted[0].Function.Parameters))
+}
+
 func TestResponsesTool_StrictFalseIsSerialized(t *testing.T) {
 	strict := false
 	payload, err := json.Marshal(ResponsesTool{

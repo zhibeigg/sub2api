@@ -183,6 +183,7 @@ Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的
 - **Adobe Firefly 原生接入** - 支持 IMS 凭据创建前两步预检、安全管理与自动续期、profile/credits 展示、OpenAI Images 兼容图片生成与编辑、Redis 异步视频任务和成功轮询幂等媒体结算（[接入文档](docs/ADOBE_INTEGRATION.md)）
 - **API Key 分发** - 为用户生成和管理 API Key
 - **API Key 多分组优先级** - 一把密钥可绑定多个模型分组，支持搜索、拖拽排序、有效倍率展示与故障转移优先级；客户端可用 `X-Sub2API-Group-ID` 明确选择已绑定分组。练习场会聚合全部绑定的可路由模型，确保对话、对比、图片和视频不会静默回退到主分组（[API 文档](docs/API_KEY_MULTI_GROUP.md)）
+- **多模态练习场工作台** - 对话模式支持图片与文本/代码附件、temperature / top_p / max_tokens / reasoning 参数、按模型能力启用联网搜索和代码执行，以及经过 SSRF 防护的公开 URL 网页抓取；会话仅在浏览器本地保存，可新建、重命名、切换、删除撤销并导出 Markdown 或自包含 JSON，不保存 API Key 明文
 - **精确计费** - Token 级别的用量追踪和成本计算
 - **智能调度** - 智能账号选择，支持粘性会话
 - **并发控制** - 用户级和账号级并发限制

@@ -59,6 +59,7 @@ func RegisterUserRoutes(
 		playground := authenticated.Group("/playground")
 		{
 			playground.GET("/api-keys/:id/model-options", h.Playground.GetModelOptions)
+			playground.POST("/fetch-url", h.Playground.FetchURL)
 		}
 
 		// API Key管理
