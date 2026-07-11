@@ -554,15 +554,15 @@ describe('AccountUsageCell', () => {
   expect(wrapper.text()).toContain('7d|100|106540000')
   })
 
-  it('Cursor Cookie 展示本地统计与 credentials_status，不请求上游用量', async () => {
+  it('Cursor API Key 展示本地统计与配置状态，不请求上游用量', async () => {
     const wrapper = mount(AccountUsageCell, {
       props: {
         account: makeAccount({
           id: 2953,
           platform: 'cursor',
-          type: 'cookie',
-          credentials: { cookie_expires_at: '2099-08-01T00:00:00Z' },
-          credentials_status: { has_cookie: true }
+          type: 'apikey',
+          credentials: {},
+          credentials_status: { has_api_key: true }
         }),
         todayStats: {
           requests: 12,
@@ -581,7 +581,7 @@ describe('AccountUsageCell', () => {
     expect(wrapper.get('[data-testid="cursor-usage-status"]').text()).toContain('12 req')
     expect(wrapper.text()).toContain('A $1.25')
     expect(wrapper.text()).toContain('U $1.50')
-    expect(wrapper.text()).toContain('admin.accounts.cursor.credentialValid')
+    expect(wrapper.text()).toContain('admin.accounts.cursor.apiKeyConfigured')
   })
 
   it('Kiro OAuth 用量窗口会展示今日请求、Token 与 A/U 双口径计费', async () => {

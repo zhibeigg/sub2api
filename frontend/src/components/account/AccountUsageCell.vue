@@ -548,8 +548,8 @@
       </div>
     </template>
 
-    <!-- Cursor Cookie accounts: local usage and credential status -->
-    <template v-else-if="account.platform === 'cursor' && account.type === 'cookie'">
+    <!-- Cursor API Key accounts: local usage and credential status -->
+    <template v-else-if="account.platform === 'cursor' && account.type === 'apikey'">
       <div class="space-y-1" data-testid="cursor-usage-status">
         <div v-if="todayStats" class="flex items-center gap-1.5 text-[9px] text-gray-500 dark:text-gray-400">
           <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">{{ formatKeyRequests }} req</span>
@@ -564,9 +564,6 @@
         <span :class="['inline-block rounded px-1.5 py-0.5 text-[10px] font-medium', cursorCredentialBadgeClass]">
           {{ cursorCredentialStatusLabel }}
         </span>
-        <div v-if="cursorCookieExpiryLabel" class="text-[10px] text-gray-500 dark:text-gray-400">
-          {{ cursorCookieExpiryLabel }}
-        </div>
       </div>
     </template>
 
@@ -1366,26 +1363,19 @@ const validationURL = computed(() => usageInfo.value?.validation_url || '')
 // 需要重新授权（401）
 const needsReauth = computed(() => !!usageInfo.value?.needs_reauth)
 
-const cursorCookieExpiresAt = computed(() => {
+const cursorApiKeyConfigured = computed(() => {
+  if (props.account.credentials_status?.has_api_key != null) {
+    return props.account.credentials_status.has_api_key
+  }
   const credentials = props.account.credentials as Record<string, unknown> | undefined
-  const value = usageInfo.value?.cursor_cookie_expires_at || credentials?.cookie_expires_at
-  return typeof value === 'string' && value.trim() ? value : null
+  return Boolean(credentials?.api_key)
 })
-const cursorCredentialsValid = computed(() => {
-  if (usageInfo.value?.cursor_credentials_valid != null) return usageInfo.value.cursor_credentials_valid
-  if (usageInfo.value?.cursor_credentials_status) return usageInfo.value.cursor_credentials_status === 'valid'
-  if (cursorCookieExpiresAt.value) return new Date(cursorCookieExpiresAt.value).getTime() > Date.now()
-  return props.account.credentials_status?.has_cookie === true
-})
-const cursorCredentialStatusLabel = computed(() => cursorCredentialsValid.value
-  ? t('admin.accounts.cursor.credentialValid')
-  : t('admin.accounts.cursor.credentialInvalid'))
-const cursorCredentialBadgeClass = computed(() => cursorCredentialsValid.value
+const cursorCredentialStatusLabel = computed(() => cursorApiKeyConfigured.value
+  ? t('admin.accounts.cursor.apiKeyConfigured')
+  : t('admin.accounts.cursor.apiKeyNotConfigured'))
+const cursorCredentialBadgeClass = computed(() => cursorApiKeyConfigured.value
   ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
   : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300')
-const cursorCookieExpiryLabel = computed(() => cursorCookieExpiresAt.value
-  ? t('admin.accounts.cursor.cookieExpiryDisplay', { time: formatRelativeTime(cursorCookieExpiresAt.value) })
-  : '')
 
 // ── Kiro 用量展示 ─────────────────────────────────────────
 const kiroSubscriptionLabel = computed(() => {

@@ -77,6 +77,33 @@ func BuildPayload(dialogue *Dialogue, options BuildOptions) (*Request, error) {
 	return &Request{Model: options.Model, ID: conversationID, Messages: messages, Trigger: "submit-message"}, nil
 }
 
+// RenderAgentPrompt converts the compatibility payload into a single Cloud
+// Agent prompt. Cloud Agents is task-oriented rather than a raw chat API, so
+// the wrapper explicitly asks for a conversational answer and forbids unrelated
+// workspace changes.
+func RenderAgentPrompt(request *Request) string {
+	if request == nil {
+		return ""
+	}
+	var builder strings.Builder
+	builder.WriteString("You are serving a chat-completion compatibility request through Cursor Cloud Agents. Answer the final user request directly. Do not create, edit, delete, commit, or push repository files unless the user explicitly asks for those actions in the transcript. Preserve requested tool-call JSON fences exactly.\n\nConversation transcript:\n")
+	for _, message := range request.Messages {
+		role := strings.ToUpper(strings.TrimSpace(message.Role))
+		if role == "" {
+			role = "USER"
+		}
+		builder.WriteString("\n[")
+		builder.WriteString(role)
+		builder.WriteString("]\n")
+		for _, part := range message.Parts {
+			builder.WriteString(part.Text)
+		}
+		builder.WriteByte('\n')
+	}
+	builder.WriteString("\n[ASSISTANT]\n")
+	return builder.String()
+}
+
 func newMessage(role, text string, index int) Message {
 	hash := sha256.Sum256([]byte(fmt.Sprintf("%d\x00%s\x00%s", index, role, text)))
 	return Message{Parts: []Part{{Type: "text", Text: text}}, ID: hex.EncodeToString(hash[:8]), Role: role}

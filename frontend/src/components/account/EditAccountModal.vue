@@ -26,38 +26,24 @@
         <p class="input-hint">{{ t('admin.accounts.notesHint') }}</p>
       </div>
 
-      <section v-if="account.platform === 'cursor' && account.type === 'cookie'" class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600" data-testid="cursor-edit-credentials">
+      <section v-if="account.platform === 'cursor' && account.type === 'apikey'" class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600" data-testid="cursor-edit-credentials">
         <div>
           <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.accounts.cursor.editCredentialsTitle') }}</h3>
           <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.editCredentialsHint') }}</p>
         </div>
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(9rem,0.7fr)_minmax(8rem,0.45fr)_minmax(12rem,1fr)] sm:items-end">
           <div>
-            <span class="input-label">{{ t('admin.accounts.cursor.cookie') }}</span>
+            <span class="input-label">{{ t('admin.accounts.cursor.apiKey') }}</span>
             <p class="text-xs text-gray-500 dark:text-gray-400">
-              {{ account.credentials_status?.has_cookie ? t('admin.accounts.cursor.configured') : t('admin.accounts.cursor.notConfigured') }}
+              {{ account.credentials_status?.has_api_key ? t('admin.accounts.cursor.configured') : t('admin.accounts.cursor.notConfigured') }}
             </p>
           </div>
-          <select v-model="cursorCredentialState.cookie.action" class="input min-h-11" @change="onCursorCredentialActionChange">
+          <select v-model="cursorCredentialState.api_key.action" class="input min-h-11" @change="onCursorCredentialActionChange">
             <option value="keep">{{ t('admin.accounts.cursor.keep') }}</option>
             <option value="replace">{{ t('admin.accounts.cursor.replace') }}</option>
             <option value="clear">{{ t('admin.accounts.cursor.clear') }}</option>
           </select>
-          <input v-model="cursorCredentialState.cookie.value" type="password" autocomplete="new-password" class="input min-h-11 font-mono" :disabled="cursorCredentialState.cookie.action !== 'replace'" :placeholder="t('admin.accounts.cursor.replacePlaceholder')" data-1p-ignore data-lpignore="true" data-bwignore="true" />
-        </div>
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label class="input-label" for="edit-cursor-cookie-expires-at">{{ t('admin.accounts.cursor.cookieExpiresAt') }}</label>
-            <input id="edit-cursor-cookie-expires-at" v-model="editCursorCookieExpiresAt" type="datetime-local" class="input" />
-          </div>
-          <div>
-            <label class="input-label" for="edit-cursor-upstream-model">{{ t('admin.accounts.cursor.upstreamModel') }}</label>
-            <input id="edit-cursor-upstream-model" v-model="editCursorUpstreamModel" type="text" class="input font-mono" />
-          </div>
-          <div class="sm:col-span-2">
-            <label class="input-label" for="edit-cursor-referer">{{ t('admin.accounts.cursor.referer') }}</label>
-            <input id="edit-cursor-referer" v-model="editCursorReferer" type="url" class="input font-mono" />
-          </div>
+          <input v-model="cursorCredentialState.api_key.value" type="password" autocomplete="new-password" class="input min-h-11 font-mono" :disabled="cursorCredentialState.api_key.action !== 'replace'" :placeholder="t('admin.accounts.cursor.replacePlaceholder')" data-testid="cursor-api-key-input" data-1p-ignore data-lpignore="true" data-bwignore="true" />
         </div>
       </section>
 
@@ -92,7 +78,7 @@
       </section>
 
       <!-- API Key fields (only for apikey type) -->
-      <div v-if="account.type === 'apikey'" class="space-y-4">
+      <div v-if="account.type === 'apikey' && account.platform !== 'cursor'" class="space-y-4">
         <div>
           <label class="input-label">{{ t('admin.accounts.baseUrl') }}</label>
           <input
@@ -590,7 +576,7 @@
 
       <!-- OpenAI/Grok/Kiro OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
       <div
-        v-if="((account.platform === 'openai' || account.platform === 'grok' || account.platform === 'adobe' || account.platform === 'kiro') && account.type === 'oauth') || (account.platform === 'cursor' && account.type === 'cookie')"
+        v-if="((account.platform === 'openai' || account.platform === 'grok' || account.platform === 'adobe' || account.platform === 'kiro') && account.type === 'oauth') || (account.platform === 'cursor' && account.type === 'apikey')"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
@@ -2695,11 +2681,8 @@ const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
 const cursorCredentialState = reactive(createCursorCredentialEditState())
-const editCursorCookieExpiresAt = ref('')
-const editCursorUpstreamModel = ref('')
-const editCursorReferer = ref('')
 const onCursorCredentialActionChange = () => {
-  if (cursorCredentialState.cookie.action !== 'replace') cursorCredentialState.cookie.value = ''
+  if (cursorCredentialState.api_key.action !== 'replace') cursorCredentialState.api_key.value = ''
 }
 const adobeCredentialKeys = ADOBE_SENSITIVE_CREDENTIAL_KEYS
 const adobeCredentialState = reactive(createAdobeCredentialEditState())
@@ -3256,15 +3239,6 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 
   // Load intercept warmup requests setting (applies to all account types)
   const credentials = newAccount.credentials as Record<string, unknown> | undefined
-  editCursorCookieExpiresAt.value = newAccount.platform === 'cursor' && typeof credentials?.cookie_expires_at === 'string'
-    ? credentials.cookie_expires_at.slice(0, 16)
-    : ''
-  editCursorUpstreamModel.value = newAccount.platform === 'cursor' && typeof credentials?.cursor_upstream_model === 'string'
-    ? credentials.cursor_upstream_model
-    : ''
-  editCursorReferer.value = newAccount.platform === 'cursor' && typeof credentials?.cursor_referer === 'string'
-    ? credentials.cursor_referer
-    : ''
   interceptWarmupRequests.value = credentials?.intercept_warmup_requests === true
   autoPauseOnExpired.value = newAccount.auto_pause_on_expired === true
   editVertexProjectId.value = ''
@@ -4036,24 +4010,28 @@ const handleSubmit = async () => {
     }
     updatePayload.auto_pause_on_expired = autoPauseOnExpired.value
 
-    if (props.account.platform === 'cursor' && props.account.type === 'cookie') {
-      if (cursorCredentialState.cookie.action === 'replace' && !cursorCredentialState.cookie.value.trim()) {
-        appStore.showError(t('admin.accounts.cursor.cookieRequired'))
+    if (props.account.platform === 'cursor' && props.account.type === 'apikey') {
+      if (cursorCredentialState.api_key.action === 'replace' && !cursorCredentialState.api_key.value.trim()) {
+        appStore.showError(t('admin.accounts.cursor.apiKeyRequired'))
         return
       }
-      if (cursorCredentialState.cookie.action === 'clear' && !confirm(t('admin.accounts.cursor.clearConfirm'))) {
+      if (cursorCredentialState.api_key.action === 'clear' && !confirm(t('admin.accounts.cursor.clearConfirm'))) {
         return
       }
-      const cursorUpdate = buildCursorCredentialUpdate(cursorCredentialState, {
-        cookie_expires_at: editCursorCookieExpiresAt.value,
-        cursor_upstream_model: editCursorUpstreamModel.value,
-        cursor_referer: editCursorReferer.value
-      })
+      const cursorUpdate = buildCursorCredentialUpdate(cursorCredentialState)
       const cursorModelMapping = buildModelRestrictionMapping()
-      if (cursorModelMapping) {
-        cursorUpdate.credentials = { ...(cursorUpdate.credentials || {}), model_mapping: cursorModelMapping }
+      const currentCredentials = (props.account.credentials as Record<string, unknown>) || {}
+      const credentials = { ...currentCredentials, ...(cursorUpdate.credentials || {}) }
+      delete credentials.api_key
+      if (cursorCredentialState.api_key.action === 'replace') {
+        credentials.api_key = cursorCredentialState.api_key.value.trim()
       }
-      if (cursorUpdate.credentials) updatePayload.credentials = cursorUpdate.credentials
+      if (cursorModelMapping) {
+        credentials.model_mapping = cursorModelMapping
+      } else {
+        delete credentials.model_mapping
+      }
+      updatePayload.credentials = credentials
       if (cursorUpdate.clear_credentials) updatePayload.clear_credentials = cursorUpdate.clear_credentials
     } else if (props.account.platform === 'adobe' && props.account.type === 'oauth') {
       const deviceTokenReplace = adobeCredentialState.device_token.action === 'replace'

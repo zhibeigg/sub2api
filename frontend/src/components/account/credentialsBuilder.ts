@@ -1,25 +1,9 @@
-export const CURSOR_SENSITIVE_CREDENTIAL_KEYS = ['cookie'] as const
-export const CURSOR_SESSION_COOKIE_NAME = '_vcrcs'
-export const CURSOR_SESSION_COOKIE_MAX_LENGTH = 16 * 1024
+export const CURSOR_SENSITIVE_CREDENTIAL_KEYS = ['api_key'] as const
 export type CursorSensitiveCredentialKey = typeof CURSOR_SENSITIVE_CREDENTIAL_KEYS[number]
 export type CursorCredentialAction = 'keep' | 'replace' | 'clear'
 
-export function buildCursorCookieHeader(cookieValue: string): string | null {
-  if (!cookieValue || cookieValue.length > CURSOR_SESSION_COOKIE_MAX_LENGTH || cookieValue !== cookieValue.trim()) {
-    return null
-  }
-  for (const character of cookieValue) {
-    const code = character.charCodeAt(0)
-    if (code <= 0x20 || code === 0x7f || character === ';') return null
-  }
-  return `${CURSOR_SESSION_COOKIE_NAME}=${cookieValue}`
-}
-
 export interface CursorCredentialInput {
-  cookie?: string
-  cookie_expires_at?: string
-  cursor_upstream_model?: string
-  cursor_referer?: string
+  api_key?: string
 }
 
 export interface CursorCredentialEditField {
@@ -30,33 +14,22 @@ export interface CursorCredentialEditField {
 export type CursorCredentialEditState = Record<CursorSensitiveCredentialKey, CursorCredentialEditField>
 
 export function buildCursorCreateCredentials(input: CursorCredentialInput): Record<string, string> {
-  const cookie = input.cookie?.trim()
-  const credentials: Record<string, string> = {}
-  if (cookie) credentials.cookie = cookie
-  for (const key of ['cookie_expires_at', 'cursor_upstream_model', 'cursor_referer'] as const) {
-    const value = input[key]?.trim()
-    if (value) credentials[key] = value
-  }
-  return credentials
+  const apiKey = input.api_key?.trim()
+  return apiKey ? { api_key: apiKey } : {}
 }
 
 export function createCursorCredentialEditState(): CursorCredentialEditState {
-  return { cookie: { action: 'keep', value: '' } }
+  return { api_key: { action: 'keep', value: '' } }
 }
 
 export function buildCursorCredentialUpdate(
-  state: CursorCredentialEditState,
-  metadata: Omit<CursorCredentialInput, 'cookie'>
+  state: CursorCredentialEditState
 ): { credentials?: Record<string, unknown>; clear_credentials?: string[] } {
   const credentials: Record<string, string> = {}
   const clearCredentials: string[] = []
-  const cookie = state.cookie
-  if (cookie.action === 'replace' && cookie.value.trim()) credentials.cookie = cookie.value.trim()
-  if (cookie.action === 'clear') clearCredentials.push('cookie')
-  for (const key of ['cookie_expires_at', 'cursor_upstream_model', 'cursor_referer'] as const) {
-    const value = metadata[key]?.trim()
-    if (value) credentials[key] = value
-  }
+  const apiKey = state.api_key
+  if (apiKey.action === 'replace' && apiKey.value.trim()) credentials.api_key = apiKey.value.trim()
+  if (apiKey.action === 'clear') clearCredentials.push('api_key')
   return {
     ...(Object.keys(credentials).length > 0 ? { credentials } : {}),
     ...(clearCredentials.length > 0 ? { clear_credentials: clearCredentials } : {})
@@ -64,8 +37,8 @@ export function buildCursorCredentialUpdate(
 }
 
 export function resetCursorCredentialEditState(state: CursorCredentialEditState): void {
-  state.cookie.action = 'keep'
-  state.cookie.value = ''
+  state.api_key.action = 'keep'
+  state.api_key.value = ''
 }
 
 export const ADOBE_SENSITIVE_CREDENTIAL_KEYS = [

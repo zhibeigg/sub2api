@@ -1148,25 +1148,21 @@ adobe:
   credits_cache_ttl_seconds: 300
 
 # =============================================================================
-# Cursor Documentation Chat Configuration (Cursor 文档聊天反代配置)
+# Cursor Cloud Agents API Configuration (Cursor Cloud Agents 官方 API 配置)
 # =============================================================================
-# Cursor accounts use a Cookie containing `_vcrcs`. The optional local browser extension
-# can import that single Cookie after an explicit user action; no server-side browser setting is required.
-# Cursor 账号使用包含 `_vcrcs` 的 Cookie。可选本地浏览器扩展仅在用户主动操作后导入该 Cookie，
-# 无需服务端浏览器配置；本服务和扩展都不会绕过验证码、Vercel Challenge 或其他安全措施。
+# Official Beta endpoint. Create a user API Key or an agent-scoped service-account
+# API Key in the Cursor Dashboard, then store it in the Cursor account credentials.
+# 官方 Beta 端点。请在 Cursor Dashboard 创建用户 API Key 或 agent-scoped 服务账户
+# API Key，并将密钥保存到 Cursor 账号凭据中；不要使用浏览器 Cookie。
+# Use GET /v1/me to verify the key and GET /v1/models to discover supported model IDs.
+# 使用 GET /v1/me 验证密钥，使用 GET /v1/models 获取可用模型 ID。
+# To create a temporary no-repository agent, omit both repos and env (or send repos: []),
+# then delete the agent after the run. Cursor plan usage and on-demand charges remain
+# Cursor-side costs; Sub2API billing only covers prices explicitly configured locally.
 cursor:
-  base_url: "https://cursor.com"
+  base_url: "https://api.cursor.com"
   request_timeout_seconds: 120
   stream_idle_timeout_seconds: 60
-  default_model: "google/gemini-3-flash"
-  referer: "https://cursor.com/docs"
-  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-  max_history_tokens: 24000
-  max_history_messages: 100
-  # Disabled by default. Continuation is only attempted for explicit upstream truncation.
-  max_auto_continue: 0
-  responses_ttl_seconds: 86400
-  tool_description_max_length: 1024
 
 # =============================================================================
 # Kiro Configuration (Kiro / AWS CodeWhisperer 平台配置)

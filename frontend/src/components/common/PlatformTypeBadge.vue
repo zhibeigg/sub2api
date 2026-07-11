@@ -87,8 +87,6 @@ const typeLabel = computed(() => {
       return 'AWS'
     case 'service_account':
       return 'Vertex'
-    case 'cookie':
-      return 'Cookie'
     default:
       return props.type
   }

@@ -173,8 +173,8 @@ Sub2API is an AI API gateway platform designed to distribute and manage API quot
 
 ## Features
 
-- **Multi-Account Management** - Support multiple upstream account types (OAuth, API Key, Cookie); native integration for Anthropic, OpenAI, Gemini, Antigravity, Grok, Kiro (AWS CodeWhisperer, serving Claude models), Adobe Firefly, and Cursor documentation chat
-- **Cursor Documentation Chat Integration** - Optional Chrome/Edge login helper that opens Cursor and imports only `_vcrcs` after explicit approval, with manual Cookie fallback, two-step preflight validation, Anthropic Messages/OpenAI Chat Completions/Responses compatibility, Redis-backed `previous_response_id`, local usage accounting, and explicit non-OAuth boundaries ([Integration Guide](docs/CURSOR_INTEGRATION.md))
+- **Multi-Account Management** - Support multiple upstream account types (OAuth, API Key, service account); native integration for Anthropic, OpenAI, Gemini, Antigravity, Grok, Kiro (AWS CodeWhisperer, serving Claude models), Adobe Firefly, and the official Cursor Cloud Agents API
+- **Cursor Cloud Agents API (Beta)** - Uses `https://api.cursor.com` with user or agent-scoped service-account API Keys, `/v1/me` credential checks, `/v1/models` model discovery, and repository-backed or temporary no-repository Agents, while keeping Cursor-side plan/on-demand charges separate from Sub2API local billing ([Integration Guide](docs/CURSOR_INTEGRATION.md))
 - **Native Kiro Integration** - Built-in AWS Builder ID device code, IAM Identity Center (PKCE), SSO token import, and credentials-JSON login; automatic token refresh, subscription/usage/overage queries, health checks, dynamic model discovery, and compact daily request/token plus account-billed/user-billed statistics in the usage window
 - **Native Adobe Firefly Integration** - Two-step credential preflight before account creation, secure IMS credential lifecycle, automatic access-token renewal, profile and credits visibility, synchronous OpenAI-compatible image generation/editing, Redis-backed asynchronous video tasks, and idempotent media billing ([Integration Guide](docs/ADOBE_INTEGRATION.md))
 - **API Key Distribution** - Generate and manage API Keys for users
@@ -680,17 +680,17 @@ See the [Adobe integration guide](docs/ADOBE_INTEGRATION.md) for credentials, co
 
 ---
 
-## Cursor Documentation Chat Support
+## Cursor Cloud Agents API Support
 
-Sub2API supports Cursor as an independent `cursor` platform using a Cookie containing `_vcrcs`. The optional Chrome/Edge login helper opens Cursor's original website, waits for the user to complete normal login, reads only `_vcrcs`, and returns it to the admin tab that started the flow. Manual Cookie input remains available. This is not Cursor desktop account access or an official OAuth/account API.
+Sub2API documents Cursor integration against the official Cloud Agents API Beta at `https://api.cursor.com`. Authentication uses a Cursor Dashboard user API Key or an agent-scoped team service-account API Key; browser Cookies and the legacy login-helper extension are not used.
 
-- The bundled extension can be downloaded from `/downloads/cursor-cookie-importer.zip`; unpacked installation is required until a store build is published.
-- Compatible endpoints: `/v1/messages`, `/v1/chat/completions`, `/v1/responses`, `/v1/messages/count_tokens`, and `/v1/models`.
-- Streaming, local token estimation, model mapping, same-platform failover, Channel pricing, Usage, Ops, and platform Quota are supported.
-- Tool calls use an explicit JSON-action compatibility convention; they are not a native Cursor tool protocol.
-- The extension never reads passwords or other Cookies and does not automate CAPTCHA/Vercel Challenge. Images, audio, files, official subscription credits, automatic Cookie refresh, browser stealth, and challenge bypass are not provided.
+- Verify the active key with `GET /v1/me`; user keys may return owner fields, while service-account/team keys omit personal owner fields.
+- Discover supported model IDs and parameters with `GET /v1/models`; omit `model` when the Cursor-configured default should be used.
+- Create Agents with `POST /v1/agents`. Omitting both `repos` and `env` (or sending `repos: []`) creates a no-repository Agent suitable for temporary tasks; delete it explicitly when its context is no longer needed.
+- Cloud Agents API is an official Beta, and selected capabilities can be gated or return `feature_unavailable`. Do not rely on Beta fields until verified for the target account.
+- Cursor plan usage, model usage, Cloud Agent execution, and on-demand overage remain Cursor-side charges. Sub2API billing applies only to prices explicitly configured locally; local usage must not be presented as official Cursor credits.
 
-See the [Cursor integration guide](docs/CURSOR_INTEGRATION.md) for credentials, security boundaries, configuration, protocol details, billing, and operations.
+See the [Cursor integration guide](docs/CURSOR_INTEGRATION.md) for authentication, endpoints, service accounts, no-repository Agents, Beta boundaries, and billing separation.
 
 ---
 

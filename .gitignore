@@ -94,8 +94,6 @@ dist/
 build/
 release/
 release-assets/
-frontend/public/downloads/cursor-cookie-importer.zip*
-extensions/cursor-cookie-importer/.test-profile/
 
 # 后端嵌入的前端构建产物
 # Keep a placeholder file so `//go:embed all:dist` always has a match in CI/lint,
@@ -126,8 +124,6 @@ Kiro-Go-main/
 # 其他
 # ===================
 tests
-!extensions/cursor-cookie-importer/tests/
-!extensions/cursor-cookie-importer/tests/*.test.js
 CLAUDE.md
 .claude
 scripts

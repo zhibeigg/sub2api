@@ -202,9 +202,6 @@ release:
     **Manual download:**
     Download the appropriate archive for your platform from the assets below.
 
-    **Cursor browser login helper:**
-    Download `cursor-cookie-importer_{{ .Version }}.zip` from the assets below, extract it, then load the directory as an unpacked Chrome/Edge extension.
-
     ## 📚 Documentation
 
     - [GitHub Repository](https://github.com/{{ .Env.GITHUB_REPO_OWNER }}/{{ .Env.GITHUB_REPO_NAME }})

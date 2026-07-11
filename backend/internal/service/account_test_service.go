@@ -191,29 +191,23 @@ func (s *AccountTestService) ValidateTransientCredentials(ctx context.Context, i
 			ExpiresAt:    summary.ExpiresAt,
 		}, nil
 
-	case platform == PlatformCursor && accountType == AccountTypeCookie:
+	case platform == PlatformCursor && accountType == AccountTypeAPIKey:
 		if s.cursorGatewayService == nil {
 			return nil, ErrTransientCredentialValidationUnavailable
 		}
 		if err := ValidateCursorAccountCredentials(accountType, account.Credentials); err != nil {
 			return nil, err
 		}
-		model := strings.TrimSpace(input.ModelID)
-		if model == "" {
-			model = "cursor-chat"
-		}
-		prompt := strings.TrimSpace(input.Prompt)
-		if prompt == "" {
-			prompt = "Reply with OK."
-		}
-		if _, err := s.cursorGatewayService.Probe(ctx, account, model, prompt); err != nil {
+		identity, err := s.cursorGatewayService.Probe(ctx, account, "", "")
+		if err != nil {
 			return nil, err
 		}
 		return &TransientCredentialValidationResult{
-			Success:  true,
-			Platform: PlatformCursor,
-			Message:  "Cursor credentials verified",
-			Summary:  model,
+			Success:     true,
+			Platform:    PlatformCursor,
+			Message:     "Cursor API key verified",
+			DisplayName: identity,
+			Summary:     identity,
 		}, nil
 	default:
 		return nil, errors.New("unsupported transient credential platform or account type")
@@ -346,14 +340,14 @@ func (s *AccountTestService) testCursorAccountConnection(c *gin.Context, account
 	c.Writer.Header().Set("X-Accel-Buffering", "no")
 	c.Writer.Flush()
 	if strings.TrimSpace(modelID) == "" {
-		modelID = "cursor-chat"
+		modelID = "cloud-agents-api"
 	}
 	s.sendEvent(c, TestEvent{Type: "test_start", Model: modelID})
 	text, err := s.cursorGatewayService.Probe(c.Request.Context(), account, modelID, prompt)
 	if err != nil {
-		return s.sendErrorAndEnd(c, fmt.Sprintf("Cursor documentation chat check failed: %s", err.Error()))
+		return s.sendErrorAndEnd(c, fmt.Sprintf("Cursor Cloud Agents API check failed: %s", err.Error()))
 	}
-	message := "Cursor documentation chat account healthy"
+	message := "Cursor Cloud Agents API key healthy"
 	if strings.TrimSpace(text) != "" {
 		message += ": " + strings.TrimSpace(text)
 	}

@@ -1,13 +1,8 @@
-// Package cursor implements the safe, transport-agnostic core of Cursor's
-// documented /api/chat protocol.
+// Package cursor implements the Cursor Cloud Agents API adapter and protocol
+// compatibility transformations used by the gateway.
 package cursor
 
-import (
-	"encoding/json"
-	"time"
-)
-
-const DefaultBaseURL = "https://cursor.com/api/chat"
+import "encoding/json"
 
 type Part struct {
 	Type string `json:"type"`
@@ -38,62 +33,6 @@ type Usage struct {
 	InputTokens  int `json:"inputTokens,omitempty"`
 	OutputTokens int `json:"outputTokens,omitempty"`
 	TotalTokens  int `json:"totalTokens,omitempty"`
-}
-
-type MessageMetadata struct {
-	Usage *Usage `json:"usage,omitempty"`
-}
-
-type SSEEvent struct {
-	Type            string           `json:"type"`
-	Delta           string           `json:"delta,omitempty"`
-	FinishReason    string           `json:"finishReason,omitempty"`
-	MessageMetadata *MessageMetadata `json:"messageMetadata,omitempty"`
-	Usage           *Usage           `json:"usage,omitempty"`
-}
-
-func (e SSEEvent) EventUsage() *Usage {
-	if e.MessageMetadata != nil && e.MessageMetadata.Usage != nil {
-		return e.MessageMetadata.Usage
-	}
-	return e.Usage
-}
-
-type Credential struct {
-	Cookie string `json:"cookie"`
-}
-
-type ClientConfig struct {
-	BaseURL           string
-	Model             string
-	Referer           string
-	UserAgent         string
-	Proxy             string
-	RequestTimeout    time.Duration
-	StreamIdleTimeout time.Duration
-	MaxErrorBody      int64
-}
-
-func (c ClientConfig) withDefaults() ClientConfig {
-	if c.BaseURL == "" {
-		c.BaseURL = DefaultBaseURL
-	}
-	if c.Referer == "" {
-		c.Referer = "https://cursor.com/docs"
-	}
-	if c.UserAgent == "" {
-		c.UserAgent = "sub2api-cursor/1"
-	}
-	if c.RequestTimeout <= 0 {
-		c.RequestTimeout = 5 * time.Minute
-	}
-	if c.StreamIdleTimeout <= 0 {
-		c.StreamIdleTimeout = 90 * time.Second
-	}
-	if c.MaxErrorBody <= 0 {
-		c.MaxErrorBody = 8 << 10
-	}
-	return c
 }
 
 type Protocol string

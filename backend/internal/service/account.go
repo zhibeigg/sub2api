@@ -244,8 +244,8 @@ func (a *Account) IsCursor() bool {
 	return a != nil && a.Platform == PlatformCursor
 }
 
-func (a *Account) IsCursorCookie() bool {
-	return a.IsCursor() && a.Type == AccountTypeCookie
+func (a *Account) IsCursorAPIKey() bool {
+	return a.IsCursor() && a.Type == AccountTypeAPIKey
 }
 
 func (a *Account) IsGrokOAuth() bool {
@@ -1834,10 +1834,9 @@ func (a *Account) IsAnthropicOAuthOrSetupToken() bool {
 }
 
 // IsTLSFingerprintEnabled 检查是否启用 TLS 指纹伪装。
-// Anthropic OAuth/SetupToken 和 Cursor Cookie 账号可显式启用；Cursor 建议绑定管理员
-// 创建的浏览器 profile，避免把内置 Node.js 默认 profile 误认为官方 Cursor 客户端。
+// 官方 Cursor Cloud Agents API 使用标准 API Key 鉴权，不需要浏览器 TLS 指纹。
 func (a *Account) IsTLSFingerprintEnabled() bool {
-	if !a.IsAnthropicOAuthOrSetupToken() && !a.IsCursorCookie() {
+	if !a.IsAnthropicOAuthOrSetupToken() {
 		return false
 	}
 	if a.Extra == nil {

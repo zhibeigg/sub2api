@@ -230,10 +230,10 @@ type UsageInfo struct {
 	// Adobe Firefly credits；Known=false 与 Available=0 语义严格区分。
 	AdobeCredits *AdobeCreditsInfo `json:"adobe_credits,omitempty"`
 
-	// Cursor 文档聊天没有官方订阅额度接口，仅展示本地统计和人工提供的 Cookie 状态。
-	CursorLocalUsage      *WindowStats `json:"cursor_local_usage,omitempty"`
-	CursorCookieExpiresAt string       `json:"cursor_cookie_expires_at,omitempty"`
-	CursorCookieExpired   bool         `json:"cursor_cookie_expired,omitempty"`
+	// Cursor Cloud Agents does not currently expose subscription quota details.
+	// Show local forwarding statistics and whether an API key is configured.
+	CursorLocalUsage       *WindowStats `json:"cursor_local_usage,omitempty"`
+	CursorAPIKeyConfigured bool         `json:"cursor_api_key_configured,omitempty"`
 
 	// Grok / xAI 被动额度快照
 	GrokRequestQuota       *xai.QuotaWindow `json:"grok_request_quota,omitempty"`
@@ -413,20 +413,16 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 
 	if account.IsCursor() {
 		now := time.Now()
-		usage := &UsageInfo{Source: "local", UpdatedAt: &now}
+		usage := &UsageInfo{Source: "local", UpdatedAt: &now, CursorAPIKeyConfigured: strings.TrimSpace(account.GetCredential("api_key")) != ""}
 		if s.usageLogRepo != nil {
 			if stats, statsErr := s.usageLogRepo.GetAccountTodayStats(ctx, account.ID); statsErr == nil && stats != nil {
 				usage.CursorLocalUsage = windowStatsFromAccountStats(stats)
 			}
 		}
-		if expiresAt := account.GetCredentialAsTime("cookie_expires_at"); expiresAt != nil {
-			usage.CursorCookieExpiresAt = expiresAt.UTC().Format(time.RFC3339)
-			usage.CursorCookieExpired = !expiresAt.After(now)
-			if usage.CursorCookieExpired {
-				usage.NeedsReauth = true
-				usage.ErrorCode = "cookie_expired"
-				usage.Error = "Cursor Cookie has expired; replace it manually"
-			}
+		if !usage.CursorAPIKeyConfigured {
+			usage.NeedsReauth = true
+			usage.ErrorCode = "api_key_missing"
+			usage.Error = "Cursor API key is missing"
 		}
 		return usage, nil
 	}

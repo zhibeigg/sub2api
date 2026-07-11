@@ -1900,7 +1900,7 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
 	}
 	setOpsSelectedAccount(c, account.ID, account.Platform)
 
-	// 转发请求（不记录使用量）。Cursor 文档聊天没有 count_tokens 接口，使用本地确定性估算。
+	// Cursor Cloud Agents API 不提供聊天协议的 count_tokens 接口，使用本地确定性估算。
 	if account.Platform == service.PlatformCursor {
 		count, countErr := h.cursorGatewayService.CountTokens(body, cursorpkg.ProtocolAnthropic)
 		if countErr != nil {

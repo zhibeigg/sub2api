@@ -27,12 +27,10 @@ func (s *validateCredentialsUpstream) DoWithTLS(_ *http.Request, _ string, _ int
 	if s.err != nil {
 		return nil, s.err
 	}
-	body := "data: {\"type\":\"text-delta\",\"delta\":\"OK\"}\n\n" +
-		"data: {\"type\":\"finish\",\"finishReason\":\"stop\"}\n\n"
 	return &http.Response{
 		StatusCode: http.StatusOK,
-		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
-		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"apiKeyName":"admin-test","userEmail":"cursor@example.com"}`)),
 	}, nil
 }
 
@@ -40,8 +38,8 @@ func setupValidateCredentialsRouter(upstream service.HTTPUpstream) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	gateway := service.NewCursorGatewayService(upstream, nil, nil, nil, &config.Config{Cursor: config.CursorConfig{
-		BaseURL:                  "https://cursor.com",
-		DefaultModel:             "google/gemini-3-flash",
+		BaseURL:                  "https://api.cursor.com",
+		DefaultModel:             "auto",
 		RequestTimeoutSeconds:    10,
 		StreamIdleTimeoutSeconds: 10,
 	}})
@@ -67,7 +65,8 @@ func TestAccountHandlerValidateCredentialsRequestValidation(t *testing.T) {
 		`{}`,
 		`{"platform":"openai","type":"oauth","credentials":{"access_token":"secret"}}`,
 		`{"platform":"adobe","type":"cookie","credentials":{"cookie":"secret"}}`,
-		`{"platform":"cursor","type":"cookie","credentials":{"cookie":"missing-required-cookie"}}`,
+		`{"platform":"cursor","type":"cookie","credentials":{"cookie":"_vcrcs=legacy"}}`,
+		`{"platform":"cursor","type":"apikey","credentials":{"api_key":""}}`,
 	} {
 		recorder := performValidateCredentialsRequest(router, body)
 		require.Equal(t, http.StatusBadRequest, recorder.Code, recorder.Body.String())
@@ -75,23 +74,21 @@ func TestAccountHandlerValidateCredentialsRequestValidation(t *testing.T) {
 	}
 }
 
-func TestAccountHandlerValidateCredentialsCursorSuccessDoesNotEchoCookie(t *testing.T) {
+func TestAccountHandlerValidateCredentialsCursorSuccessDoesNotEchoAPIKey(t *testing.T) {
 	router := setupValidateCredentialsRouter(&validateCredentialsUpstream{})
-	cookie := "foo=bar; _vcrcs=handler-secret"
-	recorder := performValidateCredentialsRequest(router, `{"platform":"cursor","type":"cookie","credentials":{"cookie":"`+cookie+`"}}`)
+	apiKey := "cursor-handler-secret"
+	recorder := performValidateCredentialsRequest(router, `{"platform":"cursor","type":"apikey","credentials":{"api_key":"`+apiKey+`"}}`)
 
 	require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
 	require.Contains(t, recorder.Body.String(), `"success":true`)
 	require.Contains(t, recorder.Body.String(), `"platform":"cursor"`)
-	require.Contains(t, recorder.Body.String(), `"summary":"cursor-chat"`)
-	require.NotContains(t, recorder.Body.String(), `"summary":{`)
-	require.NotContains(t, recorder.Body.String(), "handler-secret")
-	require.NotContains(t, recorder.Body.String(), cookie)
+	require.Contains(t, recorder.Body.String(), `"summary":"cursor@example.com"`)
+	require.NotContains(t, recorder.Body.String(), apiKey)
 }
 
 func TestAccountHandlerValidateCredentialsSanitizesUpstreamErrors(t *testing.T) {
-	router := setupValidateCredentialsRouter(&validateCredentialsUpstream{err: errors.New("upstream response body: _vcrcs=leaked-secret")})
-	recorder := performValidateCredentialsRequest(router, `{"platform":"cursor","type":"cookie","credentials":{"cookie":"_vcrcs=request-secret"}}`)
+	router := setupValidateCredentialsRouter(&validateCredentialsUpstream{err: errors.New("upstream response body: cursor-leaked-secret")})
+	recorder := performValidateCredentialsRequest(router, `{"platform":"cursor","type":"apikey","credentials":{"api_key":"cursor-request-secret"}}`)
 
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 	require.Contains(t, recorder.Body.String(), "Credential validation failed")
@@ -99,22 +96,22 @@ func TestAccountHandlerValidateCredentialsSanitizesUpstreamErrors(t *testing.T) 
 	require.NotContains(t, recorder.Body.String(), "request-secret")
 }
 
-func TestAccountRequestBindingsAcceptCookieType(t *testing.T) {
+func TestAccountRequestBindingsAcceptCursorAPIKeyType(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	createRecorder := httptest.NewRecorder()
 	createContext, _ := gin.CreateTestContext(createRecorder)
-	createContext.Request = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"cursor","platform":"cursor","type":"cookie","credentials":{"cookie":"_vcrcs=secret"}}`))
+	createContext.Request = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"name":"cursor","platform":"cursor","type":"apikey","credentials":{"api_key":"cursor-key"}}`))
 	createContext.Request.Header.Set("Content-Type", "application/json")
 	var createRequest CreateAccountRequest
 	require.NoError(t, createContext.ShouldBindJSON(&createRequest))
-	require.Equal(t, service.AccountTypeCookie, createRequest.Type)
+	require.Equal(t, service.AccountTypeAPIKey, createRequest.Type)
 
 	updateRecorder := httptest.NewRecorder()
 	updateContext, _ := gin.CreateTestContext(updateRecorder)
-	updateContext.Request = httptest.NewRequest(http.MethodPut, "/", strings.NewReader(`{"type":"cookie"}`))
+	updateContext.Request = httptest.NewRequest(http.MethodPut, "/", strings.NewReader(`{"type":"apikey"}`))
 	updateContext.Request.Header.Set("Content-Type", "application/json")
 	var updateRequest UpdateAccountRequest
 	require.NoError(t, updateContext.ShouldBindJSON(&updateRequest))
-	require.Equal(t, service.AccountTypeCookie, updateRequest.Type)
+	require.Equal(t, service.AccountTypeAPIKey, updateRequest.Type)
 }

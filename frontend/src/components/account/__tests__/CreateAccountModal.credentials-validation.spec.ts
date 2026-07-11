@@ -1,14 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, nextTick } from 'vue'
-import { flushPromises, mount } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 
 const {
   createAccountMock,
   validateCredentialsMock,
   showErrorMock,
   makeOAuthMock,
-  makeRef,
-  cursorBrowserLoginMock
+  makeRef
 } = vi.hoisted(() => {
   const makeRef = <T>(value: T) => ({ __v_isRef: true, value })
   return {
@@ -16,18 +15,6 @@ const {
     validateCredentialsMock: vi.fn(),
     showErrorMock: vi.fn(),
     makeRef,
-    cursorBrowserLoginMock: {
-      state: makeRef<'ready' | 'unavailable' | 'starting' | 'waiting_for_login' | 'reading_cookie' | 'received' | 'error'>('ready'),
-      available: makeRef(true),
-      busy: makeRef(false),
-      extensionVersion: makeRef('0.34.5'),
-      errorCode: makeRef<string | null>(null),
-      initialize: vi.fn(),
-      ping: vi.fn(),
-      start: vi.fn(),
-      cancel: vi.fn(),
-      dispose: vi.fn()
-    },
     makeOAuthMock: () => ({
       authUrl: { value: '' },
       sessionId: { value: '' },
@@ -94,13 +81,6 @@ vi.mock('@/composables/useGeminiOAuth', () => ({
 }))
 vi.mock('@/composables/useAntigravityOAuth', () => ({ useAntigravityOAuth: makeOAuthMock }))
 vi.mock('@/composables/useGrokOAuth', () => ({ useGrokOAuth: makeOAuthMock }))
-vi.mock('@/composables/useCursorBrowserLogin', () => ({
-  CURSOR_EXTENSION_DOWNLOAD_URL: '/downloads/cursor-cookie-importer.zip',
-  CursorBrowserLoginError: class CursorBrowserLoginError extends Error {
-    constructor(public readonly code: string) { super(code) }
-  },
-  useCursorBrowserLogin: () => cursorBrowserLoginMock
-}))
 vi.mock('@/composables/useKiroOAuth', () => ({
   useKiroOAuth: () => ({
     loading: makeRef(false),
@@ -178,11 +158,6 @@ const enterNameAndContinue = async (wrapper: ReturnType<typeof mountModal>) => {
 beforeEach(() => {
   vi.clearAllMocks()
   createAccountMock.mockResolvedValue({ id: 1 })
-  cursorBrowserLoginMock.state.value = 'ready'
-  cursorBrowserLoginMock.available.value = true
-  cursorBrowserLoginMock.busy.value = false
-  cursorBrowserLoginMock.extensionVersion.value = '0.34.5'
-  cursorBrowserLoginMock.errorCode.value = null
 })
 
 describe('CreateAccountModal Adobe/Cursor credential validation flow', () => {
@@ -211,13 +186,13 @@ describe('CreateAccountModal Adobe/Cursor credential validation flow', () => {
     const wrapper = mountModal()
     await selectPlatform(wrapper, 'Cursor')
     await enterNameAndContinue(wrapper)
-    await wrapper.get('[data-testid="cursor-cookie-input"]').setValue('secret-cookie')
+    await wrapper.get('[data-testid="cursor-api-key-input"]').setValue('cursor-api-key')
     await wrapper.get('#credential-validation-form').trigger('submit')
 
     expect(validateCredentialsMock).toHaveBeenCalledOnce()
     expect(createAccountMock).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="cursor-credentials-form"]').exists()).toBe(true)
-    expect(wrapper.text()).not.toContain('secret-cookie')
+    expect(wrapper.text()).not.toContain('cursor-api-key')
   })
 
   it('creates an Adobe account only after successful validation with the same credentials', async () => {
@@ -242,68 +217,44 @@ describe('CreateAccountModal Adobe/Cursor credential validation flow', () => {
     expect(createPayload.credentials).toEqual(validationPayload.credentials)
   })
 
-  it('creates Cursor with cookie type and concurrency 1 after successful validation', async () => {
+  it('validates and creates Cursor as an API Key account with concurrency 1', async () => {
     validateCredentialsMock.mockResolvedValue({ success: true, platform: 'cursor', message: 'ok' })
     const wrapper = mountModal()
     await selectPlatform(wrapper, 'Cursor')
     await enterNameAndContinue(wrapper)
-    await wrapper.get('[data-testid="cursor-cookie-input"]').setValue('secret-cookie')
+    await wrapper.get('[data-testid="cursor-api-key-input"]').setValue('cursor-api-key')
     await wrapper.get('#credential-validation-form').trigger('submit')
 
-    expect(createAccountMock).toHaveBeenCalledWith(expect.objectContaining({
-      platform: 'cursor',
-      type: 'cookie',
-      concurrency: 1
-    }))
-  })
-
-  it('imports only _vcrcs through the extension and automatically validates before creating', async () => {
-    validateCredentialsMock.mockResolvedValue({ success: true, platform: 'cursor', message: 'ok' })
-    cursorBrowserLoginMock.start.mockResolvedValue({ value: 'browser-secret', expirationDate: 1_800_000_000 })
-    const wrapper = mountModal()
-    await selectPlatform(wrapper, 'Cursor')
-    await enterNameAndContinue(wrapper)
-
-    await wrapper.get('[data-testid="cursor-browser-login-button"]').trigger('click')
-    await flushPromises()
-
-    expect(cursorBrowserLoginMock.start).toHaveBeenCalledOnce()
     expect(validateCredentialsMock).toHaveBeenCalledWith(expect.objectContaining({
       platform: 'cursor',
-      type: 'cookie',
-      credentials: expect.objectContaining({ cookie: '_vcrcs=browser-secret' })
+      type: 'apikey',
+      credentials: expect.objectContaining({ api_key: 'cursor-api-key' })
     }))
-    expect(createAccountMock).toHaveBeenCalledOnce()
-    expect(wrapper.text()).not.toContain('browser-secret')
+    expect(createAccountMock).toHaveBeenCalledWith(expect.objectContaining({
+      platform: 'cursor',
+      type: 'apikey',
+      concurrency: 1,
+      credentials: expect.objectContaining({ api_key: 'cursor-api-key' })
+    }))
   })
 
-  it('offers the bundled extension download and manual fallback when the helper is unavailable', async () => {
-    cursorBrowserLoginMock.state.value = 'unavailable'
-    cursorBrowserLoginMock.available.value = false
+  it('requires a Cursor API Key before validation', async () => {
     const wrapper = mountModal()
     await selectPlatform(wrapper, 'Cursor')
     await enterNameAndContinue(wrapper)
 
-    expect(wrapper.get('[data-testid="cursor-extension-download"]').attributes('href')).toBe('/downloads/cursor-cookie-importer.zip')
-    expect(wrapper.get('[data-testid="cursor-manual-import"]').attributes()).toHaveProperty('open')
-    expect(wrapper.get('[data-testid="cursor-cookie-input"]').exists()).toBe(true)
-  })
+    await wrapper.get('#credential-validation-form').trigger('submit')
 
-  it('keeps the internal model inside advanced settings with an empty safe default', async () => {
-    const wrapper = mountModal()
-    await selectPlatform(wrapper, 'Cursor')
-    await enterNameAndContinue(wrapper)
-
-    expect(wrapper.get('[data-testid="cursor-advanced-settings"]').text()).toContain('admin.accounts.cursor.advancedSettings')
-    expect((wrapper.get('#cursor-upstream-model').element as HTMLInputElement).value).toBe('')
-    expect(wrapper.text()).not.toContain('claude-sonnet-4-5')
+    expect(validateCredentialsMock).not.toHaveBeenCalled()
+    expect(createAccountMock).not.toHaveBeenCalled()
+    expect(showErrorMock).toHaveBeenCalledWith('admin.accounts.cursor.apiKeyRequired')
   })
 
   it('preserves sensitive input when returning to step 1 and showing step 2 again', async () => {
     const wrapper = mountModal()
     await selectPlatform(wrapper, 'Cursor')
     await enterNameAndContinue(wrapper)
-    await wrapper.get('[data-testid="cursor-cookie-input"]').setValue('secret-cookie')
+    await wrapper.get('[data-testid="cursor-api-key-input"]').setValue('cursor-api-key')
 
     const backButton = wrapper.findAll('button').find(item => item.text().includes('common.back'))
     expect(backButton).toBeTruthy()
@@ -311,7 +262,7 @@ describe('CreateAccountModal Adobe/Cursor credential validation flow', () => {
     await wrapper.get('#create-account-form').trigger('submit')
     await nextTick()
 
-    expect((wrapper.get('[data-testid="cursor-cookie-input"]').element as HTMLInputElement).value).toBe('secret-cookie')
-    expect(wrapper.text()).not.toContain('secret-cookie')
+    expect((wrapper.get('[data-testid="cursor-api-key-input"]').element as HTMLInputElement).value).toBe('cursor-api-key')
+    expect(wrapper.text()).not.toContain('cursor-api-key')
   })
 })

@@ -990,7 +990,7 @@ func (h *AccountHandler) ValidateCredentials(c *gin.Context) {
 	platform := service.NormalizePlatform(req.Platform)
 	accountType := strings.ToLower(strings.TrimSpace(req.Type))
 	if !((platform == service.PlatformAdobe && accountType == service.AccountTypeOAuth) ||
-		(platform == service.PlatformCursor && accountType == service.AccountTypeCookie)) {
+		(platform == service.PlatformCursor && accountType == service.AccountTypeAPIKey)) {
 		response.BadRequest(c, "Unsupported platform or account type")
 		return
 	}
@@ -1161,7 +1161,7 @@ func (h *AccountHandler) PreviewFromCRS(c *gin.Context) {
 // Returns (updatedAccount, warning, error) where warning is used for Antigravity ProjectIDMissing scenario.
 func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *service.Account) (*service.Account, string, error) {
 	if account.IsCursor() {
-		return nil, "", infraerrors.BadRequest("CURSOR_MANUAL_COOKIE_REQUIRED", "Cursor documentation chat has no OAuth refresh flow; replace the account Cookie manually")
+		return nil, "", infraerrors.BadRequest("CURSOR_API_KEY_NO_REFRESH", "Cursor Cloud Agents API keys cannot be refreshed; replace the API key from the account editor")
 	}
 	if !account.IsOAuth() {
 		return nil, "", infraerrors.BadRequest("NOT_OAUTH", "cannot refresh non-OAuth account")
@@ -2358,8 +2358,8 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 		return
 	}
 
-	// Cursor uses a controlled local catalog because the documentation chat endpoint
-	// has no official model-discovery API.
+	// Cursor exposes the account's configured compatibility aliases here. The
+	// upstream sync endpoint refreshes these IDs from Cloud Agents /v1/models.
 	if account.IsCursor() {
 		mapping := account.GetModelMapping()
 		models := make([]openai.Model, 0, len(mapping))

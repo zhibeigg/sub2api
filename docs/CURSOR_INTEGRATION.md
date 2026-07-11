@@ -1,144 +1,193 @@
-# Cursor 文档聊天反代接入
+# Cursor Cloud Agents 官方 API 接入
 
-Sub2API 从 `0.32.5` 起将 Cursor 作为独立平台 `cursor` 接入。该实现代理 Cursor 网站文档聊天端点 `/api/chat`，不是 Cursor 桌面端、官方账户 API 或 OAuth 服务。
+Sub2API 的 Cursor 接入应使用 Cursor 官方 **Cloud Agents API（Beta）**，生产基础地址为 `https://api.cursor.com`。旧版基于 `cursor.com/api/chat`、浏览器 Cookie `_vcrcs` 和本地 Cookie 导入扩展的文档与发布链已移除。
+
+> Cloud Agents API 仍处于官方 Beta。端点、字段、权限和可用范围可能调整；部署前应以 Cursor Dashboard、官方文档和官方 OpenAPI 为准。
 
 ## 能力边界
 
-- 账户类型固定为 `cookie`。管理员可通过可选浏览器扩展从当前浏览器会话导入 `_vcrcs`，也可手动录入包含 `_vcrcs` 的有效 Cookie。
-- 网页登录助手提供接近 OAuth 的交互，但它不是 Cursor OAuth；不提供 access token 刷新、订阅 credits、套餐余额或官方模型发现。
-- 扩展只打开 Cursor 原站并等待用户正常登录，不启动无头浏览器，不实现 stealth，也不自动处理或绕过验证码、Vercel Challenge。
-- 上游是文本协议。图片、音频、文件与文档输入会返回明确的 `400`，不会读取服务器本地文件或调用第三方 OCR。
-- 工具调用是提示词约定的兼容模式，不是 Cursor 原生工具协议。模型需要输出 `json action` 块，Sub2API 才会转换为标准工具调用。
-- thinking 参数可兼容接收，但不会诱导、伪造或暴露隐藏思维链。
-- Cursor 返回 usage 时优先使用上游值；缺失时使用本地估算，因此不应视为 Cursor 官方账单数据。
+- Cloud Agents API 用于创建和管理可自主执行任务的 Cursor Cloud Agent，不是 OpenAI Chat Completions、Anthropic Messages 或 Cursor 桌面聊天的通用反向代理。
+- API 使用 Cursor Dashboard 签发的 API Key，不使用浏览器 Cookie、网页登录助手或 Cookie 刷新流程。
+- Agent 是持久资源；每次提示词执行对应一个 run。同一 Agent 同时只能有一个活跃 run。
+- 可创建关联 GitHub 仓库、Pull Request、命名环境或无仓库的 Agent。无仓库 Agent 适合临时任务，但若不再使用，调用方应显式删除 Agent。
+- 模型 ID 必须来自 `GET /v1/models`。省略 `model` 字段表示使用 Cursor 配置的默认模型，不应写死或猜测模型名称。
+- Cursor 套餐资格、模型用量、按需超额费用、速率限制和 Cloud Agent 执行成本均由 Cursor 侧决定；Sub2API 不应把本地价格、余额或配额描述成 Cursor 官方额度。
 
-## 支持的兼容端点
+## Sub2API 兼容层语义
 
-- `POST /v1/messages`
-- `POST /v1/chat/completions`
-- `POST /v1/responses`
-- `POST /v1/messages/count_tokens`
-- `GET /v1/models`
+- 每个 OpenAI/Anthropic 兼容请求都会创建一个临时无仓库 Agent 和首个 run；完成后删除 Agent。它不是对 Cursor 桌面聊天会话的复用。
+- `previous_response_id` 由 Sub2API 在 Redis 中保存对话并在下一次请求时重新整理为 prompt，不会复用已删除的 Cursor Agent。
+- 入站 `stream=true` 会消费 Cursor Run SSE 并在任务完成后合成为现有 OpenAI/Anthropic SSE 格式；它不是逐事件透明转发，首字节延迟受整个 Agent run 时长影响。
+- 工具定义会被编码为明确的 JSON fenced-action 指令，再转换回 OpenAI/Anthropic tool call；这属于兼容约定，不等同于 Cloud Agent 原生 `tool_call` 事件。
+- 当前兼容层只接受文本、系统指令、工具调用与工具结果。OpenAI/Anthropic 的图片、音频、文件和文档输入会返回明确的 `400`，即使 Cloud Agents 原生 API 本身支持图片。
+- 若 Run SSE 在 `result` 前正常结束，Sub2API 会轮询 Run 直到终态；客户端取消或运行失败时会取消活跃 Run，并异步重试删除临时 Agent。
 
-流式与非流式文本响应均受支持。Responses 的 `previous_response_id` 使用 Redis 保存，并绑定到原 API Key，默认保存 24 小时。
+## 认证
 
-## 账号配置
-
-在管理员账号页面选择 Cursor 后采用两步创建：
-
-1. 第一步输入账号名称，并配置代理、TLS 指纹模板、模型、配额、调度和分组。
-2. 第二步推荐点击“使用 Cursor 网页登录并创建”。扩展打开 `cursor.com`，用户在原站完成登录后，扩展只读取 `_vcrcs` 并返回发起操作的后台标签页。
-3. 前端在内存中构造最小 Cookie Header，随后自动调用创建前预检；真实探测成功后才创建账号。
-4. 未安装扩展、当前后台域名未授权或自动导入失败时，可展开“手动导入 Cookie”粘贴包含非空 `_vcrcs` 的完整 Cookie。
-5. Cookie 到期时间、Cursor 内部模型与 Referer 位于“高级设置”。内部模型默认留空，留空时按账号模型映射和系统默认值解析。
-6. 失败不会创建临时数据库账号、写入 Redis 或在响应中回显 Cookie。
-
-## 浏览器扩展登录助手
-
-发布包内提供 Chrome/Edge Manifest V3 扩展，管理后台可从 `/downloads/cursor-cookie-importer.zip` 下载。非商店版本需要解压后在 `chrome://extensions` 开启开发者模式并选择“加载已解压的扩展程序”；安装后刷新管理后台。
-
-默认直接支持：
-
-- `https://www.poke2api.com`
-- `https://www.pokeapi.top`
-- `http://localhost`
-- `http://127.0.0.1`
-
-自托管 HTTPS 域名可在扩展设置页中授权精确 origin。公网明文 HTTP、`file:` 和任意宽泛来源不会被接受。
-
-扩展的数据边界：
-
-- 只有用户在 Cursor 创建流程中主动点击后才开始读取。
-- 只调用浏览器 Cookie API读取 `cursor.com` 的 `_vcrcs`；不枚举其他 Cookie。
-- 不读取密码、页面 DOM、localStorage、IndexedDB、表单或网络响应。
-- Cookie 不进入 URL、扩展持久存储、日志、剪贴板或第三方服务。
-- 消息使用协议版本、随机 flow ID、nonce、页面实例和原始标签页绑定；结果不广播给其他标签页。
-- 登录等待最长 10 分钟；关闭 Cursor 标签页、刷新后台、切换平台或关闭创建弹窗会取消流程。
-- 扩展不会刷新 Cookie。凭据过期后仍需管理员重新发起网页登录或手动替换。
-
-创建前预检 API：
+Cursor 官方 API 支持两种等价认证方式：
 
 ```http
-POST /api/v1/admin/accounts/validate-credentials
-Content-Type: application/json
-Authorization: Bearer <admin-token>
+Authorization: Bearer <cursor-api-key>
 ```
+
+或将 API Key 作为 Basic Auth 用户名并使用空密码：
+
+```bash
+curl -u "$CURSOR_API_KEY:" https://api.cursor.com/v1/me
+```
+
+建议优先使用 Bearer Auth，并遵守以下边界：
+
+- **用户 API Key**：绑定具体 Cursor 用户，适合个人自动化和以该用户身份创建 Agent。
+- **服务账户 / 团队 API Key**：不绑定具体用户，适合团队自动化。需要 My Machines 用户范围令牌时，必须使用具备 agent scope 的团队服务账户 Key 调用 `POST /v1/sub-tokens`。
+- API Key 只能保存在服务端凭据存储中，不得写入仓库、URL、日志、浏览器存储或返回给普通用户。
+- 不再支持或记录 `_vcrcs`、Cookie 到期时间、Referer、浏览器 User-Agent 等旧字段。
+
+## 验证 API Key：`GET /v1/me`
+
+```bash
+curl --fail-with-body \
+  -H "Authorization: Bearer $CURSOR_API_KEY" \
+  https://api.cursor.com/v1/me
+```
+
+响应包含 `apiKeyName` 和 `createdAt`。用户 Key 还可包含 `userId`、`userEmail`、姓名等所有者信息；服务账户 / 团队 Key 不绑定个人，因此会省略 `userId` 和 `userEmail`。
+
+该端点只证明密钥可被 Cursor API 识别。具体 Agent 权限、套餐资格或功能灰度仍可能在调用业务端点时返回 `403`，例如 `plan_required`、`role_forbidden` 或 `feature_unavailable`。
+
+## 获取模型：`GET /v1/models`
+
+```bash
+curl --fail-with-body \
+  -H "Authorization: Bearer $CURSOR_API_KEY" \
+  https://api.cursor.com/v1/models
+```
+
+响应的 `items[].id` 可作为创建 Agent 时的 `model.id`。模型还可能提供：
+
+- `aliases`：解析到同一模型的别名；
+- `parameters`：允许传入的参数和值；
+- `variants`：有效的 `id + params` 组合以及默认变体。
+
+不要维护静态“官方模型列表”。若调用方希望使用 Cursor 的账户默认模型，应完全省略 `model`，而不是发送空对象或自造模型 ID。
+
+## 创建临时无仓库 Agent
+
+`POST /v1/agents` 创建持久 Agent，并立即排入第一个 run。要启动不依赖 Git 仓库的临时任务，同时省略 `repos` 与 `env`，或传入 `repos: []`：
+
+```bash
+curl --fail-with-body \
+  -X POST \
+  -H "Authorization: Bearer $CURSOR_API_KEY" \
+  -H "Content-Type: application/json" \
+  https://api.cursor.com/v1/agents \
+  -d '{
+    "name": "Temporary analysis",
+    "prompt": {
+      "text": "Analyze the supplied task and return a concise report."
+    },
+    "repos": []
+  }'
+```
+
+成功时返回 `201`，响应同时包含：
+
+- `agent.id`：`bc-...` 格式的 Agent ID；
+- `run.id`：`run-...` 格式的首个运行 ID；
+- `agent.url`：Cursor Web 中查看 Agent 的地址；
+- `agent.repos: []`：确认该 Agent 未绑定仓库。
+
+“临时”是调用方的生命周期策略，不代表服务端自动创建一次性资源。任务结束且不再需要上下文时，应清理 Agent：
+
+```bash
+curl --fail-with-body \
+  -X DELETE \
+  -H "Authorization: Bearer $CURSOR_API_KEY" \
+  "https://api.cursor.com/v1/agents/$AGENT_ID"
+```
+
+删除不可恢复；如需保留并暂时隐藏，应使用官方 archive 端点。
+
+## Run 状态、流与后续提示
+
+常用端点：
+
+| 端点 | 用途 |
+|---|---|
+| `POST /v1/agents` | 创建 Agent 并启动首个 run |
+| `GET /v1/agents` | 列出 Agent |
+| `GET /v1/agents/{id}` | 获取 Agent 元数据 |
+| `POST /v1/agents/{id}/runs` | 在现有上下文中提交后续提示 |
+| `GET /v1/agents/{id}/runs/{runId}` | 查询 run 状态与结果 |
+| `GET /v1/agents/{id}/runs/{runId}/stream` | 使用 SSE 接收 run 事件 |
+| `POST /v1/agents/{id}/runs/{runId}/cancel` | 取消活跃 run |
+| `DELETE /v1/agents/{id}` | 永久删除 Agent |
+
+run 状态包括 `CREATING`、`RUNNING`、`FINISHED`、`ERROR`、`CANCELLED` 和 `EXPIRED`。SSE 断线恢复应使用服务端返回的事件 ID 和 `Last-Event-ID`，不要解析事件 ID 的内部格式。
+
+## 服务账户的用户范围令牌
+
+团队 My Machines worker 可由具备 agent scope 的服务账户 Key 调用：
+
+```http
+POST /v1/sub-tokens
+```
+
+请求必须且只能提供一个活跃团队成员：
 
 ```json
 {
-  "platform": "cursor",
-  "type": "cookie",
-  "proxy_id": 12,
-  "model_id": "cursor-chat",
-  "prompt": "Reply with OK.",
-  "credentials": {
-    "cookie": "_vcrcs=<value>; ...",
-    "cursor_upstream_model": "google/gemini-3-flash",
-    "cursor_referer": "https://cursor.com/docs"
-  }
+  "forUserEmail": "alice@example.com"
 }
 ```
 
-响应只返回安全的验证消息和截断后的文本摘要，不回显 Cookie。该接口只允许 `adobe/oauth` 和 `cursor/cookie`，其他平台或类型返回 `400`。
+或：
 
-Cookie 属于敏感凭据：列表、详情、预检响应、导出和日志仅暴露 `credentials_status.has_cookie` 或安全摘要，不会返回明文。编辑支持保留、替换和显式清除；Cursor 没有自动刷新能力，`refresh` 会提示管理员手动替换 Cookie。
-
-## 模型目录与映射
-
-默认公开模型：
-
-- `cursor-chat`
-- `google/gemini-3-flash`
-
-两者默认映射到 `google/gemini-3-flash`。Cursor 文档聊天没有官方动态模型目录，管理员应通过账号或渠道模型映射显式增加别名，不应把映射别名描述成 Cursor 官方支持模型。
-
-“Cursor 内部模型（可选）”是高级覆盖项，优先级为：账号 `cursor_upstream_model` → 账号模型映射 → `cursor.default_model`。普通管理员应保持留空，避免无意绕过已有模型映射。
-
-## 工具调用兼容模式
-
-Sub2API 将工具 JSON Schema 压缩后作为文本指令发送，并解析如下响应块：
-
-````text
-```json action
-{"tool":"tool_name","parameters":{"key":"value"}}
+```json
+{
+  "forUserId": 42
+}
 ```
-````
 
-参数缺失、JSON 无法可靠修复或强制工具未返回时会产生协议错误；实现不会补造参数、隐藏拒绝文本或伪造工具执行结果。
+返回的 `accessToken` 是短期用户范围令牌，官方规范当前有效期为 1 小时，仅用于相应 worker；它不是可长期存储或继续签发子令牌的 API Key。
 
-## 计费、Usage 与 Quota
+## Beta 与功能灰度
 
-- 请求按实际平台 `cursor` 记录。
-- 输入/输出 Token 使用上游 usage 或本地估算。
-- 上游基础成本默认可为零；管理员可通过 Cursor Channel 配置 per-token 或 per-request 用户价格。
-- Cursor 加入用户日/周/月平台 Quota。
-- 账号用量仅显示本地请求、Token、账号成本、用户成本以及 Cookie 状态，不显示不存在的 Cursor credits。
+- Cloud Agents API 整体应视为官方 Beta，调用方必须兼容字段新增、功能灰度和 `feature_unavailable`。
+- `envVars` 也是灰度中的 Beta 能力：未向账户开放时，创建请求可能静默忽略该字段。首次用于生产前，必须在实际 run 中验证变量已注入。
+- `envVars` 最多 50 个，名称不能以 `CURSOR_` 开头；值由 Cursor 加密保存、注入 Agent shell，并随 Agent 删除。
+- `envVars` 不能与调用方自定义 `agentId` 同时使用。需要会话密钥时应省略 `agentId`，由服务端生成。
 
-## 调度与错误处理
+## 计费边界
 
-Cursor 分组只允许绑定 Cursor 账号，fallback 链也必须保持 `cursor` 平台。
+Cursor 官方定价页将 Cloud Agents 纳入符合条件的付费计划，并将模型使用量与超额按需使用纳入 Cursor 自身账单。实际可用额度、模型费率、按需开关、团队限制和企业条款以 Cursor Dashboard 与官方定价文档为准。
 
-- 401/403、Challenge、429、5xx 与网络错误可在流开始前切换同组 Cursor 账号。
-- 400/422 等内容或参数错误不可通过换号规避。
-- 一旦向客户端写出流事件，禁止切换账号，避免拼接两个上游响应。
+Sub2API 必须保持以下边界：
 
-Ops 中上游端点固定显示为 `/api/chat`，错误日志和审计日志会脱敏 Cookie。
+1. **Cursor 侧费用**：Cursor 套餐、模型用量、Cloud Agent 执行和按需超额费用，由 Cursor 向 API Key 所属用户或团队计费。
+2. **Sub2API 侧费用**：仅在管理员明确配置本地渠道价格、用户价格或请求附加费时，由 Sub2API 记录和结算。
+3. 不得把本地 Token 估算、本地余额、平台 Quota 或 Channel 价格显示为 Cursor 官方 credits。
+4. `GET /v1/agents/{id}/usage` 等早期访问能力可能返回 `403 feature_unavailable`；不可据此虚构零用量或无限额度。
+5. 若同时启用 Cursor 按需计费与 Sub2API 本地计费，应在运营页面明确提示两套账单可能同时发生，避免用户误认为本地结算替代 Cursor 官方账单。
 
-## 配置
+## 配置示例
 
 ```yaml
 cursor:
-  base_url: "https://cursor.com"
+  base_url: "https://api.cursor.com"
   request_timeout_seconds: 120
   stream_idle_timeout_seconds: 60
-  default_model: "google/gemini-3-flash"
-  referer: "https://cursor.com/docs"
-  user_agent: "Mozilla/5.0 ..."
-  max_history_tokens: 24000
-  max_history_messages: 100
-  max_auto_continue: 0
-  responses_ttl_seconds: 86400
-  tool_description_max_length: 1024
 ```
 
-`base_url` 必须使用 HTTPS，且主机只能是 `cursor.com` 或其子域名。`max_auto_continue` 当前为保留配置且默认必须保持 `0`；客户端应根据标准结束原因自行决定是否继续，不使用语义猜测或拒绝绕过。两步预检复用现有 Cursor 超时、Referer、User-Agent、代理和 TLS 指纹设置，不新增默认配置或示例配置项。
+API Key 属于账号凭据，不应写入共享配置模板。`base_url` 应保持为官方 HTTPS 地址；如未来允许覆盖，也必须限制到可信 Cursor API 主机，避免凭据被发送到非官方端点。
+
+## 迁移检查
+
+从旧 Cookie 文档聊天实现迁移时，应确认：
+
+- 已删除浏览器扩展、扩展打包器、Release 附件和 `/downloads/cursor-cookie-importer.zip`；
+- 管理端不再要求 `_vcrcs`、Cookie 过期时间、Referer 或浏览器 User-Agent；
+- 凭据类型改为用户 API Key 或服务账户 API Key；
+- 健康检查使用 `/v1/me`，模型发现使用 `/v1/models`；
+- Agent 调用使用 `/v1/agents` 与 run 端点，而不是 `/api/chat` 或通用聊天补全协议；
+- Cursor 官方账单与 Sub2API 本地账单在 UI、API 和文档中明确分开。

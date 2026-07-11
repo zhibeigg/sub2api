@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"sort"
@@ -13,24 +14,22 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	cursorpkg "github.com/Wei-Shaw/sub2api/internal/pkg/cursor"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
 
 // CursorGatewayService adapts Anthropic Messages, OpenAI Chat Completions and
-// OpenAI Responses requests to Cursor's documentation-chat SSE endpoint.
+// OpenAI Responses requests to Cursor's asynchronous Cloud Agents API.
 type CursorGatewayService struct {
-	httpUpstream        HTTPUpstream
-	proxyRepo           ProxyRepository
-	tlsFPProfileService *TLSFingerprintProfileService
-	redisClient         *redis.Client
-	cfg                 *config.Config
+	httpUpstream HTTPUpstream
+	proxyRepo    ProxyRepository
+	redisClient  *redis.Client
+	cfg          *config.Config
 }
 
-func NewCursorGatewayService(httpUpstream HTTPUpstream, proxyRepo ProxyRepository, tlsFPProfileService *TLSFingerprintProfileService, redisClient *redis.Client, cfg *config.Config) *CursorGatewayService {
-	return &CursorGatewayService{httpUpstream: httpUpstream, proxyRepo: proxyRepo, tlsFPProfileService: tlsFPProfileService, redisClient: redisClient, cfg: cfg}
+func NewCursorGatewayService(httpUpstream HTTPUpstream, proxyRepo ProxyRepository, _ *TLSFingerprintProfileService, redisClient *redis.Client, cfg *config.Config) *CursorGatewayService {
+	return &CursorGatewayService{httpUpstream: httpUpstream, proxyRepo: proxyRepo, redisClient: redisClient, cfg: cfg}
 }
 
 type cursorRequestEnvelope struct {
@@ -65,39 +64,31 @@ func (s *CursorGatewayService) ForwardResponses(ctx context.Context, c *gin.Cont
 	return s.forward(ctx, c, account, body, cursorpkg.ProtocolResponses)
 }
 
-func (s *CursorGatewayService) Probe(ctx context.Context, account *Account, model, prompt string) (string, error) {
+func (s *CursorGatewayService) Probe(ctx context.Context, account *Account, _, _ string) (string, error) {
 	if s == nil || s.httpUpstream == nil {
 		return "", errors.New("cursor HTTP upstream is not configured")
 	}
-	if account == nil || !account.IsCursorCookie() {
-		return "", errors.New("a Cursor cookie account is required")
+	if account == nil || !account.IsCursorAPIKey() {
+		return "", errors.New("a Cursor API key account is required")
 	}
 	if err := ValidateCursorAccountCredentials(account.Type, account.Credentials); err != nil {
 		return "", err
 	}
-	if strings.TrimSpace(model) == "" {
-		model = "cursor-chat"
-	}
-	upstreamModel, _ := account.ResolveMappedModel(model)
-	if override := cursorAccountSetting(account, "cursor_upstream_model"); override != "" {
-		upstreamModel = override
-	}
-	if strings.TrimSpace(prompt) == "" {
-		prompt = "Reply with OK."
-	}
-	client, err := s.newClient(ctx, account, upstreamModel)
+	client, err := s.newCloudClient(ctx, account)
 	if err != nil {
 		return "", err
 	}
-	payload, err := client.BuildPayload(&cursorpkg.Dialogue{Messages: []cursorpkg.DialogueMessage{{Role: "user", Text: prompt}}}, cursorpkg.BuildOptions{Model: upstreamModel, ConversationID: uuid.NewString(), MaxHistoryMessages: 4, MaxHistoryTokens: 2048})
+	identity, err := client.Me(ctx)
 	if err != nil {
 		return "", err
 	}
-	collected, _, err := collectCursorResponse(ctx, client, payload, time.Now())
-	if err != nil {
-		return "", err
+	if identity.UserEmail != "" {
+		return identity.UserEmail, nil
 	}
-	return collected.CleanText, nil
+	if identity.APIKeyName != "" {
+		return identity.APIKeyName, nil
+	}
+	return "Cursor API key verified", nil
 }
 
 func (s *CursorGatewayService) CountTokens(body []byte, protocol cursorpkg.Protocol) (int, error) {
@@ -122,8 +113,8 @@ func (s *CursorGatewayService) forward(ctx context.Context, c *gin.Context, acco
 	if s == nil || s.httpUpstream == nil {
 		return nil, errors.New("cursor HTTP upstream is not configured")
 	}
-	if account == nil || !account.IsCursorCookie() {
-		return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte("a Cursor cookie account is required")}
+	if account == nil || !account.IsCursorAPIKey() {
+		return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte("a Cursor API key account is required")}
 	}
 	if err := ValidateCursorAccountCredentials(account.Type, account.Credentials); err != nil {
 		return nil, &UpstreamFailoverError{StatusCode: http.StatusUnauthorized, ResponseBody: []byte(err.Error())}
@@ -159,11 +150,11 @@ func (s *CursorGatewayService) forward(ctx context.Context, c *gin.Context, acco
 		}
 		dialogue.Messages = append(append([]cursorpkg.DialogueMessage(nil), previous.Messages...), dialogue.Messages...)
 	}
-	client, err := s.newClient(ctx, account, upstreamModel)
+	client, err := s.newCloudClient(ctx, account)
 	if err != nil {
 		return nil, mapCursorError(err)
 	}
-	payload, err := client.BuildPayload(dialogue, cursorpkg.BuildOptions{
+	payload, err := cursorpkg.BuildPayload(dialogue, cursorpkg.BuildOptions{
 		Model:              upstreamModel,
 		ConversationID:     uuid.NewString(),
 		MaxHistoryMessages: s.cursorConfig().MaxHistoryMessages,
@@ -173,10 +164,21 @@ func (s *CursorGatewayService) forward(ctx context.Context, c *gin.Context, acco
 		return nil, mapCursorError(err)
 	}
 	estimatedInput := estimateCursorPayloadTokens(payload)
-	collected, firstTokenMs, err := collectCursorResponse(ctx, client, payload, start)
+	created, err := client.CreateAgent(ctx, cursorpkg.CreateAgentRequest{
+		Prompt: cursorpkg.CloudPrompt{Text: cursorpkg.RenderAgentPrompt(payload)},
+		Model:  cursorCloudModelRef(account, upstreamModel),
+		Name:   "Sub2API compatibility request",
+	})
 	if err != nil {
 		return nil, mapCursorError(err)
 	}
+	completed := false
+	defer func() { s.cleanupCloudAgent(client, created.Agent.ID, created.Run.ID, !completed) }()
+	collected, firstTokenMs, err := collectCloudResponse(ctx, client, created, start)
+	if err != nil {
+		return nil, mapCursorError(err)
+	}
+	completed = true
 	if err := validateCursorToolResult(dialogue, collected.Actions); err != nil {
 		return nil, &UpstreamFailoverError{StatusCode: http.StatusBadGateway, ResponseBody: []byte(err.Error())}
 	}
@@ -214,9 +216,9 @@ func (s *CursorGatewayService) forward(ctx context.Context, c *gin.Context, acco
 	}, nil
 }
 
-func (s *CursorGatewayService) newClient(ctx context.Context, account *Account, model string) (*cursorpkg.Client, error) {
+func (s *CursorGatewayService) newCloudClient(ctx context.Context, account *Account) (*cursorpkg.CloudClient, error) {
 	cfg := s.cursorConfig()
-	endpoint, err := cursorEndpoint(cfg.BaseURL)
+	baseURL, err := cursorEndpoint(cfg.BaseURL)
 	if err != nil {
 		return nil, err
 	}
@@ -228,20 +230,9 @@ func (s *CursorGatewayService) newClient(ctx context.Context, account *Account, 
 			proxyURL = proxy.URL()
 		}
 	}
-	var profile *tlsfingerprint.Profile
-	if s.tlsFPProfileService != nil {
-		profile = s.tlsFPProfileService.ResolveTLSProfile(account)
-	}
-	httpClient := &http.Client{Transport: &cursorRoundTripper{upstream: s.httpUpstream, proxyURL: proxyURL, accountID: account.ID, concurrency: account.Concurrency, profile: profile}}
-	referer := cursorAccountSetting(account, "cursor_referer")
-	if referer == "" {
-		referer = cfg.Referer
-	}
-	return cursorpkg.NewClient(httpClient, cursorpkg.Credential{Cookie: account.GetCredential("cookie")}, cursorpkg.ClientConfig{
-		BaseURL:           endpoint,
-		Model:             model,
-		Referer:           referer,
-		UserAgent:         cfg.UserAgent,
+	httpClient := &http.Client{Transport: &cursorRoundTripper{upstream: s.httpUpstream, proxyURL: proxyURL, accountID: account.ID, concurrency: account.Concurrency}}
+	return cursorpkg.NewCloudClient(httpClient, account.GetCredential("api_key"), cursorpkg.CloudClientConfig{
+		BaseURL:           baseURL,
 		RequestTimeout:    durationSeconds(cfg.RequestTimeoutSeconds, 120),
 		StreamIdleTimeout: durationSeconds(cfg.StreamIdleTimeoutSeconds, 60),
 		MaxErrorBody:      8 << 10,
@@ -252,7 +243,7 @@ func (s *CursorGatewayService) cursorConfig() config.CursorConfig {
 	if s != nil && s.cfg != nil {
 		return s.cfg.Cursor
 	}
-	return config.CursorConfig{BaseURL: "https://cursor.com", DefaultModel: "google/gemini-3-flash", Referer: "https://cursor.com/docs", UserAgent: "sub2api-cursor/1", RequestTimeoutSeconds: 120, StreamIdleTimeoutSeconds: 60, MaxHistoryTokens: 24000, MaxHistoryMessages: 100}
+	return config.CursorConfig{BaseURL: cursorpkg.DefaultCloudBaseURL, DefaultModel: "auto", RequestTimeoutSeconds: 120, StreamIdleTimeoutSeconds: 60, MaxHistoryTokens: 24000, MaxHistoryMessages: 100}
 }
 
 func durationSeconds(value, fallback int) time.Duration {
@@ -265,20 +256,16 @@ func durationSeconds(value, fallback int) time.Duration {
 func cursorEndpoint(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		raw = "https://cursor.com"
+		raw = cursorpkg.DefaultCloudBaseURL
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
 		return "", fmt.Errorf("Cursor base_url must be a valid HTTPS URL")
 	}
-	host := strings.ToLower(parsed.Hostname())
-	if host != "cursor.com" && !strings.HasSuffix(host, ".cursor.com") {
-		return "", fmt.Errorf("Cursor base_url host must be cursor.com or its subdomain")
+	if !strings.EqualFold(parsed.Hostname(), "api.cursor.com") {
+		return "", fmt.Errorf("Cursor base_url host must be api.cursor.com")
 	}
 	parsed.Path = strings.TrimRight(parsed.Path, "/")
-	if !strings.HasSuffix(parsed.Path, "/api/chat") {
-		parsed.Path += "/api/chat"
-	}
 	parsed.RawQuery = ""
 	parsed.Fragment = ""
 	return parsed.String(), nil
@@ -289,37 +276,76 @@ type cursorRoundTripper struct {
 	proxyURL    string
 	accountID   int64
 	concurrency int
-	profile     *tlsfingerprint.Profile
 }
 
 func (t *cursorRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	return t.upstream.DoWithTLS(req, t.proxyURL, t.accountID, t.concurrency, t.profile)
+	return t.upstream.Do(req, t.proxyURL, t.accountID, t.concurrency)
 }
 
-func collectCursorResponse(ctx context.Context, client *cursorpkg.Client, payload *cursorpkg.Request, start time.Time) (cursorCollected, *int, error) {
+func collectCloudResponse(ctx context.Context, client *cursorpkg.CloudClient, created *cursorpkg.CreateAgentResponse, start time.Time) (cursorCollected, *int, error) {
 	var out cursorCollected
-	var text strings.Builder
+	var streamed strings.Builder
+	var finalText string
 	var firstTokenMs *int
-	err := client.Stream(ctx, payload, func(event cursorpkg.SSEEvent) error {
-		if event.Delta != "" {
-			if firstTokenMs == nil {
-				ms := int(time.Since(start).Milliseconds())
-				firstTokenMs = &ms
-			}
-			text.WriteString(event.Delta)
-		}
-		if usage := event.EventUsage(); usage != nil {
+	err := client.StreamRun(ctx, created.Agent.ID, created.Run.ID, func(event cursorpkg.CloudSSEEvent) error {
+		name := strings.ToLower(strings.TrimSpace(event.Event))
+		if usage := cloudEventUsage(event.Data); usage != nil {
 			out.Usage = *usage
 		}
-		if event.FinishReason != "" {
-			out.FinishReason = event.FinishReason
+		switch name {
+		case "error":
+			message := cloudEventError(event.Data)
+			if message == "" {
+				message = "Cursor Cloud Agent run failed"
+			}
+			return cursorpkg.HTTPError(http.StatusBadGateway, "stream run", message)
+		case "result":
+			if text := cloudEventText(event.Data); text != "" {
+				finalText = text
+			}
+			out.FinishReason = "stop"
+		case "interaction_update":
+			if text := cloudEventDelta(event.Data); text != "" {
+				if firstTokenMs == nil {
+					ms := int(time.Since(start).Milliseconds())
+					firstTokenMs = &ms
+				}
+				streamed.WriteString(text)
+			}
+		case "assistant":
+			if streamed.Len() == 0 {
+				if text := cloudEventText(event.Data); text != "" {
+					streamed.WriteString(text)
+				}
+			}
 		}
 		return nil
 	})
 	if err != nil {
 		return out, firstTokenMs, err
 	}
-	out.Text = text.String()
+	if finalText == "" {
+		finalText = streamed.String()
+	}
+	if finalText == "" {
+		run, waitErr := waitForCloudRun(ctx, client, created.Agent.ID, created.Run.ID)
+		if waitErr != nil {
+			return out, firstTokenMs, waitErr
+		}
+		finalText = cloudEventText(run.Result)
+		if run.Usage != nil {
+			out.Usage = cursorpkg.Usage{InputTokens: run.Usage.InputTokens, OutputTokens: run.Usage.OutputTokens, TotalTokens: run.Usage.TotalTokens}
+		}
+		if finalText == "" {
+			return out, firstTokenMs, cursorpkg.HTTPError(http.StatusBadGateway, "get run", "Cursor run finished without a result")
+		}
+	}
+	if firstTokenMs == nil && finalText != "" {
+		ms := int(time.Since(start).Milliseconds())
+		firstTokenMs = &ms
+	}
+	out.Text = finalText
+	out.FinishReason = "stop"
 	actions, clean, err := cursorpkg.ParseActions(out.Text)
 	if err != nil {
 		return out, firstTokenMs, err
@@ -332,6 +358,215 @@ func collectCursorResponse(ctx context.Context, client *cursorpkg.Client, payloa
 	out.Actions = actions
 	out.CleanText = clean
 	return out, firstTokenMs, nil
+}
+
+func waitForCloudRun(ctx context.Context, client *cursorpkg.CloudClient, agentID, runID string) (*cursorpkg.CloudRun, error) {
+	const pollInterval = 500 * time.Millisecond
+	for {
+		run, err := client.GetRun(ctx, agentID, runID)
+		if err != nil {
+			return nil, err
+		}
+		switch strings.ToUpper(strings.TrimSpace(run.Status)) {
+		case "FINISHED", "COMPLETED":
+			return run, nil
+		case "ERROR", "CANCELLED", "EXPIRED":
+			return nil, cursorpkg.HTTPError(http.StatusBadGateway, "get run", "Cursor run ended with status "+run.Status)
+		case "CREATING", "RUNNING", "":
+		default:
+			return nil, cursorpkg.HTTPError(http.StatusBadGateway, "get run", "Cursor returned unknown run status "+run.Status)
+		}
+		timer := time.NewTimer(pollInterval)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func cursorCloudModelRef(account *Account, model string) *cursorpkg.ModelRef {
+	model = strings.TrimSpace(model)
+	if model == "" || strings.EqualFold(model, "auto") {
+		return nil
+	}
+	ref := &cursorpkg.ModelRef{ID: model}
+	if account == nil || account.Credentials == nil {
+		return ref
+	}
+	if raw, ok := account.Credentials["cursor_model_params"]; ok {
+		encoded, err := json.Marshal(raw)
+		if err == nil {
+			_ = json.Unmarshal(encoded, &ref.Params)
+		}
+	}
+	return ref
+}
+
+func (s *CursorGatewayService) cleanupCloudAgent(client *cursorpkg.CloudClient, agentID, runID string, cancelRun bool) {
+	if client == nil || agentID == "" {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if cancelRun && runID != "" {
+			_ = client.CancelRun(ctx, agentID, runID)
+		}
+
+		var lastErr error
+		for attempt := 1; attempt <= 3; attempt++ {
+			if err := client.DeleteAgent(ctx, agentID); err == nil {
+				return
+			} else {
+				lastErr = err
+			}
+			if attempt == 3 {
+				break
+			}
+			timer := time.NewTimer(time.Duration(attempt) * 250 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
+				lastErr = ctx.Err()
+				attempt = 3
+			case <-timer.C:
+			}
+		}
+		slog.Warn("cursor_agent_cleanup_failed", "agent_id", agentID, "run_id", runID, "error", lastErr)
+	}()
+}
+
+func cloudEventDelta(data json.RawMessage) string {
+	var value any
+	if len(data) == 0 || json.Unmarshal(data, &value) != nil {
+		return ""
+	}
+	if object, ok := value.(map[string]any); ok {
+		for _, key := range []string{"delta", "textDelta", "text_delta"} {
+			if text, ok := object[key].(string); ok {
+				return text
+			}
+		}
+		if eventType, _ := object["type"].(string); strings.Contains(strings.ToLower(eventType), "text") {
+			if text, ok := object["text"].(string); ok {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func cloudEventText(data json.RawMessage) string {
+	var value any
+	if len(data) == 0 || json.Unmarshal(data, &value) != nil {
+		return ""
+	}
+	return cloudTextValue(value)
+}
+
+func cloudTextValue(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case []any:
+		var builder strings.Builder
+		for _, item := range typed {
+			builder.WriteString(cloudTextValue(item))
+		}
+		return builder.String()
+	case map[string]any:
+		for _, key := range []string{"text", "result", "output", "content", "message"} {
+			if child, ok := typed[key]; ok {
+				if text := cloudTextValue(child); text != "" {
+					return text
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func cloudEventUsage(data json.RawMessage) *cursorpkg.Usage {
+	var value any
+	if len(data) == 0 || json.Unmarshal(data, &value) != nil {
+		return nil
+	}
+	object := findCloudObject(value, "usage")
+	if object == nil {
+		object, _ = value.(map[string]any)
+	}
+	if object == nil {
+		return nil
+	}
+	usage := &cursorpkg.Usage{
+		InputTokens:  cloudInt(object, "inputTokens", "input_tokens"),
+		OutputTokens: cloudInt(object, "outputTokens", "output_tokens"),
+		TotalTokens:  cloudInt(object, "totalTokens", "total_tokens"),
+	}
+	if usage.InputTokens == 0 && usage.OutputTokens == 0 && usage.TotalTokens == 0 {
+		return nil
+	}
+	return usage
+}
+
+func findCloudObject(value any, key string) map[string]any {
+	switch typed := value.(type) {
+	case map[string]any:
+		if child, ok := typed[key].(map[string]any); ok {
+			return child
+		}
+		for _, child := range typed {
+			if found := findCloudObject(child, key); found != nil {
+				return found
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if found := findCloudObject(child, key); found != nil {
+				return found
+			}
+		}
+	}
+	return nil
+}
+
+func cloudInt(object map[string]any, keys ...string) int {
+	for _, key := range keys {
+		if value, ok := object[key].(float64); ok {
+			return int(value)
+		}
+	}
+	return 0
+}
+
+func cloudEventError(data json.RawMessage) string {
+	var value any
+	if len(data) == 0 || json.Unmarshal(data, &value) != nil {
+		return ""
+	}
+	return cloudErrorValue(value)
+}
+
+func cloudErrorValue(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case map[string]any:
+		for _, key := range []string{"message", "detail", "error"} {
+			if child, ok := typed[key]; ok {
+				if text := cloudErrorValue(child); text != "" {
+					return text
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func validateCursorToolResult(dialogue *cursorpkg.Dialogue, actions []cursorpkg.Action) error {

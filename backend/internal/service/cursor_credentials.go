@@ -2,24 +2,21 @@ package service
 
 import (
 	"fmt"
-	"net/http"
 	"strings"
-	"time"
 )
 
 var cursorCredentialKeys = map[string]struct{}{
-	"cookie":                {},
-	"cookie_expires_at":     {},
+	"api_key":               {},
 	"cursor_upstream_model": {},
-	"cursor_referer":        {},
+	"cursor_model_params":   {},
 }
 
-// ValidateCursorAccountCredentials validates the manually supplied Cursor
-// documentation-chat session cookie. Cursor does not expose an OAuth or refresh
-// flow for this endpoint, so an effective _vcrcs cookie is mandatory.
+// ValidateCursorAccountCredentials validates a Cursor Cloud Agents API key.
+// User API keys and service-account API keys are both accepted; the live /v1/me
+// probe is responsible for checking authorization and revocation status.
 func ValidateCursorAccountCredentials(accountType string, credentials map[string]any) error {
-	if strings.TrimSpace(accountType) != AccountTypeCookie {
-		return fmt.Errorf("Cursor accounts must use type %q", AccountTypeCookie)
+	if strings.TrimSpace(accountType) != AccountTypeAPIKey {
+		return fmt.Errorf("Cursor accounts must use type %q", AccountTypeAPIKey)
 	}
 	for key := range credentials {
 		if _, allowed := cursorCredentialKeys[key]; allowed {
@@ -32,48 +29,20 @@ func ValidateCursorAccountCredentials(accountType string, credentials map[string
 		}
 	}
 
-	cookie := strings.TrimSpace(credentialString(credentials, "cookie"))
-	if cookie == "" {
-		return fmt.Errorf("Cursor credentials require a cookie containing _vcrcs")
+	apiKey := strings.TrimSpace(credentialString(credentials, "api_key"))
+	if apiKey == "" {
+		return fmt.Errorf("Cursor credentials require a non-empty API key")
 	}
-	request := &http.Request{Header: make(http.Header)}
-	request.Header.Set("Cookie", cookie)
-	found := false
-	for _, parsed := range request.Cookies() {
-		if parsed.Name == "_vcrcs" && strings.TrimSpace(parsed.Value) != "" {
-			found = true
-			break
-		}
+	if len(apiKey) > 8192 {
+		return fmt.Errorf("Cursor API key exceeds 8192 characters")
 	}
-	if !found {
-		return fmt.Errorf("Cursor cookie must contain a non-empty _vcrcs value")
-	}
-	if raw, ok := credentials["cookie_expires_at"]; ok && credentialReplacementPresent(raw) {
-		if normalizeCursorCookieExpiry(raw) == "" {
-			return fmt.Errorf("Cursor cookie_expires_at must be an RFC3339 time or Unix timestamp")
-		}
+	if strings.ContainsAny(apiKey, "\r\n\x00") {
+		return fmt.Errorf("Cursor API key contains invalid control characters")
 	}
 	return nil
 }
 
-// NormalizeCursorCredentialExpiry stores optional operator-provided expiry in a
-// stable UTC RFC3339 representation. The value is advisory only.
-func NormalizeCursorCredentialExpiry(credentials map[string]any) {
-	if credentials == nil {
-		return
-	}
-	if raw, ok := credentials["cookie_expires_at"]; ok {
-		if normalized := normalizeCursorCookieExpiry(raw); normalized != "" {
-			credentials["cookie_expires_at"] = normalized
-		}
-	}
-}
-
-func normalizeCursorCookieExpiry(value any) string {
-	temp := &Account{Credentials: map[string]any{"expires_at": value}}
-	expiresAt := temp.GetCredentialAsTime("expires_at")
-	if expiresAt == nil || expiresAt.IsZero() {
-		return ""
-	}
-	return expiresAt.UTC().Format(time.RFC3339)
-}
+// NormalizeCursorCredentialExpiry is retained as a no-op for compatibility
+// with older service call sites. Cloud Agents API keys do not carry a local
+// cookie expiry value.
+func NormalizeCursorCredentialExpiry(map[string]any) {}

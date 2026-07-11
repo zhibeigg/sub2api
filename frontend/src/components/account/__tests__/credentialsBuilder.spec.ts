@@ -11,7 +11,6 @@ import {
   isHeaderOverridePlatform,
   splitHeaderOverridesObject,
   validateHeaderOverrideRows,
-  buildCursorCookieHeader,
   buildCursorCreateCredentials,
   buildCursorCredentialUpdate,
   createCursorCredentialEditState,
@@ -24,44 +23,29 @@ import {
 } from '../credentialsBuilder'
 
 describe('Cursor credentials', () => {
-  it('builds a minimal Cookie header from an imported _vcrcs value', () => {
-    expect(buildCursorCookieHeader('safe-token')).toBe('_vcrcs=safe-token')
-    expect(buildCursorCookieHeader('')).toBeNull()
-    expect(buildCursorCookieHeader(' leading-space')).toBeNull()
-    expect(buildCursorCookieHeader('secret; injected=1')).toBeNull()
-    expect(buildCursorCookieHeader('line\nbreak')).toBeNull()
-  })
-
-  it('builds trimmed create credentials and omits empty metadata', () => {
-    expect(buildCursorCreateCredentials({
-      cookie: '  _vcrcs=secret  ',
-      cookie_expires_at: ' 2026-08-01T00:00:00Z ',
-      cursor_upstream_model: ' google/gemini-3-flash ',
-      cursor_referer: ' https://cursor.com/docs '
-    })).toEqual({
-      cookie: '_vcrcs=secret',
-      cookie_expires_at: '2026-08-01T00:00:00Z',
-      cursor_upstream_model: 'google/gemini-3-flash',
-      cursor_referer: 'https://cursor.com/docs'
+  it('builds trimmed API Key create credentials', () => {
+    expect(buildCursorCreateCredentials({ api_key: '  cursor-key  ' })).toEqual({
+      api_key: 'cursor-key'
     })
+    expect(buildCursorCreateCredentials({ api_key: '   ' })).toEqual({})
   })
 
-  it('keeps cookie by default and emits only replace or clear', () => {
+  it('keeps API Key by default and emits only replace or clear', () => {
     const state = createCursorCredentialEditState()
-    expect(buildCursorCredentialUpdate(state, {})).toEqual({})
-    state.cookie = { action: 'replace', value: ' new-cookie ' }
-    expect(buildCursorCredentialUpdate(state, { cursor_upstream_model: ' model ' })).toEqual({
-      credentials: { cookie: 'new-cookie', cursor_upstream_model: 'model' }
+    expect(buildCursorCredentialUpdate(state)).toEqual({})
+    state.api_key = { action: 'replace', value: ' new-key ' }
+    expect(buildCursorCredentialUpdate(state)).toEqual({
+      credentials: { api_key: 'new-key' }
     })
-    state.cookie = { action: 'clear', value: 'ignored' }
-    expect(buildCursorCredentialUpdate(state, {})).toEqual({ clear_credentials: ['cookie'] })
+    state.api_key = { action: 'clear', value: 'ignored' }
+    expect(buildCursorCredentialUpdate(state)).toEqual({ clear_credentials: ['api_key'] })
   })
 
-  it('resets transient cookie edit state without exposing an existing value', () => {
+  it('resets transient API Key edit state without exposing an existing value', () => {
     const state = createCursorCredentialEditState()
-    state.cookie = { action: 'replace', value: 'secret' }
+    state.api_key = { action: 'replace', value: 'secret' }
     resetCursorCredentialEditState(state)
-    expect(state.cookie).toEqual({ action: 'keep', value: '' })
+    expect(state.api_key).toEqual({ action: 'keep', value: '' })
   })
 })
 

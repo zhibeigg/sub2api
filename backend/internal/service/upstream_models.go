@@ -92,7 +92,41 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 		return nil, newUpstreamModelSyncUnsupportedError("Adobe Firefly does not expose a dynamic upstream model list; use the local Firefly catalog", nil)
 	}
 	if account.Platform == PlatformCursor {
-		return nil, newUpstreamModelSyncUnsupportedError("Cursor documentation chat does not expose an official dynamic model list; use the controlled local catalog", nil)
+		if account.Type != AccountTypeAPIKey {
+			return nil, newUpstreamModelSyncUnsupportedError("Cursor Cloud Agents model sync requires an API key account", nil)
+		}
+		if s.cursorGatewayService == nil {
+			return nil, newUpstreamModelSyncConfigError("Cursor gateway service is not configured", nil)
+		}
+		if err := ValidateCursorAccountCredentials(account.Type, account.Credentials); err != nil {
+			return nil, newUpstreamModelSyncConfigError("Invalid Cursor API key credentials", err)
+		}
+		client, err := s.cursorGatewayService.newCloudClient(ctx, account)
+		if err != nil {
+			return nil, newUpstreamModelSyncConfigError("Failed to create Cursor Cloud Agents client", err)
+		}
+		models, err := client.ListModels(ctx)
+		if err != nil {
+			return nil, newUpstreamModelSyncUpstreamError("Failed to request Cursor Cloud Agents model list", err)
+		}
+		modelIDs := make([]string, 0, len(models))
+		seen := make(map[string]struct{}, len(models))
+		for _, model := range models {
+			id := strings.TrimSpace(model.ID)
+			if id == "" {
+				continue
+			}
+			if _, exists := seen[id]; exists {
+				continue
+			}
+			seen[id] = struct{}{}
+			modelIDs = append(modelIDs, id)
+		}
+		sort.Strings(modelIDs)
+		if len(modelIDs) == 0 {
+			return nil, newUpstreamModelSyncUpstreamError("Cursor returned no supported models", nil)
+		}
+		return modelIDs, nil
 	}
 
 	if s.httpUpstream == nil {

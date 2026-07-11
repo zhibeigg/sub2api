@@ -177,8 +177,8 @@ Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的
 
 ## 核心功能
 
-- **多账号管理** - 支持多种上游账号类型（OAuth、API Key、Cookie），原生集成 Anthropic、OpenAI、Gemini、Antigravity、Grok、Kiro（AWS CodeWhisperer，提供 Claude 模型）、Adobe Firefly 与 Cursor 文档聊天
-- **Cursor 文档聊天接入** - 提供可选 Chrome/Edge 登录助手，用户主动操作后打开 Cursor 并只导入 `_vcrcs`，保留手动 Cookie 兜底；支持创建前两步凭据预检、Anthropic Messages/OpenAI Chat Completions/Responses 兼容、Redis `previous_response_id`、本地用量计费，并明确不虚构 OAuth 与订阅额度能力（[接入文档](docs/CURSOR_INTEGRATION.md)）
+- **多账号管理** - 支持多种上游账号类型（OAuth、API Key、服务账户），原生集成 Anthropic、OpenAI、Gemini、Antigravity、Grok、Kiro（AWS CodeWhisperer，提供 Claude 模型）、Adobe Firefly 与 Cursor 官方 Cloud Agents API
+- **Cursor Cloud Agents API（Beta）** - 使用 `https://api.cursor.com`、用户或 agent-scoped 服务账户 API Key、`/v1/me` 凭据检查和 `/v1/models` 模型发现，支持关联仓库或临时无仓库 Agent，并明确区分 Cursor 官方套餐/按需费用与 Sub2API 本地计费（[接入文档](docs/CURSOR_INTEGRATION.md)）
 - **Kiro 原生接入** - 内建 AWS Builder ID 设备码、IAM Identity Center（PKCE）、SSO Token 导入与凭证 JSON 四种登录方式，支持 token 自动刷新、订阅/用量/超额查询、健康检查与动态模型发现
 - **Adobe Firefly 原生接入** - 支持 IMS 凭据创建前两步预检、安全管理与自动续期、profile/credits 展示、OpenAI Images 兼容图片生成与编辑、Redis 异步视频任务和成功轮询幂等媒体结算（[接入文档](docs/ADOBE_INTEGRATION.md)）
 - **API Key 分发** - 为用户生成和管理 API Key
@@ -748,17 +748,17 @@ Sub2API 将 Adobe 作为独立的 `adobe` 平台接入。Adobe 分组只调度 A
 
 ---
 
-## Cursor 文档聊天支持
+## Cursor Cloud Agents 官方 API 支持
 
-Sub2API 将 Cursor 作为独立的 `cursor` 平台接入，使用包含 `_vcrcs` 的 Cookie。可选 Chrome/Edge 登录助手会打开 Cursor 原站，等待用户正常完成登录，仅读取 `_vcrcs` 并返回发起操作的后台标签页；同时保留手动 Cookie 输入。该能力并非 Cursor 桌面端账户或官方 OAuth/账户 API。
+Sub2API 的 Cursor 接入文档现以 `https://api.cursor.com` 上的官方 Cloud Agents API Beta 为准。认证使用 Cursor Dashboard 签发的用户 API Key 或 agent-scoped 团队服务账户 API Key，不再使用浏览器 Cookie 或旧登录助手扩展。
 
-- 管理后台可从 `/downloads/cursor-cookie-importer.zip` 下载随版本提供的扩展；商店版发布前需以“加载已解压扩展”方式安装。
-- 兼容 `/v1/messages`、`/v1/chat/completions`、`/v1/responses`、`/v1/messages/count_tokens` 与 `/v1/models`。
-- 支持流式响应、本地 Token 估算、模型映射、同平台故障切换、Channel 定价、Usage、Ops 和平台 Quota。
-- 工具调用采用明确的 JSON action 兼容约定，并非 Cursor 原生工具协议。
-- 扩展不读取密码或其他 Cookie，也不自动处理验证码/Vercel Challenge；不支持图片、音频、文件、官方订阅 credits、Cookie 自动刷新、浏览器 stealth 或 Challenge 绕过。
+- 使用 `GET /v1/me` 验证当前密钥；用户 Key 可返回所有者字段，服务账户/团队 Key 不返回个人所有者字段。
+- 使用 `GET /v1/models` 获取可用模型 ID 与参数；需要 Cursor 账户默认模型时应省略 `model`。
+- 使用 `POST /v1/agents` 创建 Agent。同时省略 `repos` 和 `env`（或发送 `repos: []`）即可创建适合临时任务的无仓库 Agent；上下文不再需要时应显式删除。
+- Cloud Agents API 是官方 Beta，部分能力可能按账户灰度或返回 `feature_unavailable`，生产依赖前必须实际验证。
+- Cursor 套餐用量、模型用量、Cloud Agent 执行和按需超额费用属于 Cursor 官方账单；Sub2API 只结算管理员明确配置的本地价格，不得把本地用量显示为 Cursor 官方 credits。
 
-凭据、安全边界、配置、协议转换、计费与运维详见 [Cursor 接入文档](docs/CURSOR_INTEGRATION.md)。
+认证、端点、服务账户、临时无仓库 Agent、Beta 边界与计费拆分详见 [Cursor 接入文档](docs/CURSOR_INTEGRATION.md)。
 
 ---
 

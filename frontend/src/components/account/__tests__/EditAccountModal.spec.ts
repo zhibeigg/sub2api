@@ -166,6 +166,20 @@ function buildAccount() {
   } as any
 }
 
+function buildCursorAccount() {
+  return {
+    ...buildAccount(),
+    id: 6,
+    name: 'Cursor Key',
+    platform: 'cursor',
+    type: 'apikey',
+    credentials: {
+      model_mapping: { 'cursor-small': 'cursor-small' }
+    },
+    credentials_status: { has_api_key: true }
+  } as any
+}
+
 function buildOpenAISparkShadowAccount() {
   const account = buildAccount()
   return {
@@ -705,6 +719,55 @@ describe('EditAccountModal', () => {
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.openai_oauth_responses_websockets_v2_mode).toBe('http_bridge')
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.openai_oauth_responses_websockets_v2_enabled).toBe(true)
+  })
+
+  it('keeps the existing Cursor API Key by default', async () => {
+    const account = buildCursorAccount()
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).not.toHaveProperty('api_key')
+    expect(updateAccountMock.mock.calls[0]?.[1]?.clear_credentials).toBeUndefined()
+  })
+
+  it('replaces the Cursor API Key when requested', async () => {
+    const account = buildCursorAccount()
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    const section = wrapper.get('[data-testid="cursor-edit-credentials"]')
+    await section.get('select').setValue('replace')
+    await section.get('[data-testid="cursor-api-key-input"]').setValue(' new-cursor-key ')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials?.api_key).toBe('new-cursor-key')
+    expect(updateAccountMock.mock.calls[0]?.[1]?.clear_credentials).toBeUndefined()
+  })
+
+  it('clears the Cursor API Key when explicitly confirmed', async () => {
+    const account = buildCursorAccount()
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    const wrapper = mountModal(account)
+    await wrapper.get('[data-testid="cursor-edit-credentials"] select').setValue('clear')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock.mock.calls[0]?.[1]?.clear_credentials).toEqual(['api_key'])
+    expect(updateAccountMock.mock.calls[0]?.[1]?.credentials).not.toHaveProperty('api_key')
+    confirmSpy.mockRestore()
   })
 
   it('allows saving apikey account when backend redacted api_key but credentials_status reports it exists', async () => {

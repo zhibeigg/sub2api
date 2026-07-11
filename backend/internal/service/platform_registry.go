@@ -53,8 +53,8 @@ var platformCapabilities = map[string]PlatformCapabilities{
 		DefaultConcurrency: 1,
 	},
 	PlatformCursor: {
-		AccountTypes:       accountTypeSet(AccountTypeCookie),
-		UpstreamModelSync:  false,
+		AccountTypes:       accountTypeSet(AccountTypeAPIKey),
+		UpstreamModelSync:  true,
 		DefaultConcurrency: 1,
 	},
 	PlatformKiro: {
