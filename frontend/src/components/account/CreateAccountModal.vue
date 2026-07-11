@@ -3115,26 +3115,117 @@
       <section v-if="form.platform === 'cursor'" class="space-y-4" data-testid="cursor-credentials-form">
         <div>
           <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.accounts.cursor.credentialsTitle') }}</h3>
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.credentialsHint') }}</p>
+          <p class="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-gray-400">{{ t('admin.accounts.cursor.credentialsHint') }}</p>
         </div>
-        <div>
-          <label class="input-label" for="cursor-cookie">{{ t('admin.accounts.cursor.cookie') }}</label>
-          <input id="cursor-cookie" v-model="cursorCredentials.cookie" type="password" autocomplete="new-password" class="input font-mono" :placeholder="t('admin.accounts.cursor.cookiePlaceholder')" data-testid="cursor-cookie-input" data-1p-ignore data-lpignore="true" data-bwignore="true" />
+
+        <div class="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-dark-600 dark:bg-dark-800/70" data-testid="cursor-browser-login-card">
+          <div class="flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between">
+            <div class="flex min-w-0 gap-3">
+              <span
+                class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border"
+                :class="cursorBrowserLoginStatusTone === 'error'
+                  ? 'border-red-200 bg-red-50 text-red-600 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300'
+                  : cursorBrowserLoginStatusTone === 'success'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300'
+                    : cursorBrowserLoginStatusTone === 'active'
+                      ? 'border-lime-300 bg-lime-50 text-lime-700 dark:border-lime-800 dark:bg-lime-950/30 dark:text-lime-300'
+                      : 'border-gray-200 bg-gray-50 text-gray-500 dark:border-dark-500 dark:bg-dark-700 dark:text-gray-300'"
+                aria-hidden="true"
+              >
+                <svg v-if="cursorBrowserLogin.busy.value || verifyingCredentials || submitting" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle class="opacity-25" cx="12" cy="12" r="9" stroke="currentColor" stroke-width="3" />
+                  <path class="opacity-80" fill="currentColor" d="M21 12a9 9 0 00-9-9v3a6 6 0 016 6h3z" />
+                </svg>
+                <svg v-else-if="cursorBrowserLoginStatusTone === 'success'" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="m5 12 4 4L19 6" />
+                </svg>
+                <svg v-else class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M15 7h3a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-8a3 3 0 0 1 3-3h3" />
+                  <path d="m9 11 3 3 3-3M12 14V3" />
+                </svg>
+              </span>
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.accounts.cursor.browserLogin.title') }}</p>
+                <p class="mt-1 text-sm leading-5" :class="cursorBrowserLoginStatusTone === 'error' ? 'text-red-600 dark:text-red-300' : 'text-gray-500 dark:text-gray-400'" aria-live="polite">
+                  {{ t(cursorBrowserLoginStatusKey) }}
+                </p>
+                <p v-if="cursorBrowserLogin.extensionVersion.value" class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                  {{ t('admin.accounts.cursor.browserLogin.extensionVersion', { version: cursorBrowserLogin.extensionVersion.value }) }}
+                </p>
+              </div>
+            </div>
+
+            <button
+              v-if="cursorBrowserLogin.available.value"
+              type="button"
+              class="btn btn-primary min-h-11 shrink-0"
+              :disabled="cursorBrowserLogin.busy.value || verifyingCredentials || submitting"
+              data-testid="cursor-browser-login-button"
+              @click="handleCursorBrowserLogin"
+            >
+              {{ t('admin.accounts.cursor.browserLogin.action') }}
+            </button>
+            <a
+              v-else-if="cursorBrowserLogin.state.value === 'unavailable'"
+              :href="CURSOR_EXTENSION_DOWNLOAD_URL"
+              download
+              class="btn btn-secondary min-h-11 shrink-0"
+              data-testid="cursor-extension-download"
+            >
+              {{ t('admin.accounts.cursor.browserLogin.downloadExtension') }}
+            </a>
+          </div>
+
+          <div class="border-t border-gray-100 px-4 py-3 text-xs leading-5 text-gray-500 dark:border-dark-600 dark:text-gray-400">
+            {{ t('admin.accounts.cursor.browserLogin.securityNote') }}
+          </div>
         </div>
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label class="input-label" for="cursor-cookie-expires-at">{{ t('admin.accounts.cursor.cookieExpiresAt') }}</label>
-            <input id="cursor-cookie-expires-at" v-model="cursorCredentials.cookie_expires_at" type="datetime-local" class="input" />
+
+        <details v-if="cursorBrowserLogin.state.value === 'unavailable'" class="group rounded-lg border border-dashed border-gray-300 px-4 py-3 dark:border-dark-500">
+          <summary class="cursor-pointer list-none text-sm font-medium text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 dark:text-gray-200">
+            {{ t('admin.accounts.cursor.browserLogin.installTitle') }}
+          </summary>
+          <ol class="mt-3 list-decimal space-y-1 pl-5 text-xs leading-5 text-gray-500 dark:text-gray-400">
+            <li>{{ t('admin.accounts.cursor.browserLogin.installStepDownload') }}</li>
+            <li>{{ t('admin.accounts.cursor.browserLogin.installStepExtensions') }}</li>
+            <li>{{ t('admin.accounts.cursor.browserLogin.installStepLoad') }}</li>
+            <li>{{ t('admin.accounts.cursor.browserLogin.installStepRefresh') }}</li>
+          </ol>
+        </details>
+
+        <details class="group rounded-lg border border-gray-200 dark:border-dark-600" :open="!cursorBrowserLogin.available.value" data-testid="cursor-manual-import">
+          <summary class="cursor-pointer list-none px-4 py-3 text-sm font-medium text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 dark:text-gray-200">
+            {{ t('admin.accounts.cursor.manualImport') }}
+          </summary>
+          <div class="border-t border-gray-100 px-4 py-4 dark:border-dark-600">
+            <label class="input-label" for="cursor-cookie">{{ t('admin.accounts.cursor.cookie') }}</label>
+            <input id="cursor-cookie" v-model="cursorCredentials.cookie" type="password" autocomplete="new-password" class="input font-mono" :placeholder="t('admin.accounts.cursor.cookiePlaceholder')" data-testid="cursor-cookie-input" data-1p-ignore data-lpignore="true" data-bwignore="true" />
+            <p class="input-hint">{{ t('admin.accounts.cursor.manualImportHint') }}</p>
           </div>
-          <div>
-            <label class="input-label" for="cursor-upstream-model">{{ t('admin.accounts.cursor.upstreamModel') }}</label>
-            <input id="cursor-upstream-model" v-model="cursorCredentials.cursor_upstream_model" type="text" class="input font-mono" :placeholder="t('admin.accounts.cursor.upstreamModelPlaceholder')" />
+        </details>
+
+        <details class="group rounded-lg border border-gray-200 dark:border-dark-600" data-testid="cursor-advanced-settings">
+          <summary class="cursor-pointer list-none px-4 py-3 text-sm font-medium text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 dark:text-gray-200">
+            {{ t('admin.accounts.cursor.advancedSettings') }}
+          </summary>
+          <div class="grid grid-cols-1 gap-4 border-t border-gray-100 px-4 py-4 dark:border-dark-600 sm:grid-cols-2">
+            <div>
+              <label class="input-label" for="cursor-cookie-expires-at">{{ t('admin.accounts.cursor.cookieExpiresAt') }}</label>
+              <input id="cursor-cookie-expires-at" v-model="cursorCredentials.cookie_expires_at" type="datetime-local" class="input" />
+              <p class="input-hint">{{ t('admin.accounts.cursor.cookieExpiresAtHint') }}</p>
+            </div>
+            <div>
+              <label class="input-label" for="cursor-upstream-model">{{ t('admin.accounts.cursor.upstreamModel') }}</label>
+              <input id="cursor-upstream-model" v-model="cursorCredentials.cursor_upstream_model" type="text" class="input font-mono" :placeholder="t('admin.accounts.cursor.upstreamModelPlaceholder')" />
+              <p class="input-hint">{{ t('admin.accounts.cursor.upstreamModelHint') }}</p>
+            </div>
+            <div class="sm:col-span-2">
+              <label class="input-label" for="cursor-referer">{{ t('admin.accounts.cursor.referer') }}</label>
+              <input id="cursor-referer" v-model="cursorCredentials.cursor_referer" type="url" class="input font-mono" :placeholder="t('admin.accounts.cursor.refererPlaceholder')" />
+              <p class="input-hint">{{ t('admin.accounts.cursor.refererHint') }}</p>
+            </div>
           </div>
-          <div class="sm:col-span-2">
-            <label class="input-label" for="cursor-referer">{{ t('admin.accounts.cursor.referer') }}</label>
-            <input id="cursor-referer" v-model="cursorCredentials.cursor_referer" type="url" class="input font-mono" :placeholder="t('admin.accounts.cursor.refererPlaceholder')" />
-          </div>
-        </div>
+        </details>
       </section>
 
       <section v-else-if="form.platform === 'adobe'" class="space-y-4" data-testid="adobe-credentials-form">
@@ -3335,7 +3426,7 @@
           v-if="isCredentialValidationFlow"
           type="submit"
           form="credential-validation-form"
-          :disabled="verifyingCredentials || submitting"
+          :disabled="verifyingCredentials || submitting || (form.platform === 'cursor' && !cursorCredentials.cookie.trim())"
           class="btn btn-primary"
           data-testid="validate-and-create-button"
         >
@@ -3666,6 +3757,12 @@ import { useGeminiOAuth } from '@/composables/useGeminiOAuth'
 import { useAntigravityOAuth } from '@/composables/useAntigravityOAuth'
 import { useGrokOAuth } from '@/composables/useGrokOAuth'
 import { useKiroOAuth } from '@/composables/useKiroOAuth'
+import {
+  CURSOR_EXTENSION_DOWNLOAD_URL,
+  CursorBrowserLoginError,
+  useCursorBrowserLogin,
+  type CursorBrowserLoginErrorCode
+} from '@/composables/useCursorBrowserLogin'
 import type {
   Proxy,
   AdminGroup,
@@ -3691,6 +3788,7 @@ import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import {
   applyAntigravityProjectID,
+  buildCursorCookieHeader,
   buildCursorCreateCredentials,
   buildAdobeCreateCredentials,
   validateAdobeCredentialSource,
@@ -3786,6 +3884,7 @@ const geminiOAuth = useGeminiOAuth() // For Gemini OAuth
 const antigravityOAuth = useAntigravityOAuth() // For Antigravity OAuth
 const grokOAuth = useGrokOAuth() // For Grok OAuth
 const kiroOAuth = useKiroOAuth() // For Kiro interactive login
+const cursorBrowserLogin = useCursorBrowserLogin()
 
 // Computed: current OAuth state for template binding
 const currentAuthUrl = computed(() => {
@@ -3876,6 +3975,45 @@ const credentialValidationSummary = computed(() => {
   if (result.expires_at) items.push({ label: t('admin.accounts.credentialsValidation.expiresAt'), value: result.expires_at })
   if (result.summary) items.push({ label: t('admin.accounts.credentialsValidation.summary'), value: result.summary })
   return items
+})
+
+const cursorBrowserLoginErrorKey: Record<CursorBrowserLoginErrorCode, string> = {
+  NOT_CONFIGURED: 'admin.accounts.cursor.browserLogin.errors.notConfigured',
+  BUSY: 'admin.accounts.cursor.browserLogin.errors.busy',
+  CURSOR_TAB_CLOSED: 'admin.accounts.cursor.browserLogin.errors.cursorTabClosed',
+  SOURCE_TAB_GONE: 'admin.accounts.cursor.browserLogin.errors.sourceTabGone',
+  SOURCE_DOCUMENT_CHANGED: 'admin.accounts.cursor.browserLogin.errors.sourceDocumentChanged',
+  COOKIE_NOT_FOUND: 'admin.accounts.cursor.browserLogin.errors.cookieNotFound',
+  TIMEOUT: 'admin.accounts.cursor.browserLogin.errors.timeout',
+  CANCELLED: 'admin.accounts.cursor.browserLogin.errors.cancelled',
+  ORIGIN_NOT_ALLOWED: 'admin.accounts.cursor.browserLogin.errors.originNotAllowed',
+  UNSUPPORTED_PROTOCOL: 'admin.accounts.cursor.browserLogin.errors.unsupportedProtocol',
+  INTERNAL_ERROR: 'admin.accounts.cursor.browserLogin.errors.internal',
+  INVALID_CREDENTIAL: 'admin.accounts.cursor.browserLogin.errors.invalidCredential'
+}
+
+const cursorBrowserLoginStatusKey = computed(() => {
+  if (verifyingCredentials.value) return 'admin.accounts.cursor.browserLogin.status.verifying'
+  if (submitting.value) return 'admin.accounts.cursor.browserLogin.status.creating'
+  switch (cursorBrowserLogin.state.value) {
+    case 'detecting': return 'admin.accounts.cursor.browserLogin.status.detecting'
+    case 'unavailable': return 'admin.accounts.cursor.browserLogin.status.unavailable'
+    case 'starting': return 'admin.accounts.cursor.browserLogin.status.opening'
+    case 'waiting_for_login': return 'admin.accounts.cursor.browserLogin.status.waiting'
+    case 'reading_cookie': return 'admin.accounts.cursor.browserLogin.status.reading'
+    case 'received': return 'admin.accounts.cursor.browserLogin.status.received'
+    case 'error': return cursorBrowserLogin.errorCode.value
+      ? cursorBrowserLoginErrorKey[cursorBrowserLogin.errorCode.value]
+      : 'admin.accounts.cursor.browserLogin.errors.internal'
+    default: return 'admin.accounts.cursor.browserLogin.status.ready'
+  }
+})
+
+const cursorBrowserLoginStatusTone = computed(() => {
+  if (cursorBrowserLogin.state.value === 'error') return 'error'
+  if (cursorBrowserLogin.state.value === 'received' || credentialValidationResult.value?.success) return 'success'
+  if (cursorBrowserLogin.busy.value || verifyingCredentials.value || submitting.value) return 'active'
+  return 'neutral'
 })
 
 const syncPreviewCredentials = computed(() => {
@@ -4399,6 +4537,7 @@ watch(
 watch(
   () => form.platform,
   (newPlatform) => {
+    if (newPlatform !== 'cursor') cursorBrowserLogin.cancel(true)
     // Reset base URL based on platform
     apiKeyBaseUrl.value =
       (newPlatform === 'openai')
@@ -4837,6 +4976,7 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
 
 // Methods
 const resetForm = () => {
+  cursorBrowserLogin.cancel(true)
   step.value = 1
   verifyingCredentials.value = false
   credentialValidationResult.value = null
@@ -4945,6 +5085,7 @@ const resetForm = () => {
 }
 
 const handleClose = () => {
+  cursorBrowserLogin.cancel(true)
   Object.assign(cursorCredentials, { cookie: '', cookie_expires_at: '', cursor_upstream_model: '', cursor_referer: '' })
   Object.assign(adobeCredentials, { access_token: '', cookie: '', device_token: '', device_id: '', password: '', expires_at: '' })
   adobeValidationAttempted.value = false
@@ -5328,6 +5469,29 @@ const handleValidateAndCreate = async () => {
   await doCreateAccount(payload)
 }
 
+const handleCursorBrowserLogin = async () => {
+  if (cursorBrowserLogin.busy.value || verifyingCredentials.value || submitting.value) return
+
+  credentialValidationResult.value = null
+  try {
+    const imported = await cursorBrowserLogin.start()
+    const cookieHeader = buildCursorCookieHeader(imported.value)
+    if (!cookieHeader) throw new CursorBrowserLoginError('INVALID_CREDENTIAL')
+
+    cursorCredentials.cookie = cookieHeader
+    cursorCredentials.cookie_expires_at = imported.expirationDate
+      ? formatDateTimeLocalInput(imported.expirationDate)
+      : ''
+    await handleValidateAndCreate()
+  } catch (error) {
+    if (error instanceof CursorBrowserLoginError) {
+      if (error.code !== 'CANCELLED') appStore.showError(t(cursorBrowserLoginErrorKey[error.code]))
+      return
+    }
+    appStore.showError(t('admin.accounts.cursor.browserLogin.errors.internal'))
+  }
+}
+
 const handleSubmit = async () => {
   if (isCredentialValidationFlow.value) {
     if (!form.name.trim()) {
@@ -5565,6 +5729,7 @@ const handleSubmit = async () => {
 }
 
 const goBackToBasicInfo = () => {
+  cursorBrowserLogin.cancel(true)
   step.value = 1
   credentialValidationResult.value = null
   oauth.resetState()

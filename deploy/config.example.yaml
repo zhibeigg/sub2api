@@ -1150,8 +1150,10 @@ adobe:
 # =============================================================================
 # Cursor Documentation Chat Configuration (Cursor 文档聊天反代配置)
 # =============================================================================
-# Cursor accounts use an administrator-supplied Cookie containing `_vcrcs`.
-# Cursor 账号使用管理员手动提供、包含 `_vcrcs` 的 Cookie；本服务不会启动浏览器或绕过挑战。
+# Cursor accounts use a Cookie containing `_vcrcs`. The optional local browser extension
+# can import that single Cookie after an explicit user action; no server-side browser setting is required.
+# Cursor 账号使用包含 `_vcrcs` 的 Cookie。可选本地浏览器扩展仅在用户主动操作后导入该 Cookie，
+# 无需服务端浏览器配置；本服务和扩展都不会绕过验证码、Vercel Challenge 或其他安全措施。
 cursor:
   base_url: "https://cursor.com"
   request_timeout_seconds: 120

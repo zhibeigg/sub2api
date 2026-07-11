@@ -11,6 +11,7 @@ import {
   isHeaderOverridePlatform,
   splitHeaderOverridesObject,
   validateHeaderOverrideRows,
+  buildCursorCookieHeader,
   buildCursorCreateCredentials,
   buildCursorCredentialUpdate,
   createCursorCredentialEditState,
@@ -23,17 +24,25 @@ import {
 } from '../credentialsBuilder'
 
 describe('Cursor credentials', () => {
+  it('builds a minimal Cookie header from an imported _vcrcs value', () => {
+    expect(buildCursorCookieHeader('safe-token')).toBe('_vcrcs=safe-token')
+    expect(buildCursorCookieHeader('')).toBeNull()
+    expect(buildCursorCookieHeader(' leading-space')).toBeNull()
+    expect(buildCursorCookieHeader('secret; injected=1')).toBeNull()
+    expect(buildCursorCookieHeader('line\nbreak')).toBeNull()
+  })
+
   it('builds trimmed create credentials and omits empty metadata', () => {
     expect(buildCursorCreateCredentials({
-      cookie: '  WorkosCursorSessionToken=secret  ',
+      cookie: '  _vcrcs=secret  ',
       cookie_expires_at: ' 2026-08-01T00:00:00Z ',
-      cursor_upstream_model: ' claude-sonnet-4-5 ',
-      cursor_referer: ' https://www.cursor.com/ '
+      cursor_upstream_model: ' google/gemini-3-flash ',
+      cursor_referer: ' https://cursor.com/docs '
     })).toEqual({
-      cookie: 'WorkosCursorSessionToken=secret',
+      cookie: '_vcrcs=secret',
       cookie_expires_at: '2026-08-01T00:00:00Z',
-      cursor_upstream_model: 'claude-sonnet-4-5',
-      cursor_referer: 'https://www.cursor.com/'
+      cursor_upstream_model: 'google/gemini-3-flash',
+      cursor_referer: 'https://cursor.com/docs'
     })
   })
 

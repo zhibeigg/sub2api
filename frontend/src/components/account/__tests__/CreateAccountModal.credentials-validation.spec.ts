@@ -1,27 +1,49 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, nextTick } from 'vue'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 
-const { createAccountMock, validateCredentialsMock, showErrorMock, makeOAuthMock, makeRef } = vi.hoisted(() => ({
-  createAccountMock: vi.fn(),
-  validateCredentialsMock: vi.fn(),
-  showErrorMock: vi.fn(),
-  makeRef: <T>(value: T) => ({ __v_isRef: true, value }),
-  makeOAuthMock: () => ({
-    authUrl: { value: '' },
-    sessionId: { value: '' },
-    state: { value: '' },
-    loading: { value: false },
-    error: { value: '' },
-    resetState: vi.fn(),
-    generateAuthUrl: vi.fn(),
-    validateRefreshToken: vi.fn(),
-    exchangeAuthCode: vi.fn(),
-    buildCredentials: vi.fn(() => ({})),
-    buildExtraInfo: vi.fn(() => ({})),
-    parseSessionKeys: vi.fn(() => [])
-  })
-}))
+const {
+  createAccountMock,
+  validateCredentialsMock,
+  showErrorMock,
+  makeOAuthMock,
+  makeRef,
+  cursorBrowserLoginMock
+} = vi.hoisted(() => {
+  const makeRef = <T>(value: T) => ({ __v_isRef: true, value })
+  return {
+    createAccountMock: vi.fn(),
+    validateCredentialsMock: vi.fn(),
+    showErrorMock: vi.fn(),
+    makeRef,
+    cursorBrowserLoginMock: {
+      state: makeRef<'ready' | 'unavailable' | 'starting' | 'waiting_for_login' | 'reading_cookie' | 'received' | 'error'>('ready'),
+      available: makeRef(true),
+      busy: makeRef(false),
+      extensionVersion: makeRef('0.34.5'),
+      errorCode: makeRef<string | null>(null),
+      initialize: vi.fn(),
+      ping: vi.fn(),
+      start: vi.fn(),
+      cancel: vi.fn(),
+      dispose: vi.fn()
+    },
+    makeOAuthMock: () => ({
+      authUrl: { value: '' },
+      sessionId: { value: '' },
+      state: { value: '' },
+      loading: { value: false },
+      error: { value: '' },
+      resetState: vi.fn(),
+      generateAuthUrl: vi.fn(),
+      validateRefreshToken: vi.fn(),
+      exchangeAuthCode: vi.fn(),
+      buildCredentials: vi.fn(() => ({})),
+      buildExtraInfo: vi.fn(() => ({})),
+      parseSessionKeys: vi.fn(() => [])
+    })
+  }
+})
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
@@ -72,6 +94,13 @@ vi.mock('@/composables/useGeminiOAuth', () => ({
 }))
 vi.mock('@/composables/useAntigravityOAuth', () => ({ useAntigravityOAuth: makeOAuthMock }))
 vi.mock('@/composables/useGrokOAuth', () => ({ useGrokOAuth: makeOAuthMock }))
+vi.mock('@/composables/useCursorBrowserLogin', () => ({
+  CURSOR_EXTENSION_DOWNLOAD_URL: '/downloads/cursor-cookie-importer.zip',
+  CursorBrowserLoginError: class CursorBrowserLoginError extends Error {
+    constructor(public readonly code: string) { super(code) }
+  },
+  useCursorBrowserLogin: () => cursorBrowserLoginMock
+}))
 vi.mock('@/composables/useKiroOAuth', () => ({
   useKiroOAuth: () => ({
     loading: makeRef(false),
@@ -149,6 +178,11 @@ const enterNameAndContinue = async (wrapper: ReturnType<typeof mountModal>) => {
 beforeEach(() => {
   vi.clearAllMocks()
   createAccountMock.mockResolvedValue({ id: 1 })
+  cursorBrowserLoginMock.state.value = 'ready'
+  cursorBrowserLoginMock.available.value = true
+  cursorBrowserLoginMock.busy.value = false
+  cursorBrowserLoginMock.extensionVersion.value = '0.34.5'
+  cursorBrowserLoginMock.errorCode.value = null
 })
 
 describe('CreateAccountModal Adobe/Cursor credential validation flow', () => {
@@ -221,6 +255,48 @@ describe('CreateAccountModal Adobe/Cursor credential validation flow', () => {
       type: 'cookie',
       concurrency: 1
     }))
+  })
+
+  it('imports only _vcrcs through the extension and automatically validates before creating', async () => {
+    validateCredentialsMock.mockResolvedValue({ success: true, platform: 'cursor', message: 'ok' })
+    cursorBrowserLoginMock.start.mockResolvedValue({ value: 'browser-secret', expirationDate: 1_800_000_000 })
+    const wrapper = mountModal()
+    await selectPlatform(wrapper, 'Cursor')
+    await enterNameAndContinue(wrapper)
+
+    await wrapper.get('[data-testid="cursor-browser-login-button"]').trigger('click')
+    await flushPromises()
+
+    expect(cursorBrowserLoginMock.start).toHaveBeenCalledOnce()
+    expect(validateCredentialsMock).toHaveBeenCalledWith(expect.objectContaining({
+      platform: 'cursor',
+      type: 'cookie',
+      credentials: expect.objectContaining({ cookie: '_vcrcs=browser-secret' })
+    }))
+    expect(createAccountMock).toHaveBeenCalledOnce()
+    expect(wrapper.text()).not.toContain('browser-secret')
+  })
+
+  it('offers the bundled extension download and manual fallback when the helper is unavailable', async () => {
+    cursorBrowserLoginMock.state.value = 'unavailable'
+    cursorBrowserLoginMock.available.value = false
+    const wrapper = mountModal()
+    await selectPlatform(wrapper, 'Cursor')
+    await enterNameAndContinue(wrapper)
+
+    expect(wrapper.get('[data-testid="cursor-extension-download"]').attributes('href')).toBe('/downloads/cursor-cookie-importer.zip')
+    expect(wrapper.get('[data-testid="cursor-manual-import"]').attributes()).toHaveProperty('open')
+    expect(wrapper.get('[data-testid="cursor-cookie-input"]').exists()).toBe(true)
+  })
+
+  it('keeps the internal model inside advanced settings with an empty safe default', async () => {
+    const wrapper = mountModal()
+    await selectPlatform(wrapper, 'Cursor')
+    await enterNameAndContinue(wrapper)
+
+    expect(wrapper.get('[data-testid="cursor-advanced-settings"]').text()).toContain('admin.accounts.cursor.advancedSettings')
+    expect((wrapper.get('#cursor-upstream-model').element as HTMLInputElement).value).toBe('')
+    expect(wrapper.text()).not.toContain('claude-sonnet-4-5')
   })
 
   it('preserves sensitive input when returning to step 1 and showing step 2 again', async () => {

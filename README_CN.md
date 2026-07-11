@@ -178,7 +178,7 @@ Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的
 ## 核心功能
 
 - **多账号管理** - 支持多种上游账号类型（OAuth、API Key、Cookie），原生集成 Anthropic、OpenAI、Gemini、Antigravity、Grok、Kiro（AWS CodeWhisperer，提供 Claude 模型）、Adobe Firefly 与 Cursor 文档聊天
-- **Cursor 文档聊天接入** - 支持手动 `_vcrcs` Cookie 账号、创建前两步凭据预检、Anthropic Messages/OpenAI Chat Completions/Responses 兼容、Redis `previous_response_id`、本地用量计费，并明确不虚构 OAuth 与订阅额度能力（[接入文档](docs/CURSOR_INTEGRATION.md)）
+- **Cursor 文档聊天接入** - 提供可选 Chrome/Edge 登录助手，用户主动操作后打开 Cursor 并只导入 `_vcrcs`，保留手动 Cookie 兜底；支持创建前两步凭据预检、Anthropic Messages/OpenAI Chat Completions/Responses 兼容、Redis `previous_response_id`、本地用量计费，并明确不虚构 OAuth 与订阅额度能力（[接入文档](docs/CURSOR_INTEGRATION.md)）
 - **Kiro 原生接入** - 内建 AWS Builder ID 设备码、IAM Identity Center（PKCE）、SSO Token 导入与凭证 JSON 四种登录方式，支持 token 自动刷新、订阅/用量/超额查询、健康检查与动态模型发现
 - **Adobe Firefly 原生接入** - 支持 IMS 凭据创建前两步预检、安全管理与自动续期、profile/credits 展示、OpenAI Images 兼容图片生成与编辑、Redis 异步视频任务和成功轮询幂等媒体结算（[接入文档](docs/ADOBE_INTEGRATION.md)）
 - **API Key 分发** - 为用户生成和管理 API Key
@@ -750,12 +750,13 @@ Sub2API 将 Adobe 作为独立的 `adobe` 平台接入。Adobe 分组只调度 A
 
 ## Cursor 文档聊天支持
 
-Sub2API 将 Cursor 作为独立的 `cursor` 平台接入，使用管理员手动提供、包含 `_vcrcs` 的 Cookie。该能力代理 Cursor 网站文档聊天端点，并非 Cursor 桌面端账户或官方 OAuth/账户 API。
+Sub2API 将 Cursor 作为独立的 `cursor` 平台接入，使用包含 `_vcrcs` 的 Cookie。可选 Chrome/Edge 登录助手会打开 Cursor 原站，等待用户正常完成登录，仅读取 `_vcrcs` 并返回发起操作的后台标签页；同时保留手动 Cookie 输入。该能力并非 Cursor 桌面端账户或官方 OAuth/账户 API。
 
+- 管理后台可从 `/downloads/cursor-cookie-importer.zip` 下载随版本提供的扩展；商店版发布前需以“加载已解压扩展”方式安装。
 - 兼容 `/v1/messages`、`/v1/chat/completions`、`/v1/responses`、`/v1/messages/count_tokens` 与 `/v1/models`。
 - 支持流式响应、本地 Token 估算、模型映射、同平台故障切换、Channel 定价、Usage、Ops 和平台 Quota。
 - 工具调用采用明确的 JSON action 兼容约定，并非 Cursor 原生工具协议。
-- 不支持图片、音频、文件、官方订阅 credits、Cookie 自动刷新、浏览器 stealth 或 Challenge 绕过。
+- 扩展不读取密码或其他 Cookie，也不自动处理验证码/Vercel Challenge；不支持图片、音频、文件、官方订阅 credits、Cookie 自动刷新、浏览器 stealth 或 Challenge 绕过。
 
 凭据、安全边界、配置、协议转换、计费与运维详见 [Cursor 接入文档](docs/CURSOR_INTEGRATION.md)。
 

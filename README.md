@@ -174,7 +174,7 @@ Sub2API is an AI API gateway platform designed to distribute and manage API quot
 ## Features
 
 - **Multi-Account Management** - Support multiple upstream account types (OAuth, API Key, Cookie); native integration for Anthropic, OpenAI, Gemini, Antigravity, Grok, Kiro (AWS CodeWhisperer, serving Claude models), Adobe Firefly, and Cursor documentation chat
-- **Cursor Documentation Chat Integration** - Manual `_vcrcs` Cookie accounts with a two-step preflight check before creation, Anthropic Messages, OpenAI Chat Completions and Responses compatibility, Redis-backed `previous_response_id`, local usage accounting, and explicit non-OAuth capability boundaries ([Integration Guide](docs/CURSOR_INTEGRATION.md))
+- **Cursor Documentation Chat Integration** - Optional Chrome/Edge login helper that opens Cursor and imports only `_vcrcs` after explicit approval, with manual Cookie fallback, two-step preflight validation, Anthropic Messages/OpenAI Chat Completions/Responses compatibility, Redis-backed `previous_response_id`, local usage accounting, and explicit non-OAuth boundaries ([Integration Guide](docs/CURSOR_INTEGRATION.md))
 - **Native Kiro Integration** - Built-in AWS Builder ID device code, IAM Identity Center (PKCE), SSO token import, and credentials-JSON login; automatic token refresh, subscription/usage/overage queries, health checks, dynamic model discovery, and compact daily request/token plus account-billed/user-billed statistics in the usage window
 - **Native Adobe Firefly Integration** - Two-step credential preflight before account creation, secure IMS credential lifecycle, automatic access-token renewal, profile and credits visibility, synchronous OpenAI-compatible image generation/editing, Redis-backed asynchronous video tasks, and idempotent media billing ([Integration Guide](docs/ADOBE_INTEGRATION.md))
 - **API Key Distribution** - Generate and manage API Keys for users
@@ -682,12 +682,13 @@ See the [Adobe integration guide](docs/ADOBE_INTEGRATION.md) for credentials, co
 
 ## Cursor Documentation Chat Support
 
-Sub2API supports Cursor as an independent `cursor` platform using a manually supplied Cookie containing `_vcrcs`. This proxies Cursor's website documentation chat endpoint, not Cursor desktop accounts or an official OAuth/account API.
+Sub2API supports Cursor as an independent `cursor` platform using a Cookie containing `_vcrcs`. The optional Chrome/Edge login helper opens Cursor's original website, waits for the user to complete normal login, reads only `_vcrcs`, and returns it to the admin tab that started the flow. Manual Cookie input remains available. This is not Cursor desktop account access or an official OAuth/account API.
 
+- The bundled extension can be downloaded from `/downloads/cursor-cookie-importer.zip`; unpacked installation is required until a store build is published.
 - Compatible endpoints: `/v1/messages`, `/v1/chat/completions`, `/v1/responses`, `/v1/messages/count_tokens`, and `/v1/models`.
 - Streaming, local token estimation, model mapping, same-platform failover, Channel pricing, Usage, Ops, and platform Quota are supported.
 - Tool calls use an explicit JSON-action compatibility convention; they are not a native Cursor tool protocol.
-- Images, audio, files, official subscription credits, automatic Cookie refresh, browser stealth, and challenge bypass are not provided.
+- The extension never reads passwords or other Cookies and does not automate CAPTCHA/Vercel Challenge. Images, audio, files, official subscription credits, automatic Cookie refresh, browser stealth, and challenge bypass are not provided.
 
 See the [Cursor integration guide](docs/CURSOR_INTEGRATION.md) for credentials, security boundaries, configuration, protocol details, billing, and operations.
 

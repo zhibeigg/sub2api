@@ -1,6 +1,19 @@
 export const CURSOR_SENSITIVE_CREDENTIAL_KEYS = ['cookie'] as const
+export const CURSOR_SESSION_COOKIE_NAME = '_vcrcs'
+export const CURSOR_SESSION_COOKIE_MAX_LENGTH = 16 * 1024
 export type CursorSensitiveCredentialKey = typeof CURSOR_SENSITIVE_CREDENTIAL_KEYS[number]
 export type CursorCredentialAction = 'keep' | 'replace' | 'clear'
+
+export function buildCursorCookieHeader(cookieValue: string): string | null {
+  if (!cookieValue || cookieValue.length > CURSOR_SESSION_COOKIE_MAX_LENGTH || cookieValue !== cookieValue.trim()) {
+    return null
+  }
+  for (const character of cookieValue) {
+    const code = character.charCodeAt(0)
+    if (code <= 0x20 || code === 0x7f || character === ';') return null
+  }
+  return `${CURSOR_SESSION_COOKIE_NAME}=${cookieValue}`
+}
 
 export interface CursorCredentialInput {
   cookie?: string
