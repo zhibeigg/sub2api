@@ -391,6 +391,28 @@
         </div>
       </div>
 
+      <!-- Account Type Selection (Cursor Cloud Agents API) -->
+      <div v-if="form.platform === 'cursor'" data-testid="cursor-account-type">
+        <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
+        <div class="mt-2 grid grid-cols-1 gap-3" data-tour="account-form-type">
+          <div
+            class="flex min-h-16 items-center gap-3 rounded-lg border-2 border-cyan-500 bg-cyan-50 p-3 text-left dark:bg-cyan-900/20"
+          >
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-600 text-white dark:bg-cyan-500">
+              <Icon name="key" size="sm" />
+            </div>
+            <div class="min-w-0">
+              <span class="block text-sm font-medium text-gray-900 dark:text-white">
+                {{ t('admin.accounts.cursor.cloudAgentsApiKey') }}
+              </span>
+              <span class="mt-0.5 block text-xs leading-5 text-gray-500 dark:text-gray-400">
+                {{ t('admin.accounts.cursor.cloudAgentsApiKeyHint') }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Account Type Selection (Grok - OAuth only) -->
       <div v-if="form.platform === 'grok'">
         <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
@@ -1139,8 +1161,11 @@
         </div>
       </div>
 
-      <!-- API Key input (only for apikey type, excluding Antigravity which has its own fields) -->
-      <div v-if="form.type === 'apikey' && form.platform !== 'antigravity'" class="space-y-4">
+      <!-- API Key input (Cursor validates its dedicated API Key in step 2) -->
+      <div
+        v-if="form.type === 'apikey' && form.platform !== 'antigravity' && form.platform !== 'cursor'"
+        class="space-y-4"
+      >
         <div>
           <label class="input-label">{{ t('admin.accounts.baseUrl') }}</label>
           <input
@@ -2001,10 +2026,11 @@
         />
       </div>
 
-      <!-- OpenAI / Grok / Kiro OAuth Model Mapping (OAuth 类型没有 apikey 容器，需要独立的模型映射区域) -->
+      <!-- Credential-based platforms use one dedicated model restriction section outside the generic API Key container. -->
       <div
-        v-if="(form.platform === 'openai' || form.platform === 'grok' || form.platform === 'adobe' || form.platform === 'cursor' || form.platform === 'kiro') && accountCategory === 'oauth-based'"
+        v-if="form.platform === 'cursor' || ((form.platform === 'openai' || form.platform === 'grok' || form.platform === 'adobe' || form.platform === 'kiro') && accountCategory === 'oauth-based')"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        data-testid="credential-model-restriction"
       >
         <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
@@ -4282,7 +4308,9 @@ const selectPlatform = (platform: AccountPlatform) => {
   if (platform === 'cursor') {
     accountCategory.value = 'oauth-based'
     addMethod.value = 'oauth'
-    modelRestrictionMode.value = 'whitelist'
+    modelRestrictionMode.value = 'mapping'
+    allowedModels.value = []
+    modelMappings.value = []
     form.type = 'apikey'
     form.concurrency = 1
     form.load_factor = null
@@ -4427,8 +4455,9 @@ watch(
     if (newPlatform === 'cursor') {
       accountCategory.value = 'oauth-based'
       addMethod.value = 'oauth'
-      modelRestrictionMode.value = 'whitelist'
-      allowedModels.value = [...getModelsByPlatform('cursor')]
+      modelRestrictionMode.value = 'mapping'
+      allowedModels.value = []
+      modelMappings.value = []
       form.type = 'apikey'
       form.concurrency = 1
       form.load_factor = null
@@ -5260,7 +5289,11 @@ const buildCredentialValidationCreatePayload = (): CreateAccountRequest | null =
       return null
     }
     const credentials: Record<string, unknown> = buildCursorCreateCredentials(cursorCredentials)
-    const modelMapping = buildModelMappingObject('whitelist', allowedModels.value, [])
+    const modelMapping = buildModelMappingObject(
+      modelRestrictionMode.value,
+      allowedModels.value,
+      modelMappings.value
+    )
     if (modelMapping) credentials.model_mapping = modelMapping
     return {
       ...form,

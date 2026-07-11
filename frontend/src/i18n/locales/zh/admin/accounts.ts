@@ -26,6 +26,8 @@ export default {
         checkedAt: '刷新于 {time}', expiry: '到期：{time}'
       },
       cursor: {
+        cloudAgentsApiKey: 'Cloud Agents API Key',
+        cloudAgentsApiKeyHint: '使用 Cursor 官方任务型 API，凭据将在下一步验证。',
         credentialsTitle: '连接 Cursor 账号',
         credentialsHint: '请输入 Cursor 官方 API Key。创建前会先验证凭据，验证成功后再保存账号。',
         apiKey: 'Cursor API Key',

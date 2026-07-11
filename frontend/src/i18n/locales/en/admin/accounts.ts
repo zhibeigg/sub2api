@@ -26,6 +26,8 @@ export default {
         checkedAt: 'Checked {time}', expiry: 'Expires: {time}'
       },
       cursor: {
+        cloudAgentsApiKey: 'Cloud Agents API Key',
+        cloudAgentsApiKeyHint: 'Uses the official task-based Cursor API. The credential is validated in the next step.',
         credentialsTitle: 'Connect a Cursor Account',
         credentialsHint: 'Enter an official Cursor API Key. The credential is validated before the account is created.',
         apiKey: 'Cursor API Key',

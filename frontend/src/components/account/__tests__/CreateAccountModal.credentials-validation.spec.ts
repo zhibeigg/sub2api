@@ -181,6 +181,47 @@ describe('CreateAccountModal Adobe/Cursor credential validation flow', () => {
     })
   })
 
+  it('renders Cursor as a dedicated Cloud Agents API Key flow without duplicated generic API Key fields', async () => {
+    const wrapper = mountModal()
+    await selectPlatform(wrapper, 'Cursor')
+
+    expect(wrapper.find('[data-testid="cursor-account-type"]').exists()).toBe(true)
+    expect(wrapper.findAll('[data-testid="credential-model-restriction"]')).toHaveLength(1)
+    expect(wrapper.text()).toContain('admin.accounts.cursor.cloudAgentsApiKey')
+    expect(wrapper.text()).toContain('admin.accounts.mapRequestModels')
+    expect(wrapper.text()).not.toContain('admin.accounts.baseUrl')
+    expect(wrapper.text()).not.toContain('admin.accounts.apiKeyHint')
+  })
+
+  it('preserves Cursor model mapping when validating and creating the account', async () => {
+    validateCredentialsMock.mockResolvedValue({ success: true, platform: 'cursor', message: 'ok' })
+    const wrapper = mountModal()
+    await selectPlatform(wrapper, 'Cursor')
+
+    const addMappingButton = wrapper.findAll('button').find(item => item.text().includes('admin.accounts.addMapping'))
+    expect(addMappingButton).toBeTruthy()
+    await addMappingButton!.trigger('click')
+    await wrapper.get('input[placeholder="admin.accounts.requestModel"]').setValue('claude-sonnet-5')
+    await wrapper.get('input[placeholder="admin.accounts.actualModel"]').setValue('claude-sonnet-4-6')
+
+    await enterNameAndContinue(wrapper)
+    await wrapper.get('[data-testid="cursor-api-key-input"]').setValue('cursor-api-key')
+    await wrapper.get('#credential-validation-form').trigger('submit')
+
+    expect(validateCredentialsMock).toHaveBeenCalledWith(expect.objectContaining({
+      credentials: expect.objectContaining({
+        api_key: 'cursor-api-key',
+        model_mapping: { 'claude-sonnet-5': 'claude-sonnet-4-6' }
+      })
+    }))
+    expect(createAccountMock).toHaveBeenCalledWith(expect.objectContaining({
+      credentials: expect.objectContaining({
+        api_key: 'cursor-api-key',
+        model_mapping: { 'claude-sonnet-5': 'claude-sonnet-4-6' }
+      })
+    }))
+  })
+
   it('does not create a Cursor account when credential validation fails', async () => {
     validateCredentialsMock.mockResolvedValue({ success: false, platform: 'cursor', message: 'invalid' })
     const wrapper = mountModal()
