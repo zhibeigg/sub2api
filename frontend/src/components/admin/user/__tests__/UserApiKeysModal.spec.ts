@@ -104,6 +104,8 @@ describe('UserApiKeysModal group bindings', () => {
     expect(trigger.text()).toContain('Claude')
     expect(trigger.text()).toContain('Codex')
     expect(trigger.text()).toContain('+1')
+    expect(wrapper.get('[data-test="admin-api-key-group-1"]').classes()).toContain('text-orange-600')
+    expect(wrapper.get('[data-test="admin-api-key-group-2"]').classes()).toContain('text-green-600')
 
     await trigger.trigger('click')
     await nextTick()

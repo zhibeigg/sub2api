@@ -48,12 +48,16 @@
                   <span
                     v-for="(binding, index) in visibleBindingsForKey(key)"
                     :key="binding.group_id"
-                    class="inline-flex min-w-0 items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5 py-1 dark:border-dark-600 dark:bg-dark-800"
+                    :data-test="`admin-api-key-group-${binding.group_id}`"
+                    :class="[
+                      'inline-flex min-w-0 items-center gap-1 rounded-md border px-1.5 py-1',
+                      platformBadgeClass(groupForBinding(binding)?.platform ?? '')
+                    ]"
                   >
-                    <span class="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-primary-100 text-[10px] font-semibold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">{{ index + 1 }}</span>
+                    <span class="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-white/70 text-[10px] font-semibold shadow-sm dark:bg-black/20">{{ index + 1 }}</span>
                     <PlatformIcon v-if="groupForBinding(binding)" :platform="groupForBinding(binding)!.platform" size="xs" />
-                    <span class="max-w-24 truncate font-medium text-gray-800 dark:text-gray-100">{{ groupForBinding(binding)?.name || `#${binding.group_id}` }}</span>
-                    <span class="font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">{{ formatMultiplier(rateForGroup(groupForBinding(binding))) }}</span>
+                    <span class="max-w-24 truncate font-semibold">{{ groupForBinding(binding)?.name || `#${binding.group_id}` }}</span>
+                    <span class="rounded bg-white/70 px-1 py-0.5 font-semibold tabular-nums shadow-sm dark:bg-black/20">{{ formatMultiplier(rateForGroup(groupForBinding(binding))) }}</span>
                   </span>
                   <span
                     v-if="orderedBindingsForKey(key).length > GROUP_BINDING_PREVIEW_LIMIT"
@@ -143,6 +147,7 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
 import { formatDateTime } from '@/utils/format'
+import { platformBadgeClass } from '@/utils/platformColors'
 import type { AdminGroup, AdminUser, ApiKey, ApiKeyGroupBinding, ApiKeyGroupBindingInput, Group } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'

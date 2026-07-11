@@ -43,6 +43,8 @@ describe('SortableGroupBindingPicker', () => {
 
     expect(wrapper.get('[data-test="selected-group-2"]').text()).toContain('Codex Pro')
     expect(wrapper.get('[data-test="selected-group-2"]').text()).toContain('0.65x')
+    expect(wrapper.get('[data-test="selected-group-2"]').classes()).toContain('text-green-600')
+    expect(wrapper.get('[data-test="add-group-1"]').classes()).toContain('text-orange-600')
 
     await wrapper.get('[data-test="add-group-1"]').trigger('click')
     expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toEqual([

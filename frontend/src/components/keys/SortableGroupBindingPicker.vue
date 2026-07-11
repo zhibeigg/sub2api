@@ -34,7 +34,10 @@
         <div
           v-for="(binding, index) in selected"
           :key="binding.group_id"
-          class="flex min-w-0 items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-2 dark:border-dark-600 dark:bg-dark-700/70"
+          :class="[
+            'flex min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2',
+            platformBadgeClass(groupFor(binding.group_id)?.platform ?? '')
+          ]"
           :data-test="`selected-group-${binding.group_id}`"
         >
           <button
@@ -53,14 +56,14 @@
             size="xs"
           />
           <div class="min-w-0 flex-1">
-            <div class="truncate text-sm font-medium text-gray-900 dark:text-white">
+            <div class="truncate text-sm font-semibold">
               {{ groupFor(binding.group_id)?.name ?? `#${binding.group_id}` }}
             </div>
-            <div class="truncate text-[11px] text-gray-500 dark:text-gray-400">
+            <div class="truncate text-[11px] opacity-70">
               {{ platformName(groupFor(binding.group_id)?.platform) }}
             </div>
           </div>
-          <span class="flex-shrink-0 rounded-md bg-emerald-50 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+          <span class="flex-shrink-0 rounded-md bg-white/70 px-1.5 py-0.5 text-xs font-semibold tabular-nums shadow-sm dark:bg-black/20">
             {{ formatMultiplier(rateForId(binding.group_id)) }}
           </span>
           <div class="flex flex-shrink-0 items-center">
@@ -107,7 +110,10 @@
           v-for="group in filteredAvailableGroups"
           :key="group.id"
           type="button"
-          class="flex w-full min-w-0 items-center gap-2 rounded-lg border border-transparent px-2.5 py-2 text-left transition-colors hover:border-gray-200 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:hover:border-dark-600 dark:hover:bg-dark-700"
+          :class="[
+            'flex w-full min-w-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-all hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:hover:brightness-110',
+            platformBadgeClass(group.platform)
+          ]"
           :data-test="`add-group-${group.id}`"
           @click="addGroup(group.id)"
         >
@@ -116,12 +122,12 @@
           </span>
           <PlatformIcon :platform="group.platform" size="xs" />
           <div class="min-w-0 flex-1">
-            <div class="truncate text-sm font-medium text-gray-800 dark:text-gray-100">{{ group.name }}</div>
-            <div class="truncate text-[11px] text-gray-500 dark:text-gray-400">
+            <div class="truncate text-sm font-semibold">{{ group.name }}</div>
+            <div class="truncate text-[11px] opacity-70">
               {{ platformName(group.platform) }}<template v-if="group.description"> · {{ group.description }}</template>
             </div>
           </div>
-          <span class="flex-shrink-0 text-xs font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">
+          <span class="flex-shrink-0 rounded-md bg-white/70 px-1.5 py-0.5 text-xs font-semibold tabular-nums shadow-sm dark:bg-black/20">
             {{ formatMultiplier(rateFor(group)) }}
           </span>
         </button>
@@ -145,7 +151,7 @@ import { useI18n } from 'vue-i18n'
 import { VueDraggable } from 'vue-draggable-plus'
 import Icon from '@/components/icons/Icon.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
-import { platformLabel } from '@/utils/platformColors'
+import { platformBadgeClass, platformLabel } from '@/utils/platformColors'
 import type { ApiKeyGroupBindingInput, Group } from '@/types'
 
 const props = withDefaults(defineProps<{
