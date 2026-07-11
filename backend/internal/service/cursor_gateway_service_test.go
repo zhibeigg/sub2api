@@ -68,7 +68,7 @@ func (s *cursorGatewayUpstreamStub) Do(req *http.Request, _ string, accountID in
 			output = s.outputs[0]
 			s.outputs = s.outputs[1:]
 		}
-		sse := "event: interaction_update\ndata: {\"type\":\"text_delta\",\"text\":\"" + output + "\",\"usage\":{\"inputTokens\":7,\"outputTokens\":3}}\n\n" +
+		sse := "event: interaction_update\ndata: {\"type\":\"text_delta\",\"text\":\"" + output + "\",\"usage\":{\"inputTokens\":7,\"outputTokens\":3,\"cacheWriteTokens\":2,\"cacheReadTokens\":5,\"reasoningTokens\":1}}\n\n" +
 			"event: result\ndata: {\"status\":\"FINISHED\",\"text\":\"" + output + "\"}\n\n"
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(sse))}, nil
 	case req.Method == http.MethodGet && strings.Contains(req.URL.Path, "/runs/"):
@@ -76,7 +76,7 @@ func (s *cursorGatewayUpstreamStub) Do(req *http.Request, _ string, accountID in
 		if s.runPollCount == 1 {
 			return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(strings.NewReader(`{"id":"run-1","agentId":"agent-1","status":"RUNNING"}`))}, nil
 		}
-		return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(strings.NewReader(`{"id":"run-1","agentId":"agent-1","status":"FINISHED","result":"polled"}`))}, nil
+		return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(strings.NewReader(`{"id":"run-1","agentId":"agent-1","status":"FINISHED","result":"polled","usage":{"inputTokens":11,"outputTokens":4,"cacheWriteTokens":3,"cacheReadTokens":6,"reasoningTokens":2,"totalTokens":24}}`))}, nil
 	case req.Method == http.MethodDelete || strings.HasSuffix(req.URL.Path, "/cancel"):
 		if s.cleanupCh != nil {
 			action := "delete"
@@ -137,6 +137,10 @@ func TestCursorGatewayForwardAnthropicCloudAgent(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), `"text":"hello"`)
 	require.Equal(t, 7, result.Usage.InputTokens)
 	require.Equal(t, 3, result.Usage.OutputTokens)
+	require.Equal(t, 2, result.Usage.CacheCreationInputTokens)
+	require.Equal(t, 5, result.Usage.CacheReadInputTokens)
+	require.Contains(t, recorder.Body.String(), `"cache_creation_input_tokens":2`)
+	require.Contains(t, recorder.Body.String(), `"cache_read_input_tokens":5`)
 	require.Equal(t, "auto", result.UpstreamModel)
 
 	select {
@@ -160,9 +164,13 @@ func TestCursorGatewayPollsRunWhenStreamEndsBeforeResult(t *testing.T) {
 	body := `{"model":"cursor-chat","stream":false,"messages":[{"role":"user","content":"hi"}]}`
 	c, recorder := newCursorGatewayTestContext(t, "/v1/messages", body, 3)
 
-	_, err := svc.Forward(context.Background(), c, cursorAPIKeyAccount(), []byte(body))
+	result, err := svc.Forward(context.Background(), c, cursorAPIKeyAccount(), []byte(body))
 	require.NoError(t, err)
 	require.Contains(t, recorder.Body.String(), `"text":"polled"`)
+	require.Equal(t, 11, result.Usage.InputTokens)
+	require.Equal(t, 4, result.Usage.OutputTokens)
+	require.Equal(t, 3, result.Usage.CacheCreationInputTokens)
+	require.Equal(t, 6, result.Usage.CacheReadInputTokens)
 	select {
 	case <-cleanupCh:
 	case <-time.After(time.Second):

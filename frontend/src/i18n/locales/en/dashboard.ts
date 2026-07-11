@@ -249,7 +249,7 @@ export default {
     totalTokens: 'Total Tokens',
     cacheTotal: 'Cache',
     cacheBreakdown: 'Cache Token Breakdown',
-    cacheCreationTokensLabel: 'Cache Creation',
+    cacheCreationTokensLabel: 'Cache Write',
     cacheReadTokensLabel: 'Cache Read',
     totalCost: 'Total Cost',
     standardCost: 'Standard',

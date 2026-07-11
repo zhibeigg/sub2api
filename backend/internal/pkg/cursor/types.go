@@ -30,9 +30,12 @@ type Context struct {
 }
 
 type Usage struct {
-	InputTokens  int `json:"inputTokens,omitempty"`
-	OutputTokens int `json:"outputTokens,omitempty"`
-	TotalTokens  int `json:"totalTokens,omitempty"`
+	InputTokens      int `json:"inputTokens,omitempty"`
+	OutputTokens     int `json:"outputTokens,omitempty"`
+	CacheWriteTokens int `json:"cacheWriteTokens,omitempty"`
+	CacheReadTokens  int `json:"cacheReadTokens,omitempty"`
+	ReasoningTokens  int `json:"reasoningTokens,omitempty"`
+	TotalTokens      int `json:"totalTokens,omitempty"`
 }
 
 type Protocol string

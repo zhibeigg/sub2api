@@ -396,6 +396,12 @@ export default {
         kiroOverage: '超额 {used} / {cap}',
         kiroContext: '上下文 {pct}%',
         kiroTodayStats: '今日用量：请求、Token、账号计费与用户扣费',
+        cacheWriteTokens: '缓存写入 Token',
+        cacheReadTokens: '缓存读取 Token',
+        cursorRefresh: '刷新检测',
+        cursorVerified: 'API Key 已验证',
+        cursorProbeFailed: 'API Key 检测失败',
+        cursorCheckedAt: '检测于 {time}',
         passiveSampled: '被动采样',
         activeQuery: '查询'
       },

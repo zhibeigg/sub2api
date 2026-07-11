@@ -12,6 +12,20 @@
         <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">
           {{ formatTokens }}
         </span>
+        <span
+          v-if="(windowStats.cache_write_tokens ?? 0) > 0"
+          class="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+          :title="t('admin.accounts.usageWindow.cacheWriteTokens')"
+        >
+          CW {{ formatCacheWriteTokens }}
+        </span>
+        <span
+          v-if="(windowStats.cache_read_tokens ?? 0) > 0"
+          class="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+          :title="t('admin.accounts.usageWindow.cacheReadTokens')"
+        >
+          CR {{ formatCacheReadTokens }}
+        </span>
         <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800" :title="t('usage.accountBilled')">
           A ${{ formatAccountCost }}
         </span>
@@ -185,6 +199,14 @@ const formatRequests = computed(() => {
 const formatTokens = computed(() => {
   if (!props.windowStats) return ''
   return formatCompactNumber(props.windowStats.tokens)
+})
+
+const formatCacheWriteTokens = computed(() => {
+  return formatCompactNumber(props.windowStats?.cache_write_tokens ?? 0)
+})
+
+const formatCacheReadTokens = computed(() => {
+  return formatCompactNumber(props.windowStats?.cache_read_tokens ?? 0)
 })
 
 const formatAccountCost = computed(() => {

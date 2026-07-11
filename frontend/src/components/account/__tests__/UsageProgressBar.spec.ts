@@ -83,6 +83,26 @@ describe('UsageProgressBar', () => {
     expect(wrapper.text()).not.toContain('usage.resetNow')
   })
 
+  it('窗口统计会展示缓存写入和缓存读取 Token', () => {
+    const wrapper = mount(UsageProgressBar, {
+      props: {
+        label: '1d',
+        utilization: 25,
+        color: 'indigo',
+        windowStats: {
+          requests: 2,
+          tokens: 1000,
+          cache_write_tokens: 300,
+          cache_read_tokens: 400,
+          cost: 0.25
+        }
+      }
+    })
+
+    expect(wrapper.text()).toContain('CW 300')
+    expect(wrapper.text()).toContain('CR 400')
+  })
+
   it('resetsAt 已过期且利用率为 0 时仍显示「现在」', () => {
     const wrapper = mount(UsageProgressBar, {
       props: {

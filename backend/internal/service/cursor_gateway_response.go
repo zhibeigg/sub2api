@@ -46,7 +46,7 @@ func writeCursorJSON(c *gin.Context, protocol cursorpkg.Protocol, responseID, mo
 		c.JSON(http.StatusOK, gin.H{
 			"id": responseID, "type": "message", "role": "assistant", "model": model, "content": content,
 			"stop_reason": cursorAnthropicStopReason(result), "stop_sequence": nil,
-			"usage": gin.H{"input_tokens": result.Usage.InputTokens, "output_tokens": result.Usage.OutputTokens},
+			"usage": cursorAnthropicUsage(result.Usage, true),
 		})
 	}
 }
@@ -139,7 +139,7 @@ func writeCursorStream(c *gin.Context, protocol cursorpkg.Protocol, responseID, 
 		}
 		return write("response.completed", gin.H{"type": "response.completed", "sequence_number": sequence, "response": gin.H{"id": responseID, "object": "response", "status": "completed", "model": model, "usage": cursorResponsesUsage(result.Usage)}})
 	default:
-		if err := write("message_start", gin.H{"type": "message_start", "message": gin.H{"id": responseID, "type": "message", "role": "assistant", "model": model, "content": []any{}, "stop_reason": nil, "stop_sequence": nil, "usage": gin.H{"input_tokens": result.Usage.InputTokens, "output_tokens": 0}}}); err != nil {
+		if err := write("message_start", gin.H{"type": "message_start", "message": gin.H{"id": responseID, "type": "message", "role": "assistant", "model": model, "content": []any{}, "stop_reason": nil, "stop_sequence": nil, "usage": cursorAnthropicUsage(result.Usage, false)}}); err != nil {
 			return err
 		}
 		index := 0
@@ -205,11 +205,47 @@ func cursorAnthropicStopReason(result cursorCollected) string {
 }
 
 func cursorOpenAIUsage(usage cursorpkg.Usage) gin.H {
-	return gin.H{"prompt_tokens": usage.InputTokens, "completion_tokens": usage.OutputTokens, "total_tokens": usage.InputTokens + usage.OutputTokens}
+	inputTokens := cursorTotalInputTokens(usage)
+	return gin.H{
+		"prompt_tokens":     inputTokens,
+		"completion_tokens": usage.OutputTokens,
+		"total_tokens":      inputTokens + usage.OutputTokens,
+		"prompt_tokens_details": gin.H{
+			"cached_tokens":      usage.CacheReadTokens,
+			"cache_write_tokens": usage.CacheWriteTokens,
+		},
+	}
 }
 
 func cursorResponsesUsage(usage cursorpkg.Usage) gin.H {
-	return gin.H{"input_tokens": usage.InputTokens, "output_tokens": usage.OutputTokens, "total_tokens": usage.InputTokens + usage.OutputTokens, "input_tokens_details": gin.H{"cached_tokens": 0}, "output_tokens_details": gin.H{"reasoning_tokens": 0}}
+	inputTokens := cursorTotalInputTokens(usage)
+	return gin.H{
+		"input_tokens":  inputTokens,
+		"output_tokens": usage.OutputTokens,
+		"total_tokens":  inputTokens + usage.OutputTokens,
+		"input_tokens_details": gin.H{
+			"cached_tokens":      usage.CacheReadTokens,
+			"cache_write_tokens": usage.CacheWriteTokens,
+		},
+		"output_tokens_details": gin.H{"reasoning_tokens": usage.ReasoningTokens},
+	}
+}
+
+func cursorAnthropicUsage(usage cursorpkg.Usage, includeOutput bool) gin.H {
+	outputTokens := 0
+	if includeOutput {
+		outputTokens = usage.OutputTokens
+	}
+	return gin.H{
+		"input_tokens":                usage.InputTokens,
+		"output_tokens":               outputTokens,
+		"cache_creation_input_tokens": usage.CacheWriteTokens,
+		"cache_read_input_tokens":     usage.CacheReadTokens,
+	}
+}
+
+func cursorTotalInputTokens(usage cursorpkg.Usage) int {
+	return usage.InputTokens + usage.CacheWriteTokens + usage.CacheReadTokens
 }
 
 func nullableCursorText(text string) any {

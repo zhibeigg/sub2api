@@ -2,10 +2,94 @@ package service
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
 )
+
+type cursorUsageStatsRepo struct {
+	UsageLogRepository
+	stats *usagestats.AccountStats
+}
+
+func (r cursorUsageStatsRepo) GetAccountTodayStats(context.Context, int64) (*usagestats.AccountStats, error) {
+	return r.stats, nil
+}
+
+type cursorUsageProberFunc func(context.Context, *Account, string, string) (string, error)
+
+func (f cursorUsageProberFunc) Probe(ctx context.Context, account *Account, model, protocol string) (string, error) {
+	return f(ctx, account, model, protocol)
+}
+
+func TestAccountUsageServiceCursorLocalUsageAndForcedProbe(t *testing.T) {
+	t.Parallel()
+
+	account := Account{ID: 6101, Platform: PlatformCursor, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "cursor-key"}}
+	repo := &stubOpenAIAccountRepo{accounts: []Account{account}}
+	probeCalls := 0
+	svc := &AccountUsageService{
+		accountRepo: repo,
+		usageLogRepo: cursorUsageStatsRepo{stats: &usagestats.AccountStats{
+			Requests: 4, InputTokens: 10, OutputTokens: 20, CacheWriteTokens: 30, CacheReadTokens: 40, Tokens: 100, Cost: 1.25, UserCost: 1.5,
+		}},
+		cursorUsageProber: cursorUsageProberFunc(func(_ context.Context, got *Account, _, _ string) (string, error) {
+			probeCalls++
+			if got.ID != account.ID {
+				t.Fatalf("probe account ID = %d, want %d", got.ID, account.ID)
+			}
+			return "cursor@example.com", nil
+		}),
+	}
+
+	passive, err := svc.GetUsage(context.Background(), account.ID)
+	if err != nil {
+		t.Fatalf("GetUsage() error = %v", err)
+	}
+	if probeCalls != 0 {
+		t.Fatalf("passive Cursor usage unexpectedly probed upstream %d time(s)", probeCalls)
+	}
+	if passive.Source != "local" || passive.CursorProbeState != "configured" {
+		t.Fatalf("passive state = source:%q probe:%q", passive.Source, passive.CursorProbeState)
+	}
+	if passive.CursorLocalUsage == nil || passive.CursorLocalUsage.CacheWriteTokens != 30 || passive.CursorLocalUsage.CacheReadTokens != 40 {
+		t.Fatalf("Cursor local usage = %#v", passive.CursorLocalUsage)
+	}
+
+	active, err := svc.GetUsage(context.Background(), account.ID, true)
+	if err != nil {
+		t.Fatalf("GetUsage(force) error = %v", err)
+	}
+	if probeCalls != 1 {
+		t.Fatalf("forced Cursor usage probe calls = %d, want 1", probeCalls)
+	}
+	if active.Source != "active" || active.CursorProbeState != "verified" || active.CursorCheckedAt == "" {
+		t.Fatalf("active state = source:%q probe:%q checked:%q", active.Source, active.CursorProbeState, active.CursorCheckedAt)
+	}
+}
+
+func TestAccountUsageServiceCursorProbeFailureIsDegraded(t *testing.T) {
+	t.Parallel()
+
+	account := Account{ID: 6102, Platform: PlatformCursor, Type: AccountTypeAPIKey, Credentials: map[string]any{"api_key": "invalid"}}
+	svc := &AccountUsageService{
+		accountRepo: &stubOpenAIAccountRepo{accounts: []Account{account}},
+		cursorUsageProber: cursorUsageProberFunc(func(context.Context, *Account, string, string) (string, error) {
+			return "", errors.New("Cursor API request failed (HTTP 401): unauthorized")
+		}),
+	}
+
+	usage, err := svc.GetUsage(context.Background(), account.ID, true)
+	if err != nil {
+		t.Fatalf("GetUsage(force) error = %v", err)
+	}
+	if usage.CursorProbeState != "error" || usage.ErrorCode != errorCodeUnauthenticated || !usage.NeedsReauth {
+		t.Fatalf("degraded Cursor probe result = %#v", usage)
+	}
+}
 
 type accountUsageCodexProbeRepo struct {
 	stubOpenAIAccountRepo

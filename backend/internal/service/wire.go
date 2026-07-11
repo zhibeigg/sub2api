@@ -90,9 +90,11 @@ func ProvideAccountUsageService(
 	identityCache IdentityCache,
 	tlsFPProfileService *TLSFingerprintProfileService,
 	adobeTokenProvider *AdobeTokenProvider,
+	cursorGatewayService *CursorGatewayService,
 ) *AccountUsageService {
 	service := NewAccountUsageService(accountRepo, usageLogRepo, usageFetcher, geminiQuotaService, antigravityQuotaFetcher, grokQuotaFetcher, openAIQuotaService, cache, identityCache, tlsFPProfileService)
 	service.SetAdobeTokenProvider(adobeTokenProvider)
+	service.SetCursorUsageProber(cursorGatewayService)
 	return service
 }
 

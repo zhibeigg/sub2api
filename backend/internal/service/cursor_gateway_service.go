@@ -188,7 +188,7 @@ func (s *CursorGatewayService) forward(ctx context.Context, c *gin.Context, acco
 	if collected.Usage.OutputTokens <= 0 {
 		collected.Usage.OutputTokens = cursorpkg.EstimateTokens(collected.CleanText) + estimateCursorActionTokens(collected.Actions)
 	}
-	collected.Usage.TotalTokens = collected.Usage.InputTokens + collected.Usage.OutputTokens
+	collected.Usage.TotalTokens = collected.Usage.InputTokens + collected.Usage.OutputTokens + collected.Usage.CacheWriteTokens + collected.Usage.CacheReadTokens
 
 	responseID := cursorResponseID(protocol)
 	if protocol == cursorpkg.ProtocolResponses && (envelope.Store == nil || *envelope.Store) {
@@ -206,8 +206,13 @@ func (s *CursorGatewayService) forward(ctx context.Context, c *gin.Context, acco
 		writeCursorJSON(c, protocol, responseID, requestModel, envelope.PreviousResponseID, collected)
 	}
 	return &ForwardResult{
-		RequestID:     responseID,
-		Usage:         ClaudeUsage{InputTokens: collected.Usage.InputTokens, OutputTokens: collected.Usage.OutputTokens},
+		RequestID: responseID,
+		Usage: ClaudeUsage{
+			InputTokens:              collected.Usage.InputTokens,
+			OutputTokens:             collected.Usage.OutputTokens,
+			CacheCreationInputTokens: collected.Usage.CacheWriteTokens,
+			CacheReadInputTokens:     collected.Usage.CacheReadTokens,
+		},
 		Model:         requestModel,
 		UpstreamModel: differentOrEmpty(requestModel, upstreamModel),
 		Stream:        envelope.Stream,
@@ -334,7 +339,14 @@ func collectCloudResponse(ctx context.Context, client *cursorpkg.CloudClient, cr
 		}
 		finalText = cloudEventText(run.Result)
 		if run.Usage != nil {
-			out.Usage = cursorpkg.Usage{InputTokens: run.Usage.InputTokens, OutputTokens: run.Usage.OutputTokens, TotalTokens: run.Usage.TotalTokens}
+			out.Usage = cursorpkg.Usage{
+				InputTokens:      run.Usage.InputTokens,
+				OutputTokens:     run.Usage.OutputTokens,
+				CacheWriteTokens: run.Usage.CacheWriteTokens,
+				CacheReadTokens:  run.Usage.CacheReadTokens,
+				ReasoningTokens:  run.Usage.ReasoningTokens,
+				TotalTokens:      run.Usage.TotalTokens,
+			}
 		}
 		if finalText == "" {
 			return out, firstTokenMs, cursorpkg.HTTPError(http.StatusBadGateway, "get run", "Cursor run finished without a result")
@@ -505,11 +517,14 @@ func cloudEventUsage(data json.RawMessage) *cursorpkg.Usage {
 		return nil
 	}
 	usage := &cursorpkg.Usage{
-		InputTokens:  cloudInt(object, "inputTokens", "input_tokens"),
-		OutputTokens: cloudInt(object, "outputTokens", "output_tokens"),
-		TotalTokens:  cloudInt(object, "totalTokens", "total_tokens"),
+		InputTokens:      cloudInt(object, "inputTokens", "input_tokens"),
+		OutputTokens:     cloudInt(object, "outputTokens", "output_tokens"),
+		CacheWriteTokens: cloudInt(object, "cacheWriteTokens", "cache_write_tokens", "cacheCreationTokens", "cache_creation_tokens"),
+		CacheReadTokens:  cloudInt(object, "cacheReadTokens", "cache_read_tokens"),
+		ReasoningTokens:  cloudInt(object, "reasoningTokens", "reasoning_tokens"),
+		TotalTokens:      cloudInt(object, "totalTokens", "total_tokens"),
 	}
-	if usage.InputTokens == 0 && usage.OutputTokens == 0 && usage.TotalTokens == 0 {
+	if usage.InputTokens == 0 && usage.OutputTokens == 0 && usage.CacheWriteTokens == 0 && usage.CacheReadTokens == 0 && usage.TotalTokens == 0 {
 		return nil
 	}
 	return usage

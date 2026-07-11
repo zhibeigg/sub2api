@@ -178,7 +178,7 @@ Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的
 ## 核心功能
 
 - **多账号管理** - 支持多种上游账号类型（OAuth、API Key、服务账户），原生集成 Anthropic、OpenAI、Gemini、Antigravity、Grok、Kiro（AWS CodeWhisperer，提供 Claude 模型）、Adobe Firefly 与 Cursor 官方 Cloud Agents API
-- **Cursor Cloud Agents API（Beta）** - 使用 `https://api.cursor.com`、用户或 agent-scoped 服务账户 API Key、`/v1/me` 凭据检查和 `/v1/models` 模型发现，支持关联仓库或临时无仓库 Agent，并明确区分 Cursor 官方套餐/按需费用与 Sub2API 本地计费（[接入文档](docs/CURSOR_INTEGRATION.md)）
+- **Cursor Cloud Agents API（Beta）** - 使用 `https://api.cursor.com`、用户或 agent-scoped 服务账户 API Key、`/v1/me` 凭据检查与手动刷新探测、`/v1/models` 模型发现、本地日/周/总额度窗口及缓存写入/读取 Token 计费，支持关联仓库或临时无仓库 Agent，并明确区分 Cursor 官方套餐/按需费用与 Sub2API 本地计费（[接入文档](docs/CURSOR_INTEGRATION.md)）
 - **Kiro 原生接入** - 内建 AWS Builder ID 设备码、IAM Identity Center（PKCE）、SSO Token 导入与凭证 JSON 四种登录方式，支持 token 自动刷新、订阅/用量/超额查询、健康检查与动态模型发现
 - **Adobe Firefly 原生接入** - 支持 IMS 凭据创建前两步预检、安全管理与自动续期、profile/credits 展示、OpenAI Images 兼容图片生成与编辑、Redis 异步视频任务和成功轮询幂等媒体结算（[接入文档](docs/ADOBE_INTEGRATION.md)）
 - **API Key 分发** - 为用户生成和管理 API Key
@@ -756,7 +756,9 @@ Sub2API 的 Cursor 接入文档现以 `https://api.cursor.com` 上的官方 Clou
 - 使用 `GET /v1/models` 获取可用模型 ID 与参数；需要 Cursor 账户默认模型时应省略 `model`。
 - 使用 `POST /v1/agents` 创建 Agent。同时省略 `repos` 和 `env`（或发送 `repos: []`）即可创建适合临时任务的无仓库 Agent；上下文不再需要时应显式删除。
 - Cloud Agents API 是官方 Beta，部分能力可能按账户灰度或返回 `feature_unavailable`，生产依赖前必须实际验证。
-- Cursor 套餐用量、模型用量、Cloud Agent 执行和按需超额费用属于 Cursor 官方账单；Sub2API 只结算管理员明确配置的本地价格，不得把本地用量显示为 Cursor 官方 credits。
+- 管理后台账号列表展示 Sub2API 本地请求、Token、费用、缓存写入/读取 Token，以及已配置的本地日/周/总额度进度条；点击“刷新检测”会通过 `/v1/me` 验证当前 API Key，普通列表加载不会批量探测上游。
+- Cursor Run 的 `cacheWriteTokens` 与 `cacheReadTokens` 会进入统一用量记录、计费、兼容协议响应和导出。
+- Cursor 套餐用量、模型用量、Cloud Agent 执行和按需超额费用属于 Cursor 官方账单；Sub2API 使用 Cursor 平台专属本地价格结算，不得把本地用量显示为 Cursor 官方 credits。
 
 认证、端点、服务账户、临时无仓库 Agent、Beta 边界与计费拆分详见 [Cursor 接入文档](docs/CURSOR_INTEGRATION.md)。
 

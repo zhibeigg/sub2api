@@ -17,8 +17,10 @@ const messages: Record<string, string> = {
   'usage.costDetails': 'Cost Breakdown',
   'admin.usage.inputCost': 'Input Cost',
   'admin.usage.outputCost': 'Output Cost',
-  'admin.usage.cacheCreationCost': 'Cache Creation Cost',
+  'admin.usage.cacheCreationCost': 'Cache Write Cost',
   'admin.usage.cacheReadCost': 'Cache Read Cost',
+  'admin.usage.cacheCreationTokens': 'Cache Write Tokens',
+  'admin.usage.cacheReadTokens': 'Cache Read Tokens',
   'usage.inputTokenPrice': 'Input price',
   'usage.outputTokenPrice': 'Output price',
   'usage.perMillionTokens': '/ 1M tokens',
@@ -168,6 +170,43 @@ describe('admin UsageTable tooltip', () => {
     expect(text).toContain('$5.0000 / 1M tokens')
     expect(text).toContain('$30.0000 / 1M tokens')
     expect(text).toContain('$0.069568')
+  })
+
+  it('shows cache write and cache read tokens in usage records', async () => {
+    const row = {
+      request_id: 'req-cursor-cache-usage',
+      model: 'claude-4.6-sonnet',
+      actual_cost: 0.1,
+      total_cost: 0.1,
+      account_rate_multiplier: 1,
+      rate_multiplier: 1,
+      input_cost: 0.01,
+      output_cost: 0.02,
+      cache_creation_cost: 0.03,
+      cache_read_cost: 0.04,
+      input_tokens: 100,
+      output_tokens: 200,
+      cache_creation_tokens: 300,
+      cache_read_tokens: 400,
+      cache_creation_5m_tokens: 0,
+      cache_creation_1h_tokens: 0,
+    }
+
+    const wrapper = mount(UsageTable, {
+      props: { data: [row], loading: false, columns: [] },
+      global: {
+        stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true },
+      },
+    })
+
+    const tooltipTriggers = wrapper.findAll('.group.relative')
+    await tooltipTriggers[0].trigger('mouseenter')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('Cache Write Tokens')
+    expect(wrapper.text()).toContain('300')
+    expect(wrapper.text()).toContain('Cache Read Tokens')
+    expect(wrapper.text()).toContain('400')
   })
 
   it('shows requested and upstream models separately for admin rows', () => {

@@ -1325,6 +1325,12 @@ export default {
         kiroOverage: 'Overage {used} / {cap}',
         kiroContext: 'Context {pct}%',
         kiroTodayStats: 'Today: requests, tokens, account billed, and user billed',
+        cacheWriteTokens: 'Cache write tokens',
+        cacheReadTokens: 'Cache read tokens',
+        cursorRefresh: 'Refresh check',
+        cursorVerified: 'API Key verified',
+        cursorProbeFailed: 'API Key check failed',
+        cursorCheckedAt: 'Checked {time}',
         passiveSampled: 'Passive',
         activeQuery: 'Query'
       },

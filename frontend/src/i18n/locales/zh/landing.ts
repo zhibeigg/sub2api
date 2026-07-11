@@ -188,7 +188,7 @@ export default {
     requests: '请求数',
     inputTokens: '输入 Tokens',
     outputTokens: '输出 Tokens',
-    cacheCreationTokens: '缓存创建',
+    cacheCreationTokens: '缓存写入',
     cacheReadTokens: '缓存读取',
     cacheWriteTokens: '缓存写入',
     totalTokens: '总 Tokens',

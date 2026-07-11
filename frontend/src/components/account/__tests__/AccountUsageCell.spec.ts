@@ -554,7 +554,23 @@ describe('AccountUsageCell', () => {
   expect(wrapper.text()).toContain('7d|100|106540000')
   })
 
-  it('Cursor API Key 展示本地统计与配置状态，不请求上游用量', async () => {
+  it('Cursor API Key 自动加载本地窗口并展示缓存 Token 与额度进度', async () => {
+    getUsage.mockResolvedValue({
+      source: 'local',
+      cursor_api_key_configured: true,
+      cursor_probe_state: 'configured',
+      cursor_local_usage: {
+        requests: 12,
+        input_tokens: 10_000,
+        output_tokens: 8_000,
+        cache_write_tokens: 6_000,
+        cache_read_tokens: 10_000,
+        tokens: 34_000,
+        cost: 1.25,
+        standard_cost: 1.25,
+        user_cost: 1.5
+      }
+    })
     const wrapper = mount(AccountUsageCell, {
       props: {
         account: makeAccount({
@@ -562,26 +578,59 @@ describe('AccountUsageCell', () => {
           platform: 'cursor',
           type: 'apikey',
           credentials: {},
-          credentials_status: { has_api_key: true }
-        }),
-        todayStats: {
-          requests: 12,
-          tokens: 34_000,
-          cost: 1.25,
-          standard_cost: 1.25,
-          user_cost: 1.5
-        }
+          credentials_status: { has_api_key: true },
+          quota_daily_used: 25,
+          quota_daily_limit: 100
+        })
       },
-      global: { stubs: { UsageProgressBar: true, AccountQuotaInfo: true } }
+      global: {
+        stubs: {
+          UsageProgressBar: {
+            props: ['label', 'utilization', 'windowStats'],
+            template: '<div class="usage-bar">{{ label }}|{{ utilization }}|CW {{ windowStats?.cache_write_tokens }}|CR {{ windowStats?.cache_read_tokens }}</div>'
+          },
+          AccountQuotaInfo: true
+        }
+      }
     })
 
     await flushPromises()
 
-    expect(getUsage).not.toHaveBeenCalledWith(2953)
-    expect(wrapper.get('[data-testid="cursor-usage-status"]').text()).toContain('12 req')
-    expect(wrapper.text()).toContain('A $1.25')
-    expect(wrapper.text()).toContain('U $1.50')
+    expect(getUsage).toHaveBeenCalledWith(2953)
+    expect(wrapper.text()).toContain('1d|25|CW 6000|CR 10000')
     expect(wrapper.text()).toContain('admin.accounts.cursor.apiKeyConfigured')
+  })
+
+  it('Cursor 刷新按钮与账号列表手动刷新都会强制检测 API Key', async () => {
+    getUsage.mockResolvedValue({
+      source: 'active',
+      cursor_api_key_configured: true,
+      cursor_probe_state: 'verified',
+      cursor_checked_at: '2026-08-01T00:00:00Z',
+      cursor_local_usage: { requests: 1, tokens: 10, cost: 0.01 }
+    })
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({
+          id: 2956,
+          platform: 'cursor',
+          type: 'apikey',
+          credentials_status: { has_api_key: true }
+        }),
+        manualRefreshToken: 0
+      },
+      global: { stubs: { UsageProgressBar: true, AccountQuotaInfo: true } }
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="cursor-usage-refresh"]').trigger('click')
+    await flushPromises()
+    expect(getUsage).toHaveBeenCalledWith(2956, 'active', true)
+    expect(wrapper.text()).toContain('admin.accounts.usageWindow.cursorVerified')
+
+    await wrapper.setProps({ manualRefreshToken: 1 })
+    await flushPromises()
+    expect(getUsage).toHaveBeenCalledWith(2956, undefined, true)
   })
 
   it('Kiro OAuth 用量窗口会展示今日请求、Token 与 A/U 双口径计费', async () => {

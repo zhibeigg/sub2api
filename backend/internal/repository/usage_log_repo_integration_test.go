@@ -914,6 +914,8 @@ func (s *UsageLogRepoSuite) TestGetAccountTodayStats() {
 		Model:                 "claude-3",
 		InputTokens:           10,
 		OutputTokens:          20,
+		CacheCreationTokens:   7,
+		CacheReadTokens:       8,
 		TotalCost:             1.0,
 		ActualCost:            2.0,
 		AccountRateMultiplier: &m1,
@@ -938,7 +940,11 @@ func (s *UsageLogRepoSuite) TestGetAccountTodayStats() {
 	stats, err := s.repo.GetAccountTodayStats(s.ctx, account.ID)
 	s.Require().NoError(err, "GetAccountTodayStats")
 	s.Require().Equal(int64(2), stats.Requests)
-	s.Require().Equal(int64(40), stats.Tokens)
+	s.Require().Equal(int64(15), stats.InputTokens)
+	s.Require().Equal(int64(25), stats.OutputTokens)
+	s.Require().Equal(int64(7), stats.CacheWriteTokens)
+	s.Require().Equal(int64(8), stats.CacheReadTokens)
+	s.Require().Equal(int64(55), stats.Tokens)
 	// account cost = SUM(total_cost * account_rate_multiplier)
 	s.Require().InEpsilon(1.5, stats.Cost, 0.0001)
 	// standard cost = SUM(total_cost)

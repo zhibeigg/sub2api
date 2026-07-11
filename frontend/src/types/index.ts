@@ -1012,6 +1012,10 @@ export interface AccountSchedulerGroupScore {
 // Account Usage types
 export interface WindowStats {
   requests: number
+  input_tokens?: number
+  output_tokens?: number
+  cache_write_tokens?: number
+  cache_read_tokens?: number
   tokens: number
   cost: number // Account cost (account multiplier)
   standard_cost?: number
@@ -1054,7 +1058,7 @@ export interface AdobeCreditsInfo {
 }
 
 export interface AccountUsageInfo {
-  source?: 'passive' | 'active'
+  source?: 'passive' | 'active' | 'local'
   updated_at: string | null
   five_hour: UsageProgress | null
   seven_day: UsageProgress | null
@@ -1097,8 +1101,12 @@ export interface AccountUsageInfo {
     minimum_balance?: number
   }> | null
   adobe_credits?: AdobeCreditsInfo | null
-  // Cursor 本地用量
+  // Cursor 本地用量与 API Key 探测状态
   cursor_local_usage?: WindowStats | null
+  cursor_api_key_configured?: boolean
+  cursor_probe_state?: 'configured' | 'verified' | 'missing' | 'error'
+  cursor_probe_message?: string
+  cursor_checked_at?: string
   // Antigravity 403 forbidden 状态
   is_forbidden?: boolean
   forbidden_reason?: string

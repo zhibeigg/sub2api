@@ -135,11 +135,15 @@ func NewUsageCache() *UsageCache {
 // standard_cost: 标准费用（total_cost，不含倍率）
 // user_cost: 用户/API Key 口径费用（actual_cost，受分组倍率影响）
 type WindowStats struct {
-	Requests     int64   `json:"requests"`
-	Tokens       int64   `json:"tokens"`
-	Cost         float64 `json:"cost"`
-	StandardCost float64 `json:"standard_cost"`
-	UserCost     float64 `json:"user_cost"`
+	Requests         int64   `json:"requests"`
+	InputTokens      int64   `json:"input_tokens"`
+	OutputTokens     int64   `json:"output_tokens"`
+	CacheWriteTokens int64   `json:"cache_write_tokens"`
+	CacheReadTokens  int64   `json:"cache_read_tokens"`
+	Tokens           int64   `json:"tokens"`
+	Cost             float64 `json:"cost"`
+	StandardCost     float64 `json:"standard_cost"`
+	UserCost         float64 `json:"user_cost"`
 }
 
 // UsageProgress 使用量进度
@@ -234,6 +238,9 @@ type UsageInfo struct {
 	// Show local forwarding statistics and whether an API key is configured.
 	CursorLocalUsage       *WindowStats `json:"cursor_local_usage,omitempty"`
 	CursorAPIKeyConfigured bool         `json:"cursor_api_key_configured,omitempty"`
+	CursorProbeState       string       `json:"cursor_probe_state,omitempty"` // configured/verified/missing/error
+	CursorProbeMessage     string       `json:"cursor_probe_message,omitempty"`
+	CursorCheckedAt        string       `json:"cursor_checked_at,omitempty"`
 
 	// Grok / xAI 被动额度快照
 	GrokRequestQuota       *xai.QuotaWindow `json:"grok_request_quota,omitempty"`
@@ -335,6 +342,10 @@ type ClaudeUsageFetcher interface {
 	FetchUsageWithOptions(ctx context.Context, opts *ClaudeUsageFetchOptions) (*ClaudeUsageResponse, error)
 }
 
+type CursorUsageProber interface {
+	Probe(ctx context.Context, account *Account, model, protocol string) (string, error)
+}
+
 // AccountUsageService 账号使用量查询服务
 type AccountUsageService struct {
 	accountRepo             AccountRepository
@@ -349,6 +360,7 @@ type AccountUsageService struct {
 	tlsFPProfileService     *TLSFingerprintProfileService
 	kiroUsageService        *KiroUsageService
 	adobeTokenProvider      *AdobeTokenProvider
+	cursorUsageProber       CursorUsageProber
 }
 
 // SetKiroUsageService injects the Kiro usage service used for active probes.
@@ -359,6 +371,10 @@ func (s *AccountUsageService) SetKiroUsageService(k *KiroUsageService) {
 
 func (s *AccountUsageService) SetAdobeTokenProvider(provider *AdobeTokenProvider) {
 	s.adobeTokenProvider = provider
+}
+
+func (s *AccountUsageService) SetCursorUsageProber(prober CursorUsageProber) {
+	s.cursorUsageProber = prober
 }
 
 // NewAccountUsageService 创建AccountUsageService实例
@@ -413,16 +429,49 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 
 	if account.IsCursor() {
 		now := time.Now()
-		usage := &UsageInfo{Source: "local", UpdatedAt: &now, CursorAPIKeyConfigured: strings.TrimSpace(account.GetCredential("api_key")) != ""}
+		usage := &UsageInfo{
+			Source:                 "local",
+			UpdatedAt:              &now,
+			CursorAPIKeyConfigured: strings.TrimSpace(account.GetCredential("api_key")) != "",
+			CursorProbeState:       "configured",
+		}
 		if s.usageLogRepo != nil {
 			if stats, statsErr := s.usageLogRepo.GetAccountTodayStats(ctx, account.ID); statsErr == nil && stats != nil {
 				usage.CursorLocalUsage = windowStatsFromAccountStats(stats)
 			}
 		}
 		if !usage.CursorAPIKeyConfigured {
+			usage.CursorProbeState = "missing"
+			usage.CursorProbeMessage = "Cursor API key is missing"
 			usage.NeedsReauth = true
 			usage.ErrorCode = "api_key_missing"
-			usage.Error = "Cursor API key is missing"
+			usage.Error = usage.CursorProbeMessage
+			return usage, nil
+		}
+		if forceProbe {
+			usage.Source = "active"
+			usage.CursorCheckedAt = now.UTC().Format(time.RFC3339)
+			if s.cursorUsageProber == nil {
+				usage.CursorProbeState = "error"
+				usage.CursorProbeMessage = "Cursor usage probe is not configured"
+				usage.ErrorCode = "cursor_probe_unavailable"
+				usage.Error = usage.CursorProbeMessage
+				return usage, nil
+			}
+			if _, probeErr := s.cursorUsageProber.Probe(ctx, account, "", ""); probeErr != nil {
+				usage.CursorProbeState = "error"
+				usage.CursorProbeMessage = probeErr.Error()
+				usage.ErrorCode = "cursor_probe_failed"
+				usage.Error = probeErr.Error()
+				probeErrText := strings.ToLower(probeErr.Error())
+				if strings.Contains(probeErrText, "401") || strings.Contains(probeErrText, "unauthorized") || strings.Contains(probeErrText, "invalid api key") {
+					usage.NeedsReauth = true
+					usage.ErrorCode = errorCodeUnauthenticated
+				}
+				return usage, nil
+			}
+			usage.CursorProbeState = "verified"
+			usage.CursorProbeMessage = "Cursor API key verified"
 		}
 		return usage, nil
 	}
@@ -1299,11 +1348,15 @@ func windowStatsFromAccountStats(stats *usagestats.AccountStats) *WindowStats {
 		return &WindowStats{}
 	}
 	return &WindowStats{
-		Requests:     stats.Requests,
-		Tokens:       stats.Tokens,
-		Cost:         stats.Cost,
-		StandardCost: stats.StandardCost,
-		UserCost:     stats.UserCost,
+		Requests:         stats.Requests,
+		InputTokens:      stats.InputTokens,
+		OutputTokens:     stats.OutputTokens,
+		CacheWriteTokens: stats.CacheWriteTokens,
+		CacheReadTokens:  stats.CacheReadTokens,
+		Tokens:           stats.Tokens,
+		Cost:             stats.Cost,
+		StandardCost:     stats.StandardCost,
+		UserCost:         stats.UserCost,
 	}
 }
 

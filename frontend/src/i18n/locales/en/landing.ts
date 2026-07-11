@@ -188,7 +188,7 @@ export default {
     requests: 'Requests',
     inputTokens: 'Input Tokens',
     outputTokens: 'Output Tokens',
-    cacheCreationTokens: 'Cache Creation',
+    cacheCreationTokens: 'Cache Write',
     cacheReadTokens: 'Cache Read',
     cacheWriteTokens: 'Cache Write',
     totalTokens: 'Total Tokens',

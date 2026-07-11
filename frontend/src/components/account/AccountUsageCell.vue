@@ -548,22 +548,60 @@
       </div>
     </template>
 
-    <!-- Cursor API Key accounts: local usage and credential status -->
+    <!-- Cursor API Key accounts: local usage windows and credential probe -->
     <template v-else-if="account.platform === 'cursor' && account.type === 'apikey'">
       <div class="space-y-1" data-testid="cursor-usage-status">
-        <div v-if="todayStats" class="flex items-center gap-1.5 text-[9px] text-gray-500 dark:text-gray-400">
-          <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">{{ formatKeyRequests }} req</span>
-          <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">{{ formatKeyTokens }}</span>
-          <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800" :title="t('usage.accountBilled')">A ${{ formatKeyCost }}</span>
-          <span v-if="todayStats.user_cost != null" class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800" :title="t('usage.userBilled')">U ${{ formatKeyUserCost }}</span>
+        <div v-if="loading && !usageInfo" class="space-y-1.5">
+          <div class="h-3 w-28 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+          <div class="h-3 w-20 animate-pulse rounded bg-gray-100 dark:bg-gray-800"></div>
         </div>
-        <div v-else-if="todayStatsLoading" class="flex items-center gap-1">
-          <div class="h-3 w-10 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
-          <div class="h-3 w-8 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
-        </div>
-        <span :class="['inline-block rounded px-1.5 py-0.5 text-[10px] font-medium', cursorCredentialBadgeClass]">
-          {{ cursorCredentialStatusLabel }}
-        </span>
+        <template v-else>
+          <UsageProgressBar
+            v-if="quotaDailyBar"
+            label="1d"
+            :utilization="quotaDailyBar.utilization"
+            :resets-at="quotaDailyBar.resetsAt"
+            :window-stats="cursorLocalUsage"
+            color="indigo"
+          />
+          <div v-else-if="cursorLocalUsage" class="flex flex-wrap items-center gap-1.5 text-[9px] text-gray-500 dark:text-gray-400" data-testid="cursor-local-usage">
+            <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">{{ formatWindowRequests(cursorLocalUsage) }} req</span>
+            <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">{{ formatWindowTokens(cursorLocalUsage) }}</span>
+            <span v-if="(cursorLocalUsage.cache_write_tokens ?? 0) > 0" class="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" :title="t('admin.accounts.usageWindow.cacheWriteTokens')">CW {{ formatWindowCacheWriteTokens(cursorLocalUsage) }}</span>
+            <span v-if="(cursorLocalUsage.cache_read_tokens ?? 0) > 0" class="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" :title="t('admin.accounts.usageWindow.cacheReadTokens')">CR {{ formatWindowCacheReadTokens(cursorLocalUsage) }}</span>
+            <span class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800" :title="t('usage.accountBilled')">A ${{ formatWindowCost(cursorLocalUsage) }}</span>
+            <span v-if="cursorLocalUsage.user_cost != null" class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800" :title="t('usage.userBilled')">U ${{ formatWindowUserCost(cursorLocalUsage) }}</span>
+          </div>
+          <div v-else-if="todayStatsLoading" class="flex items-center gap-1">
+            <div class="h-3 w-10 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+            <div class="h-3 w-8 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+          </div>
+          <UsageProgressBar v-if="quotaWeeklyBar" label="7d" :utilization="quotaWeeklyBar.utilization" :resets-at="quotaWeeklyBar.resetsAt" color="emerald" />
+          <UsageProgressBar v-if="quotaTotalBar" label="total" :utilization="quotaTotalBar.utilization" color="purple" />
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span :class="['inline-block rounded px-1.5 py-0.5 text-[10px] font-medium', cursorCredentialBadgeClass]">
+              {{ cursorCredentialStatusLabel }}
+            </span>
+            <button
+              type="button"
+              data-testid="cursor-usage-refresh"
+              class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+              :disabled="activeQueryLoading"
+              @click="loadActiveUsage"
+            >
+              <svg class="h-2.5 w-2.5" :class="{ 'animate-spin': activeQueryLoading }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {{ t('admin.accounts.usageWindow.cursorRefresh') }}
+            </button>
+          </div>
+          <div v-if="cursorCheckedAt" class="text-[9px] text-gray-400 dark:text-gray-500">
+            {{ t('admin.accounts.usageWindow.cursorCheckedAt', { time: formatRelativeTime(cursorCheckedAt) }) }}
+          </div>
+          <div v-if="usageInfo?.cursor_probe_state === 'error' && usageInfo.cursor_probe_message" class="max-w-[220px] truncate text-[10px] text-amber-600 dark:text-amber-400" :title="usageInfo.cursor_probe_message">
+            {{ usageInfo.cursor_probe_message }}
+          </div>
+        </template>
       </div>
     </template>
 
@@ -875,6 +913,9 @@ const shouldFetchUsage = computed(() => {
   }
   if (props.account.platform === 'kiro') {
     return props.account.type === 'oauth'
+  }
+  if (props.account.platform === 'cursor') {
+    return props.account.type === 'apikey'
   }
   return false
 })
@@ -1312,6 +1353,8 @@ const grokRetryAfterLabel = computed(() => {
 
 const formatWindowRequests = (stats: WindowStats) => formatCompactNumber(stats.requests, { allowBillions: false })
 const formatWindowTokens = (stats: WindowStats) => formatCompactNumber(stats.tokens)
+const formatWindowCacheWriteTokens = (stats: WindowStats) => formatCompactNumber(stats.cache_write_tokens ?? 0)
+const formatWindowCacheReadTokens = (stats: WindowStats) => formatCompactNumber(stats.cache_read_tokens ?? 0)
 const formatWindowCost = (stats: WindowStats) => stats.cost.toFixed(2)
 const formatWindowUserCost = (stats: WindowStats) => (stats.user_cost ?? 0).toFixed(2)
 
@@ -1364,18 +1407,33 @@ const validationURL = computed(() => usageInfo.value?.validation_url || '')
 const needsReauth = computed(() => !!usageInfo.value?.needs_reauth)
 
 const cursorApiKeyConfigured = computed(() => {
+  if (usageInfo.value?.cursor_api_key_configured === true) return true
   if (props.account.credentials_status?.has_api_key != null) {
     return props.account.credentials_status.has_api_key
   }
   const credentials = props.account.credentials as Record<string, unknown> | undefined
   return Boolean(credentials?.api_key)
 })
-const cursorCredentialStatusLabel = computed(() => cursorApiKeyConfigured.value
-  ? t('admin.accounts.cursor.apiKeyConfigured')
-  : t('admin.accounts.cursor.apiKeyNotConfigured'))
-const cursorCredentialBadgeClass = computed(() => cursorApiKeyConfigured.value
-  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-  : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300')
+const cursorLocalUsage = computed(() => usageInfo.value?.cursor_local_usage ?? props.todayStats ?? null)
+const cursorCheckedAt = computed(() => usageInfo.value?.cursor_checked_at || null)
+const cursorCredentialStatusLabel = computed(() => {
+  switch (usageInfo.value?.cursor_probe_state) {
+    case 'verified': return t('admin.accounts.usageWindow.cursorVerified')
+    case 'error': return t('admin.accounts.usageWindow.cursorProbeFailed')
+    case 'missing': return t('admin.accounts.cursor.apiKeyNotConfigured')
+    default: return cursorApiKeyConfigured.value
+      ? t('admin.accounts.cursor.apiKeyConfigured')
+      : t('admin.accounts.cursor.apiKeyNotConfigured')
+  }
+})
+const cursorCredentialBadgeClass = computed(() => {
+  if (usageInfo.value?.cursor_probe_state === 'error') {
+    return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+  }
+  return cursorApiKeyConfigured.value
+    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+    : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+})
 
 // ── Kiro 用量展示 ─────────────────────────────────────────
 const kiroSubscriptionLabel = computed(() => {
@@ -1473,7 +1531,7 @@ const isAnthropicOAuthOrSetupToken = computed(() => {
   return props.account.platform === 'anthropic' && (props.account.type === 'oauth' || props.account.type === 'setup-token')
 })
 
-const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?: boolean }) => {
+const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?: boolean; force?: boolean }) => {
   if (!shouldFetchUsage.value) return
 
   // Check cache
@@ -1490,9 +1548,11 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
   error.value = null
 
   try {
-    const fetchFn = () => options?.source
-      ? adminAPI.accounts.getUsage(props.account.id, options.source)
-      : adminAPI.accounts.getUsage(props.account.id)
+    const fetchFn = () => {
+      if (options?.source) return adminAPI.accounts.getUsage(props.account.id, options.source, options.force)
+      if (options?.force) return adminAPI.accounts.getUsage(props.account.id, undefined, true)
+      return adminAPI.accounts.getUsage(props.account.id)
+    }
     const result = await enqueueUsageRequest(props.account, fetchFn)
     if (!unmounted.value) {
       usageInfo.value = result
@@ -1560,9 +1620,13 @@ const attachVisibilityObserver = () => {
 
 const loadActiveUsage = async () => {
   activeQueryLoading.value = true
+  error.value = null
   try {
-    usageInfo.value = await adminAPI.accounts.getUsage(props.account.id, 'active', true)
+    const result = await adminAPI.accounts.getUsage(props.account.id, 'active', true)
+    usageInfo.value = result
+    _usageCache.set(props.account.id, { data: result, ts: Date.now() })
   } catch (e: any) {
+    error.value = t('common.error')
     console.error('Failed to load active usage:', e)
   } finally {
     activeQueryLoading.value = false
@@ -1690,8 +1754,9 @@ watch(
     if (!shouldFetchUsage.value) return
 
     const source = isAnthropicOAuthOrSetupToken.value ? 'passive' : undefined
+    const force = props.account.platform === 'cursor'
     _usageCache.delete(props.account.id)
-    loadUsage({ source, bypassCache: true }).catch((e) => {
+    loadUsage({ source, bypassCache: true, force }).catch((e) => {
       console.error('Failed to refresh usage after manual refresh:', e)
     })
   }

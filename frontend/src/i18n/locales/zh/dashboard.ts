@@ -254,7 +254,7 @@ export default {
     totalTokens: '总 Token',
     cacheTotal: '缓存',
     cacheBreakdown: '缓存 Token 明细',
-    cacheCreationTokensLabel: '缓存创建',
+    cacheCreationTokensLabel: '缓存写入',
     cacheReadTokensLabel: '缓存读取',
     totalCost: '总消费',
     standardCost: '标准',

@@ -56,6 +56,14 @@ curl --fail-with-body \
 
 该端点只证明密钥可被 Cursor API 识别。具体 Agent 权限、套餐资格或功能灰度仍可能在调用业务端点时返回 `403`，例如 `plan_required`、`role_forbidden` 或 `feature_unavailable`。
 
+## 管理后台用量窗口与刷新检测
+
+- 账号列表会自动读取 Sub2API 本地 usage logs，展示今日请求、总 Token、缓存写入 Token、缓存读取 Token 及本地计费。
+- 若 Cursor 账号配置了 Sub2API 的日、周或总额度，账号列表会复用统一的 `1d`、`7d`、`total` 进度条；这些是本地额度，不是 Cursor 官方套餐额度。
+- 点击“刷新检测”或刷新账号列表时，管理 API 会以 `force=true` 调用 Cursor `GET /v1/me` 验证当前 API Key，并返回检测状态和时间；普通自动加载不会批量探测上游。
+- 管理接口为 `GET /api/v1/admin/accounts/{id}/usage?source=active&force=true`。Cursor 响应包含 `cursor_local_usage`、`cursor_api_key_configured`、`cursor_probe_state`、`cursor_probe_message` 和 `cursor_checked_at`。
+- Cursor Run 返回的 `cacheWriteTokens` 和 `cacheReadTokens` 分别保存为统一用量记录的 `cache_creation_tokens`（界面显示“缓存写入”）和 `cache_read_tokens`，并参与平台专属计费。
+
 ## 获取模型：`GET /v1/models`
 
 ```bash
