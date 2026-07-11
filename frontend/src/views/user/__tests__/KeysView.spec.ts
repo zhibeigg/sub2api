@@ -456,6 +456,8 @@ describe('user KeysView column settings', () => {
     expect(wrapper.get('[data-test="group-cell"]').text()).toContain('Claude')
     expect(wrapper.get('[data-test="group-cell"]').text()).toContain('Codex')
     expect(wrapper.get('[data-test="group-cell"]').text()).toContain('+1')
+    expect(wrapper.get('[data-test="api-key-group-1"]').classes()).toContain('text-orange-600')
+    expect(wrapper.get('[data-test="api-key-group-2"]').classes()).toContain('text-green-600')
 
     await wrapper.get('button[title="Edit ordered group bindings"]').trigger('click')
     await nextTick()
