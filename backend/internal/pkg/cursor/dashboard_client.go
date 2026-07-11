@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -40,6 +41,56 @@ type DashboardUsage struct {
 	BillingCycleEnd   int64                     `json:"billingCycleEnd,omitempty"`
 	PlanUsage         *DashboardPlanUsage       `json:"planUsage,omitempty"`
 	SpendLimitUsage   *DashboardSpendLimitUsage `json:"spendLimitUsage,omitempty"`
+}
+
+// UnmarshalJSON accepts both the numeric timestamps used by older Dashboard
+// responses and the quoted millisecond timestamps returned by newer clients.
+func (u *DashboardUsage) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		Enabled           *bool                     `json:"enabled,omitempty"`
+		BillingCycleStart json.RawMessage           `json:"billingCycleStart,omitempty"`
+		BillingCycleEnd   json.RawMessage           `json:"billingCycleEnd,omitempty"`
+		PlanUsage         *DashboardPlanUsage       `json:"planUsage,omitempty"`
+		SpendLimitUsage   *DashboardSpendLimitUsage `json:"spendLimitUsage,omitempty"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	start, err := parseDashboardTimestamp(wire.BillingCycleStart)
+	if err != nil {
+		return fmt.Errorf("parse billingCycleStart: %w", err)
+	}
+	end, err := parseDashboardTimestamp(wire.BillingCycleEnd)
+	if err != nil {
+		return fmt.Errorf("parse billingCycleEnd: %w", err)
+	}
+	*u = DashboardUsage{
+		Enabled:           wire.Enabled,
+		BillingCycleStart: start,
+		BillingCycleEnd:   end,
+		PlanUsage:         wire.PlanUsage,
+		SpendLimitUsage:   wire.SpendLimitUsage,
+	}
+	return nil
+}
+
+func parseDashboardTimestamp(raw json.RawMessage) (int64, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return 0, nil
+	}
+	if strings.HasPrefix(trimmed, `"`) {
+		var value string
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return 0, err
+		}
+		return strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	}
+	var value int64
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return 0, err
+	}
+	return value, nil
 }
 
 type DashboardPlanUsage struct {

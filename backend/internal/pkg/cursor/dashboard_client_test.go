@@ -25,7 +25,7 @@ func TestDashboardClientFetchUsageContract(t *testing.T) {
 		if string(body) != "{}" {
 			t.Fatalf("body = %q", string(body))
 		}
-		_, _ = w.Write([]byte(`{"enabled":true,"billingCycleStart":1000,"billingCycleEnd":2000,"planUsage":{"limit":2000,"totalSpend":20,"remaining":1980,"totalPercentUsed":1,"autoPercentUsed":0,"apiPercentUsed":1}}`))
+		_, _ = w.Write([]byte(`{"enabled":true,"billingCycleStart":"1000","billingCycleEnd":"2000","planUsage":{"limit":2000,"totalSpend":20,"remaining":1980,"totalPercentUsed":1,"autoPercentUsed":0,"apiPercentUsed":1}}`))
 	}))
 	defer server.Close()
 
@@ -42,6 +42,19 @@ func TestDashboardClientFetchUsageContract(t *testing.T) {
 	}
 	if usage.PlanUsage.APIPercentUsed == nil || *usage.PlanUsage.APIPercentUsed != 1 {
 		t.Fatalf("api usage = %#v", usage.PlanUsage)
+	}
+	if usage.BillingCycleStart != 1000 || usage.BillingCycleEnd != 2000 {
+		t.Fatalf("billing cycle = %d..%d", usage.BillingCycleStart, usage.BillingCycleEnd)
+	}
+}
+
+func TestDashboardUsageAcceptsNumericBillingCycleTimestamps(t *testing.T) {
+	var usage DashboardUsage
+	if err := json.Unmarshal([]byte(`{"billingCycleStart":1000,"billingCycleEnd":2000}`), &usage); err != nil {
+		t.Fatal(err)
+	}
+	if usage.BillingCycleStart != 1000 || usage.BillingCycleEnd != 2000 {
+		t.Fatalf("billing cycle = %d..%d", usage.BillingCycleStart, usage.BillingCycleEnd)
 	}
 }
 
