@@ -106,7 +106,8 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	}
 
 	if (input.Platform == PlatformAdobe || input.Platform == PlatformCursor) && len(groupIDs) > 0 {
-		if err := s.validateAccountGroupPlatform(ctx, input.Platform, groupIDs); err != nil {
+		mixedScheduling := (&Account{Platform: input.Platform, Extra: input.Extra}).IsMixedSchedulingEnabled()
+		if err := s.validateAccountGroupPlatform(ctx, input.Platform, groupIDs, mixedScheduling); err != nil {
 			return nil, err
 		}
 	}
@@ -359,7 +360,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 			return nil, err
 		}
 		if account.IsAdobe() || account.IsCursor() {
-			if err := s.validateAccountGroupPlatform(ctx, account.Platform, *input.GroupIDs); err != nil {
+			if err := s.validateAccountGroupPlatform(ctx, account.Platform, *input.GroupIDs, account.IsMixedSchedulingEnabled()); err != nil {
 				return nil, err
 			}
 		}
@@ -898,14 +899,26 @@ func (s *adminServiceImpl) checkMixedChannelRisk(ctx context.Context, currentAcc
 	return nil
 }
 
-func (s *adminServiceImpl) validateAccountGroupPlatform(ctx context.Context, platform string, groupIDs []int64) error {
+// validateAccountGroupPlatform 验证账号平台与分组平台是否兼容。
+// 独立平台账号通常只能绑定同平台分组；开启混合调度的 Cursor 账号还可以
+// 绑定 Anthropic 分组，用于承接 /v1/messages 请求。
+func (s *adminServiceImpl) validateAccountGroupPlatform(ctx context.Context, platform string, groupIDs []int64, mixedScheduling bool) error {
 	for _, groupID := range groupIDs {
 		group, err := s.groupRepo.GetByID(ctx, groupID)
 		if err != nil {
 			return err
 		}
-		if group.Platform != platform {
-			return fmt.Errorf("account platform %q cannot be bound to group %d with platform %q", platform, groupID, group.Platform)
+		compatible := group.Platform == platform ||
+			(platform == PlatformCursor && mixedScheduling && group.Platform == PlatformAnthropic)
+		if !compatible {
+			return infraerrors.Newf(
+				http.StatusBadRequest,
+				"ACCOUNT_GROUP_PLATFORM_MISMATCH",
+				"account platform %q cannot be bound to group %d with platform %q",
+				platform,
+				groupID,
+				group.Platform,
+			)
 		}
 	}
 	return nil

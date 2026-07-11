@@ -4,8 +4,10 @@ package service
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
 )
@@ -123,6 +125,80 @@ func (s *groupRepoStubForAdmin) GetAccountIDsByGroupIDs(_ context.Context, _ []i
 
 func (s *groupRepoStubForAdmin) UpdateSortOrders(_ context.Context, _ []GroupSortOrderUpdate) error {
 	return nil
+}
+
+func TestAdminService_UpdateAccount_CursorMixedSchedulingAllowsAnthropicGroup(t *testing.T) {
+	accountID := int64(25)
+	accountRepo := &updateAccountCredsRepoStub{
+		account: &Account{
+			ID:          accountID,
+			Name:        "cursor-account",
+			Platform:    PlatformCursor,
+			Type:        AccountTypeAPIKey,
+			Status:      StatusActive,
+			Credentials: map[string]any{"api_key": "cursor-key"},
+		},
+	}
+	groupRepo := &groupRepoStubForAdmin{
+		getByID: &Group{ID: 26, Name: "anthropic-messages", Platform: PlatformAnthropic},
+	}
+	svc := &adminServiceImpl{accountRepo: accountRepo, groupRepo: groupRepo}
+	groupIDs := []int64{26}
+
+	updated, err := svc.UpdateAccount(context.Background(), accountID, &UpdateAccountInput{
+		Extra:                 map[string]any{"mixed_scheduling": true},
+		GroupIDs:              &groupIDs,
+		SkipMixedChannelCheck: true,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	require.Equal(t, 1, accountRepo.updateCalls)
+	require.True(t, updated.IsMixedSchedulingEnabled())
+}
+
+func TestAdminService_ValidateAccountGroupPlatform_CursorMixedSchedulingAllowsAnthropic(t *testing.T) {
+	repo := &groupRepoStubForAdmin{
+		getByID: &Group{ID: 26, Name: "anthropic-messages", Platform: PlatformAnthropic},
+	}
+	svc := &adminServiceImpl{groupRepo: repo}
+
+	err := svc.validateAccountGroupPlatform(context.Background(), PlatformCursor, []int64{26}, true)
+	require.NoError(t, err)
+}
+
+func TestAdminService_ValidateAccountGroupPlatform_CursorWithoutMixedSchedulingRejectsAnthropic(t *testing.T) {
+	repo := &groupRepoStubForAdmin{
+		getByID: &Group{ID: 26, Name: "anthropic-messages", Platform: PlatformAnthropic},
+	}
+	svc := &adminServiceImpl{groupRepo: repo}
+
+	err := svc.validateAccountGroupPlatform(context.Background(), PlatformCursor, []int64{26}, false)
+	require.Error(t, err)
+	require.Equal(t, http.StatusBadRequest, infraerrors.Code(err))
+	require.Equal(t, "ACCOUNT_GROUP_PLATFORM_MISMATCH", infraerrors.Reason(err))
+	require.Contains(t, infraerrors.Message(err), `account platform "cursor"`)
+}
+
+func TestAdminService_ValidateAccountGroupPlatform_CursorMixedSchedulingRejectsOtherPlatforms(t *testing.T) {
+	repo := &groupRepoStubForAdmin{
+		getByID: &Group{ID: 27, Name: "openai", Platform: PlatformOpenAI},
+	}
+	svc := &adminServiceImpl{groupRepo: repo}
+
+	err := svc.validateAccountGroupPlatform(context.Background(), PlatformCursor, []int64{27}, true)
+	require.Error(t, err)
+	require.Equal(t, http.StatusBadRequest, infraerrors.Code(err))
+}
+
+func TestAdminService_ValidateAccountGroupPlatform_SamePlatformAllowed(t *testing.T) {
+	repo := &groupRepoStubForAdmin{
+		getByID: &Group{ID: 28, Name: "cursor", Platform: PlatformCursor},
+	}
+	svc := &adminServiceImpl{groupRepo: repo}
+
+	err := svc.validateAccountGroupPlatform(context.Background(), PlatformCursor, []int64{28}, false)
+	require.NoError(t, err)
 }
 
 func TestAdminService_ListGroups_PassesSortParams(t *testing.T) {
