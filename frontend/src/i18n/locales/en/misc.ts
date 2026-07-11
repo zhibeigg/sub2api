@@ -470,6 +470,8 @@ export default {
     activeSubscription: 'Active Subscription',
     noActiveSubscription: 'No active subscription',
     tabTopUp: 'Top Up',
+    quickRecharge: 'Top up',
+    quickRechargeAria: 'Go to balance top-up',
     tabSubscribe: 'Subscribe',
     noPlans: 'No subscription plans available',
     notAvailable: 'Top-up is currently unavailable',

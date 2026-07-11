@@ -1206,8 +1206,10 @@ onMounted(async () => {
     } else if (checkout.value.subscription_disabled) {
       activeTab.value = 'recharge'
     }
-    // Handle renewal navigation: ?tab=subscription&group=123
-    if (route.query.tab === 'subscription' && !checkout.value.subscription_disabled) {
+    // Handle direct tab navigation from the header shortcut or subscription renewal links.
+    if (route.query.tab === 'balance' && !checkout.value.balance_disabled) {
+      activeTab.value = 'recharge'
+    } else if (route.query.tab === 'subscription' && !checkout.value.subscription_disabled) {
       activeTab.value = 'subscription'
       if (route.query.group) {
         const groupId = Number(route.query.group)

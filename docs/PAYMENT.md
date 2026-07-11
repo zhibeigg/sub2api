@@ -54,7 +54,7 @@ An active `standard_quota` subscription takes priority over balance billing. Exh
 2. Enable **Payment**
 3. Configure basic parameters (amount range, timeout, etc.)
 4. Add at least one provider instance in **Provider Management**
-5. Users can now top up from the frontend
+5. Users can now top up from the frontend; once payment is enabled, a top-up shortcut appears next to the header balance and in the mobile user menu
 
 ---
 

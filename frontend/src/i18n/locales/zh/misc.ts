@@ -494,6 +494,8 @@ export default {
     activeSubscription: '当前订阅',
     noActiveSubscription: '暂无有效订阅',
     tabTopUp: '充值',
+    quickRecharge: '充值',
+    quickRechargeAria: '前往余额充值',
     tabSubscribe: '订阅',
     noPlans: '暂无可用订阅套餐',
     notAvailable: '充值功能暂未开放',
