@@ -101,10 +101,14 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 		if err := ValidateCursorAccountCredentials(account.Type, account.Credentials); err != nil {
 			return nil, newUpstreamModelSyncConfigError("Invalid Cursor credentials", err)
 		}
-		if s.cursorGatewayService.cursorTransportMode(account) == CursorTransportIDEChat {
-			models, err := s.cursorGatewayService.FetchIDEModels(ctx, account)
+		// Cursor's IDE AvailableModels response is an execution-variant catalog:
+		// thinking/non-thinking, effort, context and fast combinations are exposed
+		// as separate server model names. Prefer stable logical IDs from the official
+		// Cloud /v1/models endpoint; IDE-only accounts collapse legacySlugs instead.
+		if strings.TrimSpace(account.GetCredential("api_key")) == "" {
+			models, err := s.cursorGatewayService.FetchIDELogicalModels(ctx, account)
 			if err != nil {
-				return nil, newUpstreamModelSyncUpstreamError("Failed to request Cursor IDE model list", err)
+				return nil, newUpstreamModelSyncUpstreamError("Failed to request Cursor IDE logical model list", err)
 			}
 			return models, nil
 		}
@@ -120,7 +124,7 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 		seen := make(map[string]struct{}, len(models))
 		for _, model := range models {
 			id := strings.TrimSpace(model.ID)
-			if id == "" {
+			if id == "" || strings.EqualFold(id, "default") {
 				continue
 			}
 			if _, exists := seen[id]; exists {

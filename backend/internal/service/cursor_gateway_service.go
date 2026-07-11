@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +51,98 @@ type cursorRequestEnvelope struct {
 	Stream             bool   `json:"stream"`
 	PreviousResponseID string `json:"previous_response_id"`
 	Store              *bool  `json:"store"`
+	Thinking           *struct {
+		Type string `json:"type"`
+	} `json:"thinking"`
+	OutputConfig *struct {
+		Effort string `json:"effort"`
+	} `json:"output_config"`
+	Reasoning *struct {
+		Effort string `json:"effort"`
+	} `json:"reasoning"`
+	ReasoningEffort string `json:"reasoning_effort"`
+}
+
+type cursorVariantPreference struct {
+	Thinking *bool
+	Effort   string
+	Context  string
+	Fast     *bool
+}
+
+func (e cursorRequestEnvelope) variantPreference() cursorVariantPreference {
+	preference := cursorVariantPreference{}
+	if e.Thinking != nil {
+		switch strings.ToLower(strings.TrimSpace(e.Thinking.Type)) {
+		case "enabled", "adaptive", "auto":
+			value := true
+			preference.Thinking = &value
+		case "disabled", "none", "off":
+			value := false
+			preference.Thinking = &value
+		}
+	}
+	effort := strings.TrimSpace(e.ReasoningEffort)
+	if e.Reasoning != nil && strings.TrimSpace(e.Reasoning.Effort) != "" {
+		effort = e.Reasoning.Effort
+	}
+	if e.OutputConfig != nil && strings.TrimSpace(e.OutputConfig.Effort) != "" {
+		effort = e.OutputConfig.Effort
+	}
+	if normalized := NormalizeClaudeOutputEffort(effort); normalized != nil {
+		preference.Effort = *normalized
+		if preference.Thinking == nil {
+			value := true
+			preference.Thinking = &value
+		}
+	}
+	return preference
+}
+
+func normalizeCursorCloudModel(model string, preference cursorVariantPreference) (string, cursorVariantPreference) {
+	model = strings.TrimSpace(model)
+	lower := strings.ToLower(model)
+	if lower == "claude-4-sonnet-1m" {
+		preference.Context = "1m"
+		return "claude-sonnet-4", preference
+	}
+	parts := strings.Split(lower, "-")
+	hasThinking := false
+	hasFast := false
+	for _, part := range parts {
+		hasThinking = hasThinking || part == "thinking"
+		hasFast = hasFast || part == "fast"
+	}
+	effort := cursorIDEVariantEffort(lower)
+	if effort == "" && !hasThinking && !hasFast {
+		return model, preference
+	}
+	if preference.Effort == "" && effort != "" {
+		preference.Effort = effort
+	}
+	if preference.Thinking == nil && hasThinking {
+		value := true
+		preference.Thinking = &value
+	}
+	if preference.Fast == nil && hasFast {
+		value := true
+		preference.Fast = &value
+	}
+	logical := cursorIDEVariantFamily(lower)
+	logicalAliases := map[string]string{
+		"claude-4-sonnet":   "claude-sonnet-4",
+		"claude-4.5-haiku":  "claude-haiku-4-5",
+		"claude-4.5-opus":   "claude-opus-4-5",
+		"claude-4.5-sonnet": "claude-sonnet-4-5",
+		"claude-4.6-opus":   "claude-opus-4-6",
+		"claude-4.6-sonnet": "claude-sonnet-4-6",
+		"claude-4.7-opus":   "claude-opus-4-7",
+		"claude-4.8-opus":   "claude-opus-4-8",
+	}
+	if canonical, ok := logicalAliases[logical]; ok {
+		logical = canonical
+	}
+	return logical, preference
 }
 
 type cursorStoredResponse struct {
@@ -204,6 +297,8 @@ func (s *CursorGatewayService) forwardCloud(ctx context.Context, c *gin.Context,
 	if upstreamModel == "" {
 		upstreamModel = s.cursorConfig().DefaultModel
 	}
+	variantPreference := envelope.variantPreference()
+	upstreamModel, variantPreference = normalizeCursorCloudModel(upstreamModel, variantPreference)
 
 	dialogue, err := cursorpkg.ParseRequest(protocol, body)
 	if err != nil {
@@ -235,7 +330,7 @@ func (s *CursorGatewayService) forwardCloud(ctx context.Context, c *gin.Context,
 	estimatedInput := estimateCursorPayloadTokens(payload)
 	created, err := client.CreateAgent(ctx, cursorpkg.CreateAgentRequest{
 		Prompt: cursorpkg.CloudPrompt{Text: cursorpkg.RenderAgentPrompt(payload)},
-		Model:  cursorCloudModelRef(account, upstreamModel),
+		Model:  cursorCloudModelRef(account, upstreamModel, variantPreference),
 		Name:   "Sub2API compatibility request",
 	})
 	if err != nil {
@@ -274,7 +369,7 @@ func (s *CursorGatewayService) forwardCloud(ctx context.Context, c *gin.Context,
 	} else {
 		writeCursorJSON(c, protocol, responseID, requestModel, envelope.PreviousResponseID, collected)
 	}
-	return &ForwardResult{
+	result := &ForwardResult{
 		RequestID: responseID,
 		Usage: ClaudeUsage{
 			InputTokens:              collected.Usage.InputTokens,
@@ -287,7 +382,11 @@ func (s *CursorGatewayService) forwardCloud(ctx context.Context, c *gin.Context,
 		Stream:        envelope.Stream,
 		Duration:      time.Since(start),
 		FirstTokenMs:  firstTokenMs,
-	}, nil
+	}
+	if variantPreference.Effort != "" {
+		result.ReasoningEffort = &variantPreference.Effort
+	}
+	return result, nil
 }
 
 func (s *CursorGatewayService) newCloudClient(ctx context.Context, account *Account) (*cursorpkg.CloudClient, error) {
@@ -611,20 +710,46 @@ func waitForCloudRun(ctx context.Context, client *cursorpkg.CloudClient, agentID
 	}
 }
 
-func cursorCloudModelRef(account *Account, model string) *cursorpkg.ModelRef {
+func cursorCloudModelRef(account *Account, model string, preference cursorVariantPreference) *cursorpkg.ModelRef {
 	model = strings.TrimSpace(model)
 	if model == "" || strings.EqualFold(model, "auto") {
 		return nil
 	}
 	ref := &cursorpkg.ModelRef{ID: model}
-	if account == nil || account.Credentials == nil {
-		return ref
-	}
-	if raw, ok := account.Credentials["cursor_model_params"]; ok {
-		encoded, err := json.Marshal(raw)
-		if err == nil {
-			_ = json.Unmarshal(encoded, &ref.Params)
+	params := make(map[string]string)
+	if account != nil && account.Credentials != nil {
+		if raw, ok := account.Credentials["cursor_model_params"]; ok {
+			var configured []cursorpkg.ModelParam
+			encoded, err := json.Marshal(raw)
+			if err == nil && json.Unmarshal(encoded, &configured) == nil {
+				for _, item := range configured {
+					id := strings.TrimSpace(item.ID)
+					if id != "" {
+						params[id] = strings.TrimSpace(item.Value)
+					}
+				}
+			}
 		}
+	}
+	if preference.Thinking != nil {
+		params["thinking"] = strconv.FormatBool(*preference.Thinking)
+	}
+	if preference.Effort != "" {
+		params["effort"] = preference.Effort
+	}
+	if preference.Context != "" {
+		params["context"] = preference.Context
+	}
+	if preference.Fast != nil {
+		params["fast"] = strconv.FormatBool(*preference.Fast)
+	}
+	keys := make([]string, 0, len(params))
+	for key := range params {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		ref.Params = append(ref.Params, cursorpkg.ModelParam{ID: key, Value: params[key]})
 	}
 	return ref
 }

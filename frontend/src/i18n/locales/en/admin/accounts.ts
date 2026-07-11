@@ -53,7 +53,7 @@ export default {
           dashboard_access_token: 'IDE Chat mode requires a Dashboard Access Token.',
           credential_set: 'Auto mode requires at least a Cursor API Key or Dashboard Access Token.'
         },
-        modelCatalogHint: 'Cursor-compatible model IDs are prefilled. IDE Chat syncs AvailableModels, while Cloud Agent syncs the official /v1/models endpoint; treat the active transport result as authoritative.',
+        modelCatalogHint: 'The whitelist syncs only logical model IDs from Cursor’s official /v1/models endpoint. Thinking, effort, context, and fast execution variants are routed per request instead of being listed individually. Sync again to remove legacy variant entries.',
         apiKey: 'Cursor API Key (Cloud Agent only)',
         apiKeyPlaceholder: 'Enter the official Cursor Cloud Agent API Key',
         apiKeyHint: 'Used only for Cloud Agent forwarding. It is stored as a sensitive credential and never prefilled after creation.',
@@ -665,6 +665,7 @@ export default {
       syncUpstreamModels: 'Sync upstream supported models',
       syncUpstreamModelsLoading: 'Syncing upstream...',
       syncUpstreamModelsSuccess: 'Synced {count} new model(s) from upstream ({total} upstream total)',
+      syncUpstreamModelsReplaced: 'Replaced the whitelist with {count} official Cursor logical model(s)',
       syncUpstreamModelsNoChanges: 'All {count} upstream model(s) are already in the whitelist',
       syncUpstreamModelsEmpty: 'Upstream returned no models to sync',
       syncUpstreamModelsFailed: 'Failed to sync upstream models',

@@ -53,7 +53,7 @@ export default {
           dashboard_access_token: 'IDE Chat 模式需要 Dashboard Access Token。',
           credential_set: '自动模式至少需要 Cursor API Key 或 Dashboard Access Token 中的一套凭据。'
         },
-        modelCatalogHint: '已预填 Cursor 模型兼容 ID；IDE Chat 会同步 AvailableModels，Cloud Agent 会同步官方 /v1/models，以当前模式的上游结果为准。',
+        modelCatalogHint: '白名单只同步 Cursor 官方 /v1/models 的逻辑模型 ID；thinking、effort、上下文和 fast 等执行变体会在请求时自动路由，不再逐个显示。重新同步可清理旧版写入的变体条目。',
         apiKey: 'Cursor API Key（仅 Cloud Agent）',
         apiKeyPlaceholder: '输入 Cursor 官方 Cloud Agent API Key',
         apiKeyHint: '仅用于 Cloud Agent 转发。作为敏感凭据保存，创建成功后不会回填明文。',
@@ -782,6 +782,7 @@ export default {
       syncUpstreamModels: '同步上游支持的模型',
       syncUpstreamModelsLoading: '同步上游中...',
       syncUpstreamModelsSuccess: '已从上游同步 {count} 个新模型（上游共 {total} 个）',
+      syncUpstreamModelsReplaced: '已用 Cursor 官方逻辑模型目录替换白名单，共 {count} 个模型',
       syncUpstreamModelsNoChanges: '上游 {count} 个模型均已在白名单中',
       syncUpstreamModelsEmpty: '上游没有返回可同步的模型',
       syncUpstreamModelsFailed: '同步上游模型失败',

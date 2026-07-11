@@ -52,7 +52,7 @@ func (s *cursorGatewayUpstreamStub) Do(req *http.Request, _ string, accountID in
 	case req.Method == http.MethodGet && req.URL.Path == "/v1/me":
 		return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(strings.NewReader(`{"apiKeyName":"test-key","userEmail":"cursor@example.com"}`))}, nil
 	case req.Method == http.MethodGet && req.URL.Path == "/v1/models":
-		return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(strings.NewReader(`{"items":[{"id":"model-b","displayName":"B"},{"id":"model-a","displayName":"A"}]}`))}, nil
+		return &http.Response{StatusCode: http.StatusOK, Header: header, Body: io.NopCloser(strings.NewReader(`{"items":[{"id":"default","displayName":"Default"},{"id":"model-b","displayName":"B"},{"id":"model-a","displayName":"A"}]}`))}, nil
 	case req.Method == http.MethodPost && req.URL.Path == "/aiserver.v1.DashboardService/GetCurrentPeriodUsage":
 		s.dashboardUsageCalls++
 		if s.dashboardRequiresRefresh && req.Header.Get("Authorization") == "Bearer old-access" {
@@ -303,12 +303,53 @@ func TestAccountTestServiceValidateTransientCursorAPIKey(t *testing.T) {
 	require.NotContains(t, string(encoded), "transient-secret")
 }
 
-func TestCursorUpstreamModelSync(t *testing.T) {
+func TestCursorVariantPreferenceAndCloudModelParams(t *testing.T) {
+	var envelope cursorRequestEnvelope
+	require.NoError(t, json.Unmarshal([]byte(`{"thinking":{"type":"enabled"},"reasoning_effort":"low","output_config":{"effort":"HIGH"}}`), &envelope))
+	preference := envelope.variantPreference()
+	require.NotNil(t, preference.Thinking)
+	require.True(t, *preference.Thinking)
+	require.Equal(t, "high", preference.Effort)
+
+	account := &Account{Credentials: map[string]any{"cursor_model_params": []map[string]any{
+		{"id": "context", "value": "1m"},
+		{"id": "effort", "value": "medium"},
+	}}}
+	ref := cursorCloudModelRef(account, "claude-fable-5", preference)
+	require.NotNil(t, ref)
+	require.Equal(t, "claude-fable-5", ref.ID)
+	params := make(map[string]string)
+	for _, item := range ref.Params {
+		params[item.ID] = item.Value
+	}
+	require.Equal(t, map[string]string{"context": "1m", "effort": "high", "thinking": "true"}, params)
+
+	logicalModel, legacyPreference := normalizeCursorCloudModel("claude-4.7-opus-high-thinking-fast", cursorVariantPreference{})
+	require.Equal(t, "claude-opus-4-7", logicalModel)
+	require.Equal(t, "high", legacyPreference.Effort)
+	require.NotNil(t, legacyPreference.Thinking)
+	require.True(t, *legacyPreference.Thinking)
+	require.NotNil(t, legacyPreference.Fast)
+	require.True(t, *legacyPreference.Fast)
+
+	logicalModel, legacyPreference = normalizeCursorCloudModel("gpt-5.1-codex-max-high", cursorVariantPreference{})
+	require.Equal(t, "gpt-5.1-codex-max", logicalModel)
+	require.Equal(t, "high", legacyPreference.Effort)
+}
+
+func TestCursorUpstreamModelSyncAlwaysUsesLogicalCloudCatalog(t *testing.T) {
 	upstream := &cursorGatewayUpstreamStub{}
 	gateway := newCursorGatewayForTest(upstream, nil)
 	svc := NewAccountTestService(nil, nil, nil, nil, nil, nil, &config.Config{}, nil)
 	svc.SetCursorGatewayService(gateway)
-	models, err := svc.FetchUpstreamSupportedModels(context.Background(), cursorAPIKeyAccount())
+	account := cursorAPIKeyAccount()
+	account.Credentials["cursor_transport_mode"] = CursorTransportIDEChat
+	account.Credentials["dashboard_access_token"] = "dashboard-token"
+
+	models, err := svc.FetchUpstreamSupportedModels(context.Background(), account)
 	require.NoError(t, err)
 	require.Equal(t, []string{"model-a", "model-b"}, models)
+	requests, _, _, _ := upstream.snapshot()
+	require.Len(t, requests, 1)
+	require.Equal(t, "/v1/models", requests[0].URL.Path)
 }

@@ -12,7 +12,7 @@ import (
 func TestCursorModelCatalogHasPricingForEveryExplicitModel(t *testing.T) {
 	t.Parallel()
 
-	require.Len(t, CursorModelCatalog, 40)
+	require.Len(t, CursorModelCatalog, 32)
 	for _, model := range CursorModelCatalog {
 		pricing := cursorModelPricing(model)
 		require.NotNilf(t, pricing, "missing Cursor pricing for %s", model)

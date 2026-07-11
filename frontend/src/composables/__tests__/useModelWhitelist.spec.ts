@@ -4,7 +4,7 @@ vi.mock('@/api/admin/accounts', () => ({
   getAntigravityDefaultModelMapping: vi.fn()
 }))
 
-import { buildModelMappingObject, getModelsByPlatform, splitModelMappingObject } from '../useModelWhitelist'
+import { buildModelMappingObject, getModelsByPlatform, mergeUpstreamModels, splitModelMappingObject } from '../useModelWhitelist'
 
 describe('useModelWhitelist', () => {
   it('openai 模型列表包含 GPT-5.4 官方快照', () => {
@@ -43,19 +43,38 @@ describe('useModelWhitelist', () => {
     expect(getModelsByPlatform('antigravity')).toContain('claude-opus-4-8')
   })
 
-  it('Cursor 模型列表包含完整的离线默认目录', () => {
+  it('Cursor 模型列表只包含官方逻辑模型，不暴露执行变体', () => {
     const models = getModelsByPlatform('cursor')
 
-    expect(models).toHaveLength(42)
-    expect(models).toContain('cursor-agent')
-    expect(models).toContain('claude-4-sonnet-1m')
-    expect(models).toContain('claude-4.7-opus-fast')
+    expect(models).toHaveLength(32)
+    expect(models).not.toContain('default')
+    expect(models).toContain('claude-fable-5')
+    expect(models).toContain('claude-opus-4-8')
+    expect(models).toContain('claude-sonnet-4-6')
     expect(models).toContain('composer-2.5')
-    expect(models).toContain('gemini-3-pro-image-preview')
     expect(models).toContain('glm-5.2')
     expect(models).toContain('gpt-5.6-terra')
     expect(models).toContain('grok-4.5')
     expect(models).toContain('kimi-k2.7-code')
+    expect(models).not.toContain('cursor-agent')
+    expect(models).not.toContain('claude-4.7-opus-fast')
+    expect(models.some(model => model.includes('-thinking-'))).toBe(false)
+  })
+
+  it('Cursor 同步替换旧白名单，其他平台同步仍追加', () => {
+    const current = ['claude-fable-5-thinking-low', 'custom-model']
+    const upstream = ['claude-fable-5', 'claude-sonnet-4-6', 'claude-fable-5']
+
+    expect(mergeUpstreamModels(current, upstream, true)).toEqual([
+      'claude-fable-5',
+      'claude-sonnet-4-6'
+    ])
+    expect(mergeUpstreamModels(current, upstream)).toEqual([
+      'claude-fable-5-thinking-low',
+      'custom-model',
+      'claude-fable-5',
+      'claude-sonnet-4-6'
+    ])
   })
 
   it('xAI 模型列表包含 Grok 4.5 官方模型和别名', () => {

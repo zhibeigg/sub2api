@@ -22,8 +22,17 @@ import (
 )
 
 type cursorIDEModel struct {
-	Name       string
+	Name             string
+	ServerName       string
+	DefaultOn        bool
+	SupportsThinking bool
+	LegacySlugs      []string
+}
+
+type cursorIDEModelSelection struct {
 	ServerName string
+	Thinking   bool
+	Effort     string
 }
 
 type cursorIDEModelCatalogCache struct {
@@ -70,23 +79,62 @@ func (s *CursorGatewayService) FetchIDEModels(ctx context.Context, account *Acco
 	if err != nil {
 		return nil, err
 	}
-	seen := make(map[string]struct{}, len(catalog))
 	models := make([]string, 0, len(catalog))
+	seen := make(map[string]struct{}, len(catalog))
 	for _, item := range catalog {
-		name := strings.TrimSpace(item.ServerName)
+		name := strings.TrimSpace(item.Name)
+		if name == "" {
+			name = strings.TrimSpace(item.ServerName)
+		}
 		if name == "" {
 			continue
 		}
-		if _, exists := seen[name]; exists {
+		if _, ok := seen[name]; ok {
 			continue
 		}
 		seen[name] = struct{}{}
 		models = append(models, name)
 	}
-	sort.Strings(models)
 	if len(models) == 0 {
-		return nil, cursorpkg.HTTPError(http.StatusBadGateway, "IDE models request", "Cursor returned no IDE models")
+		return nil, errors.New("Cursor IDE returned no supported models")
 	}
+	sort.Strings(models)
+	return models, nil
+}
+
+func (s *CursorGatewayService) FetchIDELogicalModels(ctx context.Context, account *Account) ([]string, error) {
+	catalog, err := s.fetchIDEModelCatalog(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(catalog))
+	seen := make(map[string]struct{}, len(catalog))
+	appendModel := func(model string) {
+		model = strings.TrimSpace(model)
+		if model == "" || strings.EqualFold(model, "default") {
+			return
+		}
+		if _, ok := seen[model]; ok {
+			return
+		}
+		seen[model] = struct{}{}
+		models = append(models, model)
+	}
+	for _, item := range catalog {
+		for _, slug := range item.LegacySlugs {
+			appendModel(slug)
+		}
+	}
+	if len(models) == 0 {
+		for _, item := range catalog {
+			logical, _ := normalizeCursorCloudModel(item.Name, cursorVariantPreference{})
+			appendModel(logical)
+		}
+	}
+	if len(models) == 0 {
+		return nil, errors.New("Cursor IDE returned no logical models")
+	}
+	sort.Strings(models)
 	return models, nil
 }
 
@@ -142,18 +190,146 @@ func (s *CursorGatewayService) fetchIDEModelCatalog(ctx context.Context, account
 	return models, nil
 }
 
-func (s *CursorGatewayService) resolveCursorIDEModel(ctx context.Context, account *Account, requested string) (string, error) {
+func (s *CursorGatewayService) resolveCursorIDEModel(ctx context.Context, account *Account, requested string, preference cursorVariantPreference) (cursorIDEModelSelection, error) {
 	requested = strings.TrimSpace(requested)
+	fallback := cursorIDEModelSelection{ServerName: requested}
 	catalog, err := s.fetchIDEModelCatalog(ctx, account)
 	if err != nil {
-		return requested, err
+		return fallback, err
 	}
+
+	// Concrete IDE variant names remain valid for backwards compatibility.
 	for _, item := range catalog {
 		if strings.EqualFold(requested, item.Name) || strings.EqualFold(requested, item.ServerName) {
-			return item.ServerName, nil
+			return cursorIDESelection(item), nil
 		}
 	}
-	return requested, nil
+
+	candidates := make([]cursorIDEModel, 0)
+	families := make(map[string]struct{})
+	for _, item := range catalog {
+		for _, slug := range item.LegacySlugs {
+			if strings.EqualFold(requested, strings.TrimSpace(slug)) {
+				candidates = append(candidates, item)
+				families[cursorIDEVariantFamily(item.Name)] = struct{}{}
+				break
+			}
+		}
+	}
+	if len(families) > 0 {
+		seen := make(map[string]struct{}, len(candidates))
+		for _, item := range candidates {
+			seen[item.ServerName] = struct{}{}
+		}
+		for _, item := range catalog {
+			if _, ok := families[cursorIDEVariantFamily(item.Name)]; !ok {
+				continue
+			}
+			if _, ok := seen[item.ServerName]; ok {
+				continue
+			}
+			seen[item.ServerName] = struct{}{}
+			candidates = append(candidates, item)
+		}
+	}
+	if len(candidates) == 0 {
+		return fallback, nil
+	}
+
+	filtered := candidates
+	if preference.Thinking != nil {
+		matching := make([]cursorIDEModel, 0, len(filtered))
+		for _, item := range filtered {
+			if item.SupportsThinking == *preference.Thinking {
+				matching = append(matching, item)
+			}
+		}
+		if len(matching) > 0 {
+			filtered = matching
+		}
+	}
+	if preference.Effort != "" {
+		matching := make([]cursorIDEModel, 0, len(filtered))
+		for _, item := range filtered {
+			if cursorIDEVariantEffort(item.Name) == preference.Effort {
+				matching = append(matching, item)
+			}
+		}
+		if len(matching) > 0 {
+			filtered = matching
+		}
+	}
+	for _, item := range filtered {
+		if item.DefaultOn {
+			return cursorIDESelection(item), nil
+		}
+	}
+	if preference.Effort == "" {
+		defaultEffort := ""
+		for _, item := range candidates {
+			if item.DefaultOn {
+				defaultEffort = cursorIDEVariantEffort(item.Name)
+				break
+			}
+		}
+		if defaultEffort != "" {
+			for _, item := range filtered {
+				if cursorIDEVariantEffort(item.Name) == defaultEffort {
+					return cursorIDESelection(item), nil
+				}
+			}
+		}
+	}
+	return cursorIDESelection(filtered[0]), nil
+}
+
+func cursorIDESelection(item cursorIDEModel) cursorIDEModelSelection {
+	return cursorIDEModelSelection{
+		ServerName: item.ServerName,
+		Thinking:   item.SupportsThinking,
+		Effort:     cursorIDEVariantEffort(item.Name),
+	}
+}
+
+func cursorIDEVariantFamily(name string) string {
+	parts := strings.Split(strings.ToLower(strings.TrimSpace(name)), "-")
+	effortIndex, _ := cursorIDEVariantEffortParts(parts)
+	family := make([]string, 0, len(parts))
+	for index, part := range parts {
+		if index == effortIndex || part == "thinking" || part == "fast" {
+			continue
+		}
+		family = append(family, part)
+	}
+	return strings.Join(family, "-")
+}
+
+func cursorIDEVariantEffort(name string) string {
+	_, effort := cursorIDEVariantEffortParts(strings.Split(strings.ToLower(strings.TrimSpace(name)), "-"))
+	return effort
+}
+
+func cursorIDEVariantEffortParts(parts []string) (int, string) {
+	for index := len(parts) - 1; index >= 0; index-- {
+		part := parts[index]
+		if part == "thinking" || part == "fast" {
+			continue
+		}
+		switch part {
+		case "low", "medium", "high", "xhigh":
+			return index, part
+		case "max":
+			// gpt-5.1-codex-max is a logical model ID; a trailing effort on
+			// one of its variants appears after this token (for example ...-max-high).
+			if index > 0 && parts[index-1] == "codex" {
+				return -1, ""
+			}
+			return index, part
+		default:
+			return -1, ""
+		}
+	}
+	return -1, ""
 }
 
 func decodeCursorIDEModelsResponse(contentType string, body []byte, cfg config.CursorConfig) ([]cursorIDEModel, error) {
@@ -161,8 +337,11 @@ func decodeCursorIDEModelsResponse(contentType string, body []byte, cfg config.C
 	if strings.Contains(strings.ToLower(contentType), "json") || (len(trimmed) > 0 && trimmed[0] == '{') {
 		var payload struct {
 			Models []struct {
-				Name            string `json:"name"`
-				ServerModelName string `json:"serverModelName"`
+				Name             string   `json:"name"`
+				ServerModelName  string   `json:"serverModelName"`
+				DefaultOn        bool     `json:"defaultOn"`
+				SupportsThinking bool     `json:"supportsThinking"`
+				LegacySlugs      []string `json:"legacySlugs"`
 			} `json:"models"`
 		}
 		if err := json.Unmarshal(trimmed, &payload); err != nil {
@@ -179,7 +358,11 @@ func decodeCursorIDEModelsResponse(contentType string, body []byte, cfg config.C
 				serverName = name
 			}
 			if serverName != "" {
-				models = append(models, cursorIDEModel{Name: name, ServerName: serverName})
+				models = append(models, cursorIDEModel{
+					Name: name, ServerName: serverName,
+					DefaultOn: item.DefaultOn, SupportsThinking: item.SupportsThinking,
+					LegacySlugs: append([]string(nil), item.LegacySlugs...),
+				})
 			}
 		}
 		return models, nil
@@ -251,15 +434,21 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 	trimCursorDialogue(dialogue, s.cursorConfig().MaxHistoryMessages, s.cursorConfig().MaxHistoryTokens)
 	mode := prepareCursorIDEMode(dialogue)
 	estimatedInput := estimateCursorDialogueTokens(dialogue)
-	resolvedModel, resolveErr := s.resolveCursorIDEModel(ctx, account, upstreamModel)
+	variantPreference := envelope.variantPreference()
+	selection := cursorIDEModelSelection{ServerName: upstreamModel}
+	if variantPreference.Thinking != nil {
+		selection.Thinking = *variantPreference.Thinking
+	}
+	resolvedSelection, resolveErr := s.resolveCursorIDEModel(ctx, account, upstreamModel, variantPreference)
 	if resolveErr != nil {
 		slog.Warn("cursor_ide_model_resolution_failed", "account_id", account.ID, "model", upstreamModel, "error", resolveErr.Error())
-	} else if resolvedModel != "" {
-		upstreamModel = resolvedModel
+	} else if resolvedSelection.ServerName != "" {
+		selection = resolvedSelection
+		upstreamModel = resolvedSelection.ServerName
 	}
 
 	activeAccount, resp, stream, err := s.openCursorIDEStream(ctx, account, dialogue, cursorpkg.IDEChatOptions{
-		Model: upstreamModel, ConversationID: uuid.NewString(), Mode: mode,
+		Model: upstreamModel, ConversationID: uuid.NewString(), Mode: mode, Thinking: selection.Thinking,
 	})
 	if err != nil {
 		slog.Warn("cursor_ide_open_stream_failed", "account_id", account.ID, "model", upstreamModel, "error", err.Error())
@@ -397,7 +586,7 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 	}
 
 	_ = activeAccount
-	return &ForwardResult{
+	result := &ForwardResult{
 		RequestID: responseID,
 		Usage: ClaudeUsage{
 			InputTokens: collected.Usage.InputTokens, OutputTokens: collected.Usage.OutputTokens,
@@ -405,7 +594,13 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 		},
 		Model: requestModel, UpstreamModel: differentOrEmpty(requestModel, upstreamModel), Stream: envelope.Stream,
 		Duration: time.Since(start), FirstTokenMs: firstTokenMs,
-	}, nil
+	}
+	if selection.Effort != "" {
+		result.ReasoningEffort = &selection.Effort
+	} else if variantPreference.Effort != "" {
+		result.ReasoningEffort = &variantPreference.Effort
+	}
+	return result, nil
 }
 
 func (s *CursorGatewayService) openCursorIDEStream(ctx context.Context, account *Account, dialogue *cursorpkg.Dialogue, options cursorpkg.IDEChatOptions) (*Account, *http.Response, *cursorpkg.IDEEventStream, error) {

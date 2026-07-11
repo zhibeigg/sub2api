@@ -136,7 +136,7 @@ import { accountsAPI } from '@/api/admin/accounts'
 import type { SyncUpstreamPreviewParams } from '@/api/admin/accounts'
 import ModelIcon from '@/components/common/ModelIcon.vue'
 import Icon from '@/components/icons/Icon.vue'
-import { allModels, getModelsByPlatform } from '@/composables/useModelWhitelist'
+import { allModels, getModelsByPlatform, mergeUpstreamModels } from '@/composables/useModelWhitelist'
 
 const { t } = useI18n()
 
@@ -192,6 +192,11 @@ const canSyncUpstream = computed(() => {
     return upstreamSyncPlatforms.has(props.syncCredentials.platform.toLowerCase())
   }
   return false
+})
+
+const isCursorSync = computed(() => {
+  if (normalizedPlatforms.value.some(platform => platform.toLowerCase() === 'cursor')) return true
+  return props.syncCredentials?.platform.toLowerCase() === 'cursor'
 })
 
 const availableOptions = computed(() => {
@@ -282,14 +287,22 @@ const syncUpstreamModels = async () => {
       return
     }
 
-    const newModels = [...props.modelValue]
-    let addedCount = 0
-    for (const model of upstreamModels) {
-      if (!newModels.includes(model)) {
-        newModels.push(model)
-        addedCount += 1
+    if (isCursorSync.value) {
+      const canonicalModels = mergeUpstreamModels(props.modelValue, upstreamModels, true)
+      const changed =
+        canonicalModels.length !== props.modelValue.length ||
+        canonicalModels.some((model, index) => props.modelValue[index] !== model)
+      emit('update:modelValue', canonicalModels)
+      if (changed) {
+        appStore.showSuccess(t('admin.accounts.syncUpstreamModelsReplaced', { count: canonicalModels.length }))
+      } else {
+        appStore.showInfo(t('admin.accounts.syncUpstreamModelsNoChanges', { count: canonicalModels.length }))
       }
+      return
     }
+
+    const newModels = mergeUpstreamModels(props.modelValue, upstreamModels)
+    const addedCount = newModels.length - new Set(props.modelValue).size
 
     emit('update:modelValue', newModels)
     if (addedCount > 0) {

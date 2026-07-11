@@ -66,6 +66,7 @@ var cursorModelPriceAliases = map[string]string{
 	"claude-opus-4-7-fast":          "claude-4.7-opus-fast",
 	"claude-opus-4-7-fast-mode":     "claude-4.7-opus-fast",
 	"claude-opus-4-8":               "claude-4.8-opus",
+	"gpt-5.1":                       "gpt-5",
 	"claude-4.5-haiku-thinking":     "claude-4.5-haiku",
 	"claude-4.5-opus-thinking":      "claude-4.5-opus",
 	"claude-4.5-sonnet-thinking":    "claude-4.5-sonnet",

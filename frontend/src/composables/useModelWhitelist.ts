@@ -2,6 +2,12 @@
 // 模型列表（硬编码，与 new-api 一致）
 // =====================
 
+export function mergeUpstreamModels(current: string[], upstream: string[], replace = false): string[] {
+  const normalizedUpstream = Array.from(new Set(upstream))
+  if (replace) return normalizedUpstream
+  return Array.from(new Set([...current, ...normalizedUpstream]))
+}
+
 // OpenAI
 const openaiModels = [
   // GPT-5.2 系列
@@ -43,19 +49,16 @@ export const claudeModels = [
   'claude-fable-5'
 ]
 
-// Cursor Cloud Agents（离线默认目录；联网时可通过 /v1/models 同步最新 ID）
+// Cursor 逻辑模型目录（离线默认值；联网时以官方 /v1/models 为准）。
+// thinking、effort、context、fast 等执行参数不能作为独立白名单模型写入。
 export const cursorModels = [
-  'cursor-agent', 'cursor-chat',
-  'claude-4-sonnet', 'claude-4-sonnet-1m',
-  'claude-4.5-haiku', 'claude-4.5-opus', 'claude-4.5-sonnet',
-  'claude-4.6-opus', 'claude-4.6-sonnet', 'claude-4.7-opus',
-  'claude-fable-5', 'claude-4.7-opus-fast', 'claude-4.8-opus', 'claude-sonnet-5',
-  'composer-1', 'composer-2.5',
-  'gemini-2.5-flash', 'gemini-3-flash', 'gemini-3-pro',
-  'gemini-3-pro-image-preview', 'gemini-3.1-pro', 'gemini-3.5-flash',
+  'claude-fable-5', 'claude-haiku-4-5',
+  'claude-opus-4-5', 'claude-opus-4-6', 'claude-opus-4-7', 'claude-opus-4-8',
+  'claude-sonnet-4', 'claude-sonnet-4-5', 'claude-sonnet-4-6', 'claude-sonnet-5',
+  'composer-2.5',
+  'gemini-2.5-flash', 'gemini-3-flash', 'gemini-3.1-pro', 'gemini-3.5-flash',
   'glm-5.2',
-  'gpt-5', 'gpt-5-fast', 'gpt-5-mini', 'gpt-5-codex',
-  'gpt-5.1-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini',
+  'gpt-5-mini', 'gpt-5.1', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini',
   'gpt-5.2', 'gpt-5.2-codex', 'gpt-5.3-codex',
   'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-5.5',
   'gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra',

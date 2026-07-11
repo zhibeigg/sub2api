@@ -144,15 +144,13 @@ func TestCursorGatewayIDERejectsHTTP1BeforeWriting(t *testing.T) {
 	require.Equal(t, 0, recorder.Body.Len())
 }
 
-func TestCursorIDEModelSyncUsesAvailableModels(t *testing.T) {
+func TestCursorIDEModelProbeUsesAvailableModels(t *testing.T) {
 	modelsPayload := appendProtoString(nil, 1, "claude-4.6-sonnet-medium")
 	modelsPayload = appendProtoString(modelsPayload, 1, "composer-2-fast")
 	upstream := &cursorIDEUpstreamStub{modelsBody: cursorIDEFrames(modelsPayload)}
 	gateway := ideTestGateway(upstream)
-	svc := NewAccountTestService(nil, nil, nil, nil, nil, nil, &config.Config{}, nil)
-	svc.SetCursorGatewayService(gateway)
 
-	models, err := svc.FetchUpstreamSupportedModels(context.Background(), ideTestAccount())
+	models, err := gateway.FetchIDEModels(context.Background(), ideTestAccount())
 	require.NoError(t, err)
 	require.Equal(t, []string{"claude-4.6-sonnet-medium", "composer-2-fast"}, models)
 
@@ -164,13 +162,28 @@ func TestCursorIDEModelSyncUsesAvailableModels(t *testing.T) {
 	require.Equal(t, []byte{0, 0, 0, 0, 0}, upstream.bodies[0])
 }
 
+func TestCursorIDEOnlyModelSyncCollapsesExecutionVariants(t *testing.T) {
+	upstream := &cursorIDEUpstreamStub{modelsBody: []byte(`{"models":[
+		{"name":"claude-fable-5-thinking-low","serverModelName":"claude-fable-5-thinking-low"},
+		{"name":"claude-fable-5-thinking-high","serverModelName":"claude-fable-5-thinking-high","defaultOn":true,"supportsThinking":true,"legacySlugs":["claude-fable-5"]},
+		{"name":"claude-4.6-sonnet-medium-thinking","serverModelName":"claude-4.6-sonnet-medium-thinking","defaultOn":true,"supportsThinking":true,"legacySlugs":["claude-sonnet-4-6"]}
+	]}`)}
+	gateway := ideTestGateway(upstream)
+	svc := NewAccountTestService(nil, nil, nil, nil, nil, nil, &config.Config{}, nil)
+	svc.SetCursorGatewayService(gateway)
+
+	models, err := svc.FetchUpstreamSupportedModels(context.Background(), ideTestAccount())
+	require.NoError(t, err)
+	require.Equal(t, []string{"claude-fable-5", "claude-sonnet-4-6"}, models)
+}
+
 func TestDecodeCursorIDEModelsResponseJSON(t *testing.T) {
-	models, err := decodeCursorIDEModelsResponse("application/json", []byte(`{"models":[{"name":"display","serverModelName":"claude-4.6-sonnet-medium"},{"name":"composer-2-fast"}]}`), config.CursorConfig{
+	models, err := decodeCursorIDEModelsResponse("application/json", []byte(`{"models":[{"name":"display","serverModelName":"claude-4.6-sonnet-medium","defaultOn":true,"supportsThinking":true,"legacySlugs":["claude-sonnet-4-6"]},{"name":"composer-2-fast"}]}`), config.CursorConfig{
 		MaxFrameBytes: 8 << 20, MaxBufferedBytes: 16 << 20,
 	})
 	require.NoError(t, err)
 	require.Equal(t, []cursorIDEModel{
-		{Name: "display", ServerName: "claude-4.6-sonnet-medium"},
+		{Name: "display", ServerName: "claude-4.6-sonnet-medium", DefaultOn: true, SupportsThinking: true, LegacySlugs: []string{"claude-sonnet-4-6"}},
 		{Name: "composer-2-fast", ServerName: "composer-2-fast"},
 	}, models)
 }
@@ -196,6 +209,45 @@ func TestCursorIDEModelResolutionUsesServerModelName(t *testing.T) {
 	wrapper := firstServiceBytesField(t, frames[0].Payload, 1)
 	model := firstServiceBytesField(t, wrapper, 5)
 	require.Equal(t, "claude-4.6-sonnet-medium", firstServiceStringField(t, model, 1))
+}
+
+func TestCursorIDEModelResolutionRoutesLogicalModelByThinkingAndEffort(t *testing.T) {
+	upstream := &cursorIDEUpstreamStub{modelsBody: []byte(`{"models":[
+		{"name":"claude-4.6-sonnet-low","serverModelName":"claude-4.6-sonnet-low","supportsThinking":false},
+		{"name":"claude-4.6-sonnet-medium-thinking","serverModelName":"claude-4.6-sonnet-medium-thinking","defaultOn":true,"supportsThinking":true,"legacySlugs":["claude-sonnet-4-6"]},
+		{"name":"claude-4.6-sonnet-high-thinking","serverModelName":"claude-4.6-sonnet-high-thinking","supportsThinking":true}
+	]}`)}
+	svc := ideTestGateway(upstream)
+	account := ideTestAccount()
+
+	selection, err := svc.resolveCursorIDEModel(context.Background(), account, "claude-sonnet-4-6", cursorVariantPreference{})
+	require.NoError(t, err)
+	require.Equal(t, "claude-4.6-sonnet-medium-thinking", selection.ServerName)
+	require.True(t, selection.Thinking)
+	require.Equal(t, "medium", selection.Effort)
+
+	thinkingDisabled := false
+	selection, err = svc.resolveCursorIDEModel(context.Background(), account, "claude-sonnet-4-6", cursorVariantPreference{Thinking: &thinkingDisabled, Effort: "low"})
+	require.NoError(t, err)
+	require.Equal(t, "claude-4.6-sonnet-low", selection.ServerName)
+	require.False(t, selection.Thinking)
+	require.Equal(t, "low", selection.Effort)
+
+	thinkingEnabled := true
+	selection, err = svc.resolveCursorIDEModel(context.Background(), account, "claude-sonnet-4-6", cursorVariantPreference{Thinking: &thinkingEnabled, Effort: "high"})
+	require.NoError(t, err)
+	require.Equal(t, "claude-4.6-sonnet-high-thinking", selection.ServerName)
+	require.True(t, selection.Thinking)
+	require.Equal(t, "high", selection.Effort)
+}
+
+func TestCursorIDEVariantParsingPreservesCodexMaxLogicalModel(t *testing.T) {
+	require.Equal(t, "gpt-5.1-codex-max", cursorIDEVariantFamily("gpt-5.1-codex-max-high"))
+	require.Equal(t, "high", cursorIDEVariantEffort("gpt-5.1-codex-max-high"))
+	require.Equal(t, "gpt-5.1-codex-max", cursorIDEVariantFamily("gpt-5.1-codex-max"))
+	require.Empty(t, cursorIDEVariantEffort("gpt-5.1-codex-max"))
+	require.Equal(t, "claude-fable-5", cursorIDEVariantFamily("claude-fable-5-thinking-max"))
+	require.Equal(t, "max", cursorIDEVariantEffort("claude-fable-5-thinking-max"))
 }
 
 func TestCursorIDETransportAndMetadataCompatibility(t *testing.T) {
