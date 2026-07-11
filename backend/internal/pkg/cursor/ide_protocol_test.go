@@ -293,6 +293,43 @@ func TestIDEClientHTTP2RoutesHeadersAndStreaming(t *testing.T) {
 	}
 }
 
+func TestIDEClientAvailableModelsFallsBackToJSONOn415(t *testing.T) {
+	calls := 0
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		body, _ := io.ReadAll(r.Body)
+		if calls == 1 {
+			if r.Header.Get("Content-Type") != "application/connect+proto" || !bytes.Equal(body, []byte{0, 0, 0, 0, 0}) {
+				t.Fatalf("unexpected protobuf attempt: %q %v", r.Header.Get("Content-Type"), body)
+			}
+			w.WriteHeader(http.StatusUnsupportedMediaType)
+			return
+		}
+		if r.Header.Get("Content-Type") != "application/json" || string(body) != "{}" {
+			t.Fatalf("unexpected JSON fallback: %q %q", r.Header.Get("Content-Type"), body)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"models":[{"name":"composer-1"}]}`))
+	}))
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	defer server.Close()
+
+	client, err := NewIDEClient(server.Client(), IDEClientConfig{BaseURL: server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.AvailableModels(context.Background(), IDECredential{AccessToken: "token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if calls != 2 || resp.Header.Get("Content-Type") != "application/json" || !bytes.Contains(body, []byte("composer-1")) {
+		t.Fatalf("unexpected fallback response: calls=%d content-type=%q body=%q", calls, resp.Header.Get("Content-Type"), body)
+	}
+}
+
 func TestIDEClientHTTPErrorLimit(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)

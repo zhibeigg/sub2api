@@ -82,28 +82,45 @@ func (c *IDEClient) StreamUnifiedChatWithTools(ctx context.Context, credential I
 }
 
 func (c *IDEClient) AvailableModels(ctx context.Context, credential IDECredential) (*http.Response, error) {
-	headers, err := BuildIDEHeaders(credential, c.config)
-	if err != nil {
-		return nil, err
-	}
 	frame, err := EncodeConnectFrame(nil, false)
 	if err != nil {
 		return nil, badRequest("encode IDE models frame", err)
 	}
-	req, err := http.NewRequestWithContext(nonNilContext(ctx), http.MethodPost, c.baseURL+IDEModelsPath, bytes.NewReader(frame))
+	resp, err := c.availableModelsRequest(ctx, credential, "application/connect+proto", frame)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode == http.StatusUnsupportedMediaType {
+		_ = resp.Body.Close()
+		resp, err = c.availableModelsRequest(ctx, credential, "application/json", []byte("{}"))
+		if err != nil {
+			return nil, err
+		}
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return resp, c.httpError("IDE models request", resp)
+	}
+	return resp, nil
+}
+
+func (c *IDEClient) availableModelsRequest(ctx context.Context, credential IDECredential, contentType string, body []byte) (*http.Response, error) {
+	headers, err := BuildIDEHeaders(credential, c.config)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(nonNilContext(ctx), http.MethodPost, c.baseURL+IDEModelsPath, bytes.NewReader(body))
 	if err != nil {
 		return nil, badRequest("create IDE models request", err)
 	}
 	req.Header = headers
-	req.Header.Set("Content-Type", "application/connect+proto")
-	req.Header.Set("Accept", "application/connect+proto")
-	req.Header.Set("Connect-Accept-Encoding", "gzip")
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("Accept", contentType)
+	if contentType == "application/connect+proto" {
+		req.Header.Set("Connect-Accept-Encoding", "gzip")
+	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, transportError("IDE models request", err)
-	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return resp, c.httpError("IDE models request", resp)
 	}
 	return resp, nil
 }

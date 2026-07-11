@@ -151,7 +151,7 @@ Connect-Protocol-Version: 1
 
 ### IDE Chat：`AiService/AvailableModels`
 
-IDE 模式向以下端点发送带 5 字节 Connect 帧头的 Protobuf 请求，不能发送裸 Protobuf：
+IDE 模式优先向以下端点发送带 5 字节 Connect 帧头的 Protobuf 请求，不能发送裸 Protobuf。部分 Cursor 账号或服务端版本仅启用 JSON Connect codec，并会对 Protobuf 返回 `415 Unsupported Media Type`；Sub2API 只对这个幂等模型发现请求自动改用 `application/json` 重试，不会改变聊天流的 Connect-Protobuf 路径：
 
 ```http
 POST /aiserver.v1.AiService/AvailableModels
@@ -160,7 +160,7 @@ Content-Type: application/connect+proto
 Connect-Protocol-Version: 1
 ```
 
-响应通过 Connect 帧解码后解析 `AvailableModelsResponse` Protobuf；兼容重复 `modelNames` 字段和嵌套模型消息中的 `name`。管理端创建预览和已保存账号同步均支持此路径；已保存账号遇到过期 Token 时可自动刷新。
+Protobuf 响应通过 Connect 帧解码后解析 `AvailableModelsResponse`，兼容重复 `modelNames` 字段和嵌套模型消息中的 `name`；JSON codec 响应读取 `models[].serverModelName`，缺失时使用 `models[].name`。管理端创建预览和已保存账号同步均支持这两种响应；已保存账号遇到过期 Token 时可自动刷新。
 
 ### Cloud Agent：`GET /v1/models`
 

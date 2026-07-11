@@ -1,17 +1,20 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"runtime"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	cursorpkg "github.com/Wei-Shaw/sub2api/internal/pkg/cursor"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -58,7 +61,7 @@ func (s *CursorGatewayService) FetchIDEModels(ctx context.Context, account *Acco
 	if len(body) > cfg.MaxBufferedBytes {
 		return nil, cursorpkg.HTTPError(http.StatusBadGateway, "IDE models request", "model catalog response exceeds configured buffer limit")
 	}
-	parsedModels, err := cursorpkg.DecodeIDEAvailableModels(body, cfg.MaxFrameBytes, cfg.MaxBufferedBytes)
+	parsedModels, err := decodeCursorIDEModelsResponse(resp.Header.Get("Content-Type"), body, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +83,33 @@ func (s *CursorGatewayService) FetchIDEModels(ctx context.Context, account *Acco
 		return nil, cursorpkg.HTTPError(http.StatusBadGateway, "IDE models request", "Cursor returned no IDE models")
 	}
 	return models, nil
+}
+
+func decodeCursorIDEModelsResponse(contentType string, body []byte, cfg config.CursorConfig) ([]string, error) {
+	trimmed := bytes.TrimSpace(body)
+	if strings.Contains(strings.ToLower(contentType), "json") || (len(trimmed) > 0 && trimmed[0] == '{') {
+		var payload struct {
+			Models []struct {
+				Name            string `json:"name"`
+				ServerModelName string `json:"serverModelName"`
+			} `json:"models"`
+		}
+		if err := json.Unmarshal(trimmed, &payload); err != nil {
+			return nil, cursorpkg.HTTPError(http.StatusBadGateway, "IDE models request", "invalid JSON model catalog response: "+err.Error())
+		}
+		models := make([]string, 0, len(payload.Models))
+		for _, item := range payload.Models {
+			name := strings.TrimSpace(item.ServerModelName)
+			if name == "" {
+				name = strings.TrimSpace(item.Name)
+			}
+			if name != "" {
+				models = append(models, name)
+			}
+		}
+		return models, nil
+	}
+	return cursorpkg.DecodeIDEAvailableModels(body, cfg.MaxFrameBytes, cfg.MaxBufferedBytes)
 }
 
 func (s *CursorGatewayService) probeCursorIDE(ctx context.Context, account *Account) (string, error) {
@@ -137,6 +167,7 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 		Model: upstreamModel, ConversationID: uuid.NewString(), Mode: mode,
 	})
 	if err != nil {
+		slog.Warn("cursor_ide_open_stream_failed", "account_id", account.ID, "model", upstreamModel, "error", err.Error())
 		return nil, mapCursorError(err)
 	}
 	if resp == nil || resp.ProtoMajor != 2 {
@@ -167,6 +198,7 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 			if committed {
 				_ = writer.WriteError(nextErr.Error())
 			}
+			slog.Warn("cursor_ide_stream_read_failed", "account_id", account.ID, "model", upstreamModel, "committed", committed, "error", nextErr.Error())
 			return nil, mapCursorError(nextErr)
 		}
 		switch event.Type {
@@ -232,6 +264,7 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 			if committed {
 				_ = writer.WriteError(message)
 			}
+			slog.Warn("cursor_ide_stream_event_failed", "account_id", account.ID, "model", upstreamModel, "committed", committed, "error", message)
 			return nil, mapCursorError(cursorpkg.HTTPError(http.StatusBadGateway, "IDE chat stream", message))
 		}
 	}

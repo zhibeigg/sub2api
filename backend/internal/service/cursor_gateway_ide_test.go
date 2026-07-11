@@ -159,6 +159,14 @@ func TestCursorIDEModelSyncUsesAvailableModels(t *testing.T) {
 	require.Equal(t, []byte{0, 0, 0, 0, 0}, upstream.bodies[0])
 }
 
+func TestDecodeCursorIDEModelsResponseJSON(t *testing.T) {
+	models, err := decodeCursorIDEModelsResponse("application/json", []byte(`{"models":[{"name":"display","serverModelName":"claude-4.6-sonnet-medium"},{"name":"composer-2-fast"}]}`), config.CursorConfig{
+		MaxFrameBytes: 8 << 20, MaxBufferedBytes: 16 << 20,
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"claude-4.6-sonnet-medium", "composer-2-fast"}, models)
+}
+
 func cursorIDEFrames(payloads ...[]byte) []byte {
 	var result []byte
 	for _, payload := range payloads {
