@@ -81,6 +81,9 @@ func RegisterPaymentRoutes(
 		adminOrders := adminGroup.Group("/orders")
 		{
 			adminOrders.GET("", adminPaymentHandler.ListOrders)
+			adminOrders.GET("/summary", adminPaymentHandler.GetOrderSummary)
+			adminOrders.GET("/promo-code-options", adminPaymentHandler.ListOrderPromoCodeOptions)
+			adminOrders.GET("/export", adminPaymentHandler.ExportOrders)
 			adminOrders.GET("/:id", adminPaymentHandler.GetOrderDetail)
 			adminOrders.POST("/:id/cancel", adminPaymentHandler.CancelOrder)
 			adminOrders.POST("/:id/retry", adminPaymentHandler.RetryFulfillment)

@@ -112,12 +112,18 @@ type CreateOrderResponse struct {
 }
 
 type OrderListParams struct {
-	Page        int
-	PageSize    int
-	Status      string
-	OrderType   string
-	PaymentType string
-	Keyword     string
+	Page             int
+	PageSize         int
+	UserID           int64
+	Status           string
+	OrderType        string
+	PaymentType      string
+	Keyword          string
+	PromoCodeID      *int64
+	PromoAttribution string
+	StartTime        *time.Time
+	EndTime          *time.Time
+	TimeField        string
 }
 
 type RefundPlan struct {

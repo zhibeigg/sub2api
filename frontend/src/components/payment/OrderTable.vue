@@ -23,6 +23,25 @@
         </div>
       </div>
     </template>
+    <template #cell-signup_promo_attribution="{ row }">
+      <div class="max-w-44 text-sm">
+        <span class="font-mono font-medium text-gray-800 dark:text-gray-200">{{ promoAttributionLabel(row) }}</span>
+        <span v-if="row.signup_promo_code_id" class="ml-1 text-xs text-gray-400">#{{ row.signup_promo_code_id }}</span>
+      </div>
+    </template>
+    <template #cell-order_type="{ value }">
+      <span class="text-sm text-gray-700 dark:text-gray-300">
+        {{ value === 'subscription' ? t('payment.admin.subscriptionOrder') : t('payment.admin.balanceOrder') }}
+      </span>
+    </template>
+    <template #cell-net_recharge_amount="{ row }">
+      <div class="text-sm">
+        <span class="font-medium text-gray-900 dark:text-white">{{ creditedAmountSymbol }}{{ formatAmount(row.net_recharge_amount) }}</span>
+        <div v-if="row.first_recharge_bonus_applied" class="text-xs text-emerald-600 dark:text-emerald-400">
+          {{ t('payment.admin.firstRechargeBonus') }} ×{{ formatMultiplier(row.recharge_bonus_multiplier) }}
+        </div>
+      </div>
+    </template>
     <template #cell-payment_type="{ value }">
       <span class="text-sm text-gray-700 dark:text-gray-300">{{ t('payment.methods.' + value, value) }}</span>
     </template>
@@ -53,9 +72,28 @@ const props = defineProps<{
   orders: PaymentOrder[]
   loading: boolean
   showUser?: boolean
+  showAttribution?: boolean
 }>()
 
 function formatDate(dateStr: string) { return new Date(dateStr).toLocaleString() }
+
+function formatAmount(value: number | undefined): string {
+  return Number(value || 0).toFixed(2)
+}
+
+function formatMultiplier(value: number | undefined): string {
+  return Number(value || 1).toFixed(2).replace(/\.00$/, '')
+}
+
+function promoAttributionLabel(order: PaymentOrder): string {
+  if (order.signup_promo_attribution === 'attributed') {
+    return order.signup_promo_code || t('payment.admin.promoAttributed')
+  }
+  if (order.signup_promo_attribution === 'legacy_unknown') {
+    return t('payment.admin.promoLegacyUnknown')
+  }
+  return t('payment.admin.promoNone')
+}
 
 const creditedAmountSymbol = currencySymbol('USD')
 
@@ -71,10 +109,17 @@ const columns = computed((): Column[] => {
   if (props.showUser) {
     cols.push({ key: 'user_email', label: t('payment.admin.colUser') })
   }
+  if (props.showAttribution) {
+    cols.push(
+      { key: 'signup_promo_attribution', label: t('payment.admin.signupPromoCode') },
+      { key: 'order_type', label: t('payment.admin.orderType') },
+    )
+  }
   cols.push(
     { key: 'pay_amount', label: t('payment.orders.payAmount') },
     { key: 'payment_type', label: t('payment.orders.paymentMethod') },
     { key: 'status', label: t('payment.orders.status') },
+    ...(props.showAttribution ? [{ key: 'net_recharge_amount', label: t('payment.admin.netRecharge') }] : []),
     { key: 'created_at', label: t('payment.orders.createdAt') },
     { key: 'actions', label: t('common.actions') },
   )

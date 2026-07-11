@@ -278,6 +278,26 @@ User selects amount and payment method
 | `REFUNDING` | Refund in progress |
 | `REFUNDED` | Refund completed |
 
+### Admin Order Attribution and Export
+
+The admin **Order Management** page attributes orders to the promo code bound when the user registered; it does not use payment-time promotions. New orders snapshot the registration promo ID, code, and attribution state. Historical records that cannot be classified reliably are shown as “legacy attribution unknown” instead of being counted as organic registrations. Promo codes already bound to users or present in usage records can be disabled but not deleted.
+
+Filters include status, order type, payment method, keyword, registration promo code, and date range. A date range can use **order creation time** (default) or **payment time**, and the backend converts the browser-provided IANA timezone into an inclusive calendar-date, half-open timestamp range.
+
+Recharge totals use the system balance/USD crediting basis:
+
+- Gross recharge: `amount` from completed balance-recharge orders;
+- Refunded amount: only finalized partial or full refunds;
+- Net recharge: gross recharge minus finalized refunds;
+- Pending, failed, cancelled, unfulfilled, and subscription orders do not contribute to recharge totals.
+
+Admins can export all rows matching the active filters, not only the current page:
+
+- Order detail CSV;
+- Registration-promo attribution summary CSV.
+
+A single order-detail export is limited to 100,000 rows. Oversized exports return an explicit error and are never silently truncated. CSV output includes a UTF-8 BOM and spreadsheet-formula injection protection. This feature adds no new default or example configuration keys.
+
 ### Timeout and Fallback
 
 - Before marking an order as expired, the background job queries the upstream payment status first

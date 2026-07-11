@@ -81,6 +81,49 @@
 
 运行时规则：标准分组存在有效 `standard_quota` 订阅时优先消耗套餐额度且不扣余额；套餐额度耗尽会直接拒绝请求，不会静默改扣余额；套餐过期后，公开标准分组恢复余额计费。旧版多订阅分组套餐会标记为 `legacy_shared_subscription` 并下架，已有订阅和已创建订单继续按快照履约。
 
+### 管理员订单报表 API
+
+以下接口使用相同的筛选参数：
+
+- `GET /api/v1/admin/payment/orders`：分页订单明细；
+- `GET /api/v1/admin/payment/orders/summary`：充值汇总和注册优惠码归因分组；
+- `GET /api/v1/admin/payment/orders/promo-code-options`：当前与历史优惠码筛选选项；
+- `GET /api/v1/admin/payment/orders/export?mode=orders|attribution`：按当前筛选导出 CSV，不受列表分页限制。
+
+通用 Query 参数：
+
+| 参数 | 说明 |
+|---|---|
+| `page` / `page_size` | 仅列表分页 |
+| `user_id` | 正整数用户 ID |
+| `status` | 订单状态 |
+| `order_type` | `balance` 或 `subscription` |
+| `payment_type` | 支付方式 |
+| `keyword` | 订单号、用户邮箱、用户名或注册优惠码，最多 100 字符 |
+| `promo_code_id` | 指定注册优惠码 ID |
+| `promo_attribution` | `all`、`attributed`、`none`、`legacy_unknown` |
+| `start_date` / `end_date` | `YYYY-MM-DD`，结束日期按包含当天处理 |
+| `timezone` | IANA 时区，例如 `Asia/Shanghai` |
+| `time_field` | `created_at`（默认）或 `paid_at` |
+
+`summary` 额外支持 `group_page`、`group_page_size`。其金额字段使用固定两位小数字符串：`gross_recharge_amount`、`refunded_amount`、`net_recharge_amount`。充值仅统计已完成到账的余额充值订单；退款只在部分/全额退款最终完成后扣减。
+
+订单明细新增稳定归因字段：
+
+```json
+{
+  "signup_promo_attribution": "attributed",
+  "signup_promo_code_id": 42,
+  "signup_promo_code": "WELCOME25",
+  "recharge_base_amount": 100,
+  "recharge_bonus_multiplier": 1.25,
+  "first_recharge_bonus_applied": true,
+  "net_recharge_amount": 125
+}
+```
+
+`none` 表示订单创建时明确为自然注册；`legacy_unknown` 表示历史数据无法可靠恢复，不会被错误归入自然注册。订单明细导出最多 100,000 行，超限返回 `EXPORT_LIMIT_EXCEEDED`；CSV 使用 UTF-8 BOM，并防护 Excel 公式注入。
+
 ### 1) 一步完成创建并兑换
 `POST /api/v1/admin/redeem-codes/create-and-redeem`
 
@@ -255,6 +298,49 @@ Native subscription-group example:
 ```
 
 Runtime behavior: while an active `standard_quota` subscription covers a standard group, plan quota takes priority and the user's balance is not charged. Exhausted plan quota rejects the request instead of silently falling back to balance. After expiration, public standard groups return to balance billing. Legacy multi-subscription-group plans are marked `legacy_shared_subscription` and taken off sale, while existing subscriptions and already-created orders continue from their snapshots.
+
+### Admin order reporting APIs
+
+The following endpoints share the same filter contract:
+
+- `GET /api/v1/admin/payment/orders`: paginated order details;
+- `GET /api/v1/admin/payment/orders/summary`: recharge totals and registration-promo attribution groups;
+- `GET /api/v1/admin/payment/orders/promo-code-options`: current and historical promo filter options;
+- `GET /api/v1/admin/payment/orders/export?mode=orders|attribution`: CSV export for all matching rows, independent of list pagination.
+
+Common query parameters:
+
+| Parameter | Description |
+|---|---|
+| `page` / `page_size` | List pagination only |
+| `user_id` | Positive user ID |
+| `status` | Order status |
+| `order_type` | `balance` or `subscription` |
+| `payment_type` | Payment method |
+| `keyword` | Order number, user email/name, or registration promo code; max 100 characters |
+| `promo_code_id` | Exact registration promo ID |
+| `promo_attribution` | `all`, `attributed`, `none`, or `legacy_unknown` |
+| `start_date` / `end_date` | `YYYY-MM-DD`; the end calendar day is inclusive |
+| `timezone` | IANA timezone such as `Asia/Shanghai` |
+| `time_field` | `created_at` (default) or `paid_at` |
+
+`summary` additionally accepts `group_page` and `group_page_size`. Monetary totals are fixed-two-decimal strings: `gross_recharge_amount`, `refunded_amount`, and `net_recharge_amount`. Recharge totals include only fulfilled balance-recharge orders, and refunds are deducted only after a partial or full refund is finalized.
+
+Order detail responses include stable attribution fields:
+
+```json
+{
+  "signup_promo_attribution": "attributed",
+  "signup_promo_code_id": 42,
+  "signup_promo_code": "WELCOME25",
+  "recharge_base_amount": 100,
+  "recharge_bonus_multiplier": 1.25,
+  "first_recharge_bonus_applied": true,
+  "net_recharge_amount": 125
+}
+```
+
+`none` means the order was created for a confirmed organic registration. `legacy_unknown` means historical attribution cannot be restored reliably and is not misclassified as organic. Order-detail exports are limited to 100,000 rows; larger exports return `EXPORT_LIMIT_EXCEEDED`. CSV responses include a UTF-8 BOM and spreadsheet-formula injection protection.
 
 ### 1) Create and Redeem in one step
 `POST /api/v1/admin/redeem-codes/create-and-redeem`

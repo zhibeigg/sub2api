@@ -23,6 +23,10 @@ export type PaymentType = 'alipay' | 'wxpay' | 'alipay_direct' | 'wxpay_direct' 
 
 export type OrderType = 'balance' | 'subscription'
 
+export type PromoAttribution = 'attributed' | 'none' | 'legacy_unknown'
+
+export type AdminOrderTimeField = 'created_at' | 'paid_at'
+
 export type SubscriptionPlanType = 'subscription' | 'standard_quota' | 'legacy_shared_subscription'
 
 // ==================== Configuration ====================
@@ -84,13 +88,74 @@ export interface CheckoutInfoResponse {
 
 // ==================== Orders ====================
 
+export interface AdminOrderFilters {
+  user_id?: number
+  status?: string
+  order_type?: string
+  payment_type?: string
+  keyword?: string
+  promo_code_id?: number
+  promo_attribution?: PromoAttribution
+  start_date?: string
+  end_date?: string
+  timezone?: string
+  time_field?: AdminOrderTimeField
+}
+
+export interface AdminOrderSummaryTotals {
+  filtered_order_count: number
+  successful_order_count: number
+  recharged_user_count: number
+  gross_recharge_amount: string
+  refunded_amount: string
+  net_recharge_amount: string
+}
+
+export interface AdminOrderAttributionGroup {
+  promo_attribution: PromoAttribution
+  promo_code_id?: number
+  promo_code?: string
+  order_user_count: number
+  recharged_user_count: number
+  successful_order_count: number
+  gross_recharge_amount: string
+  refunded_amount: string
+  net_recharge_amount: string
+}
+
+export interface AdminOrderSummary {
+  totals: AdminOrderSummaryTotals
+  groups: AdminOrderAttributionGroup[]
+  group_page: number
+  group_page_size: number
+  group_total: number
+}
+
+export interface AdminOrderPromoCodeOption {
+  promo_attribution: PromoAttribution
+  promo_code_id?: number
+  promo_code?: string
+  status?: string
+  historical?: boolean
+}
+
 export interface PaymentOrder {
   id: number
   user_id: number
+  user_email?: string
+  user_name?: string
+  user_notes?: string
+  signup_promo_code_id?: number
+  signup_promo_code?: string
+  signup_promo_attribution?: PromoAttribution
   amount: number
   pay_amount: number
   currency?: string
   fee_rate: number
+  recharge_base_amount?: number
+  recharge_bonus_multiplier?: number
+  first_recharge_bonus_applied?: boolean
+  net_recharge_amount?: number
   payment_type: string
   out_trade_no: string
   status: OrderStatus

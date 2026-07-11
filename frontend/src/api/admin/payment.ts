@@ -7,6 +7,9 @@ import { apiClient } from '../client'
 import type {
   DashboardStats,
   PaymentOrder,
+  AdminOrderFilters,
+  AdminOrderSummary,
+  AdminOrderPromoCodeOption,
   PaymentChannel,
   SubscriptionPlan,
   SubscriptionPlanType,
@@ -111,18 +114,42 @@ export const adminPaymentAPI = {
   // ==================== Orders ====================
 
   /** Get all orders (paginated, with filters) */
-  getOrders(params?: {
-    page?: number
-    page_size?: number
-    status?: string
-    payment_type?: string
-    user_id?: number
-    keyword?: string
-    start_date?: string
-    end_date?: string
-    order_type?: string
-  }) {
-    return apiClient.get<BasePaginationResponse<PaymentOrder>>('/admin/payment/orders', { params })
+  getOrders(
+    params?: AdminOrderFilters & { page?: number; page_size?: number },
+    options?: { signal?: AbortSignal },
+  ) {
+    return apiClient.get<BasePaginationResponse<PaymentOrder>>('/admin/payment/orders', {
+      params,
+      signal: options?.signal,
+    })
+  },
+
+  /** Get filtered recharge totals and promo attribution groups. */
+  getOrderSummary(
+    params?: AdminOrderFilters & { group_page?: number; group_page_size?: number },
+    options?: { signal?: AbortSignal },
+  ) {
+    return apiClient.get<AdminOrderSummary>('/admin/payment/orders/summary', {
+      params,
+      signal: options?.signal,
+    })
+  },
+
+  /** Get current, historical, and unattributed promo code filter options. */
+  getOrderPromoCodeOptions(params?: { search?: string; limit?: number }, options?: { signal?: AbortSignal }) {
+    return apiClient.get<AdminOrderPromoCodeOption[]>('/admin/payment/orders/promo-code-options', {
+      params,
+      signal: options?.signal,
+    })
+  },
+
+  /** Export filtered orders or attribution groups as CSV. */
+  async exportOrders(mode: 'orders' | 'attribution', params?: AdminOrderFilters): Promise<Blob> {
+    const response = await apiClient.get('/admin/payment/orders/export', {
+      params: { ...params, mode },
+      responseType: 'blob',
+    })
+    return response.data
   },
 
   /** Get a specific order by ID */

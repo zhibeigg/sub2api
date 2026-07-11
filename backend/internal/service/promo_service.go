@@ -9,6 +9,8 @@ import (
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
+	dbuser "github.com/Wei-Shaw/sub2api/ent/user"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 )
@@ -19,6 +21,7 @@ var (
 	ErrPromoCodeDisabled    = infraerrors.BadRequest("PROMO_CODE_DISABLED", "promo code is disabled")
 	ErrPromoCodeMaxUsed     = infraerrors.BadRequest("PROMO_CODE_MAX_USED", "promo code has reached maximum uses")
 	ErrPromoCodeAlreadyUsed = infraerrors.Conflict("PROMO_CODE_ALREADY_USED", "you have already used this promo code")
+	ErrPromoCodeInUse       = infraerrors.Conflict("PROMO_CODE_IN_USE", "promo code is already attributed to users; disable it instead")
 	ErrPromoCodeInvalid     = infraerrors.BadRequest("PROMO_CODE_INVALID", "invalid promo code")
 )
 
@@ -262,8 +265,21 @@ func (s *PromoService) Update(ctx context.Context, id int64, input *UpdatePromoC
 	return promoCode, nil
 }
 
-// Delete 删除优惠码
+// Delete 删除从未使用过的优惠码；已有注册归因的优惠码只能禁用，以保留历史链路。
 func (s *PromoService) Delete(ctx context.Context, id int64) error {
+	if s.entClient != nil {
+		bound, err := s.entClient.User.Query().Where(dbuser.PromoCodeIDEQ(id)).Exist(ctx)
+		if err != nil {
+			return fmt.Errorf("check promo code bindings: %w", err)
+		}
+		used, err := s.entClient.PromoCodeUsage.Query().Where(promocodeusage.PromoCodeIDEQ(id)).Exist(ctx)
+		if err != nil {
+			return fmt.Errorf("check promo code usages: %w", err)
+		}
+		if bound || used {
+			return ErrPromoCodeInUse
+		}
+	}
 	if err := s.promoRepo.Delete(ctx, id); err != nil {
 		return fmt.Errorf("delete promo code: %w", err)
 	}

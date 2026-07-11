@@ -91,6 +91,67 @@ func (_u *PaymentOrderUpdate) ClearUserNotes() *PaymentOrderUpdate {
 	return _u
 }
 
+// SetSignupPromoCodeID sets the "signup_promo_code_id" field.
+func (_u *PaymentOrderUpdate) SetSignupPromoCodeID(v int64) *PaymentOrderUpdate {
+	_u.mutation.ResetSignupPromoCodeID()
+	_u.mutation.SetSignupPromoCodeID(v)
+	return _u
+}
+
+// SetNillableSignupPromoCodeID sets the "signup_promo_code_id" field if the given value is not nil.
+func (_u *PaymentOrderUpdate) SetNillableSignupPromoCodeID(v *int64) *PaymentOrderUpdate {
+	if v != nil {
+		_u.SetSignupPromoCodeID(*v)
+	}
+	return _u
+}
+
+// AddSignupPromoCodeID adds value to the "signup_promo_code_id" field.
+func (_u *PaymentOrderUpdate) AddSignupPromoCodeID(v int64) *PaymentOrderUpdate {
+	_u.mutation.AddSignupPromoCodeID(v)
+	return _u
+}
+
+// ClearSignupPromoCodeID clears the value of the "signup_promo_code_id" field.
+func (_u *PaymentOrderUpdate) ClearSignupPromoCodeID() *PaymentOrderUpdate {
+	_u.mutation.ClearSignupPromoCodeID()
+	return _u
+}
+
+// SetSignupPromoCode sets the "signup_promo_code" field.
+func (_u *PaymentOrderUpdate) SetSignupPromoCode(v string) *PaymentOrderUpdate {
+	_u.mutation.SetSignupPromoCode(v)
+	return _u
+}
+
+// SetNillableSignupPromoCode sets the "signup_promo_code" field if the given value is not nil.
+func (_u *PaymentOrderUpdate) SetNillableSignupPromoCode(v *string) *PaymentOrderUpdate {
+	if v != nil {
+		_u.SetSignupPromoCode(*v)
+	}
+	return _u
+}
+
+// ClearSignupPromoCode clears the value of the "signup_promo_code" field.
+func (_u *PaymentOrderUpdate) ClearSignupPromoCode() *PaymentOrderUpdate {
+	_u.mutation.ClearSignupPromoCode()
+	return _u
+}
+
+// SetSignupPromoAttribution sets the "signup_promo_attribution" field.
+func (_u *PaymentOrderUpdate) SetSignupPromoAttribution(v string) *PaymentOrderUpdate {
+	_u.mutation.SetSignupPromoAttribution(v)
+	return _u
+}
+
+// SetNillableSignupPromoAttribution sets the "signup_promo_attribution" field if the given value is not nil.
+func (_u *PaymentOrderUpdate) SetNillableSignupPromoAttribution(v *string) *PaymentOrderUpdate {
+	if v != nil {
+		_u.SetSignupPromoAttribution(*v)
+	}
+	return _u
+}
+
 // SetAmount sets the "amount" field.
 func (_u *PaymentOrderUpdate) SetAmount(v float64) *PaymentOrderUpdate {
 	_u.mutation.ResetAmount()
@@ -846,6 +907,16 @@ func (_u *PaymentOrderUpdate) check() error {
 			return &ValidationError{Name: "user_name", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.user_name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.SignupPromoCode(); ok {
+		if err := paymentorder.SignupPromoCodeValidator(v); err != nil {
+			return &ValidationError{Name: "signup_promo_code", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.signup_promo_code": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SignupPromoAttribution(); ok {
+		if err := paymentorder.SignupPromoAttributionValidator(v); err != nil {
+			return &ValidationError{Name: "signup_promo_attribution", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.signup_promo_attribution": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.RechargeCode(); ok {
 		if err := paymentorder.RechargeCodeValidator(v); err != nil {
 			return &ValidationError{Name: "recharge_code", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.recharge_code": %w`, err)}
@@ -930,6 +1001,24 @@ func (_u *PaymentOrderUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if _u.mutation.UserNotesCleared() {
 		_spec.ClearField(paymentorder.FieldUserNotes, field.TypeString)
+	}
+	if value, ok := _u.mutation.SignupPromoCodeID(); ok {
+		_spec.SetField(paymentorder.FieldSignupPromoCodeID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSignupPromoCodeID(); ok {
+		_spec.AddField(paymentorder.FieldSignupPromoCodeID, field.TypeInt64, value)
+	}
+	if _u.mutation.SignupPromoCodeIDCleared() {
+		_spec.ClearField(paymentorder.FieldSignupPromoCodeID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.SignupPromoCode(); ok {
+		_spec.SetField(paymentorder.FieldSignupPromoCode, field.TypeString, value)
+	}
+	if _u.mutation.SignupPromoCodeCleared() {
+		_spec.ClearField(paymentorder.FieldSignupPromoCode, field.TypeString)
+	}
+	if value, ok := _u.mutation.SignupPromoAttribution(); ok {
+		_spec.SetField(paymentorder.FieldSignupPromoAttribution, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Amount(); ok {
 		_spec.SetField(paymentorder.FieldAmount, field.TypeFloat64, value)
@@ -1240,6 +1329,67 @@ func (_u *PaymentOrderUpdateOne) SetNillableUserNotes(v *string) *PaymentOrderUp
 // ClearUserNotes clears the value of the "user_notes" field.
 func (_u *PaymentOrderUpdateOne) ClearUserNotes() *PaymentOrderUpdateOne {
 	_u.mutation.ClearUserNotes()
+	return _u
+}
+
+// SetSignupPromoCodeID sets the "signup_promo_code_id" field.
+func (_u *PaymentOrderUpdateOne) SetSignupPromoCodeID(v int64) *PaymentOrderUpdateOne {
+	_u.mutation.ResetSignupPromoCodeID()
+	_u.mutation.SetSignupPromoCodeID(v)
+	return _u
+}
+
+// SetNillableSignupPromoCodeID sets the "signup_promo_code_id" field if the given value is not nil.
+func (_u *PaymentOrderUpdateOne) SetNillableSignupPromoCodeID(v *int64) *PaymentOrderUpdateOne {
+	if v != nil {
+		_u.SetSignupPromoCodeID(*v)
+	}
+	return _u
+}
+
+// AddSignupPromoCodeID adds value to the "signup_promo_code_id" field.
+func (_u *PaymentOrderUpdateOne) AddSignupPromoCodeID(v int64) *PaymentOrderUpdateOne {
+	_u.mutation.AddSignupPromoCodeID(v)
+	return _u
+}
+
+// ClearSignupPromoCodeID clears the value of the "signup_promo_code_id" field.
+func (_u *PaymentOrderUpdateOne) ClearSignupPromoCodeID() *PaymentOrderUpdateOne {
+	_u.mutation.ClearSignupPromoCodeID()
+	return _u
+}
+
+// SetSignupPromoCode sets the "signup_promo_code" field.
+func (_u *PaymentOrderUpdateOne) SetSignupPromoCode(v string) *PaymentOrderUpdateOne {
+	_u.mutation.SetSignupPromoCode(v)
+	return _u
+}
+
+// SetNillableSignupPromoCode sets the "signup_promo_code" field if the given value is not nil.
+func (_u *PaymentOrderUpdateOne) SetNillableSignupPromoCode(v *string) *PaymentOrderUpdateOne {
+	if v != nil {
+		_u.SetSignupPromoCode(*v)
+	}
+	return _u
+}
+
+// ClearSignupPromoCode clears the value of the "signup_promo_code" field.
+func (_u *PaymentOrderUpdateOne) ClearSignupPromoCode() *PaymentOrderUpdateOne {
+	_u.mutation.ClearSignupPromoCode()
+	return _u
+}
+
+// SetSignupPromoAttribution sets the "signup_promo_attribution" field.
+func (_u *PaymentOrderUpdateOne) SetSignupPromoAttribution(v string) *PaymentOrderUpdateOne {
+	_u.mutation.SetSignupPromoAttribution(v)
+	return _u
+}
+
+// SetNillableSignupPromoAttribution sets the "signup_promo_attribution" field if the given value is not nil.
+func (_u *PaymentOrderUpdateOne) SetNillableSignupPromoAttribution(v *string) *PaymentOrderUpdateOne {
+	if v != nil {
+		_u.SetSignupPromoAttribution(*v)
+	}
 	return _u
 }
 
@@ -2011,6 +2161,16 @@ func (_u *PaymentOrderUpdateOne) check() error {
 			return &ValidationError{Name: "user_name", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.user_name": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.SignupPromoCode(); ok {
+		if err := paymentorder.SignupPromoCodeValidator(v); err != nil {
+			return &ValidationError{Name: "signup_promo_code", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.signup_promo_code": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SignupPromoAttribution(); ok {
+		if err := paymentorder.SignupPromoAttributionValidator(v); err != nil {
+			return &ValidationError{Name: "signup_promo_attribution", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.signup_promo_attribution": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.RechargeCode(); ok {
 		if err := paymentorder.RechargeCodeValidator(v); err != nil {
 			return &ValidationError{Name: "recharge_code", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.recharge_code": %w`, err)}
@@ -2112,6 +2272,24 @@ func (_u *PaymentOrderUpdateOne) sqlSave(ctx context.Context) (_node *PaymentOrd
 	}
 	if _u.mutation.UserNotesCleared() {
 		_spec.ClearField(paymentorder.FieldUserNotes, field.TypeString)
+	}
+	if value, ok := _u.mutation.SignupPromoCodeID(); ok {
+		_spec.SetField(paymentorder.FieldSignupPromoCodeID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedSignupPromoCodeID(); ok {
+		_spec.AddField(paymentorder.FieldSignupPromoCodeID, field.TypeInt64, value)
+	}
+	if _u.mutation.SignupPromoCodeIDCleared() {
+		_spec.ClearField(paymentorder.FieldSignupPromoCodeID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.SignupPromoCode(); ok {
+		_spec.SetField(paymentorder.FieldSignupPromoCode, field.TypeString, value)
+	}
+	if _u.mutation.SignupPromoCodeCleared() {
+		_spec.ClearField(paymentorder.FieldSignupPromoCode, field.TypeString)
+	}
+	if value, ok := _u.mutation.SignupPromoAttribution(); ok {
+		_spec.SetField(paymentorder.FieldSignupPromoAttribution, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Amount(); ok {
 		_spec.SetField(paymentorder.FieldAmount, field.TypeFloat64, value)

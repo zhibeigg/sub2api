@@ -214,6 +214,31 @@ func TestMigration154aAddsSparkShadowIndexesConcurrently(t *testing.T) {
 	require.Contains(t, sql, "deleted_at IS NULL")
 }
 
+func TestMigration176AddsStablePaymentOrderPromoAttribution(t *testing.T) {
+	content, err := FS.ReadFile("176_payment_order_signup_promo_attribution.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS signup_promo_code_id BIGINT")
+	require.Contains(t, sql, "ADD COLUMN IF NOT EXISTS signup_promo_code VARCHAR(64)")
+	require.Contains(t, sql, "DEFAULT 'legacy_unknown'")
+	require.Contains(t, sql, "promo_code_usages")
+	require.Contains(t, sql, "ORDER BY user_id, used_at ASC, id ASC")
+	require.Contains(t, sql, "ON DELETE RESTRICT")
+	require.NotContains(t, sql, "CREATE INDEX CONCURRENTLY")
+}
+
+func TestMigration177AddsPaymentOrderPromoIndexesConcurrently(t *testing.T) {
+	content, err := FS.ReadFile("177_payment_order_signup_promo_indexes_notx.sql")
+	require.NoError(t, err)
+
+	sql := string(content)
+	require.Contains(t, sql, "-- migrate:notx")
+	require.Contains(t, sql, "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_payment_orders_signup_promo_created")
+	require.Contains(t, sql, "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_payment_orders_signup_promo_paid")
+	require.Contains(t, sql, "WHERE paid_at IS NOT NULL")
+}
+
 func TestMigration173AllowsCyberBlockedUsageRequestType(t *testing.T) {
 	entries, err := FS.ReadDir(".")
 	require.NoError(t, err)

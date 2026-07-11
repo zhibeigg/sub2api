@@ -22,6 +22,12 @@ const (
 	FieldUserName = "user_name"
 	// FieldUserNotes holds the string denoting the user_notes field in the database.
 	FieldUserNotes = "user_notes"
+	// FieldSignupPromoCodeID holds the string denoting the signup_promo_code_id field in the database.
+	FieldSignupPromoCodeID = "signup_promo_code_id"
+	// FieldSignupPromoCode holds the string denoting the signup_promo_code field in the database.
+	FieldSignupPromoCode = "signup_promo_code"
+	// FieldSignupPromoAttribution holds the string denoting the signup_promo_attribution field in the database.
+	FieldSignupPromoAttribution = "signup_promo_attribution"
 	// FieldAmount holds the string denoting the amount field in the database.
 	FieldAmount = "amount"
 	// FieldPayAmount holds the string denoting the pay_amount field in the database.
@@ -120,6 +126,9 @@ var Columns = []string{
 	FieldUserEmail,
 	FieldUserName,
 	FieldUserNotes,
+	FieldSignupPromoCodeID,
+	FieldSignupPromoCode,
+	FieldSignupPromoAttribution,
 	FieldAmount,
 	FieldPayAmount,
 	FieldFeeRate,
@@ -176,6 +185,12 @@ var (
 	UserEmailValidator func(string) error
 	// UserNameValidator is a validator for the "user_name" field. It is called by the builders before save.
 	UserNameValidator func(string) error
+	// SignupPromoCodeValidator is a validator for the "signup_promo_code" field. It is called by the builders before save.
+	SignupPromoCodeValidator func(string) error
+	// DefaultSignupPromoAttribution holds the default value on creation for the "signup_promo_attribution" field.
+	DefaultSignupPromoAttribution string
+	// SignupPromoAttributionValidator is a validator for the "signup_promo_attribution" field. It is called by the builders before save.
+	SignupPromoAttributionValidator func(string) error
 	// DefaultFeeRate holds the default value on creation for the "fee_rate" field.
 	DefaultFeeRate float64
 	// DefaultRechargeBaseAmount holds the default value on creation for the "recharge_base_amount" field.
@@ -250,6 +265,21 @@ func ByUserName(opts ...sql.OrderTermOption) OrderOption {
 // ByUserNotes orders the results by the user_notes field.
 func ByUserNotes(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUserNotes, opts...).ToFunc()
+}
+
+// BySignupPromoCodeID orders the results by the signup_promo_code_id field.
+func BySignupPromoCodeID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSignupPromoCodeID, opts...).ToFunc()
+}
+
+// BySignupPromoCode orders the results by the signup_promo_code field.
+func BySignupPromoCode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSignupPromoCode, opts...).ToFunc()
+}
+
+// BySignupPromoAttribution orders the results by the signup_promo_attribution field.
+func BySignupPromoAttribution(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSignupPromoAttribution, opts...).ToFunc()
 }
 
 // ByAmount orders the results by the amount field.

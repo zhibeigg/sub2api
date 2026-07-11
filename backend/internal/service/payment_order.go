@@ -56,6 +56,7 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	orderAmount := req.Amount
 	limitAmount := req.Amount
 	rechargeBaseAmount := 0.0
+	promoSnapshot := s.resolveUserPromoSnapshot(ctx, user)
 	rechargeBonusMultiplier := DefaultRechargeBonusMultiplier
 	if plan != nil {
 		orderAmount = plan.Price
@@ -64,7 +65,7 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 		// 余额充值先快照不含优惠码的基础到账金额，再计算首充候选到账金额。
 		// 到账时会原子占用用户的首充资格：并发支付时只有一笔订单保留优惠，其余回退到基础到账金额。
 		rechargeBaseAmount = calculateCreditedBalance(req.Amount, cfg.BalanceRechargeMultiplier)
-		rechargeBonusMultiplier = s.resolveUserRechargeBonusMultiplier(ctx, user)
+		rechargeBonusMultiplier = promoSnapshot.RechargeBonusMultiplier
 		orderAmount = calculateCreditedBalanceWithPromo(req.Amount, cfg.BalanceRechargeMultiplier, rechargeBonusMultiplier)
 	}
 	feeRate := cfg.RechargeFeeRate
@@ -106,7 +107,7 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	if oauthResp != nil {
 		return oauthResp, nil
 	}
-	order, err := s.createOrderInTx(ctx, req, user, plan, cfg, orderAmount, limitAmount, rechargeBaseAmount, rechargeBonusMultiplier, feeRate, payAmount, sel)
+	order, err := s.createOrderInTx(ctx, req, user, plan, cfg, orderAmount, limitAmount, rechargeBaseAmount, rechargeBonusMultiplier, feeRate, payAmount, sel, promoSnapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -120,23 +121,51 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	return resp, nil
 }
 
-// resolveUserRechargeBonusMultiplier 返回用户绑定优惠码的首笔余额充值到账加成倍率。
-// 已完成首充、未绑定优惠码、优惠码不存在或查询失败时返回 1（无加成），保证充值主流程 fail-open。
-func (s *PaymentService) resolveUserRechargeBonusMultiplier(ctx context.Context, user *User) float64 {
-	if user == nil || user.FirstRechargeBonusUsed || user.PromoCodeID == nil || *user.PromoCodeID <= 0 || s.entClient == nil {
-		return DefaultRechargeBonusMultiplier
+const (
+	PromoAttributionAttributed    = "attributed"
+	PromoAttributionNone          = "none"
+	PromoAttributionLegacyUnknown = "legacy_unknown"
+)
+
+type userPromoSnapshot struct {
+	Attribution             string
+	PromoCodeID             *int64
+	PromoCode               *string
+	RechargeBonusMultiplier float64
+}
+
+// resolveUserPromoSnapshot 一次性解析用户注册优惠码归因和首充倍率。
+// 已知优惠码 ID 即保留 attributed 归因；优惠码实体查询失败时倍率按 1 fail-open，避免支付主流程中断。
+func (s *PaymentService) resolveUserPromoSnapshot(ctx context.Context, user *User) userPromoSnapshot {
+	snapshot := userPromoSnapshot{
+		Attribution:             PromoAttributionNone,
+		RechargeBonusMultiplier: DefaultRechargeBonusMultiplier,
 	}
-	pc, err := s.entClient.PromoCode.Get(ctx, *user.PromoCodeID)
+	if user == nil || user.PromoCodeID == nil || *user.PromoCodeID <= 0 {
+		return snapshot
+	}
+
+	promoCodeID := *user.PromoCodeID
+	snapshot.Attribution = PromoAttributionAttributed
+	snapshot.PromoCodeID = &promoCodeID
+	if s.entClient == nil {
+		return snapshot
+	}
+
+	pc, err := s.entClient.PromoCode.Get(ctx, promoCodeID)
 	if err != nil || pc == nil {
 		if err != nil && !dbent.IsNotFound(err) {
-			slog.Warn("[PaymentService] resolve promo recharge multiplier failed", "user_id", user.ID, "promo_code_id", *user.PromoCodeID, "error", err)
+			slog.Warn("[PaymentService] resolve promo snapshot failed", "user_id", user.ID, "promo_code_id", promoCodeID, "error", err)
 		}
-		return DefaultRechargeBonusMultiplier
+		return snapshot
 	}
-	if pc.RechargeBonusMultiplier < DefaultRechargeBonusMultiplier {
-		return DefaultRechargeBonusMultiplier
+
+	code := pc.Code
+	snapshot.PromoCode = &code
+	if !user.FirstRechargeBonusUsed && pc.RechargeBonusMultiplier >= DefaultRechargeBonusMultiplier {
+		snapshot.RechargeBonusMultiplier = pc.RechargeBonusMultiplier
 	}
-	return pc.RechargeBonusMultiplier
+	return snapshot
 }
 
 func (s *PaymentService) validateOrderInput(ctx context.Context, req CreateOrderRequest, cfg *PaymentConfig) (*dbent.SubscriptionPlan, error) {
@@ -193,7 +222,7 @@ func (s *PaymentService) validateSubOrder(ctx context.Context, req CreateOrderRe
 	return plan, nil
 }
 
-func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderRequest, user *User, plan *dbent.SubscriptionPlan, cfg *PaymentConfig, orderAmount, limitAmount, rechargeBaseAmount, rechargeBonusMultiplier, feeRate, payAmount float64, sel *payment.InstanceSelection) (*dbent.PaymentOrder, error) {
+func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderRequest, user *User, plan *dbent.SubscriptionPlan, cfg *PaymentConfig, orderAmount, limitAmount, rechargeBaseAmount, rechargeBonusMultiplier, feeRate, payAmount float64, sel *payment.InstanceSelection, promoSnapshot userPromoSnapshot) (*dbent.PaymentOrder, error) {
 	tx, err := s.entClient.Tx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
@@ -233,6 +262,9 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 		SetUserEmail(user.Email).
 		SetUserName(user.Username).
 		SetNillableUserNotes(psNilIfEmpty(user.Notes)).
+		SetNillableSignupPromoCodeID(promoSnapshot.PromoCodeID).
+		SetNillableSignupPromoCode(promoSnapshot.PromoCode).
+		SetSignupPromoAttribution(promoSnapshot.Attribution).
 		SetAmount(orderAmount).
 		SetPayAmount(payAmount).
 		SetFeeRate(feeRate).
@@ -907,34 +939,15 @@ func (s *PaymentService) GetUserOrders(ctx context.Context, userID int64, p Orde
 	return orders, total, nil
 }
 
-// AdminListOrders returns a paginated list of orders. If userID > 0, filters by user.
-func (s *PaymentService) AdminListOrders(ctx context.Context, userID int64, p OrderListParams) ([]*dbent.PaymentOrder, int, error) {
-	q := s.entClient.PaymentOrder.Query()
-	if userID > 0 {
-		q = q.Where(paymentorder.UserIDEQ(userID))
-	}
-	if p.Status != "" {
-		q = q.Where(paymentorder.StatusEQ(p.Status))
-	}
-	if p.OrderType != "" {
-		q = q.Where(paymentorder.OrderTypeEQ(p.OrderType))
-	}
-	if p.PaymentType != "" {
-		q = q.Where(paymentorder.PaymentTypeEQ(p.PaymentType))
-	}
-	if p.Keyword != "" {
-		q = q.Where(paymentorder.Or(
-			paymentorder.OutTradeNoContainsFold(p.Keyword),
-			paymentorder.UserEmailContainsFold(p.Keyword),
-			paymentorder.UserNameContainsFold(p.Keyword),
-		))
-	}
+// AdminListOrders returns a paginated list of orders using the shared admin report filters.
+func (s *PaymentService) AdminListOrders(ctx context.Context, p OrderListParams) ([]*dbent.PaymentOrder, int, error) {
+	q := s.adminOrderQuery(p)
 	total, err := q.Clone().Count(ctx)
 	if err != nil {
 		return nil, 0, fmt.Errorf("count admin orders: %w", err)
 	}
 	ps, pg := applyPagination(p.PageSize, p.Page)
-	orders, err := q.Order(dbent.Desc(paymentorder.FieldCreatedAt)).Limit(ps).Offset((pg - 1) * ps).All(ctx)
+	orders, err := q.Order(dbent.Desc(paymentorder.FieldCreatedAt), dbent.Desc(paymentorder.FieldID)).Limit(ps).Offset((pg - 1) * ps).All(ctx)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query admin orders: %w", err)
 	}

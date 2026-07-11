@@ -27,6 +27,12 @@ type PaymentOrder struct {
 	UserName string `json:"user_name,omitempty"`
 	// UserNotes holds the value of the "user_notes" field.
 	UserNotes *string `json:"user_notes,omitempty"`
+	// 创建订单时快照的注册优惠码 ID；不建立外键以保留历史归因
+	SignupPromoCodeID *int64 `json:"signup_promo_code_id,omitempty"`
+	// 创建订单时快照的注册优惠码文本
+	SignupPromoCode *string `json:"signup_promo_code,omitempty"`
+	// 注册优惠码归因：attributed、none 或 legacy_unknown
+	SignupPromoAttribution string `json:"signup_promo_attribution,omitempty"`
 	// Amount holds the value of the "amount" field.
 	Amount float64 `json:"amount,omitempty"`
 	// PayAmount holds the value of the "pay_amount" field.
@@ -142,9 +148,9 @@ func (*PaymentOrder) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case paymentorder.FieldAmount, paymentorder.FieldPayAmount, paymentorder.FieldFeeRate, paymentorder.FieldRechargeBaseAmount, paymentorder.FieldRechargeBonusMultiplier, paymentorder.FieldRefundAmount:
 			values[i] = new(sql.NullFloat64)
-		case paymentorder.FieldID, paymentorder.FieldUserID, paymentorder.FieldPlanID, paymentorder.FieldSubscriptionGroupID, paymentorder.FieldSubscriptionDays:
+		case paymentorder.FieldID, paymentorder.FieldUserID, paymentorder.FieldSignupPromoCodeID, paymentorder.FieldPlanID, paymentorder.FieldSubscriptionGroupID, paymentorder.FieldSubscriptionDays:
 			values[i] = new(sql.NullInt64)
-		case paymentorder.FieldUserEmail, paymentorder.FieldUserName, paymentorder.FieldUserNotes, paymentorder.FieldRechargeCode, paymentorder.FieldOutTradeNo, paymentorder.FieldPaymentType, paymentorder.FieldPaymentTradeNo, paymentorder.FieldPayURL, paymentorder.FieldQrCode, paymentorder.FieldQrCodeImg, paymentorder.FieldOrderType, paymentorder.FieldProviderInstanceID, paymentorder.FieldProviderKey, paymentorder.FieldStatus, paymentorder.FieldRefundReason, paymentorder.FieldRefundRequestReason, paymentorder.FieldRefundRequestedBy, paymentorder.FieldFailedReason, paymentorder.FieldClientIP, paymentorder.FieldSrcHost, paymentorder.FieldSrcURL:
+		case paymentorder.FieldUserEmail, paymentorder.FieldUserName, paymentorder.FieldUserNotes, paymentorder.FieldSignupPromoCode, paymentorder.FieldSignupPromoAttribution, paymentorder.FieldRechargeCode, paymentorder.FieldOutTradeNo, paymentorder.FieldPaymentType, paymentorder.FieldPaymentTradeNo, paymentorder.FieldPayURL, paymentorder.FieldQrCode, paymentorder.FieldQrCodeImg, paymentorder.FieldOrderType, paymentorder.FieldProviderInstanceID, paymentorder.FieldProviderKey, paymentorder.FieldStatus, paymentorder.FieldRefundReason, paymentorder.FieldRefundRequestReason, paymentorder.FieldRefundRequestedBy, paymentorder.FieldFailedReason, paymentorder.FieldClientIP, paymentorder.FieldSrcHost, paymentorder.FieldSrcURL:
 			values[i] = new(sql.NullString)
 		case paymentorder.FieldRefundAt, paymentorder.FieldRefundRequestedAt, paymentorder.FieldExpiresAt, paymentorder.FieldPaidAt, paymentorder.FieldCompletedAt, paymentorder.FieldFailedAt, paymentorder.FieldCreatedAt, paymentorder.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -193,6 +199,26 @@ func (_m *PaymentOrder) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.UserNotes = new(string)
 				*_m.UserNotes = value.String
+			}
+		case paymentorder.FieldSignupPromoCodeID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field signup_promo_code_id", values[i])
+			} else if value.Valid {
+				_m.SignupPromoCodeID = new(int64)
+				*_m.SignupPromoCodeID = value.Int64
+			}
+		case paymentorder.FieldSignupPromoCode:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field signup_promo_code", values[i])
+			} else if value.Valid {
+				_m.SignupPromoCode = new(string)
+				*_m.SignupPromoCode = value.String
+			}
+		case paymentorder.FieldSignupPromoAttribution:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field signup_promo_attribution", values[i])
+			} else if value.Valid {
+				_m.SignupPromoAttribution = value.String
 			}
 		case paymentorder.FieldAmount:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
@@ -504,6 +530,19 @@ func (_m *PaymentOrder) String() string {
 		builder.WriteString("user_notes=")
 		builder.WriteString(*v)
 	}
+	builder.WriteString(", ")
+	if v := _m.SignupPromoCodeID; v != nil {
+		builder.WriteString("signup_promo_code_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.SignupPromoCode; v != nil {
+		builder.WriteString("signup_promo_code=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	builder.WriteString("signup_promo_attribution=")
+	builder.WriteString(_m.SignupPromoAttribution)
 	builder.WriteString(", ")
 	builder.WriteString("amount=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Amount))

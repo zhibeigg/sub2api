@@ -55,6 +55,48 @@ func (_c *PaymentOrderCreate) SetNillableUserNotes(v *string) *PaymentOrderCreat
 	return _c
 }
 
+// SetSignupPromoCodeID sets the "signup_promo_code_id" field.
+func (_c *PaymentOrderCreate) SetSignupPromoCodeID(v int64) *PaymentOrderCreate {
+	_c.mutation.SetSignupPromoCodeID(v)
+	return _c
+}
+
+// SetNillableSignupPromoCodeID sets the "signup_promo_code_id" field if the given value is not nil.
+func (_c *PaymentOrderCreate) SetNillableSignupPromoCodeID(v *int64) *PaymentOrderCreate {
+	if v != nil {
+		_c.SetSignupPromoCodeID(*v)
+	}
+	return _c
+}
+
+// SetSignupPromoCode sets the "signup_promo_code" field.
+func (_c *PaymentOrderCreate) SetSignupPromoCode(v string) *PaymentOrderCreate {
+	_c.mutation.SetSignupPromoCode(v)
+	return _c
+}
+
+// SetNillableSignupPromoCode sets the "signup_promo_code" field if the given value is not nil.
+func (_c *PaymentOrderCreate) SetNillableSignupPromoCode(v *string) *PaymentOrderCreate {
+	if v != nil {
+		_c.SetSignupPromoCode(*v)
+	}
+	return _c
+}
+
+// SetSignupPromoAttribution sets the "signup_promo_attribution" field.
+func (_c *PaymentOrderCreate) SetSignupPromoAttribution(v string) *PaymentOrderCreate {
+	_c.mutation.SetSignupPromoAttribution(v)
+	return _c
+}
+
+// SetNillableSignupPromoAttribution sets the "signup_promo_attribution" field if the given value is not nil.
+func (_c *PaymentOrderCreate) SetNillableSignupPromoAttribution(v *string) *PaymentOrderCreate {
+	if v != nil {
+		_c.SetSignupPromoAttribution(*v)
+	}
+	return _c
+}
+
 // SetAmount sets the "amount" field.
 func (_c *PaymentOrderCreate) SetAmount(v float64) *PaymentOrderCreate {
 	_c.mutation.SetAmount(v)
@@ -561,6 +603,10 @@ func (_c *PaymentOrderCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *PaymentOrderCreate) defaults() {
+	if _, ok := _c.mutation.SignupPromoAttribution(); !ok {
+		v := paymentorder.DefaultSignupPromoAttribution
+		_c.mutation.SetSignupPromoAttribution(v)
+	}
 	if _, ok := _c.mutation.FeeRate(); !ok {
 		v := paymentorder.DefaultFeeRate
 		_c.mutation.SetFeeRate(v)
@@ -626,6 +672,19 @@ func (_c *PaymentOrderCreate) check() error {
 	if v, ok := _c.mutation.UserName(); ok {
 		if err := paymentorder.UserNameValidator(v); err != nil {
 			return &ValidationError{Name: "user_name", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.user_name": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.SignupPromoCode(); ok {
+		if err := paymentorder.SignupPromoCodeValidator(v); err != nil {
+			return &ValidationError{Name: "signup_promo_code", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.signup_promo_code": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SignupPromoAttribution(); !ok {
+		return &ValidationError{Name: "signup_promo_attribution", err: errors.New(`ent: missing required field "PaymentOrder.signup_promo_attribution"`)}
+	}
+	if v, ok := _c.mutation.SignupPromoAttribution(); ok {
+		if err := paymentorder.SignupPromoAttributionValidator(v); err != nil {
+			return &ValidationError{Name: "signup_promo_attribution", err: fmt.Errorf(`ent: validator failed for field "PaymentOrder.signup_promo_attribution": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Amount(); !ok {
@@ -781,6 +840,18 @@ func (_c *PaymentOrderCreate) createSpec() (*PaymentOrder, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.UserNotes(); ok {
 		_spec.SetField(paymentorder.FieldUserNotes, field.TypeString, value)
 		_node.UserNotes = &value
+	}
+	if value, ok := _c.mutation.SignupPromoCodeID(); ok {
+		_spec.SetField(paymentorder.FieldSignupPromoCodeID, field.TypeInt64, value)
+		_node.SignupPromoCodeID = &value
+	}
+	if value, ok := _c.mutation.SignupPromoCode(); ok {
+		_spec.SetField(paymentorder.FieldSignupPromoCode, field.TypeString, value)
+		_node.SignupPromoCode = &value
+	}
+	if value, ok := _c.mutation.SignupPromoAttribution(); ok {
+		_spec.SetField(paymentorder.FieldSignupPromoAttribution, field.TypeString, value)
+		_node.SignupPromoAttribution = value
 	}
 	if value, ok := _c.mutation.Amount(); ok {
 		_spec.SetField(paymentorder.FieldAmount, field.TypeFloat64, value)
@@ -1058,6 +1129,60 @@ func (u *PaymentOrderUpsert) UpdateUserNotes() *PaymentOrderUpsert {
 // ClearUserNotes clears the value of the "user_notes" field.
 func (u *PaymentOrderUpsert) ClearUserNotes() *PaymentOrderUpsert {
 	u.SetNull(paymentorder.FieldUserNotes)
+	return u
+}
+
+// SetSignupPromoCodeID sets the "signup_promo_code_id" field.
+func (u *PaymentOrderUpsert) SetSignupPromoCodeID(v int64) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldSignupPromoCodeID, v)
+	return u
+}
+
+// UpdateSignupPromoCodeID sets the "signup_promo_code_id" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdateSignupPromoCodeID() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldSignupPromoCodeID)
+	return u
+}
+
+// AddSignupPromoCodeID adds v to the "signup_promo_code_id" field.
+func (u *PaymentOrderUpsert) AddSignupPromoCodeID(v int64) *PaymentOrderUpsert {
+	u.Add(paymentorder.FieldSignupPromoCodeID, v)
+	return u
+}
+
+// ClearSignupPromoCodeID clears the value of the "signup_promo_code_id" field.
+func (u *PaymentOrderUpsert) ClearSignupPromoCodeID() *PaymentOrderUpsert {
+	u.SetNull(paymentorder.FieldSignupPromoCodeID)
+	return u
+}
+
+// SetSignupPromoCode sets the "signup_promo_code" field.
+func (u *PaymentOrderUpsert) SetSignupPromoCode(v string) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldSignupPromoCode, v)
+	return u
+}
+
+// UpdateSignupPromoCode sets the "signup_promo_code" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdateSignupPromoCode() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldSignupPromoCode)
+	return u
+}
+
+// ClearSignupPromoCode clears the value of the "signup_promo_code" field.
+func (u *PaymentOrderUpsert) ClearSignupPromoCode() *PaymentOrderUpsert {
+	u.SetNull(paymentorder.FieldSignupPromoCode)
+	return u
+}
+
+// SetSignupPromoAttribution sets the "signup_promo_attribution" field.
+func (u *PaymentOrderUpsert) SetSignupPromoAttribution(v string) *PaymentOrderUpsert {
+	u.Set(paymentorder.FieldSignupPromoAttribution, v)
+	return u
+}
+
+// UpdateSignupPromoAttribution sets the "signup_promo_attribution" field to the value that was provided on create.
+func (u *PaymentOrderUpsert) UpdateSignupPromoAttribution() *PaymentOrderUpsert {
+	u.SetExcluded(paymentorder.FieldSignupPromoAttribution)
 	return u
 }
 
@@ -1796,6 +1921,69 @@ func (u *PaymentOrderUpsertOne) UpdateUserNotes() *PaymentOrderUpsertOne {
 func (u *PaymentOrderUpsertOne) ClearUserNotes() *PaymentOrderUpsertOne {
 	return u.Update(func(s *PaymentOrderUpsert) {
 		s.ClearUserNotes()
+	})
+}
+
+// SetSignupPromoCodeID sets the "signup_promo_code_id" field.
+func (u *PaymentOrderUpsertOne) SetSignupPromoCodeID(v int64) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetSignupPromoCodeID(v)
+	})
+}
+
+// AddSignupPromoCodeID adds v to the "signup_promo_code_id" field.
+func (u *PaymentOrderUpsertOne) AddSignupPromoCodeID(v int64) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.AddSignupPromoCodeID(v)
+	})
+}
+
+// UpdateSignupPromoCodeID sets the "signup_promo_code_id" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdateSignupPromoCodeID() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateSignupPromoCodeID()
+	})
+}
+
+// ClearSignupPromoCodeID clears the value of the "signup_promo_code_id" field.
+func (u *PaymentOrderUpsertOne) ClearSignupPromoCodeID() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearSignupPromoCodeID()
+	})
+}
+
+// SetSignupPromoCode sets the "signup_promo_code" field.
+func (u *PaymentOrderUpsertOne) SetSignupPromoCode(v string) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetSignupPromoCode(v)
+	})
+}
+
+// UpdateSignupPromoCode sets the "signup_promo_code" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdateSignupPromoCode() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateSignupPromoCode()
+	})
+}
+
+// ClearSignupPromoCode clears the value of the "signup_promo_code" field.
+func (u *PaymentOrderUpsertOne) ClearSignupPromoCode() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearSignupPromoCode()
+	})
+}
+
+// SetSignupPromoAttribution sets the "signup_promo_attribution" field.
+func (u *PaymentOrderUpsertOne) SetSignupPromoAttribution(v string) *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetSignupPromoAttribution(v)
+	})
+}
+
+// UpdateSignupPromoAttribution sets the "signup_promo_attribution" field to the value that was provided on create.
+func (u *PaymentOrderUpsertOne) UpdateSignupPromoAttribution() *PaymentOrderUpsertOne {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateSignupPromoAttribution()
 	})
 }
 
@@ -2805,6 +2993,69 @@ func (u *PaymentOrderUpsertBulk) UpdateUserNotes() *PaymentOrderUpsertBulk {
 func (u *PaymentOrderUpsertBulk) ClearUserNotes() *PaymentOrderUpsertBulk {
 	return u.Update(func(s *PaymentOrderUpsert) {
 		s.ClearUserNotes()
+	})
+}
+
+// SetSignupPromoCodeID sets the "signup_promo_code_id" field.
+func (u *PaymentOrderUpsertBulk) SetSignupPromoCodeID(v int64) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetSignupPromoCodeID(v)
+	})
+}
+
+// AddSignupPromoCodeID adds v to the "signup_promo_code_id" field.
+func (u *PaymentOrderUpsertBulk) AddSignupPromoCodeID(v int64) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.AddSignupPromoCodeID(v)
+	})
+}
+
+// UpdateSignupPromoCodeID sets the "signup_promo_code_id" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdateSignupPromoCodeID() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateSignupPromoCodeID()
+	})
+}
+
+// ClearSignupPromoCodeID clears the value of the "signup_promo_code_id" field.
+func (u *PaymentOrderUpsertBulk) ClearSignupPromoCodeID() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearSignupPromoCodeID()
+	})
+}
+
+// SetSignupPromoCode sets the "signup_promo_code" field.
+func (u *PaymentOrderUpsertBulk) SetSignupPromoCode(v string) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetSignupPromoCode(v)
+	})
+}
+
+// UpdateSignupPromoCode sets the "signup_promo_code" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdateSignupPromoCode() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateSignupPromoCode()
+	})
+}
+
+// ClearSignupPromoCode clears the value of the "signup_promo_code" field.
+func (u *PaymentOrderUpsertBulk) ClearSignupPromoCode() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.ClearSignupPromoCode()
+	})
+}
+
+// SetSignupPromoAttribution sets the "signup_promo_attribution" field.
+func (u *PaymentOrderUpsertBulk) SetSignupPromoAttribution(v string) *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.SetSignupPromoAttribution(v)
+	})
+}
+
+// UpdateSignupPromoAttribution sets the "signup_promo_attribution" field to the value that was provided on create.
+func (u *PaymentOrderUpsertBulk) UpdateSignupPromoAttribution() *PaymentOrderUpsertBulk {
+	return u.Update(func(s *PaymentOrderUpsert) {
+		s.UpdateSignupPromoAttribution()
 	})
 }
 

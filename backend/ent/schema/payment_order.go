@@ -41,6 +41,19 @@ func (PaymentOrder) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			SchemaType(map[string]string{dialect.Postgres: "text"}),
+		field.Int64("signup_promo_code_id").
+			Optional().
+			Nillable().
+			Comment("创建订单时快照的注册优惠码 ID；不建立外键以保留历史归因"),
+		field.String("signup_promo_code").
+			Optional().
+			Nillable().
+			MaxLen(64).
+			Comment("创建订单时快照的注册优惠码文本"),
+		field.String("signup_promo_attribution").
+			MaxLen(20).
+			Default("legacy_unknown").
+			Comment("注册优惠码归因：attributed、none 或 legacy_unknown"),
 
 		// 金额信息
 		field.Float("amount").
@@ -209,5 +222,7 @@ func (PaymentOrder) Indexes() []ent.Index {
 		index.Fields("paid_at"),
 		index.Fields("payment_type", "paid_at"),
 		index.Fields("order_type"),
+		index.Fields("signup_promo_code_id", "created_at"),
+		index.Fields("signup_promo_code_id", "paid_at"),
 	}
 }

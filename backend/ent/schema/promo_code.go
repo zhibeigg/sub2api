@@ -19,7 +19,7 @@ import (
 // 注册优惠码：用户注册时使用，可获得赠送余额
 // 与 RedeemCode 不同，PromoCode 支持多次使用（有使用次数限制）
 //
-// 删除策略：硬删除
+// 删除策略：从未使用且未绑定用户时可硬删除；已有注册归因时只能禁用
 type PromoCode struct {
 	ent.Schema
 }

@@ -75,6 +75,21 @@ func UserNotes(v string) predicate.PaymentOrder {
 	return predicate.PaymentOrder(sql.FieldEQ(FieldUserNotes, v))
 }
 
+// SignupPromoCodeID applies equality check predicate on the "signup_promo_code_id" field. It's identical to SignupPromoCodeIDEQ.
+func SignupPromoCodeID(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldSignupPromoCodeID, v))
+}
+
+// SignupPromoCode applies equality check predicate on the "signup_promo_code" field. It's identical to SignupPromoCodeEQ.
+func SignupPromoCode(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldSignupPromoCode, v))
+}
+
+// SignupPromoAttribution applies equality check predicate on the "signup_promo_attribution" field. It's identical to SignupPromoAttributionEQ.
+func SignupPromoAttribution(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldSignupPromoAttribution, v))
+}
+
 // Amount applies equality check predicate on the "amount" field. It's identical to AmountEQ.
 func Amount(v float64) predicate.PaymentOrder {
 	return predicate.PaymentOrder(sql.FieldEQ(FieldAmount, v))
@@ -483,6 +498,196 @@ func UserNotesEqualFold(v string) predicate.PaymentOrder {
 // UserNotesContainsFold applies the ContainsFold predicate on the "user_notes" field.
 func UserNotesContainsFold(v string) predicate.PaymentOrder {
 	return predicate.PaymentOrder(sql.FieldContainsFold(FieldUserNotes, v))
+}
+
+// SignupPromoCodeIDEQ applies the EQ predicate on the "signup_promo_code_id" field.
+func SignupPromoCodeIDEQ(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldSignupPromoCodeID, v))
+}
+
+// SignupPromoCodeIDNEQ applies the NEQ predicate on the "signup_promo_code_id" field.
+func SignupPromoCodeIDNEQ(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNEQ(FieldSignupPromoCodeID, v))
+}
+
+// SignupPromoCodeIDIn applies the In predicate on the "signup_promo_code_id" field.
+func SignupPromoCodeIDIn(vs ...int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIn(FieldSignupPromoCodeID, vs...))
+}
+
+// SignupPromoCodeIDNotIn applies the NotIn predicate on the "signup_promo_code_id" field.
+func SignupPromoCodeIDNotIn(vs ...int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotIn(FieldSignupPromoCodeID, vs...))
+}
+
+// SignupPromoCodeIDGT applies the GT predicate on the "signup_promo_code_id" field.
+func SignupPromoCodeIDGT(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGT(FieldSignupPromoCodeID, v))
+}
+
+// SignupPromoCodeIDGTE applies the GTE predicate on the "signup_promo_code_id" field.
+func SignupPromoCodeIDGTE(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGTE(FieldSignupPromoCodeID, v))
+}
+
+// SignupPromoCodeIDLT applies the LT predicate on the "signup_promo_code_id" field.
+func SignupPromoCodeIDLT(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLT(FieldSignupPromoCodeID, v))
+}
+
+// SignupPromoCodeIDLTE applies the LTE predicate on the "signup_promo_code_id" field.
+func SignupPromoCodeIDLTE(v int64) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLTE(FieldSignupPromoCodeID, v))
+}
+
+// SignupPromoCodeIDIsNil applies the IsNil predicate on the "signup_promo_code_id" field.
+func SignupPromoCodeIDIsNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIsNull(FieldSignupPromoCodeID))
+}
+
+// SignupPromoCodeIDNotNil applies the NotNil predicate on the "signup_promo_code_id" field.
+func SignupPromoCodeIDNotNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotNull(FieldSignupPromoCodeID))
+}
+
+// SignupPromoCodeEQ applies the EQ predicate on the "signup_promo_code" field.
+func SignupPromoCodeEQ(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldSignupPromoCode, v))
+}
+
+// SignupPromoCodeNEQ applies the NEQ predicate on the "signup_promo_code" field.
+func SignupPromoCodeNEQ(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNEQ(FieldSignupPromoCode, v))
+}
+
+// SignupPromoCodeIn applies the In predicate on the "signup_promo_code" field.
+func SignupPromoCodeIn(vs ...string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIn(FieldSignupPromoCode, vs...))
+}
+
+// SignupPromoCodeNotIn applies the NotIn predicate on the "signup_promo_code" field.
+func SignupPromoCodeNotIn(vs ...string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotIn(FieldSignupPromoCode, vs...))
+}
+
+// SignupPromoCodeGT applies the GT predicate on the "signup_promo_code" field.
+func SignupPromoCodeGT(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGT(FieldSignupPromoCode, v))
+}
+
+// SignupPromoCodeGTE applies the GTE predicate on the "signup_promo_code" field.
+func SignupPromoCodeGTE(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGTE(FieldSignupPromoCode, v))
+}
+
+// SignupPromoCodeLT applies the LT predicate on the "signup_promo_code" field.
+func SignupPromoCodeLT(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLT(FieldSignupPromoCode, v))
+}
+
+// SignupPromoCodeLTE applies the LTE predicate on the "signup_promo_code" field.
+func SignupPromoCodeLTE(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLTE(FieldSignupPromoCode, v))
+}
+
+// SignupPromoCodeContains applies the Contains predicate on the "signup_promo_code" field.
+func SignupPromoCodeContains(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldContains(FieldSignupPromoCode, v))
+}
+
+// SignupPromoCodeHasPrefix applies the HasPrefix predicate on the "signup_promo_code" field.
+func SignupPromoCodeHasPrefix(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldHasPrefix(FieldSignupPromoCode, v))
+}
+
+// SignupPromoCodeHasSuffix applies the HasSuffix predicate on the "signup_promo_code" field.
+func SignupPromoCodeHasSuffix(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldHasSuffix(FieldSignupPromoCode, v))
+}
+
+// SignupPromoCodeIsNil applies the IsNil predicate on the "signup_promo_code" field.
+func SignupPromoCodeIsNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIsNull(FieldSignupPromoCode))
+}
+
+// SignupPromoCodeNotNil applies the NotNil predicate on the "signup_promo_code" field.
+func SignupPromoCodeNotNil() predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotNull(FieldSignupPromoCode))
+}
+
+// SignupPromoCodeEqualFold applies the EqualFold predicate on the "signup_promo_code" field.
+func SignupPromoCodeEqualFold(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEqualFold(FieldSignupPromoCode, v))
+}
+
+// SignupPromoCodeContainsFold applies the ContainsFold predicate on the "signup_promo_code" field.
+func SignupPromoCodeContainsFold(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldContainsFold(FieldSignupPromoCode, v))
+}
+
+// SignupPromoAttributionEQ applies the EQ predicate on the "signup_promo_attribution" field.
+func SignupPromoAttributionEQ(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEQ(FieldSignupPromoAttribution, v))
+}
+
+// SignupPromoAttributionNEQ applies the NEQ predicate on the "signup_promo_attribution" field.
+func SignupPromoAttributionNEQ(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNEQ(FieldSignupPromoAttribution, v))
+}
+
+// SignupPromoAttributionIn applies the In predicate on the "signup_promo_attribution" field.
+func SignupPromoAttributionIn(vs ...string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldIn(FieldSignupPromoAttribution, vs...))
+}
+
+// SignupPromoAttributionNotIn applies the NotIn predicate on the "signup_promo_attribution" field.
+func SignupPromoAttributionNotIn(vs ...string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldNotIn(FieldSignupPromoAttribution, vs...))
+}
+
+// SignupPromoAttributionGT applies the GT predicate on the "signup_promo_attribution" field.
+func SignupPromoAttributionGT(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGT(FieldSignupPromoAttribution, v))
+}
+
+// SignupPromoAttributionGTE applies the GTE predicate on the "signup_promo_attribution" field.
+func SignupPromoAttributionGTE(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldGTE(FieldSignupPromoAttribution, v))
+}
+
+// SignupPromoAttributionLT applies the LT predicate on the "signup_promo_attribution" field.
+func SignupPromoAttributionLT(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLT(FieldSignupPromoAttribution, v))
+}
+
+// SignupPromoAttributionLTE applies the LTE predicate on the "signup_promo_attribution" field.
+func SignupPromoAttributionLTE(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldLTE(FieldSignupPromoAttribution, v))
+}
+
+// SignupPromoAttributionContains applies the Contains predicate on the "signup_promo_attribution" field.
+func SignupPromoAttributionContains(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldContains(FieldSignupPromoAttribution, v))
+}
+
+// SignupPromoAttributionHasPrefix applies the HasPrefix predicate on the "signup_promo_attribution" field.
+func SignupPromoAttributionHasPrefix(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldHasPrefix(FieldSignupPromoAttribution, v))
+}
+
+// SignupPromoAttributionHasSuffix applies the HasSuffix predicate on the "signup_promo_attribution" field.
+func SignupPromoAttributionHasSuffix(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldHasSuffix(FieldSignupPromoAttribution, v))
+}
+
+// SignupPromoAttributionEqualFold applies the EqualFold predicate on the "signup_promo_attribution" field.
+func SignupPromoAttributionEqualFold(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldEqualFold(FieldSignupPromoAttribution, v))
+}
+
+// SignupPromoAttributionContainsFold applies the ContainsFold predicate on the "signup_promo_attribution" field.
+func SignupPromoAttributionContainsFold(v string) predicate.PaymentOrder {
+	return predicate.PaymentOrder(sql.FieldContainsFold(FieldSignupPromoAttribution, v))
 }
 
 // AmountEQ applies the EQ predicate on the "amount" field.
