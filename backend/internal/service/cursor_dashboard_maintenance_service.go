@@ -14,14 +14,15 @@ import (
 type CursorDashboardMaintenanceService struct {
 	accountRepo AccountRepository
 	auth        *CursorDashboardAuthService
+	gateway     *CursorGatewayService
 	cfg         *config.Config
 	stopCh      chan struct{}
 	stopOnce    sync.Once
 	wg          sync.WaitGroup
 }
 
-func NewCursorDashboardMaintenanceService(accountRepo AccountRepository, auth *CursorDashboardAuthService, cfg *config.Config) *CursorDashboardMaintenanceService {
-	return &CursorDashboardMaintenanceService{accountRepo: accountRepo, auth: auth, cfg: cfg, stopCh: make(chan struct{})}
+func NewCursorDashboardMaintenanceService(accountRepo AccountRepository, auth *CursorDashboardAuthService, gateway *CursorGatewayService, cfg *config.Config) *CursorDashboardMaintenanceService {
+	return &CursorDashboardMaintenanceService{accountRepo: accountRepo, auth: auth, gateway: gateway, cfg: cfg, stopCh: make(chan struct{})}
 }
 
 func (s *CursorDashboardMaintenanceService) Start() {
@@ -71,7 +72,11 @@ func (s *CursorDashboardMaintenanceService) runCycle() {
 	if probeInterval < time.Minute {
 		probeInterval = 6 * time.Hour
 	}
-	sem := make(chan struct{}, 3)
+	concurrency := s.cfg.Cursor.AgentModelPrewarmConcurrency
+	if concurrency <= 0 {
+		concurrency = 3
+	}
+	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
 	for i := range accounts {
 		account := accounts[i]
@@ -99,6 +104,9 @@ func (s *CursorDashboardMaintenanceService) runCycle() {
 				return
 			} else if refreshed != nil {
 				current = refreshed
+			}
+			if s.gateway != nil && s.cfg.Cursor.AgentModelPrewarmEnabled {
+				s.gateway.PrewarmIDEModelCatalog(current)
 			}
 			info := cursorDashboardSessionInfoFromAccount(current)
 			if info.LastVerifiedAt != nil && time.Since(*info.LastVerifiedAt) < probeInterval {

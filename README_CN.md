@@ -178,7 +178,7 @@ Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的
 ## 核心功能
 
 - **多账号管理** - 支持多种上游账号类型（OAuth、API Key、服务账户），原生集成 Anthropic、OpenAI、Gemini、Antigravity、Grok、Kiro（AWS CodeWhisperer，提供 Claude 模型）、Adobe Firefly 与 Cursor IDE Chat / Cloud Agent
-- **Cursor IDE Chat + Cloud Agent** - 普通 Anthropic Messages、OpenAI Chat Completions 和 OpenAI Responses 请求通过 Cursor 低延迟 HTTP/2 Connect-Protobuf IDE 流转发，实时透传文本、思考和原生工具调用；官方 Cloud Agents API 继续作为独立显式任务模式。Dashboard Token 仅在服务端加密保存并支持自动续期（[接入文档](docs/CURSOR_INTEGRATION.md)）
+- **Cursor Agent RPC + Cloud Agent** - 普通 Anthropic Messages、OpenAI Chat Completions 和 OpenAI Responses 请求通过双向 HTTP/2 Connect-Protobuf `agent.v1.AgentService/Run` 转发，实时透传文本、thinking 与 MCP 工具增量；下一轮通过原生 history/state 恢复工具结果，不执行本地 shell/file。Cloud Agent 保持独立显式任务模式，内部 `GetUsableModels` 目录刷新不阻塞聊天热路径。Dashboard Token 仅在服务端加密保存并支持自动续期（[接入文档](docs/CURSOR_INTEGRATION.md)）
 - **Kiro 原生接入** - 内建 AWS Builder ID 设备码、IAM Identity Center（PKCE）、SSO Token 导入与凭证 JSON 四种登录方式，支持 token 自动刷新、订阅/用量/超额查询、健康检查与动态模型发现
 - **Adobe Firefly 原生接入** - 支持 IMS 凭据创建前两步预检、安全管理与自动续期、profile/credits 展示、OpenAI Images 兼容图片生成与编辑、Redis 异步视频任务和成功轮询幂等媒体结算（[接入文档](docs/ADOBE_INTEGRATION.md)）
 - **API Key 分发** - 为用户生成和管理 API Key
@@ -761,14 +761,14 @@ Sub2API 将 Adobe 作为独立的 `adobe` 平台接入。Adobe 分组只调度 A
 
 ---
 
-## Cursor IDE Chat 与 Cloud Agent 支持
+## Cursor Agent RPC 与 Cloud Agent 支持
 
-Cursor 账号支持 `auto`、`ide_chat`、`cloud_agent` 三种转发模式。普通 `/v1/messages`、`/v1/chat/completions`、`/v1/responses` 请求在 IDE 模式下使用 Cursor IDE 的 HTTP/2 `StreamUnifiedChatWithTools` 路径；官方 `https://api.cursor.com/v1/agents` API 继续作为独立显式任务模式。
+Cursor 账号支持 `auto`、`ide_chat`、`cloud_agent` 三种转发模式。普通 `/v1/messages`、`/v1/chat/completions`、`/v1/responses` 使用双向 HTTP/2 Connect-Protobuf `agent.v1.AgentService/Run` RPC。`ide_chat` 仅作为兼容枚举保留，界面显示为 **Agent RPC（兼容 IDE Chat）**；官方 `https://api.cursor.com/v1/agents` API 继续作为独立显式任务模式。
 
-- IDE Chat 使用加密保存的 Dashboard Access/Refresh Token、独立的仅 HTTP/2 连接池和 Connect-Protobuf 帧，实时输出文本、思考及原生 MCP 工具调用。无工具请求使用 Ask 模式，带工具请求使用 Agent 模式。
-- `auto` 在存在 Dashboard Access Token 时优先使用 IDE Chat，否则使用 Cloud Agent；IDE 请求失败后不会静默改走 Cloud Agent 重放请求。
+- Agent RPC 使用加密保存的 Dashboard Access/Refresh Token 和独立的仅 HTTP/2 连接池，实时输出文本、thinking/reasoning 与 MCP 工具调用增量。下一轮工具结果通过原生 history/state 恢复；Sub2API 不执行本地 shell 命令或文件操作。
+- `auto` 只有在下游响应尚未提交且命中配置允许的可安全重放错误时，才可回退 Cloud Agent；Cloud Agent 仍是显式任务模式，不是普通聊天默认路径。
 - 已保存的 Dashboard 会话会在到期前自动续期，并在 `401` 后强制刷新重试一次。管理端可通过 `POST /api/v1/admin/cursor/dashboard-auth/start` 与 `/poll` 完成服务器独立的一键 PKCE 授权；从 `state.vscdb` 手工导入 Token 仅作为高级兼容方式。
-- IDE 模型发现使用 Connect-Protobuf `AiService/AvailableModels` RPC；Cloud Agent 模型发现继续使用 `GET /v1/models`，API Key 验证继续使用 `GET /v1/me`。
+- 内部 `GetUsableModels` 模型目录使用 fresh/stale 缓存、账号级 singleflight、启动/授权预热与非阻塞刷新；冷缓存直接执行 `AgentService/Run`，不会阻塞聊天热路径。Cloud Agent 模型同步继续使用 `GET /v1/models`，API Key 验证继续使用 `GET /v1/me`。
 - Cloud Agents API 仍是官方 Beta。仓库任务、持久 Agent、run、取消与清理继续使用 `/v1/agents` 及其 run 端点。
 - 管理后台明确拆分 Cursor Dashboard 官方套餐快照与 Sub2API 本地请求、Token、额度和账单；Cursor 套餐、模型用量、Cloud Agent 执行和按需超额费用仍属于 Cursor 官方账单。
 

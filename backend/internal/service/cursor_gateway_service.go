@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	cursorpkg "github.com/Wei-Shaw/sub2api/internal/pkg/cursor"
 	"github.com/gin-gonic/gin"
@@ -24,13 +26,14 @@ import (
 // CursorGatewayService adapts Anthropic Messages, OpenAI Chat Completions and
 // OpenAI Responses requests to Cursor's asynchronous Cloud Agents API.
 type CursorGatewayService struct {
-	httpUpstream  HTTPUpstream
-	proxyRepo     ProxyRepository
-	redisClient   *redis.Client
-	cfg           *config.Config
-	dashboardAuth *CursorDashboardAuthService
-	ideModelMu    sync.RWMutex
-	ideModelCache map[int64]cursorIDEModelCatalogCache
+	httpUpstream    HTTPUpstream
+	proxyRepo       ProxyRepository
+	redisClient     *redis.Client
+	cfg             *config.Config
+	dashboardAuth   *CursorDashboardAuthService
+	ideModelMu      sync.RWMutex
+	ideModelCache   map[int64]cursorIDEModelCatalogCache
+	ideModelRefresh singleflight.Group
 }
 
 func NewCursorGatewayService(httpUpstream HTTPUpstream, proxyRepo ProxyRepository, _ *TLSFingerprintProfileService, redisClient *redis.Client, cfg *config.Config) *CursorGatewayService {
@@ -145,9 +148,19 @@ func normalizeCursorCloudModel(model string, preference cursorVariantPreference)
 	return logical, preference
 }
 
+type cursorAgentPendingMCP struct {
+	RequestID uint64           `json:"request_id"`
+	ExecID    string           `json:"exec_id,omitempty"`
+	Action    cursorpkg.Action `json:"action"`
+}
+
 type cursorStoredResponse struct {
-	Owner    string              `json:"owner"`
-	Dialogue *cursorpkg.Dialogue `json:"dialogue"`
+	Owner               string                            `json:"owner"`
+	Dialogue            *cursorpkg.Dialogue               `json:"dialogue"`
+	AgentConversationID string                            `json:"agent_conversation_id,omitempty"`
+	AgentState          *cursorpkg.AgentConversationState `json:"agent_state,omitempty"`
+	AgentBlobs          map[string][]byte                 `json:"agent_blobs,omitempty"`
+	AgentPendingMCP     *cursorAgentPendingMCP            `json:"agent_pending_mcp,omitempty"`
 }
 
 type cursorCollected struct {
@@ -188,7 +201,16 @@ func (s *CursorGatewayService) Probe(ctx context.Context, account *Account, _, _
 		return "", err
 	}
 	if s.cursorTransportMode(account) == CursorTransportIDEChat {
-		return s.probeCursorIDE(ctx, account)
+		if s.cursorConfig().AgentRPCEnabled {
+			return s.probeCursorIDE(ctx, account)
+		}
+		rawMode := cursorAccountSetting(account, "cursor_transport_mode")
+		if strings.TrimSpace(rawMode) == "" {
+			rawMode = s.cursorConfig().DefaultTransportMode
+		}
+		if NormalizeCursorTransportMode(rawMode) != CursorTransportAuto || strings.TrimSpace(account.GetCredential("api_key")) == "" {
+			return "", errors.New("Cursor Agent RPC is disabled")
+		}
 	}
 	client, err := s.newCloudClient(ctx, account)
 	if err != nil {
@@ -267,6 +289,16 @@ func (s *CursorGatewayService) forward(ctx context.Context, c *gin.Context, acco
 	if s.cursorForwardTransportMode(account) != CursorTransportIDEChat {
 		return s.forwardCloud(ctx, c, account, body, protocol)
 	}
+	if !s.cursorConfig().AgentRPCEnabled {
+		rawMode := cursorAccountSetting(account, "cursor_transport_mode")
+		if strings.TrimSpace(rawMode) == "" {
+			rawMode = s.cursorConfig().DefaultTransportMode
+		}
+		if account != nil && strings.TrimSpace(account.GetCredential("api_key")) != "" && NormalizeCursorTransportMode(rawMode) == CursorTransportAuto {
+			return s.forwardCloud(ctx, c, account, body, protocol)
+		}
+		return nil, &UpstreamFailoverError{StatusCode: http.StatusServiceUnavailable, ResponseBody: []byte("Cursor Agent RPC is disabled")}
+	}
 
 	result, err := s.forwardIDE(ctx, c, account, body, protocol)
 	if err == nil || !s.shouldFallbackCursorIDEToCloud(c, account, err) {
@@ -287,7 +319,7 @@ func (s *CursorGatewayService) forward(ctx context.Context, c *gin.Context, acco
 }
 
 func (s *CursorGatewayService) shouldFallbackCursorIDEToCloud(c *gin.Context, account *Account, err error) bool {
-	if err == nil || account == nil || strings.TrimSpace(account.GetCredential("api_key")) == "" {
+	if !s.cursorConfig().AgentCloudFallbackEnabled || err == nil || account == nil || strings.TrimSpace(account.GetCredential("api_key")) == "" {
 		return false
 	}
 	if c != nil && c.Writer != nil && c.Writer.Written() {
@@ -512,6 +544,9 @@ func (s *CursorGatewayService) cursorConfig() config.CursorConfig {
 		DefaultTransportMode: CursorTransportAuto, ClientVersion: "3.11.13",
 		MaxFrameBytes: 8 << 20, MaxBufferedBytes: 16 << 20,
 		ResponseHeaderTimeoutSeconds: 60, IDEStreamIdleTimeoutSeconds: 60,
+		AgentRPCEnabled: true, AgentCloudFallbackEnabled: true,
+		AgentModelCacheTTLSeconds: 300, AgentModelStaleTTLSeconds: 1800, AgentModelProbeTimeoutSeconds: 5,
+		AgentModelPrewarmEnabled: true, AgentModelPrewarmConcurrency: 3,
 		DashboardBaseURL: cursorpkg.DefaultDashboardBaseURL, DashboardAuthWebsiteURL: cursorpkg.DefaultDashboardWebsiteURL,
 		DashboardMaintenanceEnabled: true, DashboardMaintenanceIntervalMins: 30, DashboardProbeIntervalMins: 360,
 		DashboardRefreshBeforeExpiryHours: 1272, DashboardLoginSessionTTLMins: 5,
@@ -1122,14 +1157,60 @@ func mapCursorError(err error) error {
 }
 
 func (s *CursorGatewayService) saveCursorResponse(ctx context.Context, c *gin.Context, responseID string, dialogue *cursorpkg.Dialogue) error {
+	return s.saveCursorStoredResponse(ctx, c, responseID, &cursorStoredResponse{Dialogue: dialogue})
+}
+
+func (s *CursorGatewayService) saveCursorAgentResponse(ctx context.Context, c *gin.Context, responseID string, dialogue *cursorpkg.Dialogue, conversationID string, state *cursorpkg.AgentConversationState, blobs map[string][]byte, pending *cursorAgentPendingMCP) error {
+	return s.saveCursorStoredResponse(ctx, c, responseID, &cursorStoredResponse{
+		Dialogue: dialogue, AgentConversationID: strings.TrimSpace(conversationID), AgentState: state,
+		AgentBlobs: cloneCursorAgentBlobs(blobs), AgentPendingMCP: cloneCursorAgentPendingMCP(pending),
+	})
+}
+
+func cloneCursorAgentPendingMCP(pending *cursorAgentPendingMCP) *cursorAgentPendingMCP {
+	if pending == nil {
+		return nil
+	}
+	cloned := *pending
+	cloned.Action.Arguments = shallowCopyAnyMap(pending.Action.Arguments)
+	return &cloned
+}
+
+func shallowCopyAnyMap(source map[string]any) map[string]any {
+	if len(source) == 0 {
+		return nil
+	}
+	cloned := make(map[string]any, len(source))
+	for key, value := range source {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func cloneCursorAgentBlobs(blobs map[string][]byte) map[string][]byte {
+	if len(blobs) == 0 {
+		return nil
+	}
+	cloned := make(map[string][]byte, len(blobs))
+	for key, value := range blobs {
+		cloned[key] = append([]byte(nil), value...)
+	}
+	return cloned
+}
+
+func (s *CursorGatewayService) saveCursorStoredResponse(ctx context.Context, c *gin.Context, responseID string, stored *cursorStoredResponse) error {
 	if s == nil || s.redisClient == nil {
 		return errors.New("Redis is not configured")
+	}
+	if stored == nil {
+		return errors.New("Cursor response state is unavailable")
 	}
 	owner, err := cursorResponseOwner(c)
 	if err != nil {
 		return err
 	}
-	encoded, err := json.Marshal(cursorStoredResponse{Owner: owner, Dialogue: dialogue})
+	stored.Owner = owner
+	encoded, err := json.Marshal(stored)
 	if err != nil {
 		return err
 	}
@@ -1138,6 +1219,17 @@ func (s *CursorGatewayService) saveCursorResponse(ctx context.Context, c *gin.Co
 }
 
 func (s *CursorGatewayService) loadCursorResponse(ctx context.Context, c *gin.Context, responseID string) (*cursorpkg.Dialogue, error) {
+	stored, err := s.loadCursorStoredResponse(ctx, c, responseID)
+	if err != nil {
+		return nil, err
+	}
+	if stored.Dialogue == nil {
+		return nil, errors.New("previous_response_id has no stored dialogue")
+	}
+	return stored.Dialogue, nil
+}
+
+func (s *CursorGatewayService) loadCursorStoredResponse(ctx context.Context, c *gin.Context, responseID string) (*cursorStoredResponse, error) {
 	if s == nil || s.redisClient == nil {
 		return nil, errors.New("Redis is not configured")
 	}
@@ -1159,10 +1251,7 @@ func (s *CursorGatewayService) loadCursorResponse(ctx context.Context, c *gin.Co
 	if stored.Owner != owner {
 		return nil, errors.New("previous_response_id does not belong to this API key")
 	}
-	if stored.Dialogue == nil {
-		return nil, errors.New("previous_response_id has no stored dialogue")
-	}
-	return stored.Dialogue, nil
+	return &stored, nil
 }
 
 func cursorAccountSetting(account *Account, key string) string {

@@ -166,6 +166,13 @@ type CursorConfig struct {
 	MaxBufferedBytes                  int    `mapstructure:"max_buffered_bytes"`
 	ResponseHeaderTimeoutSeconds      int    `mapstructure:"response_header_timeout_seconds"`
 	IDEStreamIdleTimeoutSeconds       int    `mapstructure:"ide_stream_idle_timeout_seconds"`
+	AgentRPCEnabled                   bool   `mapstructure:"agent_rpc_enabled"`
+	AgentCloudFallbackEnabled         bool   `mapstructure:"agent_cloud_fallback_enabled"`
+	AgentModelCacheTTLSeconds         int    `mapstructure:"agent_model_cache_ttl_seconds"`
+	AgentModelStaleTTLSeconds         int    `mapstructure:"agent_model_stale_ttl_seconds"`
+	AgentModelProbeTimeoutSeconds     int    `mapstructure:"agent_model_probe_timeout_seconds"`
+	AgentModelPrewarmEnabled          bool   `mapstructure:"agent_model_prewarm_enabled"`
+	AgentModelPrewarmConcurrency      int    `mapstructure:"agent_model_prewarm_concurrency"`
 	DashboardBaseURL                  string `mapstructure:"dashboard_base_url"`
 	DashboardAuthWebsiteURL           string `mapstructure:"dashboard_auth_website_url"`
 	DashboardMaintenanceEnabled       bool   `mapstructure:"dashboard_maintenance_enabled"`
@@ -1951,6 +1958,13 @@ func setDefaults() {
 	viper.SetDefault("cursor.max_buffered_bytes", 16*1024*1024)
 	viper.SetDefault("cursor.response_header_timeout_seconds", 60)
 	viper.SetDefault("cursor.ide_stream_idle_timeout_seconds", 60)
+	viper.SetDefault("cursor.agent_rpc_enabled", true)
+	viper.SetDefault("cursor.agent_cloud_fallback_enabled", true)
+	viper.SetDefault("cursor.agent_model_cache_ttl_seconds", 300)
+	viper.SetDefault("cursor.agent_model_stale_ttl_seconds", 1800)
+	viper.SetDefault("cursor.agent_model_probe_timeout_seconds", 5)
+	viper.SetDefault("cursor.agent_model_prewarm_enabled", true)
+	viper.SetDefault("cursor.agent_model_prewarm_concurrency", 3)
 	viper.SetDefault("cursor.dashboard_base_url", "https://api2.cursor.sh")
 	viper.SetDefault("cursor.dashboard_auth_website_url", "https://cursor.com")
 	viper.SetDefault("cursor.dashboard_maintenance_enabled", true)
@@ -2296,6 +2310,19 @@ func (c *Config) Validate() error {
 	}
 	if c.SubscriptionMaintenance.QueueSize < 0 {
 		return fmt.Errorf("subscription_maintenance.queue_size must be non-negative")
+	}
+
+	if c.Cursor.AgentModelCacheTTLSeconds <= 0 {
+		return fmt.Errorf("cursor.agent_model_cache_ttl_seconds must be positive")
+	}
+	if c.Cursor.AgentModelStaleTTLSeconds < c.Cursor.AgentModelCacheTTLSeconds {
+		return fmt.Errorf("cursor.agent_model_stale_ttl_seconds must be greater than or equal to cursor.agent_model_cache_ttl_seconds")
+	}
+	if c.Cursor.AgentModelProbeTimeoutSeconds <= 0 {
+		return fmt.Errorf("cursor.agent_model_probe_timeout_seconds must be positive")
+	}
+	if c.Cursor.AgentModelPrewarmConcurrency <= 0 || c.Cursor.AgentModelPrewarmConcurrency > 64 {
+		return fmt.Errorf("cursor.agent_model_prewarm_concurrency must be between 1 and 64")
 	}
 
 	// Gemini OAuth 配置校验：client_id 与 client_secret 必须同时设置或同时留空。

@@ -1184,17 +1184,18 @@ adobe:
 # Cursor-side costs; Sub2API billing only covers prices explicitly configured locally.
 cursor:
   base_url: "https://api.cursor.com"
-  # Cursor IDE chat/composer upstream origin; keep this exact HTTPS host for the safety allowlist.
-  # Cursor IDE chat/composer 上游来源；安全白名单要求保持为该固定 HTTPS 主机。
+  # Cursor low-latency Agent RPC origin; keep this exact HTTPS host for the safety allowlist.
+  # Cursor 低延迟 Agent RPC 上游来源；安全白名单要求保持为该固定 HTTPS 主机。
   chat_base_url: "https://api2.cursor.sh"
-  # Default account transport when cursor_transport_mode is omitted: auto prefers IDE Chat when a Dashboard token and
+  # Default account transport when cursor_transport_mode is omitted: auto prefers Agent RPC when a Dashboard token and
   # its login-bound machine ID exist; legacy sessions without that ID use Cloud Agent for chat until reauthorized.
-  # IDE requests use an isolated H2-only connection pool and never downgrade their codec or HTTP version.
-  # 账号未设置 cursor_transport_mode 时的默认模式：auto 在 Dashboard Token 与登录绑定的机器 ID 同时存在时优先 IDE Chat；
-  # 缺少该 ID 的旧会话在重新授权前仅将聊天回退到 Cloud Agent。IDE 请求不会降级 codec 或 HTTP 版本。
+  # The persisted value "ide_chat" remains accepted as a compatibility alias for Agent RPC.
+  # Agent requests use an isolated H2-only connection pool and never downgrade their codec or HTTP version.
+  # 账号未设置 cursor_transport_mode 时的默认模式：auto 在 Dashboard Token 与登录绑定的机器 ID 同时存在时优先 Agent RPC；
+  # 缺少该 ID 的旧会话在重新授权前仅将聊天回退到 Cloud Agent。持久化值 ide_chat 仍作为 Agent RPC 的兼容别名。
   default_transport_mode: "auto"
-  # Cursor IDE client identity sent to the chat upstream.
-  # 发送到聊天上游的 Cursor IDE 客户端版本标识。
+  # Cursor client identity sent to the Agent RPC upstream.
+  # 发送到 Agent RPC 上游的 Cursor 客户端版本标识。
   client_version: "3.11.13"
   # Optional Cursor IDE request metadata flags.
   # 可选的 Cursor IDE 请求元数据标志。
@@ -1204,15 +1205,32 @@ cursor:
   # 单帧解码与流式累计缓冲的最大字节数。
   max_frame_bytes: 8388608
   max_buffered_bytes: 16777216
-  # Timeout while waiting for IDE upstream response headers (seconds).
-  # 等待 IDE 上游响应头的超时时间（秒）。
+  # Timeout while waiting for Agent RPC response headers (seconds).
+  # 等待 Agent RPC 上游响应头的超时时间（秒）。
   response_header_timeout_seconds: 60
-  # Maximum idle interval between IDE stream frames (seconds).
-  # IDE 流式帧之间允许的最大空闲间隔（秒）。
+  # Maximum idle interval between Agent RPC stream frames (seconds).
+  # Agent RPC 流式帧之间允许的最大空闲间隔（秒）。
   ide_stream_idle_timeout_seconds: 60
-  # Cursor Dashboard RPC origin. Dashboard tokens are used by IDE Chat/model discovery and optional plan probes,
+  # Enable the low-latency AgentService/Run path for Dashboard credentials.
+  # 是否为 Dashboard 凭据启用低延迟 AgentService/Run 链路。
+  agent_rpc_enabled: true
+  # Permit the existing safe Cloud Agent replay only before downstream response commitment and only for retryable errors.
+  # 仅在下游尚未提交且错误可安全重试时，允许沿用受控 Cloud Agent 回退。
+  agent_cloud_fallback_enabled: true
+  # GetUsableModels catalog caching. Fresh entries are served directly; stale entries are served while one
+  # singleflight background refresh runs. A cold chat request sends its requested model directly and never waits here.
+  # GetUsableModels 模型目录缓存：fresh 直接命中，stale 先返回旧值并以 singleflight 后台刷新；
+  # 冷缓存聊天请求直接携带请求模型，不等待目录发现。
+  agent_model_cache_ttl_seconds: 300
+  agent_model_stale_ttl_seconds: 1800
+  agent_model_probe_timeout_seconds: 5
+  # Non-blocking startup/authorization model catalog prewarm.
+  # 启动和授权完成后的非阻塞模型目录预热。
+  agent_model_prewarm_enabled: true
+  agent_model_prewarm_concurrency: 3
+  # Cursor Dashboard RPC origin. Dashboard tokens are used by Agent RPC/model discovery and optional plan probes,
   # and are only sent to the allowlisted api2.cursor.sh origins above.
-  # Cursor Dashboard RPC 来源。Dashboard Token 用于 IDE Chat、模型发现和可选套餐探测，
+  # Cursor Dashboard RPC 来源。Dashboard Token 用于 Agent RPC、模型发现和可选套餐探测，
   # 且只会发送到上述白名单限定的 api2.cursor.sh 来源。
   dashboard_base_url: "https://api2.cursor.sh"
   # Browser login page used by the one-click server-owned PKCE flow exposed through

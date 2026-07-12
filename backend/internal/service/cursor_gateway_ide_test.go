@@ -3,11 +3,15 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	cursorpkg "github.com/Wei-Shaw/sub2api/internal/pkg/cursor"
@@ -28,7 +32,13 @@ type cursorIDEUpstreamStub struct {
 }
 
 func (s *cursorIDEUpstreamStub) Do(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
-	body, _ := io.ReadAll(req.Body)
+	var body []byte
+	if req.URL.Path == cursorpkg.AgentRunPath {
+		body, _ = readCursorConnectFrame(req.Body)
+		go func() { _, _ = io.Copy(io.Discard, req.Body) }()
+	} else {
+		body, _ = io.ReadAll(req.Body)
+	}
 	s.mu.Lock()
 	s.requests = append(s.requests, req.Clone(req.Context()))
 	s.bodies = append(s.bodies, body)
@@ -36,7 +46,7 @@ func (s *cursorIDEUpstreamStub) Do(req *http.Request, _ string, _ int64, _ int) 
 
 	status := http.StatusOK
 	responseBody := s.chatBody
-	if req.URL.Path == cursorpkg.IDEModelsPath {
+	if req.URL.Path == cursorpkg.AgentGetUsableModelsPath {
 		responseBody = s.modelsBody
 		if s.modelsStatus != 0 {
 			status = s.modelsStatus
@@ -75,9 +85,11 @@ type cursorIDEAutoFallbackUpstreamStub struct {
 
 func (s *cursorIDEAutoFallbackUpstreamStub) Do(req *http.Request, proxyURL string, accountID int64, accountConcurrency int) (*http.Response, error) {
 	switch req.URL.Path {
-	case cursorpkg.IDEModelsPath:
-		return cursorIDEHTTP2Response(req, cursorIDEFrames(appendProtoString(nil, 1, "claude-sonnet-5"))), nil
-	case cursorpkg.IDEChatPath:
+	case cursorpkg.AgentGetUsableModelsPath:
+		return cursorIDEHTTP2Response(req, cursorAgentModelsPayload("claude-sonnet-5")), nil
+	case cursorpkg.AgentRunPath:
+		_, _ = readCursorConnectFrame(req.Body)
+		go func() { _, _ = io.Copy(io.Discard, req.Body) }()
 		return cursorIDEHTTP2Response(req, s.ideChatBody), nil
 	default:
 		return s.cloud.Do(req, proxyURL, accountID, accountConcurrency)
@@ -86,6 +98,18 @@ func (s *cursorIDEAutoFallbackUpstreamStub) Do(req *http.Request, proxyURL strin
 
 func (s *cursorIDEAutoFallbackUpstreamStub) DoWithTLS(req *http.Request, proxyURL string, accountID int64, accountConcurrency int, _ *tlsfingerprint.Profile) (*http.Response, error) {
 	return s.Do(req, proxyURL, accountID, accountConcurrency)
+}
+
+func readCursorConnectFrame(reader io.Reader) ([]byte, error) {
+	header := make([]byte, 5)
+	if _, err := io.ReadFull(reader, header); err != nil {
+		return nil, err
+	}
+	payload := make([]byte, int(binary.BigEndian.Uint32(header[1:])))
+	if _, err := io.ReadFull(reader, payload); err != nil {
+		return nil, err
+	}
+	return append(header, payload...), nil
 }
 
 func cursorIDEHTTP2Response(req *http.Request, body []byte) *http.Response {
@@ -102,12 +126,15 @@ func cursorIDEHTTP2Response(req *http.Request, body []byte) *http.Response {
 
 func ideTestGateway(upstream HTTPUpstream) *CursorGatewayService {
 	if stub, ok := upstream.(*cursorIDEUpstreamStub); ok && len(stub.modelsBody) == 0 {
-		stub.modelsBody = cursorIDEFrames(appendProtoString(nil, 1, "claude-sonnet-5"))
+		stub.modelsBody = cursorAgentModelsPayload("claude-sonnet-5")
 	}
 	return NewCursorGatewayService(upstream, nil, nil, nil, &config.Config{Cursor: config.CursorConfig{
 		BaseURL: "https://api.cursor.com", ChatBaseURL: "https://api2.cursor.sh", DashboardBaseURL: "https://api2.cursor.sh",
 		DefaultTransportMode: CursorTransportAuto, ClientVersion: "3.11.13", DefaultModel: "default",
 		MaxFrameBytes: 8 << 20, MaxBufferedBytes: 16 << 20, IDEStreamIdleTimeoutSeconds: 5,
+		AgentRPCEnabled: true, AgentCloudFallbackEnabled: true,
+		AgentModelCacheTTLSeconds: 300, AgentModelStaleTTLSeconds: 1800, AgentModelProbeTimeoutSeconds: 5,
+		AgentModelPrewarmEnabled: true, AgentModelPrewarmConcurrency: 3,
 	}})
 }
 
@@ -138,13 +165,12 @@ func TestCursorGatewayIDEAnthropicStreamsImmediately(t *testing.T) {
 
 	upstream.mu.Lock()
 	defer upstream.mu.Unlock()
-	require.Len(t, upstream.requests, 2)
-	require.Equal(t, cursorpkg.IDEModelsPath, upstream.requests[0].URL.Path)
-	require.Equal(t, cursorpkg.IDEChatPath, upstream.requests[1].URL.Path)
-	require.Equal(t, HTTPUpstreamProfileCursorH2, HTTPUpstreamProfileFromContext(upstream.requests[1].Context()))
-	require.Equal(t, "Bearer cursor-session-token", upstream.requests[1].Header.Get("Authorization"))
-	require.Equal(t, "application/connect+proto", upstream.requests[1].Header.Get("Content-Type"))
-	require.NotEmpty(t, upstream.bodies[1])
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, cursorpkg.AgentRunPath, upstream.requests[0].URL.Path)
+	require.Equal(t, HTTPUpstreamProfileCursorH2, HTTPUpstreamProfileFromContext(upstream.requests[0].Context()))
+	require.Equal(t, "Bearer cursor-session-token", upstream.requests[0].Header.Get("Authorization"))
+	require.Equal(t, "application/connect+proto", upstream.requests[0].Header.Get("Content-Type"))
+	require.NotEmpty(t, upstream.bodies[0])
 }
 
 func TestCursorGatewayIDENonStreamNativeToolCall(t *testing.T) {
@@ -210,9 +236,7 @@ func TestCursorGatewayForcedIDEDoesNotFallbackToCloud(t *testing.T) {
 }
 
 func TestCursorIDEModelProbeUsesAvailableModels(t *testing.T) {
-	modelsPayload := appendProtoString(nil, 1, "claude-4.6-sonnet-medium")
-	modelsPayload = appendProtoString(modelsPayload, 1, "composer-2-fast")
-	upstream := &cursorIDEUpstreamStub{modelsBody: cursorIDEFrames(modelsPayload)}
+	upstream := &cursorIDEUpstreamStub{modelsBody: cursorAgentModelsPayload("claude-4.6-sonnet-medium", "composer-2-fast")}
 	gateway := ideTestGateway(upstream)
 
 	models, err := gateway.FetchIDEModels(context.Background(), ideTestAccount())
@@ -222,17 +246,17 @@ func TestCursorIDEModelProbeUsesAvailableModels(t *testing.T) {
 	upstream.mu.Lock()
 	defer upstream.mu.Unlock()
 	require.Len(t, upstream.requests, 1)
-	require.Equal(t, cursorpkg.IDEModelsPath, upstream.requests[0].URL.Path)
-	require.Equal(t, "application/connect+proto", upstream.requests[0].Header.Get("Content-Type"))
-	require.Equal(t, []byte{0, 0, 0, 0, 0}, upstream.bodies[0])
+	require.Equal(t, cursorpkg.AgentGetUsableModelsPath, upstream.requests[0].URL.Path)
+	require.Equal(t, "application/proto", upstream.requests[0].Header.Get("Content-Type"))
+	require.Empty(t, upstream.bodies[0])
 }
 
 func TestCursorIDEOnlyModelSyncCollapsesExecutionVariants(t *testing.T) {
-	upstream := &cursorIDEUpstreamStub{modelsBody: []byte(`{"models":[
-		{"name":"claude-fable-5-thinking-low","serverModelName":"claude-fable-5-thinking-low"},
-		{"name":"claude-fable-5-thinking-high","serverModelName":"claude-fable-5-thinking-high","defaultOn":true,"supportsThinking":true,"legacySlugs":["claude-fable-5"]},
-		{"name":"claude-4.6-sonnet-medium-thinking","serverModelName":"claude-4.6-sonnet-medium-thinking","defaultOn":true,"supportsThinking":true,"legacySlugs":["claude-sonnet-4-6"]}
-	]}`)}
+	upstream := &cursorIDEUpstreamStub{modelsBody: cursorAgentDetailedModelsPayload(
+		cursorIDEModel{Name: "claude-fable-5-thinking-low", ServerName: "claude-fable-5-thinking-low"},
+		cursorIDEModel{Name: "claude-fable-5-thinking-high", ServerName: "claude-fable-5-thinking-high", SupportsThinking: true, LegacySlugs: []string{"claude-fable-5"}},
+		cursorIDEModel{Name: "claude-4.6-sonnet-medium-thinking", ServerName: "claude-4.6-sonnet-medium-thinking", SupportsThinking: true, LegacySlugs: []string{"claude-sonnet-4-6"}},
+	)}
 	gateway := ideTestGateway(upstream)
 	svc := NewAccountTestService(nil, nil, nil, nil, nil, nil, &config.Config{}, nil)
 	svc.SetCursorGatewayService(gateway)
@@ -254,11 +278,9 @@ func TestDecodeCursorIDEModelsResponseJSON(t *testing.T) {
 }
 
 func TestCursorIDEModelResolutionUsesServerModelName(t *testing.T) {
-	upstream := &cursorIDEUpstreamStub{
-		modelsBody: []byte(`{"models":[{"name":"claude-sonnet-4-6","serverModelName":"claude-4.6-sonnet-medium"}]}`),
-		chatBody:   cursorIDEFrames(cursorIDETextPayload("ok")),
-	}
+	upstream := &cursorIDEUpstreamStub{chatBody: cursorIDEFrames(cursorIDETextPayload("ok"), cursorIDEUsagePayload(1, 1, 0, 0))}
 	svc := ideTestGateway(upstream)
+	svc.storeIDEModelCatalog(ideTestAccount(), []cursorIDEModel{{Name: "claude-sonnet-4-6", ServerName: "claude-4.6-sonnet-medium"}})
 	body := `{"model":"claude-sonnet-4-6","stream":false,"messages":[{"role":"user","content":"hi"}]}`
 	c, _ := newCursorGatewayTestContext(t, "/v1/messages", body, 3)
 
@@ -267,23 +289,24 @@ func TestCursorIDEModelResolutionUsesServerModelName(t *testing.T) {
 
 	upstream.mu.Lock()
 	defer upstream.mu.Unlock()
-	require.Len(t, upstream.requests, 2)
-	frames, decodeErr := cursorpkg.NewConnectDecoder(8<<20, 16<<20).Feed(upstream.bodies[1])
+	require.Len(t, upstream.requests, 1)
+	frames, decodeErr := cursorpkg.NewConnectDecoder(8<<20, 16<<20).Feed(upstream.bodies[0])
 	require.NoError(t, decodeErr)
 	require.Len(t, frames, 1)
-	wrapper := firstServiceBytesField(t, frames[0].Payload, 1)
-	model := firstServiceBytesField(t, wrapper, 5)
+	runRequest := firstServiceBytesField(t, frames[0].Payload, 1)
+	model := firstServiceBytesField(t, runRequest, 3)
 	require.Equal(t, "claude-4.6-sonnet-medium", firstServiceStringField(t, model, 1))
 }
 
 func TestCursorIDEModelResolutionRoutesLogicalModelByThinkingAndEffort(t *testing.T) {
-	upstream := &cursorIDEUpstreamStub{modelsBody: []byte(`{"models":[
-		{"name":"claude-4.6-sonnet-low","serverModelName":"claude-4.6-sonnet-low","supportsThinking":false},
-		{"name":"claude-4.6-sonnet-medium-thinking","serverModelName":"claude-4.6-sonnet-medium-thinking","defaultOn":true,"supportsThinking":true,"legacySlugs":["claude-sonnet-4-6"]},
-		{"name":"claude-4.6-sonnet-high-thinking","serverModelName":"claude-4.6-sonnet-high-thinking","supportsThinking":true}
-	]}`)}
+	upstream := &cursorIDEUpstreamStub{}
 	svc := ideTestGateway(upstream)
 	account := ideTestAccount()
+	svc.storeIDEModelCatalog(account, []cursorIDEModel{
+		{Name: "claude-4.6-sonnet-low", ServerName: "claude-4.6-sonnet-low"},
+		{Name: "claude-4.6-sonnet-medium-thinking", ServerName: "claude-4.6-sonnet-medium-thinking", DefaultOn: true, SupportsThinking: true, LegacySlugs: []string{"claude-sonnet-4-6"}},
+		{Name: "claude-4.6-sonnet-high-thinking", ServerName: "claude-4.6-sonnet-high-thinking", SupportsThinking: true, LegacySlugs: []string{"claude-sonnet-4-6"}},
+	})
 
 	selection, err := svc.resolveCursorIDEModel(context.Background(), account, "claude-sonnet-4-6", cursorVariantPreference{})
 	require.NoError(t, err)
@@ -306,6 +329,43 @@ func TestCursorIDEModelResolutionRoutesLogicalModelByThinkingAndEffort(t *testin
 	require.Equal(t, "high", selection.Effort)
 }
 
+func TestCursorAgentModelCatalogRefreshUsesSingleflight(t *testing.T) {
+	svc := ideTestGateway(&cursorIDEUpstreamStub{})
+	account := ideTestAccount()
+	begin := make(chan struct{})
+	release := make(chan struct{})
+	var ready sync.WaitGroup
+	var callsMu sync.Mutex
+	calls := 0
+	const workers = 8
+	ready.Add(workers)
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for range workers {
+		go func() {
+			defer wg.Done()
+			ready.Done()
+			<-begin
+			_, err := svc.refreshIDEModelCatalog(context.Background(), account, func(context.Context) ([]cursorIDEModel, error) {
+				callsMu.Lock()
+				calls++
+				callsMu.Unlock()
+				<-release
+				return []cursorIDEModel{{Name: "model", ServerName: "model"}}, nil
+			})
+			require.NoError(t, err)
+		}()
+	}
+	ready.Wait()
+	close(begin)
+	time.Sleep(20 * time.Millisecond)
+	close(release)
+	wg.Wait()
+	callsMu.Lock()
+	defer callsMu.Unlock()
+	require.Equal(t, 1, calls)
+}
+
 func TestCursorIDEVariantParsingPreservesCodexMaxLogicalModel(t *testing.T) {
 	require.Equal(t, "gpt-5.1-codex-max", cursorIDEVariantFamily("gpt-5.1-codex-max-high"))
 	require.Equal(t, "high", cursorIDEVariantEffort("gpt-5.1-codex-max-high"))
@@ -325,7 +385,7 @@ func TestCursorIDETransportAndMetadataCompatibility(t *testing.T) {
 	autoLegacy.Credentials["cursor_machine_id"] = "machine"
 	require.Equal(t, CursorTransportIDEChat, svc.cursorForwardTransportMode(autoLegacy))
 	require.Equal(t, "x64", cursorIDEClientArch("amd64"))
-	require.Equal(t, cursorpkg.IDEModeAgent, prepareCursorIDEMode(&cursorpkg.Dialogue{}))
+	require.Equal(t, cursorpkg.AgentModeAsk, prepareCursorAgentMode(&cursorpkg.Dialogue{}))
 }
 
 func firstServiceBytesField(t *testing.T, payload []byte, wanted protowire.Number) []byte {
@@ -382,34 +442,97 @@ func cursorIDEErrorFrame(code, message string) []byte {
 }
 
 func cursorIDETextPayload(text string) []byte {
-	inner := protowire.AppendTag(nil, 1, protowire.BytesType)
-	inner = protowire.AppendString(inner, text)
-	outer := protowire.AppendTag(nil, 2, protowire.BytesType)
-	return protowire.AppendBytes(outer, inner)
+	assistant := appendProtoString(nil, 1, text)
+	interaction := protowire.AppendTag(nil, 1, protowire.BytesType)
+	interaction = protowire.AppendBytes(interaction, assistant)
+	server := protowire.AppendTag(nil, 1, protowire.BytesType)
+	return protowire.AppendBytes(server, interaction)
 }
 
-func cursorIDEToolPayload(id, name, arguments string, last bool) []byte {
-	tool := appendProtoString(nil, 3, id)
-	tool = appendProtoString(tool, 9, name)
-	tool = appendProtoString(tool, 10, arguments)
-	tool = protowire.AppendTag(tool, 11, protowire.VarintType)
-	if last {
-		tool = protowire.AppendVarint(tool, 1)
-	} else {
-		tool = protowire.AppendVarint(tool, 0)
+func cursorIDEToolPayload(id, name, arguments string, _ bool) []byte {
+	var values map[string]any
+	if err := json.Unmarshal([]byte(arguments), &values); err != nil {
+		panic(err)
 	}
-	outer := protowire.AppendTag(nil, 1, protowire.BytesType)
-	return protowire.AppendBytes(outer, tool)
+	mcp := appendProtoString(nil, 1, name)
+	for key, value := range values {
+		entry := appendProtoString(nil, 1, key)
+		entry = protowire.AppendTag(entry, 2, protowire.BytesType)
+		entry = protowire.AppendBytes(entry, cursorAgentProtoValue(value))
+		mcp = protowire.AppendTag(mcp, 2, protowire.BytesType)
+		mcp = protowire.AppendBytes(mcp, entry)
+	}
+	mcp = appendProtoString(mcp, 3, id)
+	mcp = appendProtoString(mcp, 4, "sub2api")
+	mcp = appendProtoString(mcp, 5, name)
+	exec := protowire.AppendTag(nil, 1, protowire.VarintType)
+	exec = protowire.AppendVarint(exec, 42)
+	exec = appendProtoString(exec, 15, "exec-"+id)
+	exec = protowire.AppendTag(exec, 11, protowire.BytesType)
+	exec = protowire.AppendBytes(exec, mcp)
+	server := protowire.AppendTag(nil, 2, protowire.BytesType)
+	return protowire.AppendBytes(server, exec)
 }
 
 func cursorIDEUsagePayload(input, output, cacheWrite, cacheRead int) []byte {
 	var usage []byte
-	for field, value := range map[protowire.Number]int{1: input, 2: output, 3: cacheWrite, 4: cacheRead} {
+	for field, value := range map[protowire.Number]int{1: input, 2: output, 3: cacheRead, 4: cacheWrite} {
 		usage = protowire.AppendTag(usage, field, protowire.VarintType)
 		usage = protowire.AppendVarint(usage, uint64(value))
 	}
-	outer := protowire.AppendTag(nil, 12, protowire.BytesType)
-	return protowire.AppendBytes(outer, usage)
+	interaction := protowire.AppendTag(nil, 14, protowire.BytesType)
+	interaction = protowire.AppendBytes(interaction, usage)
+	server := protowire.AppendTag(nil, 1, protowire.BytesType)
+	return protowire.AppendBytes(server, interaction)
+}
+
+func cursorAgentModelsPayload(models ...string) []byte {
+	var payload []byte
+	for _, name := range models {
+		model := appendProtoString(nil, 1, name)
+		model = appendProtoString(model, 3, name)
+		model = appendProtoString(model, 4, name)
+		model = appendProtoString(model, 5, name)
+		payload = protowire.AppendTag(payload, 1, protowire.BytesType)
+		payload = protowire.AppendBytes(payload, model)
+	}
+	return payload
+}
+
+func cursorAgentDetailedModelsPayload(models ...cursorIDEModel) []byte {
+	var payload []byte
+	for _, item := range models {
+		model := appendProtoString(nil, 1, item.ServerName)
+		if item.SupportsThinking {
+			model = protowire.AppendTag(model, 2, protowire.BytesType)
+			model = protowire.AppendBytes(model, nil)
+		}
+		model = appendProtoString(model, 3, item.Name)
+		for _, alias := range item.LegacySlugs {
+			model = appendProtoString(model, 6, alias)
+		}
+		payload = protowire.AppendTag(payload, 1, protowire.BytesType)
+		payload = protowire.AppendBytes(payload, model)
+	}
+	return payload
+}
+
+func cursorAgentProtoValue(value any) []byte {
+	switch typed := value.(type) {
+	case string:
+		return appendProtoString(nil, 3, typed)
+	case bool:
+		result := protowire.AppendTag(nil, 4, protowire.VarintType)
+		if typed {
+			return protowire.AppendVarint(result, 1)
+		}
+		return protowire.AppendVarint(result, 0)
+	case float64:
+		result := protowire.AppendTag(nil, 2, protowire.Fixed64Type)
+		return protowire.AppendFixed64(result, math.Float64bits(typed))
+	default:
+		return appendProtoString(nil, 3, fmt.Sprint(typed))
+	}
 }
 
 func appendProtoString(dst []byte, number protowire.Number, value string) []byte {

@@ -27,46 +27,46 @@ export default {
       },
       cursor: {
         cloudAgentsApiKey: 'Cursor 转发账号',
-        cloudAgentsApiKeyHint: '支持自动选择、IDE Chat 与 Cloud Agent 三种转发模式，凭据将在下一步配置。',
+        cloudAgentsApiKeyHint: '支持自动选择、Agent RPC（兼容 ide_chat 枚举）与 Cloud Agent 显式任务模式，凭据将在下一步配置。',
         credentialsTitle: '连接 Cursor 账号',
         credentialsHint: '选择转发模式并配置对应凭据。创建前会先验证当前模式可用的凭据。',
         transportMode: '转发模式',
         transportModes: {
           auto: {
             label: '自动（推荐）',
-            description: '已连接 Dashboard 时优先使用低延迟 IDE Chat，否则使用 Cloud Agent。',
-            hint: '至少配置一套凭据；同一次请求不会在 IDE 失败后静默切换到 Cloud Agent。'
+            description: '优先使用 Agent RPC；仅在响应未提交且命中可配置的安全错误时回退 Cloud Agent。',
+            hint: '至少配置一套凭据；已开始输出或可能产生副作用的请求不会重放。'
           },
           ide_chat: {
-            label: 'IDE Chat',
-            description: '使用 Dashboard Access Token 转发 IDE 对话请求。',
-            hint: '必须配置 Dashboard Access Token；Refresh Token 建议同时配置以便续期。'
+            label: 'Agent RPC（兼容 IDE Chat）',
+            description: '使用 Dashboard Access Token 通过双向 HTTP/2 Connect-Protobuf AgentService/Run 转发普通聊天。',
+            hint: 'ide_chat 仅为兼容枚举；支持文本、thinking 与 MCP 工具增量，下一轮原生恢复 tool result，不执行本地 shell/file。'
           },
           cloud_agent: {
-            label: 'Cloud Agent',
-            description: '使用官方 API Key 转发 Cloud Agent 任务。',
-            hint: '必须配置 Cursor API Key；Dashboard Token 仅用于套餐探测，不参与此模式转发。'
+            label: 'Cloud Agent（显式任务）',
+            description: '使用官方 API Key 执行独立 Cloud Agent 任务。',
+            hint: '必须配置 Cursor API Key；Dashboard Token 仅用于 Agent RPC 与套餐探测。'
           }
         },
         validation: {
           api_key: 'Cloud Agent 模式需要 Cursor API Key。',
-          dashboard_access_token: 'IDE Chat 模式需要 Dashboard Access Token。',
+          dashboard_access_token: 'Agent RPC（兼容 ide_chat）模式需要 Dashboard Access Token。',
           credential_set: '自动模式至少需要 Cursor API Key 或 Dashboard Access Token 中的一套凭据。'
         },
-        modelCatalogHint: '白名单只同步 Cursor 官方 /v1/models 的逻辑模型 ID；thinking、effort、上下文和 fast 等执行变体会在请求时自动路由，不再逐个显示。重新同步可清理旧版写入的变体条目。',
+        modelCatalogHint: 'Cloud Agent 白名单同步使用官方 /v1/models；Agent RPC 使用内部 GetUsableModels 目录。目录采用 fresh/stale 缓存、账号级 singleflight 与启动/授权预热；冷缓存直接 Run，不阻塞聊天热路径。thinking、effort、上下文和 fast 变体按请求路由。',
         apiKey: 'Cursor API Key（仅 Cloud Agent）',
         apiKeyPlaceholder: '输入 Cursor 官方 Cloud Agent API Key',
         apiKeyHint: '仅用于 Cloud Agent 转发。作为敏感凭据保存，创建成功后不会回填明文。',
         apiKeyRequired: '请输入 Cursor API Key。',
-        dashboardCredentialsTitle: 'Dashboard Token（IDE Chat 与套餐探测）',
-        dashboardCredentialsHint: 'Dashboard Access Token 用于 IDE Chat 转发，同时用于读取官方套餐进度；Refresh Token 用于续期。Cloud Agent 转发不会使用这套 Token。',
+        dashboardCredentialsTitle: 'Dashboard Token（Agent RPC 与套餐探测）',
+        dashboardCredentialsHint: 'Dashboard Access Token 用于 AgentService/Run 普通聊天与官方套餐进度；Refresh Token 用于续期。Cloud Agent 显式任务不会使用这套 Token。',
         dashboard_access_token: 'Dashboard Access Token',
         dashboard_refresh_token: 'Dashboard Refresh Token',
         dashboardAccessToken: 'Dashboard Access Token',
         dashboardRefreshToken: 'Dashboard Refresh Token',
         dashboardAccessTokenPlaceholder: 'cursorAuth/accessToken',
         dashboardRefreshTokenPlaceholder: 'cursorAuth/refreshToken（推荐）',
-        dashboardTokenSourceHint: 'Windows 来源：%APPDATA%\\Cursor\\User\\globalStorage\\state.vscdb 中的 cursorAuth/accessToken 与 cursorAuth/refreshToken。Token 用于 IDE Chat 与套餐探测，仅加密保存在服务端。',
+        dashboardTokenSourceHint: 'Windows 来源：%APPDATA%\\Cursor\\User\\globalStorage\\state.vscdb 中的 cursorAuth/accessToken 与 cursorAuth/refreshToken。Token 用于 Agent RPC、模型目录与套餐探测，仅加密保存在服务端。',
         editCredentialsTitle: 'Cursor 转发模式与凭据',
         editCredentialsHint: '可切换转发模式，并分别保留、替换或清除 Cloud Agent API Key 与 Dashboard Token。敏感值不会回填，未明确清除的凭据会保留。',
         configured: '已配置',

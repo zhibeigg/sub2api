@@ -159,6 +159,8 @@ func (s *CursorDashboardAuthService) PollLogin(ctx context.Context, sessionID st
 	if err := persistAccountCredentials(ctx, s.accountRepo, account, credentials); err != nil {
 		return nil, fmt.Errorf("persist Cursor Dashboard session: %w", err)
 	}
+	account.Credentials = credentials
+	s.gateway.PrewarmIDEModelCatalog(account)
 	now := time.Now().UTC()
 	updates := cursorPlanUsageSnapshotUpdates(cursorPlanUsageFromDashboard(usage, now))
 	if updates == nil {

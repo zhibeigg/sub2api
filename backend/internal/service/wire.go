@@ -100,8 +100,8 @@ func ProvideAccountUsageService(
 	return service
 }
 
-func ProvideCursorDashboardMaintenanceService(accountRepo AccountRepository, auth *CursorDashboardAuthService, cfg *config.Config) *CursorDashboardMaintenanceService {
-	svc := NewCursorDashboardMaintenanceService(accountRepo, auth, cfg)
+func ProvideCursorDashboardMaintenanceService(accountRepo AccountRepository, auth *CursorDashboardAuthService, gateway *CursorGatewayService, cfg *config.Config) *CursorDashboardMaintenanceService {
+	svc := NewCursorDashboardMaintenanceService(accountRepo, auth, gateway, cfg)
 	svc.Start()
 	return svc
 }

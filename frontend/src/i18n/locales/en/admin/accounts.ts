@@ -27,46 +27,46 @@ export default {
       },
       cursor: {
         cloudAgentsApiKey: 'Cursor Forwarding Account',
-        cloudAgentsApiKeyHint: 'Supports automatic routing, IDE Chat, and Cloud Agent modes. Configure credentials in the next step.',
+        cloudAgentsApiKeyHint: 'Supports Auto, Agent RPC (the compatible ide_chat enum), and explicit Cloud Agent task modes. Configure credentials in the next step.',
         credentialsTitle: 'Connect a Cursor Account',
         credentialsHint: 'Choose a forwarding mode and configure its credentials. The usable credentials for that mode are validated before creation.',
         transportMode: 'Forwarding Mode',
         transportModes: {
           auto: {
             label: 'Auto (Recommended)',
-            description: 'Prefer low-latency IDE Chat when Dashboard is connected; otherwise use Cloud Agent.',
-            hint: 'Configure at least one credential set. A failed IDE request is not silently retried through Cloud Agent.'
+            description: 'Prefer Agent RPC; fall back to Cloud Agent only for configured safe errors before the response is committed.',
+            hint: 'Configure at least one credential set. Started responses and requests with possible side effects are never replayed.'
           },
           ide_chat: {
-            label: 'IDE Chat',
-            description: 'Forward IDE chat requests with a Dashboard Access Token.',
-            hint: 'A Dashboard Access Token is required. A Refresh Token is recommended for renewal.'
+            label: 'Agent RPC (IDE Chat compatible)',
+            description: 'Use a Dashboard Access Token for bidirectional HTTP/2 Connect-Protobuf AgentService/Run chat.',
+            hint: 'ide_chat is a compatibility enum. Text, thinking, and MCP tool deltas stream live; next-turn tool results restore through native history/state without local shell/file execution.'
           },
           cloud_agent: {
-            label: 'Cloud Agent',
-            description: 'Forward Cloud Agent tasks with the official API Key.',
-            hint: 'A Cursor API Key is required. Dashboard tokens are used only for plan probing in this mode.'
+            label: 'Cloud Agent (Explicit Task)',
+            description: 'Run separate Cloud Agent tasks with the official API Key.',
+            hint: 'A Cursor API Key is required. Dashboard tokens are used for Agent RPC and plan probing.'
           }
         },
         validation: {
           api_key: 'Cloud Agent mode requires a Cursor API Key.',
-          dashboard_access_token: 'IDE Chat mode requires a Dashboard Access Token.',
+          dashboard_access_token: 'Agent RPC (compatible ide_chat) mode requires a Dashboard Access Token.',
           credential_set: 'Auto mode requires at least a Cursor API Key or Dashboard Access Token.'
         },
-        modelCatalogHint: 'The whitelist syncs only logical model IDs from Cursor’s official /v1/models endpoint. Thinking, effort, context, and fast execution variants are routed per request instead of being listed individually. Sync again to remove legacy variant entries.',
+        modelCatalogHint: 'Cloud Agent whitelist sync uses the official /v1/models catalog; Agent RPC uses the internal GetUsableModels catalog with fresh/stale caching, per-account singleflight, and startup/authorization warmup. A cold cache runs directly without blocking the chat hot path. Thinking, effort, context, and fast variants route per request.',
         apiKey: 'Cursor API Key (Cloud Agent only)',
         apiKeyPlaceholder: 'Enter the official Cursor Cloud Agent API Key',
         apiKeyHint: 'Used only for Cloud Agent forwarding. It is stored as a sensitive credential and never prefilled after creation.',
         apiKeyRequired: 'Please enter a Cursor API Key.',
-        dashboardCredentialsTitle: 'Dashboard Tokens (IDE Chat and Plan Probing)',
-        dashboardCredentialsHint: 'The Dashboard Access Token is used for IDE Chat forwarding and official plan meters. The Refresh Token renews it. Cloud Agent forwarding does not use these tokens.',
+        dashboardCredentialsTitle: 'Dashboard Tokens (Agent RPC and Plan Probing)',
+        dashboardCredentialsHint: 'The Dashboard Access Token is used for ordinary AgentService/Run chat and official plan meters. The Refresh Token renews it. Explicit Cloud Agent tasks do not use these tokens.',
         dashboard_access_token: 'Dashboard Access Token',
         dashboard_refresh_token: 'Dashboard Refresh Token',
         dashboardAccessToken: 'Dashboard Access Token',
         dashboardRefreshToken: 'Dashboard Refresh Token',
         dashboardAccessTokenPlaceholder: 'cursorAuth/accessToken',
         dashboardRefreshTokenPlaceholder: 'cursorAuth/refreshToken (recommended)',
-        dashboardTokenSourceHint: 'Windows source: cursorAuth/accessToken and cursorAuth/refreshToken in %APPDATA%\\Cursor\\User\\globalStorage\\state.vscdb. Tokens are used for IDE Chat and plan probing and are encrypted at rest.',
+        dashboardTokenSourceHint: 'Windows source: cursorAuth/accessToken and cursorAuth/refreshToken in %APPDATA%\\Cursor\\User\\globalStorage\\state.vscdb. Tokens are used for Agent RPC, the model catalog, and plan probing, and are encrypted at rest.',
         editCredentialsTitle: 'Cursor Forwarding Mode and Credentials',
         editCredentialsHint: 'Switch forwarding modes and independently keep, replace, or clear the Cloud Agent API Key and Dashboard tokens. Secrets are never prefilled, and credentials are preserved unless explicitly cleared.',
         configured: 'Configured',
