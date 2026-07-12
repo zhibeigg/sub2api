@@ -42,6 +42,10 @@ func encodeAgentRunRequest(dialogue *Dialogue, options AgentRunOptions, uuidFn f
 		if actionIndex > 0 && dialogue.Messages[actionIndex-1].Role == "user" {
 			actionIndex--
 			actionText = dialogue.Messages[actionIndex].Text
+		} else if actionIndex > 0 && dialogue.Messages[actionIndex-1].Role == "tool" {
+			// A rebuilt tool-result turn still needs a non-empty user action after
+			// the assistant/tool history, otherwise Agent treats it as an empty prompt.
+			actionText = "Continue the conversation using the latest tool result."
 		}
 		userMessage := appendString(nil, 1, actionText)
 		userMessage = appendString(userMessage, 2, uuidFn())

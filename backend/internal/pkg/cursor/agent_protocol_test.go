@@ -92,8 +92,8 @@ func TestAgentRunRequestKeepsTrailingAssistantAndToolHistory(t *testing.T) {
 	}
 	runRequest := firstBytesField(t, payload, 1)
 	userAction := firstBytesField(t, firstBytesField(t, runRequest, 2), 1)
-	if firstStringField(t, firstBytesField(t, userAction, 1), 1) != "" {
-		t.Fatal("non-user tail was incorrectly reused as an older user action")
+	if got := firstStringField(t, firstBytesField(t, userAction, 1), 1); got != "Continue the conversation using the latest tool result." {
+		t.Fatalf("tool-result continuation action = %q", got)
 	}
 	historyMessages := bytesFields(firstBytesField(t, userAction, 7), 1)
 	if len(historyMessages) != 3 {
