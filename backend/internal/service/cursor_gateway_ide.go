@@ -793,6 +793,9 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 		if strings.TrimSpace(dialogue.System) == "" {
 			dialogue.System = previous.Dialogue.System
 		}
+		if len(dialogue.Tools) == 0 && len(previous.Dialogue.Tools) > 0 {
+			dialogue.Tools = append([]cursorpkg.ToolDefinition(nil), previous.Dialogue.Tools...)
+		}
 		dialogue.Messages = append(append([]cursorpkg.DialogueMessage(nil), previous.Dialogue.Messages...), dialogue.Messages...)
 		if strings.TrimSpace(previous.AgentConversationID) != "" {
 			conversationID = strings.TrimSpace(previous.AgentConversationID)
