@@ -89,8 +89,6 @@ func encodeAgentRunRequest(dialogue *Dialogue, options AgentRunOptions, uuidFn f
 	request = appendString(request, 5, conversationID)
 	if options.CustomSystemPrompt != "" {
 		request = appendString(request, 8, options.CustomSystemPrompt)
-	} else if dialogue.System != "" {
-		request = appendString(request, 8, dialogue.System)
 	}
 	if options.SuggestNextPrompt {
 		request = appendVarint(request, 10, 1)
