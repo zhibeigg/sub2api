@@ -103,7 +103,7 @@ export default {
         poor: 'High latency',
         unavailable: 'Unavailable',
       },
-      clientProbeHint: 'Latency is measured directly from this browser and reflects only your current network. Probe data is not uploaded.',
+      clientProbeHint: 'Latency is measured directly from this browser and refreshes every 3 seconds. It reflects only your current network, and probe data is not uploaded.',
     },
     allGroups: 'All Groups',
     allStatus: 'All Status',

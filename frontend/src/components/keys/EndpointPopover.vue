@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useClipboard } from '@/composables/useClipboard'
 import Icon from '@/components/icons/Icon.vue'
@@ -22,11 +22,14 @@ const props = defineProps<{
 
 const { t, locale } = useI18n()
 const { copyToClipboard } = useClipboard()
+const ENDPOINT_AUTO_REFRESH_INTERVAL_MS = 3_000
+
 const copiedEndpoint = ref<string | null>(null)
 const probeResults = ref<Record<string, EndpointProbeResult>>({})
 const testingAll = ref(false)
 
 let copiedResetTimer: number | undefined
+let autoRefreshTimer: number | undefined
 let probeController: AbortController | null = null
 let probeGeneration = 0
 
@@ -145,7 +148,7 @@ function latencyBarClass(item: EndpointDisplayItem): string {
   }[latencyLevel(item)]
 }
 
-async function testAllEndpoints() {
+async function testAllEndpoints(preservePreviousResults = false) {
   probeController?.abort()
   probeController = new AbortController()
   const activeController = probeController
@@ -160,7 +163,9 @@ async function testAllEndpoints() {
   testingAll.value = true
   const nextResults = { ...probeResults.value }
   items.forEach((item) => {
-    nextResults[item.key] = { status: 'testing', latencyMs: null, testedAt: null }
+    if (!preservePreviousResults || !nextResults[item.key]) {
+      nextResults[item.key] = { status: 'testing', latencyMs: null, testedAt: null }
+    }
   })
   probeResults.value = nextResults
 
@@ -173,14 +178,24 @@ async function testAllEndpoints() {
   if (generation === probeGeneration) testingAll.value = false
 }
 
+function autoRefreshEndpoints() {
+  if (testingAll.value) return
+  void testAllEndpoints(true)
+}
+
 watch(
   () => allEndpoints.value.map((item) => item.key).join('|'),
   () => void testAllEndpoints(),
   { immediate: true },
 )
 
+onMounted(() => {
+  autoRefreshTimer = window.setInterval(autoRefreshEndpoints, ENDPOINT_AUTO_REFRESH_INTERVAL_MS)
+})
+
 onBeforeUnmount(() => {
   probeController?.abort()
+  if (autoRefreshTimer !== undefined) window.clearInterval(autoRefreshTimer)
   if (copiedResetTimer !== undefined) window.clearTimeout(copiedResetTimer)
 })
 </script>
@@ -203,7 +218,7 @@ onBeforeUnmount(() => {
         class="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:text-dark-300 dark:hover:bg-dark-700 dark:hover:text-white dark:focus-visible:ring-offset-dark-900"
         :disabled="testingAll"
         :aria-label="t('keys.endpoints.retest')"
-        @click="testAllEndpoints"
+        @click="testAllEndpoints()"
       >
         <Icon name="refresh" size="sm" :class="testingAll ? 'animate-spin' : ''" />
         <span>{{ testingAll ? t('keys.endpoints.testingAll') : t('keys.endpoints.retest') }}</span>

@@ -36,7 +36,7 @@ const messages: Record<string, string> = {
   'keys.endpoints.status.slow': '连接偏慢',
   'keys.endpoints.status.poor': '延迟较高',
   'keys.endpoints.status.unavailable': '暂不可用',
-  'keys.endpoints.clientProbeHint': '由当前浏览器直连测得',
+  'keys.endpoints.clientProbeHint': '由当前浏览器直连测得，每 3 秒自动刷新',
 }
 
 vi.mock('vue-i18n', () => ({
@@ -91,6 +91,36 @@ describe('EndpointPopover', () => {
     expect(wrapper.text()).toContain('151ms')
     expect(wrapper.text()).toContain('国内低延迟入口')
     expect(measureEndpointLatency).toHaveBeenCalledTimes(3)
+  })
+
+  it('每 3 秒自动刷新全部端点，并在卸载后停止轮询', async () => {
+    vi.useFakeTimers()
+    try {
+      const wrapper = mount(EndpointPopover, {
+        props: { apiBaseUrl: 'https://default.example.com', customEndpoints: [] },
+      })
+      await flushPromises()
+
+      expect(measureEndpointLatency).toHaveBeenCalledTimes(2)
+      expect(wrapper.text()).toContain('151ms')
+
+      measureEndpointLatency.mockResolvedValue({
+        status: 'success',
+        latencyMs: 99,
+        testedAt: new Date('2026-04-02T12:00:03Z').getTime(),
+      })
+      await vi.advanceTimersByTimeAsync(3_000)
+      await flushPromises()
+
+      expect(measureEndpointLatency).toHaveBeenCalledTimes(4)
+      expect(wrapper.text()).toContain('99ms')
+
+      wrapper.unmount()
+      await vi.advanceTimersByTimeAsync(6_000)
+      expect(measureEndpointLatency).toHaveBeenCalledTimes(4)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('规范化去重，管理员已配置备用域名时不会重复展示', async () => {

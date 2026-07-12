@@ -103,7 +103,7 @@ export default {
         poor: '延迟较高',
         unavailable: '暂不可用',
       },
-      clientProbeHint: '延迟由当前浏览器直连节点测得，仅反映您此刻的网络质量，不会上传测速数据。',
+      clientProbeHint: '延迟由当前浏览器直连节点测得，每 3 秒自动刷新；仅反映您此刻的网络质量，不会上传测速数据。',
     },
     allGroups: '全部分组',
     allStatus: '全部状态',
