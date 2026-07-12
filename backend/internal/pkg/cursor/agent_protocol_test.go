@@ -232,6 +232,7 @@ func TestAgentEventStreamMCPAggregationKVExecAndUsage(t *testing.T) {
 	kvArgs := appendBytes(nil, 1, []byte("blob"))
 	kv := appendVarint(nil, 1, 7)
 	kv = appendBytes(kv, 2, kvArgs)
+	kv = appendBytes(kv, 4, []byte("trace-metadata"))
 	serverMessage := appendBytes(nil, 1, interaction)
 	serverMessage = appendBytes(serverMessage, 2, exec)
 	serverMessage = appendBytes(serverMessage, 4, kv)
@@ -267,17 +268,17 @@ func TestAgentEventStreamMCPAggregationKVExecAndUsage(t *testing.T) {
 	if events[6].Type != AgentEventExecMCP || events[6].ExecMCP.Name != "lookup" || events[6].ExecRequestID != 9 || events[6].ExecID != "exec-1" {
 		t.Fatalf("exec MCP = %#v", events[6])
 	}
-	if events[7].Type != AgentEventKVGet || string(events[7].KV.BlobID) != "blob" {
+	if events[7].Type != AgentEventKVGet || string(events[7].KV.BlobID) != "blob" || string(events[7].KV.Metadata) != "trace-metadata" {
 		t.Fatalf("KV = %#v", events[7])
 	}
 }
 
 func TestAgentStreamKVAndMCPResponsesPreserveRequestIDs(t *testing.T) {
 	stream := &AgentStream{ctx: context.Background(), send: make(chan []byte, 5)}
-	if err := stream.SendKVGetResult(7, []byte("data")); err != nil {
+	if err := stream.SendKVGetResult(7, []byte("data"), []byte("get-metadata")); err != nil {
 		t.Fatal(err)
 	}
-	if err := stream.SendKVSetResult(8); err != nil {
+	if err := stream.SendKVSetResult(8, []byte("set-metadata")); err != nil {
 		t.Fatal(err)
 	}
 	if err := stream.SendMCPResult(9, "exec-1", "ok", false); err != nil {
@@ -291,12 +292,12 @@ func TestAgentStreamKVAndMCPResponsesPreserveRequestIDs(t *testing.T) {
 	}
 	getMessage := <-stream.send
 	getKV := firstBytesField(t, getMessage, 3)
-	if firstProtoVarint(getKV, 1) != 7 || string(firstProtoBytes(firstProtoBytes(getKV, 2), 1)) != "data" {
+	if firstProtoVarint(getKV, 1) != 7 || string(firstProtoBytes(firstProtoBytes(getKV, 2), 1)) != "data" || string(firstProtoBytes(getKV, 4)) != "get-metadata" {
 		t.Fatalf("KV get response = %x", getMessage)
 	}
 	setMessage := <-stream.send
 	setKV := firstBytesField(t, setMessage, 3)
-	if firstProtoVarint(setKV, 1) != 8 || firstProtoBytes(setKV, 3) == nil {
+	if firstProtoVarint(setKV, 1) != 8 || firstProtoBytes(setKV, 3) == nil || string(firstProtoBytes(setKV, 4)) != "set-metadata" {
 		t.Fatalf("KV set response = %x", setMessage)
 	}
 	mcpMessage := <-stream.send
@@ -501,6 +502,70 @@ func TestAgentClientHTTP2TrueDuplexAndIdempotentClose(t *testing.T) {
 	case <-requestDone:
 	case <-time.After(time.Second):
 		t.Fatal("server did not observe duplex client close")
+	}
+}
+
+func TestAgentClientHTTP2KVMetadataRoundTrip(t *testing.T) {
+	requestDone := make(chan struct{})
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := readConnectFrame(r.Body); err != nil {
+			t.Errorf("initial frame: %v", err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/connect+proto")
+		getArgs := appendBytes(nil, 1, []byte("blob-id"))
+		kvRequest := appendVarint(nil, 1, 9)
+		kvRequest = appendBytes(kvRequest, 2, getArgs)
+		kvRequest = appendBytes(kvRequest, 4, []byte("trace-metadata"))
+		message := appendBytes(nil, 4, kvRequest)
+		response, _ := EncodeConnectFrame(message, false)
+		_, _ = w.Write(response)
+		w.(http.Flusher).Flush()
+
+		result, err := readConnectFrame(r.Body)
+		if err != nil {
+			t.Errorf("KV result frame: %v", err)
+			return
+		}
+		kvResult := firstProtoBytes(result.Payload, 3)
+		if firstProtoVarint(kvResult, 1) != 9 || string(firstProtoBytes(firstProtoBytes(kvResult, 2), 1)) != "blob-data" || string(firstProtoBytes(kvResult, 4)) != "trace-metadata" {
+			t.Errorf("KV result = %x", result.Payload)
+		}
+		if _, err := readConnectFrame(r.Body); err != nil {
+			t.Errorf("client end stream: %v", err)
+		}
+		_, _ = w.Write(encodeAgentConnectEndStream())
+		close(requestDone)
+	}))
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	defer server.Close()
+
+	client, err := NewAgentClient(server.Client(), AgentClientConfig{IDEClientConfig: IDEClientConfig{BaseURL: server.URL}, HeartbeatInterval: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, stream, err := client.Run(context.Background(), IDECredential{AccessToken: "token"}, &Dialogue{Messages: []DialogueMessage{{Role: "user", Text: "hi"}}}, AgentRunOptions{Model: "model"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	event, err := stream.Next()
+	if err != nil || event.Type != AgentEventKVGet || event.KV == nil || string(event.KV.Metadata) != "trace-metadata" {
+		t.Fatalf("KV event = %#v %v", event, err)
+	}
+	if err := stream.SendKVGetResult(event.KV.ID, []byte("blob-data"), event.KV.Metadata); err != nil {
+		t.Fatal(err)
+	}
+	if err := stream.CloseSend(); err != nil {
+		t.Fatal(err)
+	}
+	if finish, err := stream.Next(); err != nil || finish.Type != AgentEventFinish {
+		t.Fatalf("finish = %#v %v", finish, err)
+	}
+	select {
+	case <-requestDone:
+	case <-time.After(time.Second):
+		t.Fatal("server did not observe KV metadata response")
 	}
 }
 

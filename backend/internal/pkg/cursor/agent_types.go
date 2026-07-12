@@ -118,6 +118,7 @@ type AgentKVRequest struct {
 	ID       uint64
 	BlobID   []byte
 	BlobData []byte
+	Metadata []byte
 }
 
 type AgentUnsupportedExec struct {

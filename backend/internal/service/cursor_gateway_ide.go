@@ -583,20 +583,26 @@ type cursorIDEEventSource interface {
 }
 
 type cursorAgentEventAdapter struct {
-	stream        *cursorpkg.AgentStream
-	checkpoint    *cursorpkg.AgentConversationState
-	blobs         map[string][]byte
-	tools         []cursorpkg.ToolDefinition
-	pendingMCP    *cursorAgentPendingMCP
-	lastTool      *cursorpkg.Action
-	emitted       map[string]struct{}
-	sawTool       bool
-	pendingFinish bool
+	stream               *cursorpkg.AgentStream
+	checkpoint           *cursorpkg.AgentConversationState
+	blobs                map[string][]byte
+	tools                []cursorpkg.ToolDefinition
+	pendingMCP           *cursorAgentPendingMCP
+	lastTool             *cursorpkg.Action
+	emitted              map[string]struct{}
+	sawTool              bool
+	pendingFinish        bool
+	seededBlobCount      int
+	kvGetCount           int
+	kvMissCount          int
+	kvMetadataCount      int
+	blobExchangeReported bool
 }
 
 func newCursorAgentEventAdapter(stream *cursorpkg.AgentStream, blobs map[string][]byte, tools []cursorpkg.ToolDefinition) *cursorAgentEventAdapter {
 	return &cursorAgentEventAdapter{
 		stream: stream, blobs: cloneCursorAgentBlobs(blobs), tools: append([]cursorpkg.ToolDefinition(nil), tools...), emitted: make(map[string]struct{}),
+		seededBlobCount: len(blobs),
 	}
 }
 
@@ -678,19 +684,29 @@ func (s *cursorAgentEventAdapter) Next() (cursorpkg.IDEEvent, error) {
 			}
 			key := base64.RawURLEncoding.EncodeToString(event.KV.BlobID)
 			s.blobs[key] = append([]byte(nil), event.KV.BlobData...)
-			if err := s.stream.SendKVSetResult(event.KV.ID); err != nil {
+			if err := s.stream.SendKVSetResult(event.KV.ID, event.KV.Metadata); err != nil {
 				return cursorpkg.IDEEvent{}, err
 			}
 		case cursorpkg.AgentEventKVGet:
 			if event.KV == nil {
 				continue
 			}
+			s.kvGetCount++
+			if len(event.KV.Metadata) > 0 {
+				s.kvMetadataCount++
+			}
 			key := base64.RawURLEncoding.EncodeToString(event.KV.BlobID)
-			blob := append([]byte(nil), s.blobs[key]...)
-			if err := s.stream.SendKVGetResult(event.KV.ID, blob); err != nil {
+			blobData, found := s.blobs[key]
+			if !found {
+				s.kvMissCount++
+				slog.Warn("cursor_agent_blob_missing", "blob_id", key, "seeded_blob_count", s.seededBlobCount)
+			}
+			blob := append([]byte(nil), blobData...)
+			if err := s.stream.SendKVGetResult(event.KV.ID, blob, event.KV.Metadata); err != nil {
 				return cursorpkg.IDEEvent{}, err
 			}
 		case cursorpkg.AgentEventTurnEnded:
+			s.reportBlobExchange()
 			reason := strings.TrimSpace(event.FinishReason)
 			if s.sawTool {
 				reason = "tool_calls"
@@ -699,6 +715,7 @@ func (s *cursorAgentEventAdapter) Next() (cursorpkg.IDEEvent, error) {
 			}
 			return cursorpkg.IDEEvent{Type: cursorpkg.IDEEventFinish, FinishReason: reason}, nil
 		case cursorpkg.AgentEventFinish:
+			s.reportBlobExchange()
 			reason := strings.TrimSpace(event.FinishReason)
 			if s.sawTool {
 				reason = "tool_calls"
@@ -718,6 +735,19 @@ func (s *cursorAgentEventAdapter) Next() (cursorpkg.IDEEvent, error) {
 			return cursorpkg.IDEEvent{Type: cursorpkg.IDEEventError, Error: event.Error}, nil
 		}
 	}
+}
+
+func (s *cursorAgentEventAdapter) reportBlobExchange() {
+	if s == nil || s.blobExchangeReported || (s.seededBlobCount <= 1 && s.kvGetCount == 0) {
+		return
+	}
+	s.blobExchangeReported = true
+	slog.Info("cursor_agent_blob_exchange",
+		"seeded_blob_count", s.seededBlobCount,
+		"get_count", s.kvGetCount,
+		"miss_count", s.kvMissCount,
+		"metadata_count", s.kvMetadataCount,
+	)
 }
 
 func cloneCursorAgentAction(action *cursorpkg.Action) *cursorpkg.Action {

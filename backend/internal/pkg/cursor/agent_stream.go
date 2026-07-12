@@ -41,12 +41,19 @@ func (s *AgentStream) SendResume(options AgentRunOptions) error {
 	return s.SendClientMessage(encodeAgentResumeAction(options))
 }
 
-func (s *AgentStream) SendKVGetResult(id uint64, blobData []byte) error {
-	return s.SendClientMessage(encodeAgentKVGetResult(id, blobData))
+func (s *AgentStream) SendKVGetResult(id uint64, blobData []byte, metadata ...[]byte) error {
+	return s.SendClientMessage(encodeAgentKVGetResult(id, blobData, firstAgentKVMetadata(metadata)))
 }
 
-func (s *AgentStream) SendKVSetResult(id uint64) error {
-	return s.SendClientMessage(encodeAgentKVSetResult(id))
+func (s *AgentStream) SendKVSetResult(id uint64, metadata ...[]byte) error {
+	return s.SendClientMessage(encodeAgentKVSetResult(id, firstAgentKVMetadata(metadata)))
+}
+
+func firstAgentKVMetadata(metadata [][]byte) []byte {
+	if len(metadata) == 0 {
+		return nil
+	}
+	return metadata[0]
 }
 
 func (s *AgentStream) SendMCPResult(id uint64, execID, text string, isError bool) error {
@@ -471,11 +478,16 @@ func parseAgentExecServerMessage(payload []byte) []AgentEvent {
 
 func parseAgentKVServerMessage(payload []byte) *AgentEvent {
 	id := firstProtoVarint(payload, 1)
+	metadata := append([]byte(nil), firstProtoBytes(payload, 4)...)
 	if value := firstProtoBytes(payload, 2); value != nil {
-		return &AgentEvent{Type: AgentEventKVGet, KV: &AgentKVRequest{ID: id, BlobID: append([]byte(nil), firstProtoBytes(value, 1)...)}}
+		return &AgentEvent{Type: AgentEventKVGet, KV: &AgentKVRequest{
+			ID: id, BlobID: append([]byte(nil), firstProtoBytes(value, 1)...), Metadata: metadata,
+		}}
 	}
 	if value := firstProtoBytes(payload, 3); value != nil {
-		return &AgentEvent{Type: AgentEventKVSet, KV: &AgentKVRequest{ID: id, BlobID: append([]byte(nil), firstProtoBytes(value, 1)...), BlobData: append([]byte(nil), firstProtoBytes(value, 2)...)}}
+		return &AgentEvent{Type: AgentEventKVSet, KV: &AgentKVRequest{
+			ID: id, BlobID: append([]byte(nil), firstProtoBytes(value, 1)...), BlobData: append([]byte(nil), firstProtoBytes(value, 2)...), Metadata: metadata,
+		}}
 	}
 	return nil
 }

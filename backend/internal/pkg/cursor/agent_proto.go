@@ -448,16 +448,22 @@ func encodeAgentResumeAction(options AgentRunOptions) []byte {
 	return appendBytes(nil, 4, conversationAction)
 }
 
-func encodeAgentKVGetResult(id uint64, blobData []byte) []byte {
+func encodeAgentKVGetResult(id uint64, blobData, metadata []byte) []byte {
 	result := appendBytes(nil, 1, blobData)
 	message := appendVarint(nil, 1, id)
 	message = appendBytes(message, 2, result)
+	if len(metadata) > 0 {
+		message = appendBytes(message, 4, metadata)
+	}
 	return appendBytes(nil, 3, message)
 }
 
-func encodeAgentKVSetResult(id uint64) []byte {
+func encodeAgentKVSetResult(id uint64, metadata []byte) []byte {
 	message := appendVarint(nil, 1, id)
 	message = appendBytes(message, 3, nil)
+	if len(metadata) > 0 {
+		message = appendBytes(message, 4, metadata)
+	}
 	return appendBytes(nil, 3, message)
 }
 
