@@ -315,9 +315,15 @@ func (s *CursorGatewayService) fetchIDEModelCatalogUncached(ctx context.Context,
 		if serverName == "" {
 			continue
 		}
+		aliases := append([]string(nil), model.Aliases...)
+		logical, _ := normalizeCursorCloudModel(serverName, cursorVariantPreference{})
+		if logical != "" && !strings.EqualFold(logical, serverName) && !containsCursorIDEAlias(aliases, logical) {
+			aliases = append(aliases, logical)
+		}
 		catalog = append(catalog, cursorIDEModel{
-			Name: name, ServerName: serverName, SupportsThinking: model.SupportsThinking,
-			LegacySlugs: append([]string(nil), model.Aliases...),
+			Name: name, ServerName: serverName,
+			SupportsThinking: model.SupportsThinking || cursorIDEVariantNameHasThinking(name) || cursorIDEVariantNameHasThinking(serverName),
+			LegacySlugs:      aliases,
 		})
 	}
 	if len(catalog) == 0 {
@@ -352,12 +358,15 @@ func (s *CursorGatewayService) resolveCursorIDEModel(ctx context.Context, accoun
 	candidates := make([]cursorIDEModel, 0)
 	families := make(map[string]struct{})
 	for _, item := range catalog {
-		for _, slug := range item.LegacySlugs {
-			if strings.EqualFold(requested, strings.TrimSpace(slug)) {
-				candidates = append(candidates, item)
-				families[cursorIDEVariantFamily(item.Name)] = struct{}{}
-				break
-			}
+		matched := containsCursorIDEAlias(item.LegacySlugs, requested)
+		if !matched {
+			logicalName, _ := normalizeCursorCloudModel(item.Name, cursorVariantPreference{})
+			logicalServerName, _ := normalizeCursorCloudModel(item.ServerName, cursorVariantPreference{})
+			matched = strings.EqualFold(requested, logicalName) || strings.EqualFold(requested, logicalServerName)
+		}
+		if matched {
+			candidates = append(candidates, item)
+			families[cursorIDEVariantFamily(item.Name)] = struct{}{}
 		}
 	}
 	if len(families) > 0 {
@@ -384,7 +393,7 @@ func (s *CursorGatewayService) resolveCursorIDEModel(ctx context.Context, accoun
 	if preference.Thinking != nil {
 		matching := make([]cursorIDEModel, 0, len(filtered))
 		for _, item := range filtered {
-			if item.SupportsThinking == *preference.Thinking {
+			if cursorIDEModelSupportsThinking(item) == *preference.Thinking {
 				matching = append(matching, item)
 			}
 		}
@@ -408,6 +417,17 @@ func (s *CursorGatewayService) resolveCursorIDEModel(ctx context.Context, accoun
 			return cursorIDESelection(item), nil
 		}
 	}
+	if preference.Thinking == nil {
+		nonThinking := make([]cursorIDEModel, 0, len(filtered))
+		for _, item := range filtered {
+			if !cursorIDEModelSupportsThinking(item) {
+				nonThinking = append(nonThinking, item)
+			}
+		}
+		if len(nonThinking) > 0 {
+			filtered = nonThinking
+		}
+	}
 	if preference.Effort == "" {
 		defaultEffort := ""
 		for _, item := range candidates {
@@ -416,21 +436,44 @@ func (s *CursorGatewayService) resolveCursorIDEModel(ctx context.Context, accoun
 				break
 			}
 		}
-		if defaultEffort != "" {
-			for _, item := range filtered {
-				if cursorIDEVariantEffort(item.Name) == defaultEffort {
-					return cursorIDESelection(item), nil
-				}
+		if defaultEffort == "" {
+			defaultEffort = "medium"
+		}
+		for _, item := range filtered {
+			if cursorIDEVariantEffort(item.Name) == defaultEffort {
+				return cursorIDESelection(item), nil
 			}
 		}
 	}
 	return cursorIDESelection(filtered[0]), nil
 }
 
+func containsCursorIDEAlias(aliases []string, requested string) bool {
+	for _, alias := range aliases {
+		if strings.EqualFold(strings.TrimSpace(alias), strings.TrimSpace(requested)) {
+			return true
+		}
+	}
+	return false
+}
+
+func cursorIDEVariantNameHasThinking(name string) bool {
+	for _, part := range strings.Split(strings.ToLower(strings.TrimSpace(name)), "-") {
+		if part == "thinking" {
+			return true
+		}
+	}
+	return false
+}
+
+func cursorIDEModelSupportsThinking(item cursorIDEModel) bool {
+	return item.SupportsThinking || cursorIDEVariantNameHasThinking(item.Name) || cursorIDEVariantNameHasThinking(item.ServerName)
+}
+
 func cursorIDESelection(item cursorIDEModel) cursorIDEModelSelection {
 	return cursorIDEModelSelection{
 		ServerName: item.ServerName,
-		Thinking:   item.SupportsThinking,
+		Thinking:   cursorIDEModelSupportsThinking(item),
 		Effort:     cursorIDEVariantEffort(item.Name),
 	}
 }
@@ -778,7 +821,7 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 	resumeAttempt = resumeAttempt && agentState != nil
 	runOptions := cursorpkg.AgentRunOptions{
 		Model: upstreamModel, DisplayModel: requestModel, ConversationID: conversationID, Mode: mode,
-		ConversationState: agentState, Resume: resumeAttempt, ExcludeWorkspace: true, MCPProviderIdentifier: "sub2api",
+		ConversationState: agentState, Resume: resumeAttempt, MCPProviderIdentifier: "sub2api",
 		RequestContext: cursorpkg.AgentRequestContext{
 			OSVersion: runtime.GOOS, TimeZone: time.Now().Location().String(), MCPInfoComplete: true, EnvInfoComplete: true,
 		},

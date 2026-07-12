@@ -179,6 +179,12 @@ func (c *AgentClient) GetUsableModels(ctx context.Context, credential IDECredent
 	if len(body) > c.config.MaxBufferedBytes {
 		return nil, protocolError("decode Agent models response", errors.New("response exceeds configured buffer limit"))
 	}
+	if strings.Contains(strings.ToLower(resp.Header.Get("Content-Encoding")), "gzip") || (len(body) >= 2 && body[0] == 0x1f && body[1] == 0x8b) {
+		body, err = gunzipLimited(body, c.config.MaxBufferedBytes)
+		if err != nil {
+			return nil, protocolError("decompress Agent models response", err)
+		}
+	}
 	contentType := resp.Header.Get("Content-Type")
 	if strings.Contains(contentType, "application/connect+proto") {
 		decoder := NewConnectDecoder(c.config.MaxFrameSize, c.config.MaxBufferedBytes)

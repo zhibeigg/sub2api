@@ -213,11 +213,14 @@ func encodeAgentMCPTools(tools []ToolDefinition, provider string) ([]byte, error
 		if err != nil {
 			return nil, fmt.Errorf("tool %q schema: %w", tool.Name, err)
 		}
+		// McpToolDefinition.input_schema is google.protobuf.Value, not Struct.
+		// JSON objects therefore need the Value.struct_value wrapper (field 5).
+		schemaValue := appendBytes(nil, 5, structValue)
 		encoded := appendString(nil, 1, tool.Name)
 		encoded = appendString(encoded, 4, provider)
 		encoded = appendString(encoded, 5, tool.Name)
 		encoded = appendString(encoded, 2, tool.Description)
-		encoded = appendBytes(encoded, 3, structValue)
+		encoded = appendBytes(encoded, 3, schemaValue)
 		wrapper = appendBytes(wrapper, 1, encoded)
 	}
 	return wrapper, nil

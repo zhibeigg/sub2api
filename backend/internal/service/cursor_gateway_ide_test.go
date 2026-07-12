@@ -254,8 +254,8 @@ func TestCursorIDEModelProbeUsesAvailableModels(t *testing.T) {
 func TestCursorIDEOnlyModelSyncCollapsesExecutionVariants(t *testing.T) {
 	upstream := &cursorIDEUpstreamStub{modelsBody: cursorAgentDetailedModelsPayload(
 		cursorIDEModel{Name: "claude-fable-5-thinking-low", ServerName: "claude-fable-5-thinking-low"},
-		cursorIDEModel{Name: "claude-fable-5-thinking-high", ServerName: "claude-fable-5-thinking-high", SupportsThinking: true, LegacySlugs: []string{"claude-fable-5"}},
-		cursorIDEModel{Name: "claude-4.6-sonnet-medium-thinking", ServerName: "claude-4.6-sonnet-medium-thinking", SupportsThinking: true, LegacySlugs: []string{"claude-sonnet-4-6"}},
+		cursorIDEModel{Name: "claude-fable-5-thinking-high", ServerName: "claude-fable-5-thinking-high"},
+		cursorIDEModel{Name: "claude-4.6-sonnet-medium-thinking", ServerName: "claude-4.6-sonnet-medium-thinking"},
 	)}
 	gateway := ideTestGateway(upstream)
 	svc := NewAccountTestService(nil, nil, nil, nil, nil, nil, &config.Config{}, nil)
@@ -296,6 +296,32 @@ func TestCursorIDEModelResolutionUsesServerModelName(t *testing.T) {
 	runRequest := firstServiceBytesField(t, frames[0].Payload, 1)
 	model := firstServiceBytesField(t, runRequest, 3)
 	require.Equal(t, "claude-4.6-sonnet-medium", firstServiceStringField(t, model, 1))
+	require.False(t, hasServiceProtoField(runRequest, 12), "exclude_workspace_context must stay omitted")
+}
+
+func TestCursorIDEModelResolutionInfersUnaliasedAgentVariants(t *testing.T) {
+	svc := ideTestGateway(&cursorIDEUpstreamStub{})
+	account := ideTestAccount()
+	svc.storeIDEModelCatalog(account, []cursorIDEModel{
+		{Name: "claude-fable-5-thinking-high", ServerName: "claude-fable-5-thinking-high"},
+		{Name: "claude-fable-5-low", ServerName: "claude-fable-5-low"},
+		{Name: "claude-fable-5-medium", ServerName: "claude-fable-5-medium"},
+		{Name: "claude-fable-5-thinking-medium", ServerName: "claude-fable-5-thinking-medium"},
+		{Name: "claude-fable-5-high", ServerName: "claude-fable-5-high"},
+	})
+
+	selection, err := svc.resolveCursorIDEModel(context.Background(), account, "claude-fable-5", cursorVariantPreference{})
+	require.NoError(t, err)
+	require.Equal(t, "claude-fable-5-medium", selection.ServerName)
+	require.False(t, selection.Thinking)
+	require.Equal(t, "medium", selection.Effort)
+
+	thinking := true
+	selection, err = svc.resolveCursorIDEModel(context.Background(), account, "claude-fable-5", cursorVariantPreference{Thinking: &thinking, Effort: "high"})
+	require.NoError(t, err)
+	require.Equal(t, "claude-fable-5-thinking-high", selection.ServerName)
+	require.True(t, selection.Thinking)
+	require.Equal(t, "high", selection.Effort)
 }
 
 func TestCursorIDEModelResolutionRoutesLogicalModelByThinkingAndEffort(t *testing.T) {
@@ -386,6 +412,25 @@ func TestCursorIDETransportAndMetadataCompatibility(t *testing.T) {
 	require.Equal(t, CursorTransportIDEChat, svc.cursorForwardTransportMode(autoLegacy))
 	require.Equal(t, "x64", cursorIDEClientArch("amd64"))
 	require.Equal(t, cursorpkg.AgentModeAsk, prepareCursorAgentMode(&cursorpkg.Dialogue{}))
+}
+
+func hasServiceProtoField(payload []byte, wanted protowire.Number) bool {
+	for len(payload) > 0 {
+		number, wireType, n := protowire.ConsumeTag(payload)
+		if n < 0 {
+			return false
+		}
+		payload = payload[n:]
+		if number == wanted {
+			return true
+		}
+		size := protowire.ConsumeFieldValue(number, wireType, payload)
+		if size < 0 {
+			return false
+		}
+		payload = payload[size:]
+	}
+	return false
 }
 
 func firstServiceBytesField(t *testing.T, payload []byte, wanted protowire.Number) []byte {

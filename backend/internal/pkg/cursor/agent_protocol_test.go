@@ -2,6 +2,7 @@ package cursor
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -38,7 +39,7 @@ func TestAgentRunRequestGoldenAndDescriptorFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256(payload)
-	if got, want := hex.EncodeToString(sum[:]), "57ff03e11b3347936a830c5cf0c3134fdc915b24de1e35a7787512815eb252da"; got != want {
+	if got, want := hex.EncodeToString(sum[:]), "6508afb28df5dc2006276ceaa1ddcbbedfe10a4079733005c0fee02d9abd8c26"; got != want {
 		t.Fatalf("Agent request golden SHA256 = %s, want %s", got, want)
 	}
 
@@ -72,6 +73,10 @@ func TestAgentRunRequestGoldenAndDescriptorFields(t *testing.T) {
 	tool := firstBytesField(t, mcpTools, 1)
 	if firstStringField(t, tool, 4) != "sub2api" || firstStringField(t, tool, 5) != "lookup" {
 		t.Fatalf("unexpected MCP tool: %x", tool)
+	}
+	inputSchemaValue := firstBytesField(t, tool, 3)
+	if !hasField(allFields(inputSchemaValue), 5) {
+		t.Fatalf("MCP input schema is not wrapped as google.protobuf.Value.struct_value: %x", inputSchemaValue)
 	}
 }
 
@@ -117,8 +122,13 @@ func TestAgentGetUsableModelsUnaryCodec(t *testing.T) {
 		model = appendString(model, 5, "Sonnet 4")
 		model = appendString(model, 6, "sonnet")
 		model = appendVarint(model, 7, 1)
+		var compressed bytes.Buffer
+		zipWriter := gzip.NewWriter(&compressed)
+		_, _ = zipWriter.Write(appendBytes(nil, 1, model))
+		_ = zipWriter.Close()
 		w.Header().Set("Content-Type", "application/proto")
-		_, _ = w.Write(appendBytes(nil, 1, model))
+		w.Header().Set("Content-Encoding", "gzip")
+		_, _ = w.Write(compressed.Bytes())
 	}))
 	server.EnableHTTP2 = true
 	server.StartTLS()
