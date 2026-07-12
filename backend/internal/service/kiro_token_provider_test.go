@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/kiro"
 )
 
 type kiroTokenProviderRepoStub struct {
@@ -87,4 +89,77 @@ func TestKiroTokenProvider_RefreshFailureStillRejectsExpiredAccessToken(t *testi
 	require.Equal(t, 1, executor.refreshCalls)
 	require.Equal(t, 1, repo.tempUnschedCalls)
 	require.Zero(t, repo.setErrorCalls)
+}
+
+func TestKiroTokenProvider_DoesNotCacheTokenInsideSafetyWindow(t *testing.T) {
+	expiresAt := time.Now().Add(4 * time.Minute)
+	account := &Account{
+		ID:       143,
+		Platform: PlatformKiro,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token":  "near-expiry-access-token",
+			"refresh_token": "refresh-token",
+			"expires_at":    expiresAt.Format(time.RFC3339),
+		},
+	}
+	repo := &kiroTokenProviderRepoStub{}
+	repo.account = account
+	cache := &refreshAPICacheStub{}
+	provider := NewKiroTokenProvider(repo, cache)
+
+	token, err := provider.GetAccessToken(context.Background(), account)
+
+	require.NoError(t, err)
+	require.Equal(t, "near-expiry-access-token", token)
+	require.Zero(t, cache.setCalls)
+}
+
+func TestKiroGateway_Upstream401ForcesRefreshAndRetriesSameAccount(t *testing.T) {
+	expiresAt := time.Now().Add(30 * time.Minute)
+	account := &Account{
+		ID:       143,
+		Platform: PlatformKiro,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token":  "rejected-access-token",
+			"refresh_token": "refresh-token",
+			"expires_at":    expiresAt.Format(time.RFC3339),
+		},
+	}
+	repo := &kiroTokenProviderRepoStub{}
+	repo.account = account
+	cache := &refreshAPICacheStub{accessToken: "rejected-access-token", lockResult: true}
+	executor := &refreshAPIExecutorStub{
+		credentials: map[string]any{
+			"access_token":  "refreshed-access-token",
+			"refresh_token": "rotated-refresh-token",
+			"expires_at":    time.Now().Add(time.Hour).Format(time.RFC3339),
+		},
+	}
+	provider := NewKiroTokenProvider(repo, cache)
+	provider.SetRefreshAPI(NewOAuthRefreshAPI(repo, cache), executor)
+
+	calls := 0
+	gateway := &KiroGatewayService{
+		tokenProvider: provider,
+		callKiroAPI: func(_ context.Context, cred *kiro.Credential, _ *kiro.KiroPayload, _ *kiro.StreamCallback) error {
+			calls++
+			if cred.AccessToken == "rejected-access-token" {
+				return &kiro.APIError{StatusCode: 401, Endpoint: "Kiro IDE", Body: "Unauthorized"}
+			}
+			require.Equal(t, "refreshed-access-token", cred.AccessToken)
+			return nil
+		},
+	}
+	cred := &kiro.Credential{AccessToken: "rejected-access-token"}
+
+	err := gateway.callKiroWithAuthRetry(context.Background(), account, cred, &kiro.KiroPayload{}, &kiro.StreamCallback{})
+
+	require.NoError(t, err)
+	require.Equal(t, 2, calls)
+	require.Equal(t, 1, executor.refreshCalls)
+	require.Equal(t, 1, cache.deleteCalls)
+	require.Equal(t, "refreshed-access-token", cache.lastSetToken)
+	require.Equal(t, "refreshed-access-token", cred.AccessToken)
 }

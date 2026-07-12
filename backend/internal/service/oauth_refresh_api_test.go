@@ -77,20 +77,33 @@ func (e *refreshAPIExecutorStub) CacheKey(account *Account) string {
 
 // refreshAPICacheStub implements GeminiTokenCache for OAuthRefreshAPI tests.
 type refreshAPICacheStub struct {
+	accessToken  string
 	lockResult   bool
 	lockErr      error
+	setCalls     int
+	deleteCalls  int
+	lastSetToken string
+	lastSetTTL   time.Duration
 	releaseCalls int
 }
 
 func (c *refreshAPICacheStub) GetAccessToken(context.Context, string) (string, error) {
-	return "", nil
+	return c.accessToken, nil
 }
 
-func (c *refreshAPICacheStub) SetAccessToken(context.Context, string, string, time.Duration) error {
+func (c *refreshAPICacheStub) SetAccessToken(_ context.Context, _ string, token string, ttl time.Duration) error {
+	c.setCalls++
+	c.accessToken = token
+	c.lastSetToken = token
+	c.lastSetTTL = ttl
 	return nil
 }
 
-func (c *refreshAPICacheStub) DeleteAccessToken(context.Context, string) error { return nil }
+func (c *refreshAPICacheStub) DeleteAccessToken(context.Context, string) error {
+	c.deleteCalls++
+	c.accessToken = ""
+	return nil
+}
 
 func (c *refreshAPICacheStub) AcquireRefreshLock(context.Context, string, time.Duration) (bool, error) {
 	return c.lockResult, c.lockErr

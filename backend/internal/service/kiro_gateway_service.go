@@ -15,6 +15,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/kiro"
+	"github.com/Wei-Shaw/sub2api/internal/util/logredact"
 )
 
 // KiroGatewayService forwards requests to the AWS Kiro / CodeWhisperer upstream,
@@ -31,6 +32,7 @@ type KiroGatewayService struct {
 	profileArnCache   sync.Map
 	profileArnFlight  singleflight.Group
 	resolveProfileArn func(context.Context, *kiro.Credential) (string, error)
+	callKiroAPI       func(context.Context, *kiro.Credential, *kiro.KiroPayload, *kiro.StreamCallback) error
 }
 
 // NewKiroGatewayService constructs a KiroGatewayService.
@@ -46,6 +48,7 @@ func NewKiroGatewayService(
 		responsesStore:    kiro.NewResponsesStore(24 * time.Hour),
 		promptCache:       kiro.NewPromptCacheTracker(),
 		resolveProfileArn: kiro.ResolveProfileArn,
+		callKiroAPI:       kiro.CallKiroAPI,
 	}
 }
 
@@ -224,7 +227,7 @@ func (s *KiroGatewayService) forwardResponsesStream(
 		wrapText(t, thinkingChunk)
 	}
 
-	if err := kiro.CallKiroAPI(ctx, cred, payload, cb); err != nil {
+	if err := s.callKiroWithAuthRetry(ctx, account, cred, payload, cb); err != nil {
 		if !state.Started() {
 			return nil, mapKiroError(err)
 		}
@@ -263,7 +266,7 @@ func (s *KiroGatewayService) forwardResponsesNonStream(
 	cb := agg.Callback()
 	var credits float64
 	cb.OnCredits = func(c float64) { credits += c }
-	if err := kiro.CallKiroAPI(ctx, cred, payload, cb); err != nil {
+	if err := s.callKiroWithAuthRetry(ctx, account, cred, payload, cb); err != nil {
 		return nil, mapKiroError(err)
 	}
 
@@ -461,7 +464,7 @@ func (s *KiroGatewayService) forwardStream(
 	}
 
 	instrument(callback)
-	if err := kiro.CallKiroAPI(ctx, cred, payload, callback); err != nil {
+	if err := s.callKiroWithAuthRetry(ctx, account, cred, payload, callback); err != nil {
 		return nil, mapKiroError(err)
 	}
 
@@ -607,7 +610,7 @@ func (s *KiroGatewayService) forwardNonStream(
 	cb.OnCredits = func(c float64) { credits += c }
 	cb.OnContextUsage = func(pct float64) { contextPct = pct }
 	cacheUsage := s.computePromptCacheUsage(account, cacheProfile)
-	if err := kiro.CallKiroAPI(ctx, cred, payload, cb); err != nil {
+	if err := s.callKiroWithAuthRetry(ctx, account, cred, payload, cb); err != nil {
 		return nil, mapKiroError(err)
 	}
 
@@ -662,6 +665,42 @@ func differentOrEmpty(model, upstream string) string {
 		return ""
 	}
 	return upstream
+}
+
+func (s *KiroGatewayService) callKiroWithAuthRetry(
+	ctx context.Context,
+	account *Account,
+	cred *kiro.Credential,
+	payload *kiro.KiroPayload,
+	callback *kiro.StreamCallback,
+) error {
+	call := s.callKiroAPI
+	if call == nil {
+		call = kiro.CallKiroAPI
+	}
+
+	err := call(ctx, cred, payload, callback)
+	if !isKiroUnauthorized(err) || s.tokenProvider == nil || account == nil || cred == nil {
+		return err
+	}
+
+	accessToken, refreshErr := s.tokenProvider.ForceRefreshAccessToken(ctx, account)
+	if refreshErr != nil {
+		slog.Warn("kiro upstream 401 forced refresh failed",
+			"account_id", account.ID,
+			"error", logredact.RedactText(refreshErr.Error()),
+		)
+		return err
+	}
+
+	cred.AccessToken = accessToken
+	slog.Info("kiro upstream 401 retrying after forced refresh", "account_id", account.ID)
+	return call(ctx, cred, payload, callback)
+}
+
+func isKiroUnauthorized(err error) bool {
+	var apiErr *kiro.APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusUnauthorized
 }
 
 // mapKiroError maps a pkg/kiro upstream error to a sub2api failover error.

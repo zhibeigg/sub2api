@@ -112,28 +112,97 @@ func (p *KiroTokenProvider) GetAccessToken(ctx context.Context, account *Account
 	if p.tokenCache != nil {
 		latestAccount, isStale := CheckTokenVersion(ctx, account, p.accountRepo)
 		if isStale && latestAccount != nil {
+			account = latestAccount
 			accessToken = latestAccount.GetCredential("access_token")
+			expiresAt = latestAccount.GetCredentialAsTime("expires_at")
 			if strings.TrimSpace(accessToken) == "" {
 				return "", errors.New("access_token not found after version check")
 			}
-		} else {
-			ttl := 30 * time.Minute
-			if expiresAt != nil {
-				until := time.Until(*expiresAt)
-				switch {
-				case until > kiroTokenCacheSkew:
-					ttl = until - kiroTokenCacheSkew
-				case until > 0:
-					ttl = until
-				default:
-					ttl = time.Minute
-				}
-			}
-			_ = p.tokenCache.SetAccessToken(ctx, cacheKey, accessToken, ttl)
 		}
+		p.cacheAccessToken(ctx, cacheKey, accessToken, expiresAt)
 	}
 
 	return accessToken, nil
+}
+
+// ForceRefreshAccessToken refreshes a Kiro token after the upstream rejects the
+// cached token with HTTP 401. It bypasses the normal expiry check and returns the
+// freshly persisted token so the gateway can retry once on the same account.
+func (p *KiroTokenProvider) ForceRefreshAccessToken(ctx context.Context, account *Account) (string, error) {
+	if account == nil {
+		return "", errors.New("account is nil")
+	}
+	if account.Platform != PlatformKiro || account.Type != AccountTypeOAuth {
+		return "", errors.New("not a kiro oauth account")
+	}
+	if p.refreshAPI == nil || p.executor == nil {
+		return "", errors.New("kiro token refresh is not configured")
+	}
+	if strings.TrimSpace(account.GetCredential("refresh_token")) == "" {
+		return "", errors.New("kiro refresh_token is missing")
+	}
+
+	cacheKey := KiroTokenCacheKey(account)
+	if p.tokenCache != nil {
+		_ = p.tokenCache.DeleteAccessToken(ctx, cacheKey)
+	}
+
+	refreshCtx, cancel := context.WithTimeout(ctx, kiroRequestRefreshTimeout)
+	defer cancel()
+	result, err := p.refreshAPI.ForceRefresh(refreshCtx, account, p.executor)
+	if err != nil {
+		p.markTempUnschedulable(account, err)
+		return "", err
+	}
+
+	refreshedAccount := account
+	if result != nil && result.Account != nil {
+		refreshedAccount = result.Account
+	}
+	if result != nil && result.LockHeld {
+		if p.accountRepo == nil {
+			return "", errors.New("kiro token refresh is already in progress")
+		}
+		latestAccount, readErr := p.accountRepo.GetByID(ctx, account.ID)
+		if readErr != nil || latestAccount == nil {
+			return "", errors.New("kiro token refresh is already in progress")
+		}
+		refreshedAccount = latestAccount
+		if refreshedAccount.GetCredential("access_token") == account.GetCredential("access_token") {
+			return "", errors.New("kiro token refresh is already in progress")
+		}
+	}
+
+	accessToken := strings.TrimSpace(refreshedAccount.GetCredential("access_token"))
+	if accessToken == "" {
+		return "", errors.New("access_token not found after forced refresh")
+	}
+	if p.tokenCache != nil {
+		p.cacheAccessToken(ctx, cacheKey, accessToken, refreshedAccount.GetCredentialAsTime("expires_at"))
+	}
+	return accessToken, nil
+}
+
+func (p *KiroTokenProvider) cacheAccessToken(ctx context.Context, cacheKey, accessToken string, expiresAt *time.Time) {
+	if p == nil || p.tokenCache == nil || strings.TrimSpace(accessToken) == "" {
+		return
+	}
+
+	ttl := 30 * time.Minute
+	if expiresAt != nil {
+		until := time.Until(*expiresAt)
+		// Do not cache tokens inside the safety window. A cache hit bypasses the
+		// expiry check above, so caching here until the literal expiry would prevent
+		// the request path from refreshing a token that Kiro may already reject.
+		if until <= kiroTokenCacheSkew {
+			return
+		}
+		ttl = until - kiroTokenCacheSkew
+	}
+	if ttl <= 0 {
+		return
+	}
+	_ = p.tokenCache.SetAccessToken(ctx, cacheKey, accessToken, ttl)
 }
 
 func canUseUnexpiredKiroAccessToken(account *Account, expiresAt *time.Time) bool {
