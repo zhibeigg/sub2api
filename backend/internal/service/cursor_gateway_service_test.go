@@ -212,6 +212,24 @@ func TestCursorGatewayForwardAnthropicFollowUpWithThinkingHistory(t *testing.T) 
 	require.NotContains(t, bodies[0], "private reasoning")
 }
 
+func TestCursorGatewayForwardAnthropicIgnoresServerWebSearchTool(t *testing.T) {
+	upstream := &cursorGatewayUpstreamStub{outputs: []string{"answer without server search"}}
+	svc := newCursorGatewayForTest(upstream, nil)
+	body := `{"model":"claude-fable-5","stream":false,"tools":[{"type":"web_search_20250305","name":"web_search","max_uses":5}],"messages":[{"role":"user","content":"answer normally"}]}`
+	c, recorder := newCursorGatewayTestContext(t, "/v1/messages", body, 3)
+
+	result, err := svc.Forward(context.Background(), c, cursorAPIKeyAccount(), []byte(body))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), `"text":"answer without server search"`)
+	require.NotNil(t, result)
+
+	requests, bodies, _, _ := upstream.snapshot()
+	require.NotEmpty(t, requests)
+	require.Equal(t, "/v1/agents", requests[0].URL.Path)
+	require.NotContains(t, bodies[0], "web_search_20250305")
+}
+
 func TestCursorGatewayPollsRunWhenStreamEndsBeforeResult(t *testing.T) {
 	cleanupCh := make(chan string, 1)
 	upstream := &cursorGatewayUpstreamStub{streamWithoutResult: true, cleanupCh: cleanupCh}

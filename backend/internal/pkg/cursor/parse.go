@@ -117,6 +117,11 @@ func parseAnthropicMessage(msg rawMessage) ([]DialogueMessage, error) {
 			// Anthropic thinking blocks. Ignore prior assistant reasoning so a
 			// follow-up request can replay responses emitted by this gateway.
 			continue
+		case "server_tool_use", "web_search_tool_result", "web_fetch_tool_result", "code_execution_tool_result", "bash_code_execution_tool_result", "text_editor_code_execution_tool_result":
+			// Anthropic executes these tools on its own infrastructure. Cursor Cloud
+			// cannot replay their native blocks, but the following visible assistant
+			// text still preserves the useful result in conversation history.
+			continue
 		case "tool_use":
 			if msg.Role != "assistant" {
 				return nil, fmt.Errorf("tool_use is only valid for assistant messages")
@@ -314,9 +319,30 @@ func parseTextContent(raw json.RawMessage, allowEmpty bool) (string, error) {
 	return result.String(), nil
 }
 
+func isAnthropicServerToolType(toolType string) bool {
+	for _, prefix := range []string{
+		"web_search_",
+		"web_fetch_",
+		"code_execution_",
+		"bash_code_execution_",
+		"text_editor_code_execution_",
+	} {
+		if strings.HasPrefix(toolType, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func normalizeTools(raw []rawTool) ([]ToolDefinition, error) {
 	result := make([]ToolDefinition, 0, len(raw))
 	for _, tool := range raw {
+		if isAnthropicServerToolType(tool.Type) {
+			// Server tools are executed by Anthropic itself and have no client-side
+			// input schema to expose to Cursor. Ignore their declarations instead of
+			// rejecting an otherwise compatible conversation request.
+			continue
+		}
 		name, description, schema := tool.Name, tool.Description, tool.InputSchema
 		if tool.Function != nil {
 			name, description, schema = tool.Function.Name, tool.Function.Description, tool.Function.Parameters
