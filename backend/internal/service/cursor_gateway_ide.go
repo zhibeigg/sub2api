@@ -1143,6 +1143,14 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 		}
 		resumeStoredMCP = true
 	}
+	if activeSession == nil {
+		preparedState, preparedBlobs, prepareErr := cursorpkg.PrepareAgentConversationState(dialogue, agentState, agentBlobs, uuid.NewString)
+		if prepareErr != nil {
+			return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte(prepareErr.Error())}
+		}
+		agentState = preparedState
+		agentBlobs = preparedBlobs
+	}
 
 	runOptions := cursorpkg.AgentRunOptions{
 		Model: upstreamModel, DisplayModel: requestModel, ConversationID: conversationID, Mode: mode,

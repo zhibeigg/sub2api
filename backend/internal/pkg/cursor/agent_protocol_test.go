@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -30,16 +32,21 @@ func TestAgentRunRequestGoldenAndDescriptorFields(t *testing.T) {
 		},
 		Tools: []ToolDefinition{{Name: "lookup", Description: "Search", InputSchema: json.RawMessage(`{"type":"object","properties":{"q":{"type":"string"}}}`)}},
 	}
+	state, blobs, err := PrepareAgentConversationState(dialogue, nil, nil, sequenceUUID("history-message"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	payload, err := encodeAgentRunRequest(dialogue, AgentRunOptions{
 		Model: "claude-4-sonnet", ConversationID: "conversation", ConversationGroupID: "group", Mode: AgentModeAgent,
 		WorkspacePaths: []string{"D:/repo"}, ProjectFolder: "D:/repo", Shell: "bash", ClientSupportsSend: true,
-		RequestContext: AgentRequestContext{OSVersion: "Windows 11", TimeZone: "America/New_York", MCPInfoComplete: true, EnvInfoComplete: true},
+		ConversationState: state,
+		RequestContext:    AgentRequestContext{OSVersion: "Windows 11", TimeZone: "America/New_York", MCPInfoComplete: true, EnvInfoComplete: true},
 	}, sequenceUUID("message"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256(payload)
-	if got, want := hex.EncodeToString(sum[:]), "d6cf4385d2d93081ba6f23be50422486b7043ad016363ba317eebc2ce168a554"; got != want {
+	if got, want := hex.EncodeToString(sum[:]), "8213f0df03990882e61baade6aee8e55c5d25f209955c3bd4646bda19667c609"; got != want {
 		t.Fatalf("Agent request golden SHA256 = %s, want %s", got, want)
 	}
 
@@ -55,20 +62,44 @@ func TestAgentRunRequestGoldenAndDescriptorFields(t *testing.T) {
 	if firstStringField(t, userMessage, 1) != "new question" || !hasVarint(allFields(userMessage), 4, 1) {
 		t.Fatalf("unexpected UserMessage: %x", userMessage)
 	}
+	if hasField(allFields(userAction), 7) {
+		t.Fatalf("UserMessageAction contains obsolete history field 7: %x", userAction)
+	}
 	requestContext := firstBytesField(t, userAction, 2)
 	env := firstBytesField(t, requestContext, 4)
 	if firstStringField(t, env, 1) != "Windows 11" || firstStringField(t, env, 11) != "D:/repo" {
 		t.Fatalf("unexpected RequestContextEnv: %x", env)
 	}
-	history := firstBytesField(t, userAction, 7)
-	historyMessages := bytesFields(history, 1)
-	if len(historyMessages) != 3 {
-		t.Fatalf("history message count = %d", len(historyMessages))
+
+	encodedState := firstBytesField(t, runRequest, 1)
+	rootPromptIDs := bytesFields(encodedState, 1)
+	turnIDs := bytesFields(encodedState, 8)
+	if len(rootPromptIDs) != 1 || len(turnIDs) != 1 {
+		t.Fatalf("conversation state root=%d turns=%d", len(rootPromptIDs), len(turnIDs))
 	}
-	toolHistory := firstBytesField(t, historyMessages[2], 3)
-	if firstStringField(t, toolHistory, 2) != "lookup" {
-		t.Fatalf("history tool_name missing: %x", toolHistory)
+	rootPrompt := agentTestBlob(t, blobs, rootPromptIDs[0])
+	if !bytes.Contains(rootPrompt, []byte(`"content":"Be concise."`)) {
+		t.Fatalf("root prompt blob = %s", rootPrompt)
 	}
+	turn := agentTestBlob(t, blobs, turnIDs[0])
+	agentTurn := firstBytesField(t, turn, 1)
+	historyUser := agentTestBlob(t, blobs, firstBytesField(t, agentTurn, 1))
+	if firstStringField(t, historyUser, 1) != "old question" {
+		t.Fatalf("history user = %x", historyUser)
+	}
+	stepIDs := bytesFields(agentTurn, 2)
+	if len(stepIDs) != 2 {
+		t.Fatalf("history step count = %d", len(stepIDs))
+	}
+	firstStep := firstBytesField(t, agentTestBlob(t, blobs, stepIDs[0]), 1)
+	if text := firstStringField(t, firstStep, 1); !strings.Contains(text, "calling") || !strings.Contains(text, "[Tool: lookup]") {
+		t.Fatalf("assistant history text = %q", text)
+	}
+	secondStep := firstBytesField(t, agentTestBlob(t, blobs, stepIDs[1]), 1)
+	if text := firstStringField(t, secondStep, 1); !strings.Contains(text, "old result") {
+		t.Fatalf("tool history text = %q", text)
+	}
+
 	mcpTools := firstBytesField(t, runRequest, 4)
 	tool := firstBytesField(t, mcpTools, 1)
 	if firstStringField(t, tool, 4) != "sub2api" || firstStringField(t, tool, 5) != "lookup" {
@@ -86,7 +117,11 @@ func TestAgentRunRequestKeepsTrailingAssistantAndToolHistory(t *testing.T) {
 		{Role: "assistant", ToolCalls: []Action{{ID: "call-1", Name: "lookup", Arguments: map[string]any{"q": "go"}}}},
 		{Role: "tool", ToolCallID: "call-1", Text: "result"},
 	}}
-	payload, err := encodeAgentRunRequest(dialogue, AgentRunOptions{Model: "model"}, sequenceUUID("message", "conversation"))
+	state, blobs, err := PrepareAgentConversationState(dialogue, nil, nil, sequenceUUID("history-message"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := encodeAgentRunRequest(dialogue, AgentRunOptions{Model: "model", ConversationState: state}, sequenceUUID("message", "conversation"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,14 +130,32 @@ func TestAgentRunRequestKeepsTrailingAssistantAndToolHistory(t *testing.T) {
 	if got := firstStringField(t, firstBytesField(t, userAction, 1), 1); got != "Continue the conversation using the latest tool result." {
 		t.Fatalf("tool-result continuation action = %q", got)
 	}
-	historyMessages := bytesFields(firstBytesField(t, userAction, 7), 1)
-	if len(historyMessages) != 3 {
-		t.Fatalf("trailing history was truncated: %d", len(historyMessages))
+	turnIDs := bytesFields(firstBytesField(t, runRequest, 1), 8)
+	if len(turnIDs) != 1 {
+		t.Fatalf("trailing history turn count = %d", len(turnIDs))
 	}
-	toolHistory := firstBytesField(t, historyMessages[2], 3)
-	if firstStringField(t, toolHistory, 2) != "lookup" {
-		t.Fatalf("tool_name = %q", firstStringField(t, toolHistory, 2))
+	agentTurn := firstBytesField(t, agentTestBlob(t, blobs, turnIDs[0]), 1)
+	if got := firstStringField(t, agentTestBlob(t, blobs, firstBytesField(t, agentTurn, 1)), 1); got != "question" {
+		t.Fatalf("history user = %q", got)
 	}
+	stepIDs := bytesFields(agentTurn, 2)
+	if len(stepIDs) != 2 {
+		t.Fatalf("trailing history step count = %d", len(stepIDs))
+	}
+	toolStep := firstBytesField(t, agentTestBlob(t, blobs, stepIDs[1]), 1)
+	if text := firstStringField(t, toolStep, 1); !strings.Contains(text, "result") {
+		t.Fatalf("tool history text = %q", text)
+	}
+}
+
+func agentTestBlob(t *testing.T, blobs map[string][]byte, blobID []byte) []byte {
+	t.Helper()
+	key := base64.RawURLEncoding.EncodeToString(blobID)
+	blob, ok := blobs[key]
+	if !ok {
+		t.Fatalf("blob %s is missing", key)
+	}
+	return blob
 }
 
 func TestAgentGetUsableModelsUnaryCodec(t *testing.T) {

@@ -1,6 +1,8 @@
 package cursor
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -50,15 +52,8 @@ func encodeAgentRunRequest(dialogue *Dialogue, options AgentRunOptions, uuidFn f
 		userMessage := appendString(nil, 1, actionText)
 		userMessage = appendString(userMessage, 2, uuidFn())
 		userMessage = appendVarint(userMessage, 4, uint64(mode))
-		history, err := encodeAgentConversationHistory(dialogue.Messages[:actionIndex])
-		if err != nil {
-			return nil, badRequest("encode Agent conversation history", err)
-		}
 		userAction := appendBytes(nil, 1, userMessage)
 		userAction = appendBytes(userAction, 2, requestContext)
-		if len(history) > 0 {
-			userAction = appendBytes(userAction, 7, history)
-		}
 		conversationAction = appendBytes(nil, 1, userAction)
 	}
 
@@ -228,50 +223,162 @@ func encodeAgentMCPTools(tools []ToolDefinition, provider string) ([]byte, error
 	return wrapper, nil
 }
 
-func encodeAgentConversationHistory(messages []DialogueMessage) ([]byte, error) {
-	var history []byte
-	toolNames := make(map[string]string)
-	for _, message := range messages {
-		var encoded []byte
-		switch message.Role {
-		case "user":
-			content := appendBytes(nil, 1, appendString(nil, 1, message.Text))
-			encoded = appendBytes(nil, 1, appendBytes(nil, 1, content))
-		case "assistant":
-			var assistant []byte
-			if message.Text != "" {
-				assistant = appendBytes(assistant, 1, appendBytes(nil, 1, appendString(nil, 1, message.Text)))
-			}
-			for _, call := range message.ToolCalls {
-				args, err := json.Marshal(call.Arguments)
-				if err != nil {
-					return nil, fmt.Errorf("tool call %q arguments: %w", call.Name, err)
-				}
-				if call.ID != "" {
-					toolNames[call.ID] = call.Name
-				}
-				toolCall := appendString(nil, 1, call.ID)
-				toolCall = appendString(toolCall, 2, call.Name)
-				toolCall = appendString(toolCall, 3, string(args))
-				assistant = appendBytes(assistant, 1, appendBytes(nil, 4, toolCall))
-			}
-			encoded = appendBytes(nil, 2, assistant)
-		case "tool":
-			tool := appendString(nil, 1, message.ToolCallID)
-			if name := toolNames[message.ToolCallID]; name != "" {
-				tool = appendString(tool, 2, name)
-			}
-			tool = appendBytes(tool, 3, appendBytes(nil, 1, appendString(nil, 1, message.Text)))
-			if message.IsError {
-				tool = appendVarint(tool, 4, 1)
-			}
-			encoded = appendBytes(nil, 3, tool)
-		default:
-			return nil, fmt.Errorf("unsupported dialogue role %q", message.Role)
-		}
-		history = appendBytes(history, 1, encoded)
+// PrepareAgentConversationState converts inline compatibility history into the
+// blob-backed ConversationStateStructure expected by Cursor Agent. State fields
+// contain SHA-256 blob IDs; the corresponding payloads are served later through
+// the Agent KV duplex channel.
+func PrepareAgentConversationState(dialogue *Dialogue, state *AgentConversationState, blobs map[string][]byte, messageID func() string) (*AgentConversationState, map[string][]byte, error) {
+	if dialogue == nil {
+		return nil, blobs, badRequest("prepare Agent conversation state", errors.New("dialogue is required"))
 	}
-	return history, nil
+	prepared := cloneAgentConversationState(state)
+	if prepared == nil {
+		prepared = &AgentConversationState{}
+	}
+	if blobs == nil {
+		blobs = make(map[string][]byte)
+	}
+	if messageID == nil {
+		sequence := 0
+		messageID = func() string {
+			sequence++
+			return fmt.Sprintf("history-message-%d", sequence)
+		}
+	}
+
+	if len(prepared.RootPromptMessagesJSON) == 0 {
+		system := strings.TrimSpace(dialogue.System)
+		if system == "" {
+			system = "You are a helpful assistant."
+		}
+		rootPrompt, err := json.Marshal(struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		}{Role: "system", Content: system})
+		if err != nil {
+			return nil, blobs, badRequest("encode Agent root prompt", err)
+		}
+		prepared.RootPromptMessagesJSON = [][]byte{storeAgentBlob(blobs, rootPrompt)}
+	}
+
+	if len(prepared.Turns) == 0 {
+		turns, err := encodeAgentConversationTurns(agentConversationHistoryPrefix(dialogue.Messages), blobs, messageID)
+		if err != nil {
+			return nil, blobs, badRequest("encode Agent conversation turns", err)
+		}
+		prepared.Turns = turns
+	}
+	return prepared, blobs, nil
+}
+
+func agentConversationHistoryPrefix(messages []DialogueMessage) []DialogueMessage {
+	end := len(messages)
+	if end > 0 && messages[end-1].Role == "user" {
+		end--
+	}
+	return messages[:end]
+}
+
+func encodeAgentConversationTurns(messages []DialogueMessage, blobs map[string][]byte, messageID func() string) ([][]byte, error) {
+	turns := make([][]byte, 0)
+	for index := 0; index < len(messages); {
+		message := messages[index]
+		if message.Role != "user" || strings.TrimSpace(message.Text) == "" {
+			index++
+			continue
+		}
+
+		userMessage := appendString(nil, 1, message.Text)
+		userMessage = appendString(userMessage, 2, messageID())
+		userMessageBlobID := storeAgentBlob(blobs, userMessage)
+		index++
+
+		stepBlobIDs := make([][]byte, 0)
+		for index < len(messages) && messages[index].Role != "user" {
+			stepText, err := agentHistoryStepText(messages[index])
+			if err != nil {
+				return nil, err
+			}
+			if strings.TrimSpace(stepText) != "" {
+				assistantMessage := appendString(nil, 1, stepText)
+				conversationStep := appendBytes(nil, 1, assistantMessage)
+				stepBlobIDs = append(stepBlobIDs, storeAgentBlob(blobs, conversationStep))
+			}
+			index++
+		}
+
+		agentTurn := appendBytes(nil, 1, userMessageBlobID)
+		for _, stepBlobID := range stepBlobIDs {
+			agentTurn = appendBytes(agentTurn, 2, stepBlobID)
+		}
+		conversationTurn := appendBytes(nil, 1, agentTurn)
+		turns = append(turns, storeAgentBlob(blobs, conversationTurn))
+	}
+	return turns, nil
+}
+
+func agentHistoryStepText(message DialogueMessage) (string, error) {
+	parts := make([]string, 0, 1+len(message.ToolCalls))
+	switch message.Role {
+	case "assistant":
+		if strings.TrimSpace(message.Text) != "" {
+			parts = append(parts, message.Text)
+		}
+		for _, call := range message.ToolCalls {
+			arguments, err := json.Marshal(call.Arguments)
+			if err != nil {
+				return "", fmt.Errorf("tool call %q arguments: %w", call.Name, err)
+			}
+			parts = append(parts, fmt.Sprintf("[Tool: %s]\nArguments: %s", call.Name, arguments))
+		}
+	case "tool":
+		label := "Tool result"
+		if message.IsError {
+			label = "Tool error"
+		}
+		if strings.TrimSpace(message.ToolCallID) != "" {
+			label += " for " + message.ToolCallID
+		}
+		parts = append(parts, fmt.Sprintf("[%s]\n%s", label, message.Text))
+	default:
+		return "", fmt.Errorf("unsupported dialogue role %q", message.Role)
+	}
+	return strings.Join(parts, "\n\n"), nil
+}
+
+func storeAgentBlob(blobs map[string][]byte, data []byte) []byte {
+	hash := sha256.Sum256(data)
+	blobID := append([]byte(nil), hash[:]...)
+	key := base64.RawURLEncoding.EncodeToString(blobID)
+	blobs[key] = append([]byte(nil), data...)
+	return blobID
+}
+
+func cloneAgentConversationState(state *AgentConversationState) *AgentConversationState {
+	if state == nil {
+		return nil
+	}
+	cloned := *state
+	cloned.RootPromptMessagesJSON = cloneAgentByteSlices(state.RootPromptMessagesJSON)
+	cloned.Turns = cloneAgentByteSlices(state.Turns)
+	cloned.Todos = cloneAgentByteSlices(state.Todos)
+	cloned.PendingToolCalls = append([]string(nil), state.PendingToolCalls...)
+	cloned.Summary = append([]byte(nil), state.Summary...)
+	cloned.Plan = append([]byte(nil), state.Plan...)
+	cloned.PreviousWorkspaceURIs = append([]string(nil), state.PreviousWorkspaceURIs...)
+	cloned.ReadPaths = append([]string(nil), state.ReadPaths...)
+	return &cloned
+}
+
+func cloneAgentByteSlices(values [][]byte) [][]byte {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make([][]byte, len(values))
+	for index, value := range values {
+		cloned[index] = append([]byte(nil), value...)
+	}
+	return cloned
 }
 
 func encodeProtoStructJSON(raw json.RawMessage) ([]byte, error) {
