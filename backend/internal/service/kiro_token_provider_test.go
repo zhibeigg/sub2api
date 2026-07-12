@@ -60,14 +60,86 @@ func TestKiroTokenProvider_RefreshFailureUsesUnexpiredAccessToken(t *testing.T) 
 	require.Zero(t, repo.setErrorCalls)
 }
 
-func TestKiroTokenProvider_RefreshFailureStillRejectsExpiredAccessToken(t *testing.T) {
+func TestKiroTokenProvider_ReloadsLatestAccountBeforeRefreshFallback(t *testing.T) {
+	staleExpiresAt := time.Now().Add(-time.Minute)
+	latestExpiresAt := time.Now().Add(time.Minute)
+	staleAccount := &Account{
+		ID:       143,
+		Platform: PlatformKiro,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token":  "stale-expired-access-token",
+			"refresh_token": "stale-refresh-token",
+			"expires_at":    staleExpiresAt.Format(time.RFC3339),
+		},
+	}
+	latestAccount := &Account{
+		ID:       143,
+		Platform: PlatformKiro,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token":  "latest-still-valid-access-token",
+			"refresh_token": "rejected-refresh-token",
+			"expires_at":    latestExpiresAt.Format(time.RFC3339),
+		},
+	}
+	repo := &kiroTokenProviderRepoStub{}
+	repo.account = latestAccount
+	cache := &refreshAPICacheStub{lockResult: true}
+	executor := &refreshAPIExecutorStub{
+		needsRefresh: true,
+		err:          errors.New("OAuth 401: Invalid bearer token"),
+	}
+	provider := NewKiroTokenProvider(repo, cache)
+	provider.SetRefreshAPI(NewOAuthRefreshAPI(repo, cache), executor)
+
+	token, err := provider.GetAccessToken(context.Background(), staleAccount)
+
+	require.NoError(t, err)
+	require.Equal(t, "latest-still-valid-access-token", token)
+	require.Equal(t, 1, executor.refreshCalls)
+	require.Zero(t, repo.tempUnschedCalls)
+	require.Zero(t, repo.setErrorCalls)
+}
+
+func TestKiroTokenProvider_RefreshFailureDefersExpiredTokenDecisionToUpstream(t *testing.T) {
 	expiresAt := time.Now().Add(-time.Minute)
 	account := &Account{
 		ID:       143,
 		Platform: PlatformKiro,
 		Type:     AccountTypeOAuth,
 		Credentials: map[string]any{
-			"access_token":  "expired-access-token",
+			"access_token":  "locally-expired-access-token",
+			"refresh_token": "rejected-refresh-token",
+			"expires_at":    expiresAt.Format(time.RFC3339),
+		},
+	}
+	repo := &kiroTokenProviderRepoStub{}
+	repo.account = account
+	cache := &refreshAPICacheStub{lockResult: true}
+	executor := &refreshAPIExecutorStub{
+		needsRefresh: true,
+		err:          errors.New("OAuth 401: Invalid bearer token"),
+	}
+	provider := NewKiroTokenProvider(repo, cache)
+	provider.SetRefreshAPI(NewOAuthRefreshAPI(repo, cache), executor)
+
+	token, err := provider.GetAccessToken(context.Background(), account)
+
+	require.NoError(t, err)
+	require.Equal(t, "locally-expired-access-token", token)
+	require.Equal(t, 1, executor.refreshCalls)
+	require.Zero(t, repo.tempUnschedCalls)
+	require.Zero(t, repo.setErrorCalls)
+}
+
+func TestKiroTokenProvider_RefreshFailureStillRejectsMissingAccessToken(t *testing.T) {
+	expiresAt := time.Now().Add(-time.Minute)
+	account := &Account{
+		ID:       143,
+		Platform: PlatformKiro,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
 			"refresh_token": "rejected-refresh-token",
 			"expires_at":    expiresAt.Format(time.RFC3339),
 		},

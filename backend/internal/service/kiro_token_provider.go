@@ -68,6 +68,21 @@ func (p *KiroTokenProvider) GetAccessToken(ctx context.Context, account *Account
 		}
 	}
 
+	// Scheduler selections can carry a credential snapshot that predates a
+	// background token refresh. On a cache miss, reload the persisted account
+	// before evaluating expiry or attempting another refresh; otherwise a
+	// refresh failure can incorrectly reject a still-valid latest access token.
+	if p.accountRepo != nil {
+		if latestAccount, err := p.accountRepo.GetByID(ctx, account.ID); err == nil && latestAccount != nil {
+			account = latestAccount
+		} else if err != nil {
+			slog.Warn(kiroTokenProviderLogComponent+".latest_account_reload_failed",
+				"account_id", account.ID,
+				"error", logredact.RedactText(err.Error()),
+			)
+		}
+	}
+
 	expiresAt := account.GetCredentialAsTime("expires_at")
 	needsRefresh := expiresAt == nil || time.Until(*expiresAt) <= kiroTokenRefreshSkew
 	if needsRefresh && strings.TrimSpace(account.GetCredential("refresh_token")) == "" {
@@ -81,12 +96,12 @@ func (p *KiroTokenProvider) GetAccessToken(ctx context.Context, account *Account
 		defer cancel()
 		result, err := p.refreshAPI.RefreshIfNeeded(refreshCtx, account, p.executor, kiroTokenRefreshSkew)
 		if err != nil {
-			// Kiro access tokens can remain usable even when the refresh endpoint
-			// rejects an outdated/rotated refresh token. Do not take a healthy
-			// account out of rotation while its current access token is still
-			// explicitly valid; let the upstream request make the authoritative
-			// decision instead.
-			if canUseUnexpiredKiroAccessToken(account, expiresAt) {
+			// Kiro access tokens can remain usable even after the locally recorded
+			// expires_at and while the refresh endpoint rejects an outdated/rotated
+			// refresh token. Kiro-Go sends the current access token and lets the
+			// streaming upstream make the authoritative auth decision, so do the
+			// same here instead of failing before the request reaches Kiro.
+			if canUseKiroAccessTokenAfterRefreshFailure(account) {
 				slog.Warn(kiroTokenProviderLogComponent+".refresh_failed_using_existing_token",
 					"account_id", account.ID,
 					"expires_at", expiresAt,
@@ -205,11 +220,8 @@ func (p *KiroTokenProvider) cacheAccessToken(ctx context.Context, cacheKey, acce
 	_ = p.tokenCache.SetAccessToken(ctx, cacheKey, accessToken, ttl)
 }
 
-func canUseUnexpiredKiroAccessToken(account *Account, expiresAt *time.Time) bool {
-	if account == nil || expiresAt == nil || !time.Now().Before(*expiresAt) {
-		return false
-	}
-	return strings.TrimSpace(account.GetCredential("access_token")) != ""
+func canUseKiroAccessTokenAfterRefreshFailure(account *Account) bool {
+	return account != nil && strings.TrimSpace(account.GetCredential("access_token")) != ""
 }
 
 func (p *KiroTokenProvider) markTempUnschedulable(account *Account, refreshErr error) {
