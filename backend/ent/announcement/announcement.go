@@ -38,6 +38,8 @@ const (
 	FieldUpdatedAt = "updated_at"
 	// EdgeReads holds the string denoting the reads edge name in mutations.
 	EdgeReads = "reads"
+	// EdgeEmailJobs holds the string denoting the email_jobs edge name in mutations.
+	EdgeEmailJobs = "email_jobs"
 	// Table holds the table name of the announcement in the database.
 	Table = "announcements"
 	// ReadsTable is the table that holds the reads relation/edge.
@@ -47,6 +49,13 @@ const (
 	ReadsInverseTable = "announcement_reads"
 	// ReadsColumn is the table column denoting the reads relation/edge.
 	ReadsColumn = "announcement_id"
+	// EmailJobsTable is the table that holds the email_jobs relation/edge.
+	EmailJobsTable = "announcement_email_jobs"
+	// EmailJobsInverseTable is the table name for the AnnouncementEmailJob entity.
+	// It exists in this package in order to avoid circular dependency with the "announcementemailjob" package.
+	EmailJobsInverseTable = "announcement_email_jobs"
+	// EmailJobsColumn is the table column denoting the email_jobs relation/edge.
+	EmailJobsColumn = "announcement_id"
 )
 
 // Columns holds all SQL columns for announcement fields.
@@ -167,10 +176,31 @@ func ByReads(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newReadsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByEmailJobsCount orders the results by email_jobs count.
+func ByEmailJobsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newEmailJobsStep(), opts...)
+	}
+}
+
+// ByEmailJobs orders the results by email_jobs terms.
+func ByEmailJobs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newEmailJobsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newReadsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(ReadsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, ReadsTable, ReadsColumn),
+	)
+}
+func newEmailJobsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(EmailJobsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, EmailJobsTable, EmailJobsColumn),
 	)
 }

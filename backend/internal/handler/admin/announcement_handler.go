@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"time"
@@ -16,14 +17,20 @@ import (
 
 // AnnouncementHandler handles admin announcement management
 type AnnouncementHandler struct {
-	announcementService *service.AnnouncementService
+	announcementService      *service.AnnouncementService
+	announcementEmailService *service.AnnouncementEmailService
 }
 
 // NewAnnouncementHandler creates a new admin announcement handler
 func NewAnnouncementHandler(announcementService *service.AnnouncementService) *AnnouncementHandler {
-	return &AnnouncementHandler{
-		announcementService: announcementService,
+	return &AnnouncementHandler{announcementService: announcementService}
+}
+
+func ProvideAnnouncementHandler(announcementService *service.AnnouncementService, emailService *service.AnnouncementEmailService) *AnnouncementHandler {
+	if announcementService != nil {
+		announcementService.SetEmailPublicationValidator(emailService)
 	}
+	return &AnnouncementHandler{announcementService: announcementService, announcementEmailService: emailService}
 }
 
 type CreateAnnouncementRequest struct {
@@ -34,6 +41,7 @@ type CreateAnnouncementRequest struct {
 	Targeting  service.AnnouncementTargeting `json:"targeting"`
 	StartsAt   *int64                        `json:"starts_at"` // Unix seconds, 0/empty = immediate
 	EndsAt     *int64                        `json:"ends_at"`   // Unix seconds, 0/empty = never
+	SendEmail  bool                          `json:"send_email"`
 }
 
 type UpdateAnnouncementRequest struct {
@@ -44,6 +52,7 @@ type UpdateAnnouncementRequest struct {
 	Targeting  *service.AnnouncementTargeting `json:"targeting"`
 	StartsAt   *int64                         `json:"starts_at"` // Unix seconds, 0 = clear
 	EndsAt     *int64                         `json:"ends_at"`   // Unix seconds, 0 = clear
+	SendEmail  bool                           `json:"send_email"`
 }
 
 // List handles listing announcements with filters
@@ -122,6 +131,7 @@ func (h *AnnouncementHandler) Create(c *gin.Context) {
 		NotifyMode: req.NotifyMode,
 		Targeting:  req.Targeting,
 		ActorID:    &subject.UserID,
+		SendEmail:  req.SendEmail,
 	}
 
 	if req.StartsAt != nil && *req.StartsAt > 0 {
@@ -133,12 +143,21 @@ func (h *AnnouncementHandler) Create(c *gin.Context) {
 		input.EndsAt = &t
 	}
 
+	if req.SendEmail {
+		executeAdminStrictIdempotentJSON(c, "announcement.create.email", req, 24*time.Hour, func(ctx context.Context) (any, error) {
+			created, err := h.announcementService.Create(ctx, input)
+			if err != nil {
+				return nil, err
+			}
+			return dto.AnnouncementFromService(created), nil
+		})
+		return
+	}
 	created, err := h.announcementService.Create(c.Request.Context(), input)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
-
 	response.Success(c, dto.AnnouncementFromService(created))
 }
 
@@ -170,6 +189,7 @@ func (h *AnnouncementHandler) Update(c *gin.Context) {
 		NotifyMode: req.NotifyMode,
 		Targeting:  req.Targeting,
 		ActorID:    &subject.UserID,
+		SendEmail:  req.SendEmail,
 	}
 
 	if req.StartsAt != nil {
@@ -194,12 +214,21 @@ func (h *AnnouncementHandler) Update(c *gin.Context) {
 		}
 	}
 
+	if req.SendEmail {
+		executeAdminStrictIdempotentJSON(c, "announcement.update.email", gin.H{"announcement_id": announcementID, "request": req}, 24*time.Hour, func(ctx context.Context) (any, error) {
+			updated, err := h.announcementService.Update(ctx, announcementID, input)
+			if err != nil {
+				return nil, err
+			}
+			return dto.AnnouncementFromService(updated), nil
+		})
+		return
+	}
 	updated, err := h.announcementService.Update(c.Request.Context(), announcementID, input)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
-
 	response.Success(c, dto.AnnouncementFromService(updated))
 }
 
@@ -222,6 +251,64 @@ func (h *AnnouncementHandler) Delete(c *gin.Context) {
 
 // ListReadStatus handles listing users read status for an announcement
 // GET /api/v1/admin/announcements/:id/read-status
+func (h *AnnouncementHandler) EmailCapability(c *gin.Context) {
+	if h.announcementEmailService == nil {
+		response.Success(c, service.AnnouncementEmailCapability{})
+		return
+	}
+	capability, err := h.announcementEmailService.Capability(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, capability)
+}
+
+func (h *AnnouncementHandler) GetEmailNotification(c *gin.Context) {
+	announcementID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || announcementID <= 0 {
+		response.BadRequest(c, "Invalid announcement ID")
+		return
+	}
+	if h.announcementEmailService == nil {
+		response.ErrorFrom(c, service.ErrAnnouncementEmailNotFound)
+		return
+	}
+	item, err := h.announcementEmailService.Get(c.Request.Context(), announcementID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, dto.AnnouncementEmailNotificationFromService(item))
+}
+
+type RetryAnnouncementEmailRequest struct {
+	IncludeAmbiguous bool `json:"include_ambiguous"`
+}
+
+func (h *AnnouncementHandler) RetryEmailNotification(c *gin.Context) {
+	announcementID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || announcementID <= 0 {
+		response.BadRequest(c, "Invalid announcement ID")
+		return
+	}
+	var req RetryAnnouncementEmailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	executeAdminStrictIdempotentJSON(c, "announcement.email.retry", gin.H{"announcement_id": announcementID, "include_ambiguous": req.IncludeAmbiguous}, 24*time.Hour, func(ctx context.Context) (any, error) {
+		if h.announcementEmailService == nil {
+			return nil, service.ErrAnnouncementEmailNotFound
+		}
+		item, err := h.announcementEmailService.Retry(ctx, announcementID, req.IncludeAmbiguous)
+		if err != nil {
+			return nil, err
+		}
+		return gin.H{"email_notification": dto.AnnouncementEmailNotificationFromService(item)}, nil
+	})
+}
+
 func (h *AnnouncementHandler) ListReadStatus(c *gin.Context) {
 	announcementID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || announcementID <= 0 {

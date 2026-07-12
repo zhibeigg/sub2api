@@ -11,6 +11,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/account"
 	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
+	"github.com/Wei-Shaw/sub2api/ent/announcementemaildelivery"
+	"github.com/Wei-Shaw/sub2api/ent/announcementemailjob"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
 	"github.com/Wei-Shaw/sub2api/ent/apikeygroup"
@@ -241,6 +243,60 @@ func (f TraverseAnnouncement) Traverse(ctx context.Context, q ent.Query) error {
 		return f(ctx, q)
 	}
 	return fmt.Errorf("unexpected query type %T. expect *ent.AnnouncementQuery", q)
+}
+
+// The AnnouncementEmailDeliveryFunc type is an adapter to allow the use of ordinary function as a Querier.
+type AnnouncementEmailDeliveryFunc func(context.Context, *ent.AnnouncementEmailDeliveryQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f AnnouncementEmailDeliveryFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.AnnouncementEmailDeliveryQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.AnnouncementEmailDeliveryQuery", q)
+}
+
+// The TraverseAnnouncementEmailDelivery type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseAnnouncementEmailDelivery func(context.Context, *ent.AnnouncementEmailDeliveryQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseAnnouncementEmailDelivery) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseAnnouncementEmailDelivery) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.AnnouncementEmailDeliveryQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.AnnouncementEmailDeliveryQuery", q)
+}
+
+// The AnnouncementEmailJobFunc type is an adapter to allow the use of ordinary function as a Querier.
+type AnnouncementEmailJobFunc func(context.Context, *ent.AnnouncementEmailJobQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f AnnouncementEmailJobFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.AnnouncementEmailJobQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.AnnouncementEmailJobQuery", q)
+}
+
+// The TraverseAnnouncementEmailJob type is an adapter to allow the use of ordinary function as Traverser.
+type TraverseAnnouncementEmailJob func(context.Context, *ent.AnnouncementEmailJobQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraverseAnnouncementEmailJob) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraverseAnnouncementEmailJob) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.AnnouncementEmailJobQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.AnnouncementEmailJobQuery", q)
 }
 
 // The AnnouncementReadFunc type is an adapter to allow the use of ordinary function as a Querier.
@@ -1228,6 +1284,10 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.AccountGroupQuery, predicate.AccountGroup, accountgroup.OrderOption]{typ: ent.TypeAccountGroup, tq: q}, nil
 	case *ent.AnnouncementQuery:
 		return &query[*ent.AnnouncementQuery, predicate.Announcement, announcement.OrderOption]{typ: ent.TypeAnnouncement, tq: q}, nil
+	case *ent.AnnouncementEmailDeliveryQuery:
+		return &query[*ent.AnnouncementEmailDeliveryQuery, predicate.AnnouncementEmailDelivery, announcementemaildelivery.OrderOption]{typ: ent.TypeAnnouncementEmailDelivery, tq: q}, nil
+	case *ent.AnnouncementEmailJobQuery:
+		return &query[*ent.AnnouncementEmailJobQuery, predicate.AnnouncementEmailJob, announcementemailjob.OrderOption]{typ: ent.TypeAnnouncementEmailJob, tq: q}, nil
 	case *ent.AnnouncementReadQuery:
 		return &query[*ent.AnnouncementReadQuery, predicate.AnnouncementRead, announcementread.OrderOption]{typ: ent.TypeAnnouncementRead, tq: q}, nil
 	case *ent.AuthIdentityQuery:

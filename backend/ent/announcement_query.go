@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
+	"github.com/Wei-Shaw/sub2api/ent/announcementemailjob"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
 )
@@ -21,12 +22,13 @@ import (
 // AnnouncementQuery is the builder for querying Announcement entities.
 type AnnouncementQuery struct {
 	config
-	ctx        *QueryContext
-	order      []announcement.OrderOption
-	inters     []Interceptor
-	predicates []predicate.Announcement
-	withReads  *AnnouncementReadQuery
-	modifiers  []func(*sql.Selector)
+	ctx           *QueryContext
+	order         []announcement.OrderOption
+	inters        []Interceptor
+	predicates    []predicate.Announcement
+	withReads     *AnnouncementReadQuery
+	withEmailJobs *AnnouncementEmailJobQuery
+	modifiers     []func(*sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -78,6 +80,28 @@ func (_q *AnnouncementQuery) QueryReads() *AnnouncementReadQuery {
 			sqlgraph.From(announcement.Table, announcement.FieldID, selector),
 			sqlgraph.To(announcementread.Table, announcementread.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, announcement.ReadsTable, announcement.ReadsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryEmailJobs chains the current query on the "email_jobs" edge.
+func (_q *AnnouncementQuery) QueryEmailJobs() *AnnouncementEmailJobQuery {
+	query := (&AnnouncementEmailJobClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(announcement.Table, announcement.FieldID, selector),
+			sqlgraph.To(announcementemailjob.Table, announcementemailjob.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, announcement.EmailJobsTable, announcement.EmailJobsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -272,12 +296,13 @@ func (_q *AnnouncementQuery) Clone() *AnnouncementQuery {
 		return nil
 	}
 	return &AnnouncementQuery{
-		config:     _q.config,
-		ctx:        _q.ctx.Clone(),
-		order:      append([]announcement.OrderOption{}, _q.order...),
-		inters:     append([]Interceptor{}, _q.inters...),
-		predicates: append([]predicate.Announcement{}, _q.predicates...),
-		withReads:  _q.withReads.Clone(),
+		config:        _q.config,
+		ctx:           _q.ctx.Clone(),
+		order:         append([]announcement.OrderOption{}, _q.order...),
+		inters:        append([]Interceptor{}, _q.inters...),
+		predicates:    append([]predicate.Announcement{}, _q.predicates...),
+		withReads:     _q.withReads.Clone(),
+		withEmailJobs: _q.withEmailJobs.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -292,6 +317,17 @@ func (_q *AnnouncementQuery) WithReads(opts ...func(*AnnouncementReadQuery)) *An
 		opt(query)
 	}
 	_q.withReads = query
+	return _q
+}
+
+// WithEmailJobs tells the query-builder to eager-load the nodes that are connected to
+// the "email_jobs" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *AnnouncementQuery) WithEmailJobs(opts ...func(*AnnouncementEmailJobQuery)) *AnnouncementQuery {
+	query := (&AnnouncementEmailJobClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withEmailJobs = query
 	return _q
 }
 
@@ -373,8 +409,9 @@ func (_q *AnnouncementQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	var (
 		nodes       = []*Announcement{}
 		_spec       = _q.querySpec()
-		loadedTypes = [1]bool{
+		loadedTypes = [2]bool{
 			_q.withReads != nil,
+			_q.withEmailJobs != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -405,6 +442,13 @@ func (_q *AnnouncementQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 			return nil, err
 		}
 	}
+	if query := _q.withEmailJobs; query != nil {
+		if err := _q.loadEmailJobs(ctx, query, nodes,
+			func(n *Announcement) { n.Edges.EmailJobs = []*AnnouncementEmailJob{} },
+			func(n *Announcement, e *AnnouncementEmailJob) { n.Edges.EmailJobs = append(n.Edges.EmailJobs, e) }); err != nil {
+			return nil, err
+		}
+	}
 	return nodes, nil
 }
 
@@ -423,6 +467,36 @@ func (_q *AnnouncementQuery) loadReads(ctx context.Context, query *AnnouncementR
 	}
 	query.Where(predicate.AnnouncementRead(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(announcement.ReadsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.AnnouncementID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "announcement_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *AnnouncementQuery) loadEmailJobs(ctx context.Context, query *AnnouncementEmailJobQuery, nodes []*Announcement, init func(*Announcement), assign func(*Announcement, *AnnouncementEmailJob)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int64]*Announcement)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(announcementemailjob.FieldAnnouncementID)
+	}
+	query.Where(predicate.AnnouncementEmailJob(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(announcement.EmailJobsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

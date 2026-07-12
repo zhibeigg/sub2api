@@ -6,12 +6,14 @@ import (
 	"crypto/subtle"
 	"crypto/tls"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"html"
 	"log/slog"
 	"math/big"
 	"net"
 	"net/smtp"
+	"net/textproto"
 	"net/url"
 	"strconv"
 	"strings"
@@ -91,6 +93,51 @@ type SMTPConfig struct {
 	From     string
 	FromName string
 	UseTLS   bool
+}
+
+type SMTPErrorClass string
+
+const (
+	SMTPErrorTemporary SMTPErrorClass = "temporary"
+	SMTPErrorPermanent SMTPErrorClass = "permanent"
+	SMTPErrorAmbiguous SMTPErrorClass = "ambiguous"
+)
+
+type ClassifiedSMTPError struct {
+	Class SMTPErrorClass
+	Err   error
+}
+
+func (e *ClassifiedSMTPError) Error() string { return e.Err.Error() }
+func (e *ClassifiedSMTPError) Unwrap() error { return e.Err }
+
+func ClassifySMTPError(err error) SMTPErrorClass {
+	if err == nil {
+		return ""
+	}
+	var classified *ClassifiedSMTPError
+	if errors.As(err, &classified) {
+		return classified.Class
+	}
+	var protocolErr *textproto.Error
+	if errors.As(err, &protocolErr) {
+		if protocolErr.Code >= 400 && protocolErr.Code < 500 {
+			return SMTPErrorTemporary
+		}
+		return SMTPErrorPermanent
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return SMTPErrorTemporary
+	}
+	return SMTPErrorPermanent
+}
+
+func wrapSMTPError(class SMTPErrorClass, err error) error {
+	if err == nil {
+		return nil
+	}
+	return &ClassifiedSMTPError{Class: class, Err: err}
 }
 
 // EmailService 邮件服务
@@ -178,14 +225,32 @@ func (s *EmailService) SendEmail(ctx context.Context, to, subject, body string) 
 	if err != nil {
 		return err
 	}
-	return s.SendEmailWithConfig(config, to, subject, body)
+	return s.SendEmailWithConfigContext(ctx, config, to, subject, body)
 }
 
 const smtpDialTimeout = 10 * time.Second
 const smtpIOTimeout = 20 * time.Second
 
+func smtpDeadline(ctx context.Context) time.Time {
+	deadline := time.Now().Add(smtpIOTimeout)
+	if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) {
+		return ctxDeadline
+	}
+	return deadline
+}
+
 // SendEmailWithConfig 使用指定配置发送邮件
 func (s *EmailService) SendEmailWithConfig(config *SMTPConfig, to, subject, body string) error {
+	return s.SendEmailWithConfigContext(context.Background(), config, to, subject, body)
+}
+
+func (s *EmailService) SendEmailWithConfigContext(ctx context.Context, config *SMTPConfig, to, subject, body string) error {
+	if err := ctx.Err(); err != nil {
+		return wrapSMTPError(SMTPErrorTemporary, err)
+	}
+	if config == nil {
+		return wrapSMTPError(SMTPErrorPermanent, errors.New("nil smtp config"))
+	}
 	// Sanitize all SMTP header fields to prevent header injection (CR/LF removal).
 	to = sanitizeEmailHeader(to)
 	subject = sanitizeEmailHeader(subject)
@@ -202,20 +267,20 @@ func (s *EmailService) SendEmailWithConfig(config *SMTPConfig, to, subject, body
 	auth := smtp.PlainAuth("", config.Username, config.Password, config.Host)
 
 	if config.UseTLS {
-		return s.sendMailTLS(addr, auth, config.From, to, []byte(msg), config.Host)
+		return s.sendMailTLS(ctx, addr, auth, config.From, to, []byte(msg), config.Host)
 	}
 
-	return s.sendMailPlain(addr, auth, config.From, to, []byte(msg), config.Host)
+	return s.sendMailPlain(ctx, addr, auth, config.From, to, []byte(msg), config.Host)
 }
 
 // sendMailPlain sends mail without TLS using a dialer with timeout.
-func (s *EmailService) sendMailPlain(addr string, auth smtp.Auth, from, to string, msg []byte, host string) error {
+func (s *EmailService) sendMailPlain(ctx context.Context, addr string, auth smtp.Auth, from, to string, msg []byte, host string) error {
 	dialer := &net.Dialer{Timeout: smtpDialTimeout}
-	conn, err := dialer.Dial("tcp", addr)
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return fmt.Errorf("smtp dial: %w", err)
 	}
-	_ = conn.SetDeadline(time.Now().Add(smtpIOTimeout))
+	_ = conn.SetDeadline(smtpDeadline(ctx))
 	defer func() { _ = conn.Close() }()
 
 	client, err := smtp.NewClient(conn, host)
@@ -246,17 +311,17 @@ func (s *EmailService) sendMailPlain(addr string, auth smtp.Auth, from, to strin
 		return fmt.Errorf("smtp data: %w", err)
 	}
 	if _, err = w.Write(msg); err != nil {
-		return fmt.Errorf("write msg: %w", err)
+		return wrapSMTPError(SMTPErrorAmbiguous, fmt.Errorf("write msg: %w", err))
 	}
 	if err = w.Close(); err != nil {
-		return fmt.Errorf("close writer: %w", err)
+		return wrapSMTPError(SMTPErrorAmbiguous, fmt.Errorf("close writer: %w", err))
 	}
 	_ = client.Quit()
 	return nil
 }
 
 // sendMailTLS 使用TLS发送邮件
-func (s *EmailService) sendMailTLS(addr string, auth smtp.Auth, from, to string, msg []byte, host string) error {
+func (s *EmailService) sendMailTLS(ctx context.Context, addr string, auth smtp.Auth, from, to string, msg []byte, host string) error {
 	tlsConfig := &tls.Config{
 		ServerName: host,
 		// 强制 TLS 1.2+，避免协议降级导致的弱加密风险。
@@ -264,11 +329,16 @@ func (s *EmailService) sendMailTLS(addr string, auth smtp.Auth, from, to string,
 	}
 
 	dialer := &net.Dialer{Timeout: smtpDialTimeout}
-	conn, err := tls.DialWithDialer(dialer, "tcp", addr, tlsConfig)
+	rawConn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return fmt.Errorf("tls dial: %w", err)
 	}
-	_ = conn.SetDeadline(time.Now().Add(smtpIOTimeout))
+	conn := tls.Client(rawConn, tlsConfig)
+	if err = conn.HandshakeContext(ctx); err != nil {
+		_ = rawConn.Close()
+		return fmt.Errorf("tls handshake: %w", err)
+	}
+	_ = conn.SetDeadline(smtpDeadline(ctx))
 	defer func() { _ = conn.Close() }()
 
 	client, err := smtp.NewClient(conn, host)
@@ -296,12 +366,12 @@ func (s *EmailService) sendMailTLS(addr string, auth smtp.Auth, from, to string,
 
 	_, err = w.Write(msg)
 	if err != nil {
-		return fmt.Errorf("write msg: %w", err)
+		return wrapSMTPError(SMTPErrorAmbiguous, fmt.Errorf("write msg: %w", err))
 	}
 
 	err = w.Close()
 	if err != nil {
-		return fmt.Errorf("close writer: %w", err)
+		return wrapSMTPError(SMTPErrorAmbiguous, fmt.Errorf("close writer: %w", err))
 	}
 
 	// Email is sent successfully after w.Close(), ignore Quit errors

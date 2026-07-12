@@ -295,6 +295,45 @@ export interface UpdateSubscriptionRequest {
 
 export type AnnouncementStatus = 'draft' | 'active' | 'archived'
 export type AnnouncementNotifyMode = 'silent' | 'popup'
+export type AnnouncementEmailJobStatus =
+  | 'pending'
+  | 'preparing'
+  | 'sending'
+  | 'completed'
+  | 'completed_with_failures'
+  | 'failed'
+  | 'cancelled'
+
+export interface AnnouncementEmailNotificationSummary {
+  status: AnnouncementEmailJobStatus
+  total_count: number
+  sent_count: number
+  failed_count: number
+  ambiguous_count: number
+  skipped_count: number
+  available_at?: string | null
+  started_at?: string | null
+  finished_at?: string | null
+  last_error_code?: string | null
+  last_error_message?: string | null
+  can_retry: boolean
+}
+
+export interface AnnouncementEmailCapability {
+  enabled: boolean
+  smtp_configured: boolean
+  eligible_count: number
+}
+
+export type AnnouncementEmailNotificationStatus = AnnouncementEmailNotificationSummary
+
+export interface RetryAnnouncementEmailNotificationRequest {
+  include_ambiguous?: boolean
+}
+
+export interface RetryAnnouncementEmailNotificationResponse {
+  email_notification: AnnouncementEmailNotificationStatus
+}
 
 export type AnnouncementConditionType = 'subscription' | 'balance'
 
@@ -326,6 +365,7 @@ export interface Announcement {
   ends_at?: string
   created_by?: number
   updated_by?: number
+  email_notification?: AnnouncementEmailNotificationSummary | null
   created_at: string
   updated_at: string
 }
@@ -350,6 +390,7 @@ export interface CreateAnnouncementRequest {
   targeting: AnnouncementTargeting
   starts_at?: number
   ends_at?: number
+  send_email?: boolean
 }
 
 export interface UpdateAnnouncementRequest {
@@ -360,6 +401,7 @@ export interface UpdateAnnouncementRequest {
   targeting?: AnnouncementTargeting
   starts_at?: number
   ends_at?: number
+  send_email?: boolean
 }
 
 export interface AnnouncementUserReadStatus {

@@ -184,6 +184,7 @@ Sub2API is an AI API gateway platform designed to distribute and manage API quot
 - **Smart Scheduling** - Intelligent account selection with sticky sessions
 - **Concurrency Control** - Per-user and per-account concurrency limits
 - **Rate Limiting** - Configurable request and token rate limits
+- **Announcement Email Broadcasts** - Administrators can optionally queue a durable background broadcast to every eligible user's verified primary email when publishing an active announcement. Per-recipient delivery records provide restart recovery, progress, controlled retries, and end-to-end idempotency independently of announcement targeting ([Design and API guide](docs/ANNOUNCEMENT_EMAIL.md))
 - **Built-in Payment System** - Supports EasyPay, Alipay, WeChat Pay, and Stripe for user self-service top-up; promo codes can grant a balance bonus on the first successful top-up only. Admin order management includes registration-promo attribution, date-range filtering, server-side net recharge totals, and filtered CSV exports, with no separate payment service needed ([Configuration Guide](docs/PAYMENT.md))
 - **Dual Subscription Plan Modes** - A `subscription` plan binds exactly one subscription group and uses that group's native limits. A `standard_quota` plan binds one or more standard balance groups and defines shared daily, weekly, or monthly plan limits. An active plan takes priority over balance billing on its standard groups; public groups return to balance billing after expiration
 - **Cyber Abuse Guard** - The risk-control center can enable conservative, high-confidence preflight detection for credential theft, malware, unauthorized intrusion, security-control evasion, data exfiltration, and botnet/DDoS patterns. Matching requests receive a warning and are terminated before upstream forwarding. The guard is disabled by default and includes side-effect-free testing, redacted audit records, and integration with upstream `cyber_policy` feedback; it does not replace human review or legal advice
@@ -201,6 +202,12 @@ For verified logged-in identities, copy the inbox's Identity Validation Secret i
 The public settings response exposes only `chatwoot_enabled`, `chatwoot_base_url`, and `chatwoot_website_token`. When configuration is incomplete the effective enabled value is `false`. The CSP middleware automatically adds the validated Chatwoot origin to the required script, frame, HTTPS, and WebSocket directives, including self-hosted origins, without requiring a server restart after an administrator update.
 
 The equivalent startup defaults are available under `chatwoot` in `config.yaml`; database values saved by the administrator take precedence. Keep the feature disabled until the inbox URL and token are ready, use HTTPS in production, and leave the secret input empty on later saves to preserve the existing secret.
+
+## Announcement Email Broadcasts
+
+When creating or editing an announcement whose final status is active, administrators can optionally choose **Send to all eligible user emails**. The switch is off by default. The HTTP request atomically saves the announcement and queues a durable job; background workers deliver to verified primary emails and report progress. Email scope does not follow announcement targeting, each announcement can create only one broadcast job, and later edits do not resend it.
+
+The `announcement_email` section in `config.yaml` controls enablement, recipient/delivery batches, concurrency, polling, leases, retries, and send timeout. SMTP continues to use the existing email settings. Create/update requests with `send_email=true` and retry requests require a stable `Idempotency-Key`. See the [Announcement Email design and API guide](docs/ANNOUNCEMENT_EMAIL.md) for recipient rules, statuses, configuration, admin endpoints, and the SMTP exactly-once boundary.
 
 ## Ecosystem
 

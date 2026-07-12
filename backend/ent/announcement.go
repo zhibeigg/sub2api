@@ -51,9 +51,11 @@ type Announcement struct {
 type AnnouncementEdges struct {
 	// Reads holds the value of the reads edge.
 	Reads []*AnnouncementRead `json:"reads,omitempty"`
+	// EmailJobs holds the value of the email_jobs edge.
+	EmailJobs []*AnnouncementEmailJob `json:"email_jobs,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [1]bool
+	loadedTypes [2]bool
 }
 
 // ReadsOrErr returns the Reads value or an error if the edge
@@ -63,6 +65,15 @@ func (e AnnouncementEdges) ReadsOrErr() ([]*AnnouncementRead, error) {
 		return e.Reads, nil
 	}
 	return nil, &NotLoadedError{edge: "reads"}
+}
+
+// EmailJobsOrErr returns the EmailJobs value or an error if the edge
+// was not loaded in eager-loading.
+func (e AnnouncementEdges) EmailJobsOrErr() ([]*AnnouncementEmailJob, error) {
+	if e.loadedTypes[1] {
+		return e.EmailJobs, nil
+	}
+	return nil, &NotLoadedError{edge: "email_jobs"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -187,6 +198,11 @@ func (_m *Announcement) Value(name string) (ent.Value, error) {
 // QueryReads queries the "reads" edge of the Announcement entity.
 func (_m *Announcement) QueryReads() *AnnouncementReadQuery {
 	return NewAnnouncementClient(_m.config).QueryReads(_m)
+}
+
+// QueryEmailJobs queries the "email_jobs" edge of the Announcement entity.
+func (_m *Announcement) QueryEmailJobs() *AnnouncementEmailJobQuery {
+	return NewAnnouncementClient(_m.config).QueryEmailJobs(_m)
 }
 
 // Update returns a builder for updating this Announcement.

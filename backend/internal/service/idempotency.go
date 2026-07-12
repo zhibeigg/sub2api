@@ -87,6 +87,7 @@ type IdempotencyExecuteOptions struct {
 	Payload        any
 	TTL            time.Duration
 	RequireKey     bool
+	StrictKey      bool
 }
 
 type IdempotencyExecuteResult struct {
@@ -211,7 +212,7 @@ func (c *IdempotencyCoordinator) Execute(
 		return nil, err
 	}
 	if key == "" {
-		if opts.RequireKey && !c.cfg.ObserveOnly {
+		if opts.RequireKey && (opts.StrictKey || !c.cfg.ObserveOnly) {
 			return nil, ErrIdempotencyKeyRequired
 		}
 		data, execErr := execute(ctx)

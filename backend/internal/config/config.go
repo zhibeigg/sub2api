@@ -98,6 +98,7 @@ type Config struct {
 	Update                  UpdateConfig                  `mapstructure:"update"`
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
 	BatchImage              BatchImageConfig              `mapstructure:"batch_image"`
+	AnnouncementEmail       AnnouncementEmailConfig       `mapstructure:"announcement_email"`
 }
 
 type ChatwootConfig struct {
@@ -269,6 +270,19 @@ type IdempotencyConfig struct {
 	CleanupIntervalSeconds int `mapstructure:"cleanup_interval_seconds"`
 	// CleanupBatchSize 每次清理的最大记录数。
 	CleanupBatchSize int `mapstructure:"cleanup_batch_size"`
+}
+
+type AnnouncementEmailConfig struct {
+	Enabled             bool `mapstructure:"enabled"`
+	DeliveryWorkerCount int  `mapstructure:"delivery_worker_count"`
+	RecipientBatchSize  int  `mapstructure:"recipient_batch_size"`
+	DeliveryBatchSize   int  `mapstructure:"delivery_batch_size"`
+	PollIntervalSeconds int  `mapstructure:"poll_interval_seconds"`
+	LeaseSeconds        int  `mapstructure:"lease_seconds"`
+	MaxAttempts         int  `mapstructure:"max_attempts"`
+	RetryBaseSeconds    int  `mapstructure:"retry_base_seconds"`
+	MaxRetrySeconds     int  `mapstructure:"max_retry_seconds"`
+	SendTimeoutSeconds  int  `mapstructure:"send_timeout_seconds"`
 }
 
 type BatchImageConfig struct {
@@ -1574,6 +1588,7 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	}
 
 	cfg.RunMode = NormalizeRunMode(cfg.RunMode)
+	normalizeAnnouncementEmailConfig(&cfg.AnnouncementEmail)
 	cfg.Server.Mode = strings.ToLower(strings.TrimSpace(cfg.Server.Mode))
 	if cfg.Server.Mode == "" {
 		cfg.Server.Mode = "debug"
@@ -1892,6 +1907,17 @@ func setDefaults() {
 	viper.SetDefault("redis.enable_tls", false)
 
 	// Batch Image queue
+	viper.SetDefault("announcement_email.enabled", true)
+	viper.SetDefault("announcement_email.delivery_worker_count", 4)
+	viper.SetDefault("announcement_email.recipient_batch_size", 500)
+	viper.SetDefault("announcement_email.delivery_batch_size", 50)
+	viper.SetDefault("announcement_email.poll_interval_seconds", 5)
+	viper.SetDefault("announcement_email.lease_seconds", 120)
+	viper.SetDefault("announcement_email.max_attempts", 5)
+	viper.SetDefault("announcement_email.retry_base_seconds", 30)
+	viper.SetDefault("announcement_email.max_retry_seconds", 3600)
+	viper.SetDefault("announcement_email.send_timeout_seconds", 30)
+
 	viper.SetDefault("batch_image.enabled", false)
 	viper.SetDefault("batch_image.max_items_per_job_default", 200)
 	viper.SetDefault("batch_image.max_items_per_job_trial", 50)
@@ -3174,6 +3200,58 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("dingtalk_connect: %w", err)
 	}
 	return nil
+}
+
+func normalizeAnnouncementEmailConfig(cfg *AnnouncementEmailConfig) {
+	if cfg.DeliveryWorkerCount < 1 {
+		cfg.DeliveryWorkerCount = 1
+	} else if cfg.DeliveryWorkerCount > 32 {
+		cfg.DeliveryWorkerCount = 32
+	}
+	if cfg.RecipientBatchSize < 1 {
+		cfg.RecipientBatchSize = 500
+	} else if cfg.RecipientBatchSize > 5000 {
+		cfg.RecipientBatchSize = 5000
+	}
+	if cfg.DeliveryBatchSize < 1 {
+		cfg.DeliveryBatchSize = 50
+	} else if cfg.DeliveryBatchSize > 500 {
+		cfg.DeliveryBatchSize = 500
+	}
+	if cfg.PollIntervalSeconds < 1 {
+		cfg.PollIntervalSeconds = 5
+	} else if cfg.PollIntervalSeconds > 60 {
+		cfg.PollIntervalSeconds = 60
+	}
+	if cfg.LeaseSeconds < 30 {
+		cfg.LeaseSeconds = 120
+	} else if cfg.LeaseSeconds > 3600 {
+		cfg.LeaseSeconds = 3600
+	}
+	if cfg.MaxAttempts < 1 {
+		cfg.MaxAttempts = 5
+	} else if cfg.MaxAttempts > 20 {
+		cfg.MaxAttempts = 20
+	}
+	if cfg.RetryBaseSeconds < 1 {
+		cfg.RetryBaseSeconds = 30
+	} else if cfg.RetryBaseSeconds > 3600 {
+		cfg.RetryBaseSeconds = 3600
+	}
+	if cfg.MaxRetrySeconds < cfg.RetryBaseSeconds {
+		cfg.MaxRetrySeconds = cfg.RetryBaseSeconds
+	} else if cfg.MaxRetrySeconds > 86400 {
+		cfg.MaxRetrySeconds = 86400
+	}
+	if cfg.SendTimeoutSeconds < 5 {
+		cfg.SendTimeoutSeconds = 30
+	} else if cfg.SendTimeoutSeconds > 300 {
+		cfg.SendTimeoutSeconds = 300
+	}
+	minimumLease := cfg.SendTimeoutSeconds + 30
+	if cfg.LeaseSeconds < minimumLease {
+		cfg.LeaseSeconds = minimumLease
+	}
 }
 
 func normalizeStringSlice(values []string) []string {

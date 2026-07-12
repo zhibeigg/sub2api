@@ -16,6 +16,7 @@ type AnnouncementService struct {
 	readRepo         AnnouncementReadRepository
 	userRepo         UserRepository
 	userSubRepo      UserSubscriptionRepository
+	emailValidator   AnnouncementEmailPublicationValidator
 }
 
 func NewAnnouncementService(
@@ -32,6 +33,12 @@ func NewAnnouncementService(
 	}
 }
 
+func (s *AnnouncementService) SetEmailPublicationValidator(validator AnnouncementEmailPublicationValidator) {
+	if s != nil {
+		s.emailValidator = validator
+	}
+}
+
 type CreateAnnouncementInput struct {
 	Title      string
 	Content    string
@@ -41,6 +48,7 @@ type CreateAnnouncementInput struct {
 	StartsAt   *time.Time
 	EndsAt     *time.Time
 	ActorID    *int64 // 管理员用户ID
+	SendEmail  bool
 }
 
 type UpdateAnnouncementInput struct {
@@ -52,6 +60,7 @@ type UpdateAnnouncementInput struct {
 	StartsAt   **time.Time
 	EndsAt     **time.Time
 	ActorID    *int64 // 管理员用户ID
+	SendEmail  bool
 }
 
 type UserAnnouncement struct {
@@ -123,7 +132,23 @@ func (s *AnnouncementService) Create(ctx context.Context, input *CreateAnnouncem
 		a.UpdatedBy = input.ActorID
 	}
 
-	if err := s.announcementRepo.Create(ctx, a); err != nil {
+	if input.SendEmail && a.Status != AnnouncementStatusActive {
+		return nil, ErrAnnouncementEmailRequiresActive
+	}
+	if input.SendEmail {
+		if s.emailValidator != nil {
+			if err := s.emailValidator.ValidatePublication(ctx, a.Title, a.Content); err != nil {
+				return nil, err
+			}
+		}
+		scheduledAt := time.Now().UTC()
+		if a.StartsAt != nil && a.StartsAt.After(scheduledAt) {
+			scheduledAt = *a.StartsAt
+		}
+		if err := s.announcementRepo.CreateWithEmailJob(ctx, a, scheduledAt); err != nil {
+			return nil, fmt.Errorf("create announcement with email job: %w", err)
+		}
+	} else if err := s.announcementRepo.Create(ctx, a); err != nil {
 		return nil, fmt.Errorf("create announcement: %w", err)
 	}
 	return a, nil
@@ -194,7 +219,23 @@ func (s *AnnouncementService) Update(ctx context.Context, id int64, input *Updat
 		a.UpdatedBy = input.ActorID
 	}
 
-	if err := s.announcementRepo.Update(ctx, a); err != nil {
+	if input.SendEmail && a.Status != AnnouncementStatusActive {
+		return nil, ErrAnnouncementEmailRequiresActive
+	}
+	if input.SendEmail {
+		if a.EmailNotification == nil && s.emailValidator != nil {
+			if err := s.emailValidator.ValidatePublication(ctx, a.Title, a.Content); err != nil {
+				return nil, err
+			}
+		}
+		scheduledAt := time.Now().UTC()
+		if a.StartsAt != nil && a.StartsAt.After(scheduledAt) {
+			scheduledAt = *a.StartsAt
+		}
+		if err := s.announcementRepo.UpdateWithEmailJob(ctx, a, scheduledAt); err != nil {
+			return nil, fmt.Errorf("update announcement with email job: %w", err)
+		}
+	} else if err := s.announcementRepo.Update(ctx, a); err != nil {
 		return nil, fmt.Errorf("update announcement: %w", err)
 	}
 	return a, nil

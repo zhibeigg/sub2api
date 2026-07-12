@@ -193,6 +193,29 @@ func TestNotificationEmailRawHTMLVariablesAreTrustedOnlyForHTMLPlaceholders(t *t
 	require.NotContains(t, preview.HTML, `<strong>raw</strong>`)
 }
 
+func TestAnnouncementNotificationTemplateEscapesContentAndRejectsOversizedRender(t *testing.T) {
+	svc := NewNotificationEmailService(newNotificationEmailMemorySettingRepo(), nil)
+	renderer, err := svc.PrepareBatchRenderer(context.Background(), NotificationEmailEventAnnouncementPublished)
+	require.NoError(t, err)
+
+	preview, err := renderer.Render("zh-CN", "user@example.com", "用户", map[string]string{
+		"announcement_title":     "维护通知",
+		"announcement_content":   `<script>alert("x")</script>`,
+		"announcement_starts_at": "2026-01-01T00:00:00Z",
+	})
+	require.NoError(t, err)
+	require.Contains(t, preview.HTML, `&lt;script&gt;alert(&#34;x&#34;)&lt;/script&gt;`)
+	require.NotContains(t, preview.HTML, `<script>alert`)
+
+	_, err = renderer.Render("en", "user@example.com", "User", map[string]string{
+		"announcement_title":     "Large",
+		"announcement_content":   strings.Repeat("x", notificationEmailMaxHTMLLength),
+		"announcement_starts_at": "2026-01-01T00:00:00Z",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "rendered email html")
+}
+
 func TestNotificationEmailFallbackClassification(t *testing.T) {
 	templateErr := notificationEmailTemplateErr(errors.New("bad template"))
 	configErr := notificationEmailConfigErr(errors.New("missing email service"))

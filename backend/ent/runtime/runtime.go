@@ -8,6 +8,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/account"
 	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
+	"github.com/Wei-Shaw/sub2api/ent/announcementemaildelivery"
+	"github.com/Wei-Shaw/sub2api/ent/announcementemailjob"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
 	"github.com/Wei-Shaw/sub2api/ent/apikeygroup"
@@ -324,6 +326,126 @@ func init() {
 	announcement.DefaultUpdatedAt = announcementDescUpdatedAt.Default.(func() time.Time)
 	// announcement.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	announcement.UpdateDefaultUpdatedAt = announcementDescUpdatedAt.UpdateDefault.(func() time.Time)
+	announcementemaildeliveryFields := schema.AnnouncementEmailDelivery{}.Fields()
+	_ = announcementemaildeliveryFields
+	// announcementemaildeliveryDescRecipientEmail is the schema descriptor for recipient_email field.
+	announcementemaildeliveryDescRecipientEmail := announcementemaildeliveryFields[2].Descriptor()
+	// announcementemaildelivery.RecipientEmailValidator is a validator for the "recipient_email" field. It is called by the builders before save.
+	announcementemaildelivery.RecipientEmailValidator = announcementemaildeliveryDescRecipientEmail.Validators[0].(func(string) error)
+	// announcementemaildeliveryDescRecipientName is the schema descriptor for recipient_name field.
+	announcementemaildeliveryDescRecipientName := announcementemaildeliveryFields[3].Descriptor()
+	// announcementemaildelivery.DefaultRecipientName holds the default value on creation for the recipient_name field.
+	announcementemaildelivery.DefaultRecipientName = announcementemaildeliveryDescRecipientName.Default.(string)
+	// announcementemaildelivery.RecipientNameValidator is a validator for the "recipient_name" field. It is called by the builders before save.
+	announcementemaildelivery.RecipientNameValidator = announcementemaildeliveryDescRecipientName.Validators[0].(func(string) error)
+	// announcementemaildeliveryDescLocale is the schema descriptor for locale field.
+	announcementemaildeliveryDescLocale := announcementemaildeliveryFields[4].Descriptor()
+	// announcementemaildelivery.DefaultLocale holds the default value on creation for the locale field.
+	announcementemaildelivery.DefaultLocale = announcementemaildeliveryDescLocale.Default.(string)
+	// announcementemaildelivery.LocaleValidator is a validator for the "locale" field. It is called by the builders before save.
+	announcementemaildelivery.LocaleValidator = announcementemaildeliveryDescLocale.Validators[0].(func(string) error)
+	// announcementemaildeliveryDescStatus is the schema descriptor for status field.
+	announcementemaildeliveryDescStatus := announcementemaildeliveryFields[5].Descriptor()
+	// announcementemaildelivery.DefaultStatus holds the default value on creation for the status field.
+	announcementemaildelivery.DefaultStatus = announcementemaildeliveryDescStatus.Default.(string)
+	// announcementemaildelivery.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	announcementemaildelivery.StatusValidator = announcementemaildeliveryDescStatus.Validators[0].(func(string) error)
+	// announcementemaildeliveryDescAttemptCount is the schema descriptor for attempt_count field.
+	announcementemaildeliveryDescAttemptCount := announcementemaildeliveryFields[6].Descriptor()
+	// announcementemaildelivery.DefaultAttemptCount holds the default value on creation for the attempt_count field.
+	announcementemaildelivery.DefaultAttemptCount = announcementemaildeliveryDescAttemptCount.Default.(int)
+	// announcementemaildeliveryDescMaxAttempts is the schema descriptor for max_attempts field.
+	announcementemaildeliveryDescMaxAttempts := announcementemaildeliveryFields[7].Descriptor()
+	// announcementemaildelivery.DefaultMaxAttempts holds the default value on creation for the max_attempts field.
+	announcementemaildelivery.DefaultMaxAttempts = announcementemaildeliveryDescMaxAttempts.Default.(int)
+	// announcementemaildeliveryDescNextAttemptAt is the schema descriptor for next_attempt_at field.
+	announcementemaildeliveryDescNextAttemptAt := announcementemaildeliveryFields[8].Descriptor()
+	// announcementemaildelivery.DefaultNextAttemptAt holds the default value on creation for the next_attempt_at field.
+	announcementemaildelivery.DefaultNextAttemptAt = announcementemaildeliveryDescNextAttemptAt.Default.(func() time.Time)
+	// announcementemaildeliveryDescLeaseOwner is the schema descriptor for lease_owner field.
+	announcementemaildeliveryDescLeaseOwner := announcementemaildeliveryFields[9].Descriptor()
+	// announcementemaildelivery.LeaseOwnerValidator is a validator for the "lease_owner" field. It is called by the builders before save.
+	announcementemaildelivery.LeaseOwnerValidator = announcementemaildeliveryDescLeaseOwner.Validators[0].(func(string) error)
+	// announcementemaildeliveryDescLastErrorClass is the schema descriptor for last_error_class field.
+	announcementemaildeliveryDescLastErrorClass := announcementemaildeliveryFields[11].Descriptor()
+	// announcementemaildelivery.LastErrorClassValidator is a validator for the "last_error_class" field. It is called by the builders before save.
+	announcementemaildelivery.LastErrorClassValidator = announcementemaildeliveryDescLastErrorClass.Validators[0].(func(string) error)
+	// announcementemaildeliveryDescCreatedAt is the schema descriptor for created_at field.
+	announcementemaildeliveryDescCreatedAt := announcementemaildeliveryFields[13].Descriptor()
+	// announcementemaildelivery.DefaultCreatedAt holds the default value on creation for the created_at field.
+	announcementemaildelivery.DefaultCreatedAt = announcementemaildeliveryDescCreatedAt.Default.(func() time.Time)
+	// announcementemaildeliveryDescUpdatedAt is the schema descriptor for updated_at field.
+	announcementemaildeliveryDescUpdatedAt := announcementemaildeliveryFields[14].Descriptor()
+	// announcementemaildelivery.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	announcementemaildelivery.DefaultUpdatedAt = announcementemaildeliveryDescUpdatedAt.Default.(func() time.Time)
+	// announcementemaildelivery.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	announcementemaildelivery.UpdateDefaultUpdatedAt = announcementemaildeliveryDescUpdatedAt.UpdateDefault.(func() time.Time)
+	announcementemailjobFields := schema.AnnouncementEmailJob{}.Fields()
+	_ = announcementemailjobFields
+	// announcementemailjobDescStatus is the schema descriptor for status field.
+	announcementemailjobDescStatus := announcementemailjobFields[1].Descriptor()
+	// announcementemailjob.DefaultStatus holds the default value on creation for the status field.
+	announcementemailjob.DefaultStatus = announcementemailjobDescStatus.Default.(string)
+	// announcementemailjob.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	announcementemailjob.StatusValidator = announcementemailjobDescStatus.Validators[0].(func(string) error)
+	// announcementemailjobDescRecipientCutoffID is the schema descriptor for recipient_cutoff_id field.
+	announcementemailjobDescRecipientCutoffID := announcementemailjobFields[3].Descriptor()
+	// announcementemailjob.DefaultRecipientCutoffID holds the default value on creation for the recipient_cutoff_id field.
+	announcementemailjob.DefaultRecipientCutoffID = announcementemailjobDescRecipientCutoffID.Default.(int64)
+	// announcementemailjobDescPreparationCursorID is the schema descriptor for preparation_cursor_id field.
+	announcementemailjobDescPreparationCursorID := announcementemailjobFields[4].Descriptor()
+	// announcementemailjob.DefaultPreparationCursorID holds the default value on creation for the preparation_cursor_id field.
+	announcementemailjob.DefaultPreparationCursorID = announcementemailjobDescPreparationCursorID.Default.(int64)
+	// announcementemailjobDescRecipientCount is the schema descriptor for recipient_count field.
+	announcementemailjobDescRecipientCount := announcementemailjobFields[5].Descriptor()
+	// announcementemailjob.DefaultRecipientCount holds the default value on creation for the recipient_count field.
+	announcementemailjob.DefaultRecipientCount = announcementemailjobDescRecipientCount.Default.(int64)
+	// announcementemailjobDescPendingCount is the schema descriptor for pending_count field.
+	announcementemailjobDescPendingCount := announcementemailjobFields[6].Descriptor()
+	// announcementemailjob.DefaultPendingCount holds the default value on creation for the pending_count field.
+	announcementemailjob.DefaultPendingCount = announcementemailjobDescPendingCount.Default.(int64)
+	// announcementemailjobDescSendingCount is the schema descriptor for sending_count field.
+	announcementemailjobDescSendingCount := announcementemailjobFields[7].Descriptor()
+	// announcementemailjob.DefaultSendingCount holds the default value on creation for the sending_count field.
+	announcementemailjob.DefaultSendingCount = announcementemailjobDescSendingCount.Default.(int64)
+	// announcementemailjobDescSentCount is the schema descriptor for sent_count field.
+	announcementemailjobDescSentCount := announcementemailjobFields[8].Descriptor()
+	// announcementemailjob.DefaultSentCount holds the default value on creation for the sent_count field.
+	announcementemailjob.DefaultSentCount = announcementemailjobDescSentCount.Default.(int64)
+	// announcementemailjobDescFailedCount is the schema descriptor for failed_count field.
+	announcementemailjobDescFailedCount := announcementemailjobFields[9].Descriptor()
+	// announcementemailjob.DefaultFailedCount holds the default value on creation for the failed_count field.
+	announcementemailjob.DefaultFailedCount = announcementemailjobDescFailedCount.Default.(int64)
+	// announcementemailjobDescAmbiguousCount is the schema descriptor for ambiguous_count field.
+	announcementemailjobDescAmbiguousCount := announcementemailjobFields[10].Descriptor()
+	// announcementemailjob.DefaultAmbiguousCount holds the default value on creation for the ambiguous_count field.
+	announcementemailjob.DefaultAmbiguousCount = announcementemailjobDescAmbiguousCount.Default.(int64)
+	// announcementemailjobDescSkippedCount is the schema descriptor for skipped_count field.
+	announcementemailjobDescSkippedCount := announcementemailjobFields[11].Descriptor()
+	// announcementemailjob.DefaultSkippedCount holds the default value on creation for the skipped_count field.
+	announcementemailjob.DefaultSkippedCount = announcementemailjobDescSkippedCount.Default.(int64)
+	// announcementemailjobDescAttemptCount is the schema descriptor for attempt_count field.
+	announcementemailjobDescAttemptCount := announcementemailjobFields[12].Descriptor()
+	// announcementemailjob.DefaultAttemptCount holds the default value on creation for the attempt_count field.
+	announcementemailjob.DefaultAttemptCount = announcementemailjobDescAttemptCount.Default.(int)
+	// announcementemailjobDescLastErrorCode is the schema descriptor for last_error_code field.
+	announcementemailjobDescLastErrorCode := announcementemailjobFields[14].Descriptor()
+	// announcementemailjob.LastErrorCodeValidator is a validator for the "last_error_code" field. It is called by the builders before save.
+	announcementemailjob.LastErrorCodeValidator = announcementemailjobDescLastErrorCode.Validators[0].(func(string) error)
+	// announcementemailjobDescLeaseOwner is the schema descriptor for lease_owner field.
+	announcementemailjobDescLeaseOwner := announcementemailjobFields[18].Descriptor()
+	// announcementemailjob.LeaseOwnerValidator is a validator for the "lease_owner" field. It is called by the builders before save.
+	announcementemailjob.LeaseOwnerValidator = announcementemailjobDescLeaseOwner.Validators[0].(func(string) error)
+	// announcementemailjobDescCreatedAt is the schema descriptor for created_at field.
+	announcementemailjobDescCreatedAt := announcementemailjobFields[21].Descriptor()
+	// announcementemailjob.DefaultCreatedAt holds the default value on creation for the created_at field.
+	announcementemailjob.DefaultCreatedAt = announcementemailjobDescCreatedAt.Default.(func() time.Time)
+	// announcementemailjobDescUpdatedAt is the schema descriptor for updated_at field.
+	announcementemailjobDescUpdatedAt := announcementemailjobFields[22].Descriptor()
+	// announcementemailjob.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	announcementemailjob.DefaultUpdatedAt = announcementemailjobDescUpdatedAt.Default.(func() time.Time)
+	// announcementemailjob.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	announcementemailjob.UpdateDefaultUpdatedAt = announcementemailjobDescUpdatedAt.UpdateDefault.(func() time.Time)
 	announcementreadFields := schema.AnnouncementRead{}.Fields()
 	_ = announcementreadFields
 	// announcementreadDescReadAt is the schema descriptor for read_at field.

@@ -5,11 +5,26 @@
 import { apiClient } from '../client'
 import type {
   Announcement,
+  AnnouncementEmailCapability,
+  AnnouncementEmailNotificationStatus,
   AnnouncementUserReadStatus,
   BasePaginationResponse,
   CreateAnnouncementRequest,
+  RetryAnnouncementEmailNotificationRequest,
+  RetryAnnouncementEmailNotificationResponse,
   UpdateAnnouncementRequest
 } from '@/types'
+
+export type IdempotencyKeyOptions = string | { idempotencyKey?: string }
+
+function resolveIdempotencyKey(options?: IdempotencyKeyOptions): string | undefined {
+  return typeof options === 'string' ? options : options?.idempotencyKey
+}
+
+function idempotencyConfig(options?: IdempotencyKeyOptions) {
+  const idempotencyKey = resolveIdempotencyKey(options)
+  return idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined
+}
 
 export async function list(
   page: number = 1,
@@ -36,13 +51,22 @@ export async function getById(id: number): Promise<Announcement> {
   return data
 }
 
-export async function create(request: CreateAnnouncementRequest): Promise<Announcement> {
-  const { data } = await apiClient.post<Announcement>('/admin/announcements', request)
+export async function create(
+  request: CreateAnnouncementRequest,
+  options?: IdempotencyKeyOptions
+): Promise<Announcement> {
+  const config = request.send_email ? idempotencyConfig(options) : undefined
+  const { data } = await apiClient.post<Announcement>('/admin/announcements', request, config)
   return data
 }
 
-export async function update(id: number, request: UpdateAnnouncementRequest): Promise<Announcement> {
-  const { data } = await apiClient.put<Announcement>(`/admin/announcements/${id}`, request)
+export async function update(
+  id: number,
+  request: UpdateAnnouncementRequest,
+  options?: IdempotencyKeyOptions
+): Promise<Announcement> {
+  const config = request.send_email ? idempotencyConfig(options) : undefined
+  const { data } = await apiClient.put<Announcement>(`/admin/announcements/${id}`, request, config)
   return data
 }
 
@@ -74,13 +98,50 @@ export async function getReadStatus(
   return data
 }
 
+export async function getEmailCapability(options?: {
+  signal?: AbortSignal
+}): Promise<AnnouncementEmailCapability> {
+  const { data } = await apiClient.get<AnnouncementEmailCapability>(
+    '/admin/announcements/email-capability',
+    { signal: options?.signal }
+  )
+  return data
+}
+
+export async function getEmailStatus(
+  id: number,
+  options?: { signal?: AbortSignal }
+): Promise<AnnouncementEmailNotificationStatus> {
+  const { data } = await apiClient.get<AnnouncementEmailNotificationStatus>(
+    `/admin/announcements/${id}/email-notification`,
+    { signal: options?.signal }
+  )
+  return data
+}
+
+export async function retryEmailNotification(
+  id: number,
+  request: RetryAnnouncementEmailNotificationRequest = {},
+  options?: IdempotencyKeyOptions
+): Promise<RetryAnnouncementEmailNotificationResponse> {
+  const { data } = await apiClient.post<RetryAnnouncementEmailNotificationResponse>(
+    `/admin/announcements/${id}/email-notification/retry`,
+    request,
+    idempotencyConfig(options)
+  )
+  return data
+}
+
 const announcementsAPI = {
   list,
   getById,
   create,
   update,
   delete: deleteAnnouncement,
-  getReadStatus
+  getReadStatus,
+  getEmailCapability,
+  getEmailStatus,
+  retryEmailNotification
 }
 
 export default announcementsAPI

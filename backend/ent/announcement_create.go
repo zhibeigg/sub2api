@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
+	"github.com/Wei-Shaw/sub2api/ent/announcementemailjob"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 )
@@ -175,6 +176,21 @@ func (_c *AnnouncementCreate) AddReads(v ...*AnnouncementRead) *AnnouncementCrea
 		ids[i] = v[i].ID
 	}
 	return _c.AddReadIDs(ids...)
+}
+
+// AddEmailJobIDs adds the "email_jobs" edge to the AnnouncementEmailJob entity by IDs.
+func (_c *AnnouncementCreate) AddEmailJobIDs(ids ...int64) *AnnouncementCreate {
+	_c.mutation.AddEmailJobIDs(ids...)
+	return _c
+}
+
+// AddEmailJobs adds the "email_jobs" edges to the AnnouncementEmailJob entity.
+func (_c *AnnouncementCreate) AddEmailJobs(v ...*AnnouncementEmailJob) *AnnouncementCreate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddEmailJobIDs(ids...)
 }
 
 // Mutation returns the AnnouncementMutation object of the builder.
@@ -350,6 +366,22 @@ func (_c *AnnouncementCreate) createSpec() (*Announcement, *sqlgraph.CreateSpec)
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(announcementread.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.EmailJobsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   announcement.EmailJobsTable,
+			Columns: []string{announcement.EmailJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(announcementemailjob.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {

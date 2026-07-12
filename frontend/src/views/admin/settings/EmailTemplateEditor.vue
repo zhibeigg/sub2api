@@ -287,6 +287,9 @@ const fallbackPlaceholders = [
   "{{report_start_time}}",
   "{{report_end_time}}",
   "{{report_html}}",
+  "{{announcement_title}}",
+  "{{announcement_content}}",
+  "{{announcement_starts_at}}",
 ];
 
 const loadingList = ref(true);
@@ -377,6 +380,11 @@ const eventDisplayMeta: Record<string, EventDisplayMeta> = {
     timing: "运维日报、周报、错误摘要或账号健康报表到达配置的发送时间时发送。",
     categoryLabel: "运维",
   },
+  "announcement.published": {
+    label: "公告发布通知",
+    timing: "管理员发布公告并明确启用邮件发送后，在公告 starts_at 到达时向有效主邮箱排队发送；每条公告仅创建一次任务。",
+    categoryLabel: "公告",
+  },
 };
 
 const eventDisplayMetaEn: Record<string, EventDisplayMeta> = {
@@ -440,6 +448,11 @@ const eventDisplayMetaEn: Record<string, EventDisplayMeta> = {
     timing: "Sent when a configured daily, weekly, error digest, or account health report reaches its scheduled send time.",
     categoryLabel: "Ops",
   },
+  "announcement.published": {
+    label: "Announcement Published",
+    timing: "Queued for valid primary email addresses when an admin publishes an announcement with email enabled and starts_at is reached; each announcement creates one job only.",
+    categoryLabel: "Announcement",
+  },
 };
 
 function normalizeEventOption(option: EmailTemplateEventOption): EmailTemplateOption {
@@ -484,6 +497,7 @@ function formatCategory(category: string): string {
     admin: { zh: "管理告警", en: "Admin" },
     risk_control: { zh: "风控", en: "Risk Control" },
     ops: { zh: "运维", en: "Ops" },
+    announcement: { zh: "公告", en: "Announcement" },
   };
   const item = labels[normalized];
   return item ? localText(item.zh, item.en) : category;

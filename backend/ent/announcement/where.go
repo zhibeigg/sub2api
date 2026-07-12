@@ -678,6 +678,29 @@ func HasReadsWith(preds ...predicate.AnnouncementRead) predicate.Announcement {
 	})
 }
 
+// HasEmailJobs applies the HasEdge predicate on the "email_jobs" edge.
+func HasEmailJobs() predicate.Announcement {
+	return predicate.Announcement(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, EmailJobsTable, EmailJobsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasEmailJobsWith applies the HasEdge predicate on the "email_jobs" edge with a given conditions (other predicates).
+func HasEmailJobsWith(preds ...predicate.AnnouncementEmailJob) predicate.Announcement {
+	return predicate.Announcement(func(s *sql.Selector) {
+		step := newEmailJobsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.Announcement) predicate.Announcement {
 	return predicate.Announcement(sql.AndPredicates(predicates...))

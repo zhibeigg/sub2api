@@ -23,6 +23,31 @@ type Announcement struct {
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+
+	EmailNotification *AnnouncementEmailNotification `json:"email_notification,omitempty"`
+}
+
+type AnnouncementEmailNotification struct {
+	JobID            int64      `json:"job_id"`
+	AnnouncementID   int64      `json:"announcement_id"`
+	Status           string     `json:"status"`
+	AvailableAt      time.Time  `json:"available_at"`
+	TotalCount       int64      `json:"total_count"`
+	PendingCount     int64      `json:"pending_count"`
+	SendingCount     int64      `json:"sending_count"`
+	SentCount        int64      `json:"sent_count"`
+	FailedCount      int64      `json:"failed_count"`
+	AmbiguousCount   int64      `json:"ambiguous_count"`
+	SkippedCount     int64      `json:"skipped_count"`
+	AttemptCount     int        `json:"attempt_count"`
+	CreatedBy        *int64     `json:"created_by,omitempty"`
+	LastErrorCode    *string    `json:"last_error_code,omitempty"`
+	LastErrorMessage *string    `json:"last_error_message,omitempty"`
+	CanRetry         bool       `json:"can_retry"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	StartedAt        *time.Time `json:"started_at,omitempty"`
+	FinishedAt       *time.Time `json:"finished_at,omitempty"`
 }
 
 type UserAnnouncement struct {
@@ -45,18 +70,35 @@ func AnnouncementFromService(a *service.Announcement) *Announcement {
 		return nil
 	}
 	return &Announcement{
-		ID:         a.ID,
-		Title:      a.Title,
-		Content:    a.Content,
-		Status:     a.Status,
-		NotifyMode: a.NotifyMode,
-		Targeting:  a.Targeting,
-		StartsAt:   a.StartsAt,
-		EndsAt:     a.EndsAt,
-		CreatedBy:  a.CreatedBy,
-		UpdatedBy:  a.UpdatedBy,
-		CreatedAt:  a.CreatedAt,
-		UpdatedAt:  a.UpdatedAt,
+		ID:                a.ID,
+		Title:             a.Title,
+		Content:           a.Content,
+		Status:            a.Status,
+		NotifyMode:        a.NotifyMode,
+		Targeting:         a.Targeting,
+		StartsAt:          a.StartsAt,
+		EndsAt:            a.EndsAt,
+		CreatedBy:         a.CreatedBy,
+		UpdatedBy:         a.UpdatedBy,
+		CreatedAt:         a.CreatedAt,
+		UpdatedAt:         a.UpdatedAt,
+		EmailNotification: AnnouncementEmailNotificationFromService(a.EmailNotification),
+	}
+}
+
+func AnnouncementEmailNotificationFromService(n *service.AnnouncementEmailNotification) *AnnouncementEmailNotification {
+	if n == nil {
+		return nil
+	}
+	canRetry := n.Status == service.AnnouncementEmailJobFailed ||
+		(n.Status == service.AnnouncementEmailJobCompletedWithFailures && (n.FailedCount > 0 || n.AmbiguousCount > 0))
+	return &AnnouncementEmailNotification{
+		JobID: n.JobID, AnnouncementID: n.AnnouncementID, Status: n.Status, AvailableAt: n.ScheduledAt,
+		TotalCount: n.RecipientCount, PendingCount: n.PendingCount, SendingCount: n.SendingCount,
+		SentCount: n.SentCount, FailedCount: n.FailedCount, AmbiguousCount: n.AmbiguousCount,
+		SkippedCount: n.SkippedCount, AttemptCount: n.AttemptCount, CreatedBy: n.CreatedBy, LastErrorCode: n.LastErrorCode,
+		LastErrorMessage: n.LastError, CanRetry: canRetry, CreatedAt: n.CreatedAt, UpdatedAt: n.UpdatedAt,
+		StartedAt: n.StartedAt, FinishedAt: n.FinishedAt,
 	}
 }
 

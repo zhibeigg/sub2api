@@ -212,6 +212,32 @@ type Announcement struct {
 	UpdatedBy  *int64
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+
+	EmailNotification *AnnouncementEmailNotification
+}
+
+type AnnouncementEmailNotification struct {
+	JobID               int64
+	AnnouncementID      int64
+	Status              string
+	ScheduledAt         time.Time
+	RecipientCount      int64
+	PendingCount        int64
+	SendingCount        int64
+	SentCount           int64
+	FailedCount         int64
+	AmbiguousCount      int64
+	SkippedCount        int64
+	AttemptCount        int
+	CreatedBy           *int64
+	LastErrorCode       *string
+	PreparationCursorID int64
+	RecipientCutoffID   int64
+	LastError           *string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	StartedAt           *time.Time
+	FinishedAt          *time.Time
 }
 
 func (a *Announcement) IsActiveAt(now time.Time) bool {

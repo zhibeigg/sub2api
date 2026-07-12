@@ -787,6 +787,22 @@ idempotency:
   cleanup_batch_size: 500
 
 # =============================================================================
+# 公告邮件批量投递
+# Announcement Email Dispatch
+# =============================================================================
+announcement_email:
+  enabled: true
+  delivery_worker_count: 4
+  recipient_batch_size: 500
+  delivery_batch_size: 50
+  poll_interval_seconds: 5
+  lease_seconds: 120
+  max_attempts: 5
+  retry_base_seconds: 30
+  max_retry_seconds: 3600
+  send_timeout_seconds: 30
+
+# =============================================================================
 # Concurrency Wait Configuration
 # 并发等待配置
 # =============================================================================

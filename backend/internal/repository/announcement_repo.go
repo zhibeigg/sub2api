@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 	"time"
 
@@ -19,6 +20,24 @@ type announcementRepository struct {
 
 func NewAnnouncementRepository(client *dbent.Client) service.AnnouncementRepository {
 	return &announcementRepository{client: client}
+}
+
+func (r *announcementRepository) CreateWithEmailJob(ctx context.Context, a *service.Announcement, scheduledAt time.Time) error {
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	txCtx := dbent.NewTxContext(ctx, tx)
+	if err := r.Create(txCtx, a); err != nil {
+		return err
+	}
+	summary, err := createAnnouncementEmailJob(txCtx, tx.Client(), a, scheduledAt)
+	if err != nil {
+		return err
+	}
+	a.EmailNotification = summary
+	return tx.Commit()
 }
 
 func (r *announcementRepository) Create(ctx context.Context, a *service.Announcement) error {
@@ -59,7 +78,29 @@ func (r *announcementRepository) GetByID(ctx context.Context, id int64) (*servic
 	if err != nil {
 		return nil, translatePersistenceError(err, service.ErrAnnouncementNotFound, nil)
 	}
-	return announcementEntityToService(m), nil
+	out := announcementEntityToService(m)
+	if summary, summaryErr := queryAnnouncementEmailSummary(ctx, r.client, id); summaryErr == nil {
+		out.EmailNotification = summary
+	}
+	return out, nil
+}
+
+func (r *announcementRepository) UpdateWithEmailJob(ctx context.Context, a *service.Announcement, scheduledAt time.Time) error {
+	tx, err := r.client.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	txCtx := dbent.NewTxContext(ctx, tx)
+	if err := r.Update(txCtx, a); err != nil {
+		return err
+	}
+	summary, err := createAnnouncementEmailJob(txCtx, tx.Client(), a, scheduledAt)
+	if err != nil {
+		return err
+	}
+	a.EmailNotification = summary
+	return tx.Commit()
 }
 
 func (r *announcementRepository) Update(ctx context.Context, a *service.Announcement) error {
@@ -144,6 +185,11 @@ func (r *announcementRepository) List(
 	}
 
 	out := announcementEntitiesToService(items)
+	for i := range out {
+		if summary, summaryErr := queryAnnouncementEmailSummary(ctx, r.client, out[i].ID); summaryErr == nil {
+			out[i].EmailNotification = summary
+		}
+	}
 	return out, paginationResultFromTotal(int64(total), params), nil
 }
 
@@ -241,6 +287,61 @@ func announcementEntityToService(m *dbent.Announcement) *service.Announcement {
 		CreatedAt:  m.CreatedAt,
 		UpdatedAt:  m.UpdatedAt,
 	}
+}
+
+func queryAnnouncementEmailSummary(ctx context.Context, client *dbent.Client, announcementID int64) (*service.AnnouncementEmailNotification, error) {
+	rows, err := client.QueryContext(ctx, `SELECT id, announcement_id, status, scheduled_at,
+		recipient_count, pending_count, sending_count, sent_count, failed_count, ambiguous_count,
+		skipped_count, attempt_count, created_by, last_error_code,
+		preparation_cursor_id, recipient_cutoff_id, last_error, created_at, updated_at, started_at, finished_at
+		FROM announcement_email_jobs WHERE announcement_id = $1`, announcementID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return nil, sql.ErrNoRows
+	}
+	var out service.AnnouncementEmailNotification
+	var lastError, lastErrorCode sql.NullString
+	var createdBy sql.NullInt64
+	var startedAt, finishedAt sql.NullTime
+	if err := rows.Scan(&out.JobID, &out.AnnouncementID, &out.Status, &out.ScheduledAt,
+		&out.RecipientCount, &out.PendingCount, &out.SendingCount, &out.SentCount, &out.FailedCount, &out.AmbiguousCount,
+		&out.SkippedCount, &out.AttemptCount, &createdBy, &lastErrorCode,
+		&out.PreparationCursorID, &out.RecipientCutoffID, &lastError, &out.CreatedAt, &out.UpdatedAt, &startedAt, &finishedAt); err != nil {
+		return nil, err
+	}
+	if lastError.Valid {
+		out.LastError = &lastError.String
+	}
+	if lastErrorCode.Valid {
+		out.LastErrorCode = &lastErrorCode.String
+	}
+	if createdBy.Valid {
+		out.CreatedBy = &createdBy.Int64
+	}
+	if startedAt.Valid {
+		out.StartedAt = &startedAt.Time
+	}
+	if finishedAt.Valid {
+		out.FinishedAt = &finishedAt.Time
+	}
+	return &out, nil
+}
+
+func createAnnouncementEmailJob(ctx context.Context, client *dbent.Client, a *service.Announcement, scheduledAt time.Time) (*service.AnnouncementEmailNotification, error) {
+	if _, err := client.ExecContext(ctx, `
+		INSERT INTO announcement_email_jobs (
+			announcement_id, status, scheduled_at, announcement_title, announcement_content,
+			announcement_starts_at, created_by, created_at, updated_at
+		) VALUES ($1, 'pending', $2, $3, $4, $5, $6, NOW(), NOW())
+		ON CONFLICT (announcement_id) DO NOTHING`,
+		a.ID, scheduledAt, a.Title, a.Content, a.StartsAt, a.UpdatedBy,
+	); err != nil {
+		return nil, err
+	}
+	return queryAnnouncementEmailSummary(ctx, client, a.ID)
 }
 
 func announcementEntitiesToService(models []*dbent.Announcement) []service.Announcement {

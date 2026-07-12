@@ -81,6 +81,7 @@ func (Announcement) Fields() []ent.Field {
 func (Announcement) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("reads", AnnouncementRead.Type),
+		edge.To("email_jobs", AnnouncementEmailJob.Type).Annotations(entsql.OnDelete(entsql.Cascade)),
 	}
 }
 

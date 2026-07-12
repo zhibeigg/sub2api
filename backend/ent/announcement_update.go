@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
+	"github.com/Wei-Shaw/sub2api/ent/announcementemailjob"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
@@ -221,6 +222,21 @@ func (_u *AnnouncementUpdate) AddReads(v ...*AnnouncementRead) *AnnouncementUpda
 	return _u.AddReadIDs(ids...)
 }
 
+// AddEmailJobIDs adds the "email_jobs" edge to the AnnouncementEmailJob entity by IDs.
+func (_u *AnnouncementUpdate) AddEmailJobIDs(ids ...int64) *AnnouncementUpdate {
+	_u.mutation.AddEmailJobIDs(ids...)
+	return _u
+}
+
+// AddEmailJobs adds the "email_jobs" edges to the AnnouncementEmailJob entity.
+func (_u *AnnouncementUpdate) AddEmailJobs(v ...*AnnouncementEmailJob) *AnnouncementUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddEmailJobIDs(ids...)
+}
+
 // Mutation returns the AnnouncementMutation object of the builder.
 func (_u *AnnouncementUpdate) Mutation() *AnnouncementMutation {
 	return _u.mutation
@@ -245,6 +261,27 @@ func (_u *AnnouncementUpdate) RemoveReads(v ...*AnnouncementRead) *AnnouncementU
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveReadIDs(ids...)
+}
+
+// ClearEmailJobs clears all "email_jobs" edges to the AnnouncementEmailJob entity.
+func (_u *AnnouncementUpdate) ClearEmailJobs() *AnnouncementUpdate {
+	_u.mutation.ClearEmailJobs()
+	return _u
+}
+
+// RemoveEmailJobIDs removes the "email_jobs" edge to AnnouncementEmailJob entities by IDs.
+func (_u *AnnouncementUpdate) RemoveEmailJobIDs(ids ...int64) *AnnouncementUpdate {
+	_u.mutation.RemoveEmailJobIDs(ids...)
+	return _u
+}
+
+// RemoveEmailJobs removes "email_jobs" edges to AnnouncementEmailJob entities.
+func (_u *AnnouncementUpdate) RemoveEmailJobs(v ...*AnnouncementEmailJob) *AnnouncementUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveEmailJobIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -409,6 +446,51 @@ func (_u *AnnouncementUpdate) sqlSave(ctx context.Context) (_node int, err error
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(announcementread.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.EmailJobsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   announcement.EmailJobsTable,
+			Columns: []string{announcement.EmailJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(announcementemailjob.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedEmailJobsIDs(); len(nodes) > 0 && !_u.mutation.EmailJobsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   announcement.EmailJobsTable,
+			Columns: []string{announcement.EmailJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(announcementemailjob.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.EmailJobsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   announcement.EmailJobsTable,
+			Columns: []string{announcement.EmailJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(announcementemailjob.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {
@@ -627,6 +709,21 @@ func (_u *AnnouncementUpdateOne) AddReads(v ...*AnnouncementRead) *AnnouncementU
 	return _u.AddReadIDs(ids...)
 }
 
+// AddEmailJobIDs adds the "email_jobs" edge to the AnnouncementEmailJob entity by IDs.
+func (_u *AnnouncementUpdateOne) AddEmailJobIDs(ids ...int64) *AnnouncementUpdateOne {
+	_u.mutation.AddEmailJobIDs(ids...)
+	return _u
+}
+
+// AddEmailJobs adds the "email_jobs" edges to the AnnouncementEmailJob entity.
+func (_u *AnnouncementUpdateOne) AddEmailJobs(v ...*AnnouncementEmailJob) *AnnouncementUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddEmailJobIDs(ids...)
+}
+
 // Mutation returns the AnnouncementMutation object of the builder.
 func (_u *AnnouncementUpdateOne) Mutation() *AnnouncementMutation {
 	return _u.mutation
@@ -651,6 +748,27 @@ func (_u *AnnouncementUpdateOne) RemoveReads(v ...*AnnouncementRead) *Announceme
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveReadIDs(ids...)
+}
+
+// ClearEmailJobs clears all "email_jobs" edges to the AnnouncementEmailJob entity.
+func (_u *AnnouncementUpdateOne) ClearEmailJobs() *AnnouncementUpdateOne {
+	_u.mutation.ClearEmailJobs()
+	return _u
+}
+
+// RemoveEmailJobIDs removes the "email_jobs" edge to AnnouncementEmailJob entities by IDs.
+func (_u *AnnouncementUpdateOne) RemoveEmailJobIDs(ids ...int64) *AnnouncementUpdateOne {
+	_u.mutation.RemoveEmailJobIDs(ids...)
+	return _u
+}
+
+// RemoveEmailJobs removes "email_jobs" edges to AnnouncementEmailJob entities.
+func (_u *AnnouncementUpdateOne) RemoveEmailJobs(v ...*AnnouncementEmailJob) *AnnouncementUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveEmailJobIDs(ids...)
 }
 
 // Where appends a list predicates to the AnnouncementUpdate builder.
@@ -845,6 +963,51 @@ func (_u *AnnouncementUpdateOne) sqlSave(ctx context.Context) (_node *Announceme
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(announcementread.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.EmailJobsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   announcement.EmailJobsTable,
+			Columns: []string{announcement.EmailJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(announcementemailjob.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedEmailJobsIDs(); len(nodes) > 0 && !_u.mutation.EmailJobsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   announcement.EmailJobsTable,
+			Columns: []string{announcement.EmailJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(announcementemailjob.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.EmailJobsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   announcement.EmailJobsTable,
+			Columns: []string{announcement.EmailJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(announcementemailjob.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {

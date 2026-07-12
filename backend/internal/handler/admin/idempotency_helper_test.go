@@ -93,6 +93,31 @@ func TestExecuteAdminIdempotentJSONFailOpenOnStoreUnavailable(t *testing.T) {
 	require.Equal(t, 1, executed, "fail-open strategy should allow semantic idempotent path to continue")
 }
 
+func TestExecuteAdminStrictIdempotentJSONRequiresKeyDuringObserveOnly(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := newMemoryIdempotencyRepoStub()
+	cfg := service.DefaultIdempotencyConfig()
+	cfg.ObserveOnly = true
+	service.SetDefaultIdempotencyCoordinator(service.NewIdempotencyCoordinator(repo, cfg))
+	t.Cleanup(func() { service.SetDefaultIdempotencyCoordinator(nil) })
+
+	var executed int
+	router := gin.New()
+	router.POST("/strict", func(c *gin.Context) {
+		executeAdminStrictIdempotentJSON(c, "admin.test.strict", map[string]any{"a": 1}, time.Minute, func(context.Context) (any, error) {
+			executed++
+			return gin.H{"ok": true}, nil
+		})
+	})
+	req := httptest.NewRequest(http.MethodPost, "/strict", bytes.NewBufferString(`{"a":1}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Zero(t, executed)
+}
+
 type memoryIdempotencyRepoStub struct {
 	mu     sync.Mutex
 	nextID int64

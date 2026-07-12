@@ -361,10 +361,13 @@ func registerAnnouncementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	{
 		announcements.GET("", h.Admin.Announcement.List)
 		announcements.POST("", h.Admin.Announcement.Create)
+		announcements.GET("/email-capability", h.Admin.Announcement.EmailCapability)
 		announcements.GET("/:id", h.Admin.Announcement.GetByID)
 		announcements.PUT("/:id", h.Admin.Announcement.Update)
 		announcements.DELETE("/:id", h.Admin.Announcement.Delete)
 		announcements.GET("/:id/read-status", h.Admin.Announcement.ListReadStatus)
+		announcements.GET("/:id/email-notification", h.Admin.Announcement.GetEmailNotification)
+		announcements.POST("/:id/email-notification/retry", h.Admin.Announcement.RetryEmailNotification)
 	}
 }
 

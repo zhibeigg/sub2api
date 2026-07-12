@@ -15,6 +15,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/account"
 	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
 	"github.com/Wei-Shaw/sub2api/ent/announcement"
+	"github.com/Wei-Shaw/sub2api/ent/announcementemaildelivery"
+	"github.com/Wei-Shaw/sub2api/ent/announcementemailjob"
 	"github.com/Wei-Shaw/sub2api/ent/announcementread"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
 	"github.com/Wei-Shaw/sub2api/ent/apikeygroup"
@@ -71,6 +73,8 @@ const (
 	TypeAccount                       = "Account"
 	TypeAccountGroup                  = "AccountGroup"
 	TypeAnnouncement                  = "Announcement"
+	TypeAnnouncementEmailDelivery     = "AnnouncementEmailDelivery"
+	TypeAnnouncementEmailJob          = "AnnouncementEmailJob"
 	TypeAnnouncementRead              = "AnnouncementRead"
 	TypeAuthIdentity                  = "AuthIdentity"
 	TypeAuthIdentityChannel           = "AuthIdentityChannel"
@@ -6145,29 +6149,32 @@ func (m *AccountGroupMutation) ResetEdge(name string) error {
 // AnnouncementMutation represents an operation that mutates the Announcement nodes in the graph.
 type AnnouncementMutation struct {
 	config
-	op            Op
-	typ           string
-	id            *int64
-	title         *string
-	content       *string
-	status        *string
-	notify_mode   *string
-	targeting     *domain.AnnouncementTargeting
-	starts_at     *time.Time
-	ends_at       *time.Time
-	created_by    *int64
-	addcreated_by *int64
-	updated_by    *int64
-	addupdated_by *int64
-	created_at    *time.Time
-	updated_at    *time.Time
-	clearedFields map[string]struct{}
-	reads         map[int64]struct{}
-	removedreads  map[int64]struct{}
-	clearedreads  bool
-	done          bool
-	oldValue      func(context.Context) (*Announcement, error)
-	predicates    []predicate.Announcement
+	op                Op
+	typ               string
+	id                *int64
+	title             *string
+	content           *string
+	status            *string
+	notify_mode       *string
+	targeting         *domain.AnnouncementTargeting
+	starts_at         *time.Time
+	ends_at           *time.Time
+	created_by        *int64
+	addcreated_by     *int64
+	updated_by        *int64
+	addupdated_by     *int64
+	created_at        *time.Time
+	updated_at        *time.Time
+	clearedFields     map[string]struct{}
+	reads             map[int64]struct{}
+	removedreads      map[int64]struct{}
+	clearedreads      bool
+	email_jobs        map[int64]struct{}
+	removedemail_jobs map[int64]struct{}
+	clearedemail_jobs bool
+	done              bool
+	oldValue          func(context.Context) (*Announcement, error)
+	predicates        []predicate.Announcement
 }
 
 var _ ent.Mutation = (*AnnouncementMutation)(nil)
@@ -6825,6 +6832,60 @@ func (m *AnnouncementMutation) ResetReads() {
 	m.removedreads = nil
 }
 
+// AddEmailJobIDs adds the "email_jobs" edge to the AnnouncementEmailJob entity by ids.
+func (m *AnnouncementMutation) AddEmailJobIDs(ids ...int64) {
+	if m.email_jobs == nil {
+		m.email_jobs = make(map[int64]struct{})
+	}
+	for i := range ids {
+		m.email_jobs[ids[i]] = struct{}{}
+	}
+}
+
+// ClearEmailJobs clears the "email_jobs" edge to the AnnouncementEmailJob entity.
+func (m *AnnouncementMutation) ClearEmailJobs() {
+	m.clearedemail_jobs = true
+}
+
+// EmailJobsCleared reports if the "email_jobs" edge to the AnnouncementEmailJob entity was cleared.
+func (m *AnnouncementMutation) EmailJobsCleared() bool {
+	return m.clearedemail_jobs
+}
+
+// RemoveEmailJobIDs removes the "email_jobs" edge to the AnnouncementEmailJob entity by IDs.
+func (m *AnnouncementMutation) RemoveEmailJobIDs(ids ...int64) {
+	if m.removedemail_jobs == nil {
+		m.removedemail_jobs = make(map[int64]struct{})
+	}
+	for i := range ids {
+		delete(m.email_jobs, ids[i])
+		m.removedemail_jobs[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedEmailJobs returns the removed IDs of the "email_jobs" edge to the AnnouncementEmailJob entity.
+func (m *AnnouncementMutation) RemovedEmailJobsIDs() (ids []int64) {
+	for id := range m.removedemail_jobs {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// EmailJobsIDs returns the "email_jobs" edge IDs in the mutation.
+func (m *AnnouncementMutation) EmailJobsIDs() (ids []int64) {
+	for id := range m.email_jobs {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetEmailJobs resets all changes to the "email_jobs" edge.
+func (m *AnnouncementMutation) ResetEmailJobs() {
+	m.email_jobs = nil
+	m.clearedemail_jobs = false
+	m.removedemail_jobs = nil
+}
+
 // Where appends a list predicates to the AnnouncementMutation builder.
 func (m *AnnouncementMutation) Where(ps ...predicate.Announcement) {
 	m.predicates = append(m.predicates, ps...)
@@ -7188,9 +7249,12 @@ func (m *AnnouncementMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *AnnouncementMutation) AddedEdges() []string {
-	edges := make([]string, 0, 1)
+	edges := make([]string, 0, 2)
 	if m.reads != nil {
 		edges = append(edges, announcement.EdgeReads)
+	}
+	if m.email_jobs != nil {
+		edges = append(edges, announcement.EdgeEmailJobs)
 	}
 	return edges
 }
@@ -7205,15 +7269,24 @@ func (m *AnnouncementMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case announcement.EdgeEmailJobs:
+		ids := make([]ent.Value, 0, len(m.email_jobs))
+		for id := range m.email_jobs {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *AnnouncementMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 1)
+	edges := make([]string, 0, 2)
 	if m.removedreads != nil {
 		edges = append(edges, announcement.EdgeReads)
+	}
+	if m.removedemail_jobs != nil {
+		edges = append(edges, announcement.EdgeEmailJobs)
 	}
 	return edges
 }
@@ -7228,15 +7301,24 @@ func (m *AnnouncementMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case announcement.EdgeEmailJobs:
+		ids := make([]ent.Value, 0, len(m.removedemail_jobs))
+		for id := range m.removedemail_jobs {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *AnnouncementMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 1)
+	edges := make([]string, 0, 2)
 	if m.clearedreads {
 		edges = append(edges, announcement.EdgeReads)
+	}
+	if m.clearedemail_jobs {
+		edges = append(edges, announcement.EdgeEmailJobs)
 	}
 	return edges
 }
@@ -7247,6 +7329,8 @@ func (m *AnnouncementMutation) EdgeCleared(name string) bool {
 	switch name {
 	case announcement.EdgeReads:
 		return m.clearedreads
+	case announcement.EdgeEmailJobs:
+		return m.clearedemail_jobs
 	}
 	return false
 }
@@ -7266,8 +7350,3684 @@ func (m *AnnouncementMutation) ResetEdge(name string) error {
 	case announcement.EdgeReads:
 		m.ResetReads()
 		return nil
+	case announcement.EdgeEmailJobs:
+		m.ResetEmailJobs()
+		return nil
 	}
 	return fmt.Errorf("unknown Announcement edge %s", name)
+}
+
+// AnnouncementEmailDeliveryMutation represents an operation that mutates the AnnouncementEmailDelivery nodes in the graph.
+type AnnouncementEmailDeliveryMutation struct {
+	config
+	op               Op
+	typ              string
+	id               *int64
+	user_id          *int64
+	adduser_id       *int64
+	recipient_email  *string
+	recipient_name   *string
+	locale           *string
+	status           *string
+	attempt_count    *int
+	addattempt_count *int
+	max_attempts     *int
+	addmax_attempts  *int
+	next_attempt_at  *time.Time
+	lease_owner      *string
+	lease_expires_at *time.Time
+	last_error_class *string
+	last_error       *string
+	created_at       *time.Time
+	updated_at       *time.Time
+	sent_at          *time.Time
+	clearedFields    map[string]struct{}
+	job              *int64
+	clearedjob       bool
+	done             bool
+	oldValue         func(context.Context) (*AnnouncementEmailDelivery, error)
+	predicates       []predicate.AnnouncementEmailDelivery
+}
+
+var _ ent.Mutation = (*AnnouncementEmailDeliveryMutation)(nil)
+
+// announcementemaildeliveryOption allows management of the mutation configuration using functional options.
+type announcementemaildeliveryOption func(*AnnouncementEmailDeliveryMutation)
+
+// newAnnouncementEmailDeliveryMutation creates new mutation for the AnnouncementEmailDelivery entity.
+func newAnnouncementEmailDeliveryMutation(c config, op Op, opts ...announcementemaildeliveryOption) *AnnouncementEmailDeliveryMutation {
+	m := &AnnouncementEmailDeliveryMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeAnnouncementEmailDelivery,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withAnnouncementEmailDeliveryID sets the ID field of the mutation.
+func withAnnouncementEmailDeliveryID(id int64) announcementemaildeliveryOption {
+	return func(m *AnnouncementEmailDeliveryMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *AnnouncementEmailDelivery
+		)
+		m.oldValue = func(ctx context.Context) (*AnnouncementEmailDelivery, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().AnnouncementEmailDelivery.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withAnnouncementEmailDelivery sets the old AnnouncementEmailDelivery of the mutation.
+func withAnnouncementEmailDelivery(node *AnnouncementEmailDelivery) announcementemaildeliveryOption {
+	return func(m *AnnouncementEmailDeliveryMutation) {
+		m.oldValue = func(context.Context) (*AnnouncementEmailDelivery, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m AnnouncementEmailDeliveryMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m AnnouncementEmailDeliveryMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *AnnouncementEmailDeliveryMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *AnnouncementEmailDeliveryMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().AnnouncementEmailDelivery.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetJobID sets the "job_id" field.
+func (m *AnnouncementEmailDeliveryMutation) SetJobID(i int64) {
+	m.job = &i
+}
+
+// JobID returns the value of the "job_id" field in the mutation.
+func (m *AnnouncementEmailDeliveryMutation) JobID() (r int64, exists bool) {
+	v := m.job
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldJobID returns the old "job_id" field's value of the AnnouncementEmailDelivery entity.
+// If the AnnouncementEmailDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailDeliveryMutation) OldJobID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldJobID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldJobID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldJobID: %w", err)
+	}
+	return oldValue.JobID, nil
+}
+
+// ResetJobID resets all changes to the "job_id" field.
+func (m *AnnouncementEmailDeliveryMutation) ResetJobID() {
+	m.job = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *AnnouncementEmailDeliveryMutation) SetUserID(i int64) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *AnnouncementEmailDeliveryMutation) UserID() (r int64, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the AnnouncementEmailDelivery entity.
+// If the AnnouncementEmailDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailDeliveryMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *AnnouncementEmailDeliveryMutation) AddUserID(i int64) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *AnnouncementEmailDeliveryMutation) AddedUserID() (r int64, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *AnnouncementEmailDeliveryMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+}
+
+// SetRecipientEmail sets the "recipient_email" field.
+func (m *AnnouncementEmailDeliveryMutation) SetRecipientEmail(s string) {
+	m.recipient_email = &s
+}
+
+// RecipientEmail returns the value of the "recipient_email" field in the mutation.
+func (m *AnnouncementEmailDeliveryMutation) RecipientEmail() (r string, exists bool) {
+	v := m.recipient_email
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRecipientEmail returns the old "recipient_email" field's value of the AnnouncementEmailDelivery entity.
+// If the AnnouncementEmailDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailDeliveryMutation) OldRecipientEmail(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRecipientEmail is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRecipientEmail requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRecipientEmail: %w", err)
+	}
+	return oldValue.RecipientEmail, nil
+}
+
+// ResetRecipientEmail resets all changes to the "recipient_email" field.
+func (m *AnnouncementEmailDeliveryMutation) ResetRecipientEmail() {
+	m.recipient_email = nil
+}
+
+// SetRecipientName sets the "recipient_name" field.
+func (m *AnnouncementEmailDeliveryMutation) SetRecipientName(s string) {
+	m.recipient_name = &s
+}
+
+// RecipientName returns the value of the "recipient_name" field in the mutation.
+func (m *AnnouncementEmailDeliveryMutation) RecipientName() (r string, exists bool) {
+	v := m.recipient_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRecipientName returns the old "recipient_name" field's value of the AnnouncementEmailDelivery entity.
+// If the AnnouncementEmailDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailDeliveryMutation) OldRecipientName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRecipientName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRecipientName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRecipientName: %w", err)
+	}
+	return oldValue.RecipientName, nil
+}
+
+// ResetRecipientName resets all changes to the "recipient_name" field.
+func (m *AnnouncementEmailDeliveryMutation) ResetRecipientName() {
+	m.recipient_name = nil
+}
+
+// SetLocale sets the "locale" field.
+func (m *AnnouncementEmailDeliveryMutation) SetLocale(s string) {
+	m.locale = &s
+}
+
+// Locale returns the value of the "locale" field in the mutation.
+func (m *AnnouncementEmailDeliveryMutation) Locale() (r string, exists bool) {
+	v := m.locale
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLocale returns the old "locale" field's value of the AnnouncementEmailDelivery entity.
+// If the AnnouncementEmailDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailDeliveryMutation) OldLocale(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLocale is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLocale requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLocale: %w", err)
+	}
+	return oldValue.Locale, nil
+}
+
+// ResetLocale resets all changes to the "locale" field.
+func (m *AnnouncementEmailDeliveryMutation) ResetLocale() {
+	m.locale = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *AnnouncementEmailDeliveryMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *AnnouncementEmailDeliveryMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the AnnouncementEmailDelivery entity.
+// If the AnnouncementEmailDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailDeliveryMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *AnnouncementEmailDeliveryMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetAttemptCount sets the "attempt_count" field.
+func (m *AnnouncementEmailDeliveryMutation) SetAttemptCount(i int) {
+	m.attempt_count = &i
+	m.addattempt_count = nil
+}
+
+// AttemptCount returns the value of the "attempt_count" field in the mutation.
+func (m *AnnouncementEmailDeliveryMutation) AttemptCount() (r int, exists bool) {
+	v := m.attempt_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAttemptCount returns the old "attempt_count" field's value of the AnnouncementEmailDelivery entity.
+// If the AnnouncementEmailDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailDeliveryMutation) OldAttemptCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAttemptCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAttemptCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAttemptCount: %w", err)
+	}
+	return oldValue.AttemptCount, nil
+}
+
+// AddAttemptCount adds i to the "attempt_count" field.
+func (m *AnnouncementEmailDeliveryMutation) AddAttemptCount(i int) {
+	if m.addattempt_count != nil {
+		*m.addattempt_count += i
+	} else {
+		m.addattempt_count = &i
+	}
+}
+
+// AddedAttemptCount returns the value that was added to the "attempt_count" field in this mutation.
+func (m *AnnouncementEmailDeliveryMutation) AddedAttemptCount() (r int, exists bool) {
+	v := m.addattempt_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAttemptCount resets all changes to the "attempt_count" field.
+func (m *AnnouncementEmailDeliveryMutation) ResetAttemptCount() {
+	m.attempt_count = nil
+	m.addattempt_count = nil
+}
+
+// SetMaxAttempts sets the "max_attempts" field.
+func (m *AnnouncementEmailDeliveryMutation) SetMaxAttempts(i int) {
+	m.max_attempts = &i
+	m.addmax_attempts = nil
+}
+
+// MaxAttempts returns the value of the "max_attempts" field in the mutation.
+func (m *AnnouncementEmailDeliveryMutation) MaxAttempts() (r int, exists bool) {
+	v := m.max_attempts
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMaxAttempts returns the old "max_attempts" field's value of the AnnouncementEmailDelivery entity.
+// If the AnnouncementEmailDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailDeliveryMutation) OldMaxAttempts(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMaxAttempts is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMaxAttempts requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMaxAttempts: %w", err)
+	}
+	return oldValue.MaxAttempts, nil
+}
+
+// AddMaxAttempts adds i to the "max_attempts" field.
+func (m *AnnouncementEmailDeliveryMutation) AddMaxAttempts(i int) {
+	if m.addmax_attempts != nil {
+		*m.addmax_attempts += i
+	} else {
+		m.addmax_attempts = &i
+	}
+}
+
+// AddedMaxAttempts returns the value that was added to the "max_attempts" field in this mutation.
+func (m *AnnouncementEmailDeliveryMutation) AddedMaxAttempts() (r int, exists bool) {
+	v := m.addmax_attempts
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetMaxAttempts resets all changes to the "max_attempts" field.
+func (m *AnnouncementEmailDeliveryMutation) ResetMaxAttempts() {
+	m.max_attempts = nil
+	m.addmax_attempts = nil
+}
+
+// SetNextAttemptAt sets the "next_attempt_at" field.
+func (m *AnnouncementEmailDeliveryMutation) SetNextAttemptAt(t time.Time) {
+	m.next_attempt_at = &t
+}
+
+// NextAttemptAt returns the value of the "next_attempt_at" field in the mutation.
+func (m *AnnouncementEmailDeliveryMutation) NextAttemptAt() (r time.Time, exists bool) {
+	v := m.next_attempt_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNextAttemptAt returns the old "next_attempt_at" field's value of the AnnouncementEmailDelivery entity.
+// If the AnnouncementEmailDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailDeliveryMutation) OldNextAttemptAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNextAttemptAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNextAttemptAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNextAttemptAt: %w", err)
+	}
+	return oldValue.NextAttemptAt, nil
+}
+
+// ResetNextAttemptAt resets all changes to the "next_attempt_at" field.
+func (m *AnnouncementEmailDeliveryMutation) ResetNextAttemptAt() {
+	m.next_attempt_at = nil
+}
+
+// SetLeaseOwner sets the "lease_owner" field.
+func (m *AnnouncementEmailDeliveryMutation) SetLeaseOwner(s string) {
+	m.lease_owner = &s
+}
+
+// LeaseOwner returns the value of the "lease_owner" field in the mutation.
+func (m *AnnouncementEmailDeliveryMutation) LeaseOwner() (r string, exists bool) {
+	v := m.lease_owner
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLeaseOwner returns the old "lease_owner" field's value of the AnnouncementEmailDelivery entity.
+// If the AnnouncementEmailDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailDeliveryMutation) OldLeaseOwner(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLeaseOwner is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLeaseOwner requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLeaseOwner: %w", err)
+	}
+	return oldValue.LeaseOwner, nil
+}
+
+// ClearLeaseOwner clears the value of the "lease_owner" field.
+func (m *AnnouncementEmailDeliveryMutation) ClearLeaseOwner() {
+	m.lease_owner = nil
+	m.clearedFields[announcementemaildelivery.FieldLeaseOwner] = struct{}{}
+}
+
+// LeaseOwnerCleared returns if the "lease_owner" field was cleared in this mutation.
+func (m *AnnouncementEmailDeliveryMutation) LeaseOwnerCleared() bool {
+	_, ok := m.clearedFields[announcementemaildelivery.FieldLeaseOwner]
+	return ok
+}
+
+// ResetLeaseOwner resets all changes to the "lease_owner" field.
+func (m *AnnouncementEmailDeliveryMutation) ResetLeaseOwner() {
+	m.lease_owner = nil
+	delete(m.clearedFields, announcementemaildelivery.FieldLeaseOwner)
+}
+
+// SetLeaseExpiresAt sets the "lease_expires_at" field.
+func (m *AnnouncementEmailDeliveryMutation) SetLeaseExpiresAt(t time.Time) {
+	m.lease_expires_at = &t
+}
+
+// LeaseExpiresAt returns the value of the "lease_expires_at" field in the mutation.
+func (m *AnnouncementEmailDeliveryMutation) LeaseExpiresAt() (r time.Time, exists bool) {
+	v := m.lease_expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLeaseExpiresAt returns the old "lease_expires_at" field's value of the AnnouncementEmailDelivery entity.
+// If the AnnouncementEmailDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailDeliveryMutation) OldLeaseExpiresAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLeaseExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLeaseExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLeaseExpiresAt: %w", err)
+	}
+	return oldValue.LeaseExpiresAt, nil
+}
+
+// ClearLeaseExpiresAt clears the value of the "lease_expires_at" field.
+func (m *AnnouncementEmailDeliveryMutation) ClearLeaseExpiresAt() {
+	m.lease_expires_at = nil
+	m.clearedFields[announcementemaildelivery.FieldLeaseExpiresAt] = struct{}{}
+}
+
+// LeaseExpiresAtCleared returns if the "lease_expires_at" field was cleared in this mutation.
+func (m *AnnouncementEmailDeliveryMutation) LeaseExpiresAtCleared() bool {
+	_, ok := m.clearedFields[announcementemaildelivery.FieldLeaseExpiresAt]
+	return ok
+}
+
+// ResetLeaseExpiresAt resets all changes to the "lease_expires_at" field.
+func (m *AnnouncementEmailDeliveryMutation) ResetLeaseExpiresAt() {
+	m.lease_expires_at = nil
+	delete(m.clearedFields, announcementemaildelivery.FieldLeaseExpiresAt)
+}
+
+// SetLastErrorClass sets the "last_error_class" field.
+func (m *AnnouncementEmailDeliveryMutation) SetLastErrorClass(s string) {
+	m.last_error_class = &s
+}
+
+// LastErrorClass returns the value of the "last_error_class" field in the mutation.
+func (m *AnnouncementEmailDeliveryMutation) LastErrorClass() (r string, exists bool) {
+	v := m.last_error_class
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastErrorClass returns the old "last_error_class" field's value of the AnnouncementEmailDelivery entity.
+// If the AnnouncementEmailDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailDeliveryMutation) OldLastErrorClass(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastErrorClass is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastErrorClass requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastErrorClass: %w", err)
+	}
+	return oldValue.LastErrorClass, nil
+}
+
+// ClearLastErrorClass clears the value of the "last_error_class" field.
+func (m *AnnouncementEmailDeliveryMutation) ClearLastErrorClass() {
+	m.last_error_class = nil
+	m.clearedFields[announcementemaildelivery.FieldLastErrorClass] = struct{}{}
+}
+
+// LastErrorClassCleared returns if the "last_error_class" field was cleared in this mutation.
+func (m *AnnouncementEmailDeliveryMutation) LastErrorClassCleared() bool {
+	_, ok := m.clearedFields[announcementemaildelivery.FieldLastErrorClass]
+	return ok
+}
+
+// ResetLastErrorClass resets all changes to the "last_error_class" field.
+func (m *AnnouncementEmailDeliveryMutation) ResetLastErrorClass() {
+	m.last_error_class = nil
+	delete(m.clearedFields, announcementemaildelivery.FieldLastErrorClass)
+}
+
+// SetLastError sets the "last_error" field.
+func (m *AnnouncementEmailDeliveryMutation) SetLastError(s string) {
+	m.last_error = &s
+}
+
+// LastError returns the value of the "last_error" field in the mutation.
+func (m *AnnouncementEmailDeliveryMutation) LastError() (r string, exists bool) {
+	v := m.last_error
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastError returns the old "last_error" field's value of the AnnouncementEmailDelivery entity.
+// If the AnnouncementEmailDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailDeliveryMutation) OldLastError(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastError is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastError requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastError: %w", err)
+	}
+	return oldValue.LastError, nil
+}
+
+// ClearLastError clears the value of the "last_error" field.
+func (m *AnnouncementEmailDeliveryMutation) ClearLastError() {
+	m.last_error = nil
+	m.clearedFields[announcementemaildelivery.FieldLastError] = struct{}{}
+}
+
+// LastErrorCleared returns if the "last_error" field was cleared in this mutation.
+func (m *AnnouncementEmailDeliveryMutation) LastErrorCleared() bool {
+	_, ok := m.clearedFields[announcementemaildelivery.FieldLastError]
+	return ok
+}
+
+// ResetLastError resets all changes to the "last_error" field.
+func (m *AnnouncementEmailDeliveryMutation) ResetLastError() {
+	m.last_error = nil
+	delete(m.clearedFields, announcementemaildelivery.FieldLastError)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *AnnouncementEmailDeliveryMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *AnnouncementEmailDeliveryMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the AnnouncementEmailDelivery entity.
+// If the AnnouncementEmailDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailDeliveryMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *AnnouncementEmailDeliveryMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *AnnouncementEmailDeliveryMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *AnnouncementEmailDeliveryMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the AnnouncementEmailDelivery entity.
+// If the AnnouncementEmailDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailDeliveryMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *AnnouncementEmailDeliveryMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetSentAt sets the "sent_at" field.
+func (m *AnnouncementEmailDeliveryMutation) SetSentAt(t time.Time) {
+	m.sent_at = &t
+}
+
+// SentAt returns the value of the "sent_at" field in the mutation.
+func (m *AnnouncementEmailDeliveryMutation) SentAt() (r time.Time, exists bool) {
+	v := m.sent_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSentAt returns the old "sent_at" field's value of the AnnouncementEmailDelivery entity.
+// If the AnnouncementEmailDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailDeliveryMutation) OldSentAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSentAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSentAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSentAt: %w", err)
+	}
+	return oldValue.SentAt, nil
+}
+
+// ClearSentAt clears the value of the "sent_at" field.
+func (m *AnnouncementEmailDeliveryMutation) ClearSentAt() {
+	m.sent_at = nil
+	m.clearedFields[announcementemaildelivery.FieldSentAt] = struct{}{}
+}
+
+// SentAtCleared returns if the "sent_at" field was cleared in this mutation.
+func (m *AnnouncementEmailDeliveryMutation) SentAtCleared() bool {
+	_, ok := m.clearedFields[announcementemaildelivery.FieldSentAt]
+	return ok
+}
+
+// ResetSentAt resets all changes to the "sent_at" field.
+func (m *AnnouncementEmailDeliveryMutation) ResetSentAt() {
+	m.sent_at = nil
+	delete(m.clearedFields, announcementemaildelivery.FieldSentAt)
+}
+
+// ClearJob clears the "job" edge to the AnnouncementEmailJob entity.
+func (m *AnnouncementEmailDeliveryMutation) ClearJob() {
+	m.clearedjob = true
+	m.clearedFields[announcementemaildelivery.FieldJobID] = struct{}{}
+}
+
+// JobCleared reports if the "job" edge to the AnnouncementEmailJob entity was cleared.
+func (m *AnnouncementEmailDeliveryMutation) JobCleared() bool {
+	return m.clearedjob
+}
+
+// JobIDs returns the "job" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// JobID instead. It exists only for internal usage by the builders.
+func (m *AnnouncementEmailDeliveryMutation) JobIDs() (ids []int64) {
+	if id := m.job; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetJob resets all changes to the "job" edge.
+func (m *AnnouncementEmailDeliveryMutation) ResetJob() {
+	m.job = nil
+	m.clearedjob = false
+}
+
+// Where appends a list predicates to the AnnouncementEmailDeliveryMutation builder.
+func (m *AnnouncementEmailDeliveryMutation) Where(ps ...predicate.AnnouncementEmailDelivery) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the AnnouncementEmailDeliveryMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *AnnouncementEmailDeliveryMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.AnnouncementEmailDelivery, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *AnnouncementEmailDeliveryMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *AnnouncementEmailDeliveryMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (AnnouncementEmailDelivery).
+func (m *AnnouncementEmailDeliveryMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *AnnouncementEmailDeliveryMutation) Fields() []string {
+	fields := make([]string, 0, 16)
+	if m.job != nil {
+		fields = append(fields, announcementemaildelivery.FieldJobID)
+	}
+	if m.user_id != nil {
+		fields = append(fields, announcementemaildelivery.FieldUserID)
+	}
+	if m.recipient_email != nil {
+		fields = append(fields, announcementemaildelivery.FieldRecipientEmail)
+	}
+	if m.recipient_name != nil {
+		fields = append(fields, announcementemaildelivery.FieldRecipientName)
+	}
+	if m.locale != nil {
+		fields = append(fields, announcementemaildelivery.FieldLocale)
+	}
+	if m.status != nil {
+		fields = append(fields, announcementemaildelivery.FieldStatus)
+	}
+	if m.attempt_count != nil {
+		fields = append(fields, announcementemaildelivery.FieldAttemptCount)
+	}
+	if m.max_attempts != nil {
+		fields = append(fields, announcementemaildelivery.FieldMaxAttempts)
+	}
+	if m.next_attempt_at != nil {
+		fields = append(fields, announcementemaildelivery.FieldNextAttemptAt)
+	}
+	if m.lease_owner != nil {
+		fields = append(fields, announcementemaildelivery.FieldLeaseOwner)
+	}
+	if m.lease_expires_at != nil {
+		fields = append(fields, announcementemaildelivery.FieldLeaseExpiresAt)
+	}
+	if m.last_error_class != nil {
+		fields = append(fields, announcementemaildelivery.FieldLastErrorClass)
+	}
+	if m.last_error != nil {
+		fields = append(fields, announcementemaildelivery.FieldLastError)
+	}
+	if m.created_at != nil {
+		fields = append(fields, announcementemaildelivery.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, announcementemaildelivery.FieldUpdatedAt)
+	}
+	if m.sent_at != nil {
+		fields = append(fields, announcementemaildelivery.FieldSentAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *AnnouncementEmailDeliveryMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case announcementemaildelivery.FieldJobID:
+		return m.JobID()
+	case announcementemaildelivery.FieldUserID:
+		return m.UserID()
+	case announcementemaildelivery.FieldRecipientEmail:
+		return m.RecipientEmail()
+	case announcementemaildelivery.FieldRecipientName:
+		return m.RecipientName()
+	case announcementemaildelivery.FieldLocale:
+		return m.Locale()
+	case announcementemaildelivery.FieldStatus:
+		return m.Status()
+	case announcementemaildelivery.FieldAttemptCount:
+		return m.AttemptCount()
+	case announcementemaildelivery.FieldMaxAttempts:
+		return m.MaxAttempts()
+	case announcementemaildelivery.FieldNextAttemptAt:
+		return m.NextAttemptAt()
+	case announcementemaildelivery.FieldLeaseOwner:
+		return m.LeaseOwner()
+	case announcementemaildelivery.FieldLeaseExpiresAt:
+		return m.LeaseExpiresAt()
+	case announcementemaildelivery.FieldLastErrorClass:
+		return m.LastErrorClass()
+	case announcementemaildelivery.FieldLastError:
+		return m.LastError()
+	case announcementemaildelivery.FieldCreatedAt:
+		return m.CreatedAt()
+	case announcementemaildelivery.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case announcementemaildelivery.FieldSentAt:
+		return m.SentAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *AnnouncementEmailDeliveryMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case announcementemaildelivery.FieldJobID:
+		return m.OldJobID(ctx)
+	case announcementemaildelivery.FieldUserID:
+		return m.OldUserID(ctx)
+	case announcementemaildelivery.FieldRecipientEmail:
+		return m.OldRecipientEmail(ctx)
+	case announcementemaildelivery.FieldRecipientName:
+		return m.OldRecipientName(ctx)
+	case announcementemaildelivery.FieldLocale:
+		return m.OldLocale(ctx)
+	case announcementemaildelivery.FieldStatus:
+		return m.OldStatus(ctx)
+	case announcementemaildelivery.FieldAttemptCount:
+		return m.OldAttemptCount(ctx)
+	case announcementemaildelivery.FieldMaxAttempts:
+		return m.OldMaxAttempts(ctx)
+	case announcementemaildelivery.FieldNextAttemptAt:
+		return m.OldNextAttemptAt(ctx)
+	case announcementemaildelivery.FieldLeaseOwner:
+		return m.OldLeaseOwner(ctx)
+	case announcementemaildelivery.FieldLeaseExpiresAt:
+		return m.OldLeaseExpiresAt(ctx)
+	case announcementemaildelivery.FieldLastErrorClass:
+		return m.OldLastErrorClass(ctx)
+	case announcementemaildelivery.FieldLastError:
+		return m.OldLastError(ctx)
+	case announcementemaildelivery.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case announcementemaildelivery.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case announcementemaildelivery.FieldSentAt:
+		return m.OldSentAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown AnnouncementEmailDelivery field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *AnnouncementEmailDeliveryMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case announcementemaildelivery.FieldJobID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetJobID(v)
+		return nil
+	case announcementemaildelivery.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case announcementemaildelivery.FieldRecipientEmail:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRecipientEmail(v)
+		return nil
+	case announcementemaildelivery.FieldRecipientName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRecipientName(v)
+		return nil
+	case announcementemaildelivery.FieldLocale:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLocale(v)
+		return nil
+	case announcementemaildelivery.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case announcementemaildelivery.FieldAttemptCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAttemptCount(v)
+		return nil
+	case announcementemaildelivery.FieldMaxAttempts:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMaxAttempts(v)
+		return nil
+	case announcementemaildelivery.FieldNextAttemptAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNextAttemptAt(v)
+		return nil
+	case announcementemaildelivery.FieldLeaseOwner:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLeaseOwner(v)
+		return nil
+	case announcementemaildelivery.FieldLeaseExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLeaseExpiresAt(v)
+		return nil
+	case announcementemaildelivery.FieldLastErrorClass:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastErrorClass(v)
+		return nil
+	case announcementemaildelivery.FieldLastError:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastError(v)
+		return nil
+	case announcementemaildelivery.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case announcementemaildelivery.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case announcementemaildelivery.FieldSentAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSentAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown AnnouncementEmailDelivery field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *AnnouncementEmailDeliveryMutation) AddedFields() []string {
+	var fields []string
+	if m.adduser_id != nil {
+		fields = append(fields, announcementemaildelivery.FieldUserID)
+	}
+	if m.addattempt_count != nil {
+		fields = append(fields, announcementemaildelivery.FieldAttemptCount)
+	}
+	if m.addmax_attempts != nil {
+		fields = append(fields, announcementemaildelivery.FieldMaxAttempts)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *AnnouncementEmailDeliveryMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case announcementemaildelivery.FieldUserID:
+		return m.AddedUserID()
+	case announcementemaildelivery.FieldAttemptCount:
+		return m.AddedAttemptCount()
+	case announcementemaildelivery.FieldMaxAttempts:
+		return m.AddedMaxAttempts()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *AnnouncementEmailDeliveryMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case announcementemaildelivery.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
+	case announcementemaildelivery.FieldAttemptCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAttemptCount(v)
+		return nil
+	case announcementemaildelivery.FieldMaxAttempts:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddMaxAttempts(v)
+		return nil
+	}
+	return fmt.Errorf("unknown AnnouncementEmailDelivery numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *AnnouncementEmailDeliveryMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(announcementemaildelivery.FieldLeaseOwner) {
+		fields = append(fields, announcementemaildelivery.FieldLeaseOwner)
+	}
+	if m.FieldCleared(announcementemaildelivery.FieldLeaseExpiresAt) {
+		fields = append(fields, announcementemaildelivery.FieldLeaseExpiresAt)
+	}
+	if m.FieldCleared(announcementemaildelivery.FieldLastErrorClass) {
+		fields = append(fields, announcementemaildelivery.FieldLastErrorClass)
+	}
+	if m.FieldCleared(announcementemaildelivery.FieldLastError) {
+		fields = append(fields, announcementemaildelivery.FieldLastError)
+	}
+	if m.FieldCleared(announcementemaildelivery.FieldSentAt) {
+		fields = append(fields, announcementemaildelivery.FieldSentAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *AnnouncementEmailDeliveryMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *AnnouncementEmailDeliveryMutation) ClearField(name string) error {
+	switch name {
+	case announcementemaildelivery.FieldLeaseOwner:
+		m.ClearLeaseOwner()
+		return nil
+	case announcementemaildelivery.FieldLeaseExpiresAt:
+		m.ClearLeaseExpiresAt()
+		return nil
+	case announcementemaildelivery.FieldLastErrorClass:
+		m.ClearLastErrorClass()
+		return nil
+	case announcementemaildelivery.FieldLastError:
+		m.ClearLastError()
+		return nil
+	case announcementemaildelivery.FieldSentAt:
+		m.ClearSentAt()
+		return nil
+	}
+	return fmt.Errorf("unknown AnnouncementEmailDelivery nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *AnnouncementEmailDeliveryMutation) ResetField(name string) error {
+	switch name {
+	case announcementemaildelivery.FieldJobID:
+		m.ResetJobID()
+		return nil
+	case announcementemaildelivery.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case announcementemaildelivery.FieldRecipientEmail:
+		m.ResetRecipientEmail()
+		return nil
+	case announcementemaildelivery.FieldRecipientName:
+		m.ResetRecipientName()
+		return nil
+	case announcementemaildelivery.FieldLocale:
+		m.ResetLocale()
+		return nil
+	case announcementemaildelivery.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case announcementemaildelivery.FieldAttemptCount:
+		m.ResetAttemptCount()
+		return nil
+	case announcementemaildelivery.FieldMaxAttempts:
+		m.ResetMaxAttempts()
+		return nil
+	case announcementemaildelivery.FieldNextAttemptAt:
+		m.ResetNextAttemptAt()
+		return nil
+	case announcementemaildelivery.FieldLeaseOwner:
+		m.ResetLeaseOwner()
+		return nil
+	case announcementemaildelivery.FieldLeaseExpiresAt:
+		m.ResetLeaseExpiresAt()
+		return nil
+	case announcementemaildelivery.FieldLastErrorClass:
+		m.ResetLastErrorClass()
+		return nil
+	case announcementemaildelivery.FieldLastError:
+		m.ResetLastError()
+		return nil
+	case announcementemaildelivery.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case announcementemaildelivery.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case announcementemaildelivery.FieldSentAt:
+		m.ResetSentAt()
+		return nil
+	}
+	return fmt.Errorf("unknown AnnouncementEmailDelivery field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *AnnouncementEmailDeliveryMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.job != nil {
+		edges = append(edges, announcementemaildelivery.EdgeJob)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *AnnouncementEmailDeliveryMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case announcementemaildelivery.EdgeJob:
+		if id := m.job; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *AnnouncementEmailDeliveryMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *AnnouncementEmailDeliveryMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *AnnouncementEmailDeliveryMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedjob {
+		edges = append(edges, announcementemaildelivery.EdgeJob)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *AnnouncementEmailDeliveryMutation) EdgeCleared(name string) bool {
+	switch name {
+	case announcementemaildelivery.EdgeJob:
+		return m.clearedjob
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *AnnouncementEmailDeliveryMutation) ClearEdge(name string) error {
+	switch name {
+	case announcementemaildelivery.EdgeJob:
+		m.ClearJob()
+		return nil
+	}
+	return fmt.Errorf("unknown AnnouncementEmailDelivery unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *AnnouncementEmailDeliveryMutation) ResetEdge(name string) error {
+	switch name {
+	case announcementemaildelivery.EdgeJob:
+		m.ResetJob()
+		return nil
+	}
+	return fmt.Errorf("unknown AnnouncementEmailDelivery edge %s", name)
+}
+
+// AnnouncementEmailJobMutation represents an operation that mutates the AnnouncementEmailJob nodes in the graph.
+type AnnouncementEmailJobMutation struct {
+	config
+	op                       Op
+	typ                      string
+	id                       *int64
+	status                   *string
+	scheduled_at             *time.Time
+	recipient_cutoff_id      *int64
+	addrecipient_cutoff_id   *int64
+	preparation_cursor_id    *int64
+	addpreparation_cursor_id *int64
+	recipient_count          *int64
+	addrecipient_count       *int64
+	pending_count            *int64
+	addpending_count         *int64
+	sending_count            *int64
+	addsending_count         *int64
+	sent_count               *int64
+	addsent_count            *int64
+	failed_count             *int64
+	addfailed_count          *int64
+	ambiguous_count          *int64
+	addambiguous_count       *int64
+	skipped_count            *int64
+	addskipped_count         *int64
+	attempt_count            *int
+	addattempt_count         *int
+	created_by               *int64
+	addcreated_by            *int64
+	last_error_code          *string
+	announcement_title       *string
+	announcement_content     *string
+	announcement_starts_at   *time.Time
+	lease_owner              *string
+	lease_expires_at         *time.Time
+	last_error               *string
+	created_at               *time.Time
+	updated_at               *time.Time
+	started_at               *time.Time
+	finished_at              *time.Time
+	clearedFields            map[string]struct{}
+	announcement             *int64
+	clearedannouncement      bool
+	deliveries               map[int64]struct{}
+	removeddeliveries        map[int64]struct{}
+	cleareddeliveries        bool
+	done                     bool
+	oldValue                 func(context.Context) (*AnnouncementEmailJob, error)
+	predicates               []predicate.AnnouncementEmailJob
+}
+
+var _ ent.Mutation = (*AnnouncementEmailJobMutation)(nil)
+
+// announcementemailjobOption allows management of the mutation configuration using functional options.
+type announcementemailjobOption func(*AnnouncementEmailJobMutation)
+
+// newAnnouncementEmailJobMutation creates new mutation for the AnnouncementEmailJob entity.
+func newAnnouncementEmailJobMutation(c config, op Op, opts ...announcementemailjobOption) *AnnouncementEmailJobMutation {
+	m := &AnnouncementEmailJobMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeAnnouncementEmailJob,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withAnnouncementEmailJobID sets the ID field of the mutation.
+func withAnnouncementEmailJobID(id int64) announcementemailjobOption {
+	return func(m *AnnouncementEmailJobMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *AnnouncementEmailJob
+		)
+		m.oldValue = func(ctx context.Context) (*AnnouncementEmailJob, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().AnnouncementEmailJob.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withAnnouncementEmailJob sets the old AnnouncementEmailJob of the mutation.
+func withAnnouncementEmailJob(node *AnnouncementEmailJob) announcementemailjobOption {
+	return func(m *AnnouncementEmailJobMutation) {
+		m.oldValue = func(context.Context) (*AnnouncementEmailJob, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m AnnouncementEmailJobMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m AnnouncementEmailJobMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *AnnouncementEmailJobMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *AnnouncementEmailJobMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().AnnouncementEmailJob.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetAnnouncementID sets the "announcement_id" field.
+func (m *AnnouncementEmailJobMutation) SetAnnouncementID(i int64) {
+	m.announcement = &i
+}
+
+// AnnouncementID returns the value of the "announcement_id" field in the mutation.
+func (m *AnnouncementEmailJobMutation) AnnouncementID() (r int64, exists bool) {
+	v := m.announcement
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAnnouncementID returns the old "announcement_id" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldAnnouncementID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAnnouncementID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAnnouncementID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAnnouncementID: %w", err)
+	}
+	return oldValue.AnnouncementID, nil
+}
+
+// ResetAnnouncementID resets all changes to the "announcement_id" field.
+func (m *AnnouncementEmailJobMutation) ResetAnnouncementID() {
+	m.announcement = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *AnnouncementEmailJobMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *AnnouncementEmailJobMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *AnnouncementEmailJobMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetScheduledAt sets the "scheduled_at" field.
+func (m *AnnouncementEmailJobMutation) SetScheduledAt(t time.Time) {
+	m.scheduled_at = &t
+}
+
+// ScheduledAt returns the value of the "scheduled_at" field in the mutation.
+func (m *AnnouncementEmailJobMutation) ScheduledAt() (r time.Time, exists bool) {
+	v := m.scheduled_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldScheduledAt returns the old "scheduled_at" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldScheduledAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldScheduledAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldScheduledAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldScheduledAt: %w", err)
+	}
+	return oldValue.ScheduledAt, nil
+}
+
+// ResetScheduledAt resets all changes to the "scheduled_at" field.
+func (m *AnnouncementEmailJobMutation) ResetScheduledAt() {
+	m.scheduled_at = nil
+}
+
+// SetRecipientCutoffID sets the "recipient_cutoff_id" field.
+func (m *AnnouncementEmailJobMutation) SetRecipientCutoffID(i int64) {
+	m.recipient_cutoff_id = &i
+	m.addrecipient_cutoff_id = nil
+}
+
+// RecipientCutoffID returns the value of the "recipient_cutoff_id" field in the mutation.
+func (m *AnnouncementEmailJobMutation) RecipientCutoffID() (r int64, exists bool) {
+	v := m.recipient_cutoff_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRecipientCutoffID returns the old "recipient_cutoff_id" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldRecipientCutoffID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRecipientCutoffID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRecipientCutoffID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRecipientCutoffID: %w", err)
+	}
+	return oldValue.RecipientCutoffID, nil
+}
+
+// AddRecipientCutoffID adds i to the "recipient_cutoff_id" field.
+func (m *AnnouncementEmailJobMutation) AddRecipientCutoffID(i int64) {
+	if m.addrecipient_cutoff_id != nil {
+		*m.addrecipient_cutoff_id += i
+	} else {
+		m.addrecipient_cutoff_id = &i
+	}
+}
+
+// AddedRecipientCutoffID returns the value that was added to the "recipient_cutoff_id" field in this mutation.
+func (m *AnnouncementEmailJobMutation) AddedRecipientCutoffID() (r int64, exists bool) {
+	v := m.addrecipient_cutoff_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRecipientCutoffID resets all changes to the "recipient_cutoff_id" field.
+func (m *AnnouncementEmailJobMutation) ResetRecipientCutoffID() {
+	m.recipient_cutoff_id = nil
+	m.addrecipient_cutoff_id = nil
+}
+
+// SetPreparationCursorID sets the "preparation_cursor_id" field.
+func (m *AnnouncementEmailJobMutation) SetPreparationCursorID(i int64) {
+	m.preparation_cursor_id = &i
+	m.addpreparation_cursor_id = nil
+}
+
+// PreparationCursorID returns the value of the "preparation_cursor_id" field in the mutation.
+func (m *AnnouncementEmailJobMutation) PreparationCursorID() (r int64, exists bool) {
+	v := m.preparation_cursor_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPreparationCursorID returns the old "preparation_cursor_id" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldPreparationCursorID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPreparationCursorID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPreparationCursorID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPreparationCursorID: %w", err)
+	}
+	return oldValue.PreparationCursorID, nil
+}
+
+// AddPreparationCursorID adds i to the "preparation_cursor_id" field.
+func (m *AnnouncementEmailJobMutation) AddPreparationCursorID(i int64) {
+	if m.addpreparation_cursor_id != nil {
+		*m.addpreparation_cursor_id += i
+	} else {
+		m.addpreparation_cursor_id = &i
+	}
+}
+
+// AddedPreparationCursorID returns the value that was added to the "preparation_cursor_id" field in this mutation.
+func (m *AnnouncementEmailJobMutation) AddedPreparationCursorID() (r int64, exists bool) {
+	v := m.addpreparation_cursor_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPreparationCursorID resets all changes to the "preparation_cursor_id" field.
+func (m *AnnouncementEmailJobMutation) ResetPreparationCursorID() {
+	m.preparation_cursor_id = nil
+	m.addpreparation_cursor_id = nil
+}
+
+// SetRecipientCount sets the "recipient_count" field.
+func (m *AnnouncementEmailJobMutation) SetRecipientCount(i int64) {
+	m.recipient_count = &i
+	m.addrecipient_count = nil
+}
+
+// RecipientCount returns the value of the "recipient_count" field in the mutation.
+func (m *AnnouncementEmailJobMutation) RecipientCount() (r int64, exists bool) {
+	v := m.recipient_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRecipientCount returns the old "recipient_count" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldRecipientCount(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRecipientCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRecipientCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRecipientCount: %w", err)
+	}
+	return oldValue.RecipientCount, nil
+}
+
+// AddRecipientCount adds i to the "recipient_count" field.
+func (m *AnnouncementEmailJobMutation) AddRecipientCount(i int64) {
+	if m.addrecipient_count != nil {
+		*m.addrecipient_count += i
+	} else {
+		m.addrecipient_count = &i
+	}
+}
+
+// AddedRecipientCount returns the value that was added to the "recipient_count" field in this mutation.
+func (m *AnnouncementEmailJobMutation) AddedRecipientCount() (r int64, exists bool) {
+	v := m.addrecipient_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRecipientCount resets all changes to the "recipient_count" field.
+func (m *AnnouncementEmailJobMutation) ResetRecipientCount() {
+	m.recipient_count = nil
+	m.addrecipient_count = nil
+}
+
+// SetPendingCount sets the "pending_count" field.
+func (m *AnnouncementEmailJobMutation) SetPendingCount(i int64) {
+	m.pending_count = &i
+	m.addpending_count = nil
+}
+
+// PendingCount returns the value of the "pending_count" field in the mutation.
+func (m *AnnouncementEmailJobMutation) PendingCount() (r int64, exists bool) {
+	v := m.pending_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPendingCount returns the old "pending_count" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldPendingCount(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPendingCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPendingCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPendingCount: %w", err)
+	}
+	return oldValue.PendingCount, nil
+}
+
+// AddPendingCount adds i to the "pending_count" field.
+func (m *AnnouncementEmailJobMutation) AddPendingCount(i int64) {
+	if m.addpending_count != nil {
+		*m.addpending_count += i
+	} else {
+		m.addpending_count = &i
+	}
+}
+
+// AddedPendingCount returns the value that was added to the "pending_count" field in this mutation.
+func (m *AnnouncementEmailJobMutation) AddedPendingCount() (r int64, exists bool) {
+	v := m.addpending_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPendingCount resets all changes to the "pending_count" field.
+func (m *AnnouncementEmailJobMutation) ResetPendingCount() {
+	m.pending_count = nil
+	m.addpending_count = nil
+}
+
+// SetSendingCount sets the "sending_count" field.
+func (m *AnnouncementEmailJobMutation) SetSendingCount(i int64) {
+	m.sending_count = &i
+	m.addsending_count = nil
+}
+
+// SendingCount returns the value of the "sending_count" field in the mutation.
+func (m *AnnouncementEmailJobMutation) SendingCount() (r int64, exists bool) {
+	v := m.sending_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSendingCount returns the old "sending_count" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldSendingCount(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSendingCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSendingCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSendingCount: %w", err)
+	}
+	return oldValue.SendingCount, nil
+}
+
+// AddSendingCount adds i to the "sending_count" field.
+func (m *AnnouncementEmailJobMutation) AddSendingCount(i int64) {
+	if m.addsending_count != nil {
+		*m.addsending_count += i
+	} else {
+		m.addsending_count = &i
+	}
+}
+
+// AddedSendingCount returns the value that was added to the "sending_count" field in this mutation.
+func (m *AnnouncementEmailJobMutation) AddedSendingCount() (r int64, exists bool) {
+	v := m.addsending_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSendingCount resets all changes to the "sending_count" field.
+func (m *AnnouncementEmailJobMutation) ResetSendingCount() {
+	m.sending_count = nil
+	m.addsending_count = nil
+}
+
+// SetSentCount sets the "sent_count" field.
+func (m *AnnouncementEmailJobMutation) SetSentCount(i int64) {
+	m.sent_count = &i
+	m.addsent_count = nil
+}
+
+// SentCount returns the value of the "sent_count" field in the mutation.
+func (m *AnnouncementEmailJobMutation) SentCount() (r int64, exists bool) {
+	v := m.sent_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSentCount returns the old "sent_count" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldSentCount(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSentCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSentCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSentCount: %w", err)
+	}
+	return oldValue.SentCount, nil
+}
+
+// AddSentCount adds i to the "sent_count" field.
+func (m *AnnouncementEmailJobMutation) AddSentCount(i int64) {
+	if m.addsent_count != nil {
+		*m.addsent_count += i
+	} else {
+		m.addsent_count = &i
+	}
+}
+
+// AddedSentCount returns the value that was added to the "sent_count" field in this mutation.
+func (m *AnnouncementEmailJobMutation) AddedSentCount() (r int64, exists bool) {
+	v := m.addsent_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSentCount resets all changes to the "sent_count" field.
+func (m *AnnouncementEmailJobMutation) ResetSentCount() {
+	m.sent_count = nil
+	m.addsent_count = nil
+}
+
+// SetFailedCount sets the "failed_count" field.
+func (m *AnnouncementEmailJobMutation) SetFailedCount(i int64) {
+	m.failed_count = &i
+	m.addfailed_count = nil
+}
+
+// FailedCount returns the value of the "failed_count" field in the mutation.
+func (m *AnnouncementEmailJobMutation) FailedCount() (r int64, exists bool) {
+	v := m.failed_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailedCount returns the old "failed_count" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldFailedCount(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailedCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailedCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailedCount: %w", err)
+	}
+	return oldValue.FailedCount, nil
+}
+
+// AddFailedCount adds i to the "failed_count" field.
+func (m *AnnouncementEmailJobMutation) AddFailedCount(i int64) {
+	if m.addfailed_count != nil {
+		*m.addfailed_count += i
+	} else {
+		m.addfailed_count = &i
+	}
+}
+
+// AddedFailedCount returns the value that was added to the "failed_count" field in this mutation.
+func (m *AnnouncementEmailJobMutation) AddedFailedCount() (r int64, exists bool) {
+	v := m.addfailed_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetFailedCount resets all changes to the "failed_count" field.
+func (m *AnnouncementEmailJobMutation) ResetFailedCount() {
+	m.failed_count = nil
+	m.addfailed_count = nil
+}
+
+// SetAmbiguousCount sets the "ambiguous_count" field.
+func (m *AnnouncementEmailJobMutation) SetAmbiguousCount(i int64) {
+	m.ambiguous_count = &i
+	m.addambiguous_count = nil
+}
+
+// AmbiguousCount returns the value of the "ambiguous_count" field in the mutation.
+func (m *AnnouncementEmailJobMutation) AmbiguousCount() (r int64, exists bool) {
+	v := m.ambiguous_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAmbiguousCount returns the old "ambiguous_count" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldAmbiguousCount(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAmbiguousCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAmbiguousCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAmbiguousCount: %w", err)
+	}
+	return oldValue.AmbiguousCount, nil
+}
+
+// AddAmbiguousCount adds i to the "ambiguous_count" field.
+func (m *AnnouncementEmailJobMutation) AddAmbiguousCount(i int64) {
+	if m.addambiguous_count != nil {
+		*m.addambiguous_count += i
+	} else {
+		m.addambiguous_count = &i
+	}
+}
+
+// AddedAmbiguousCount returns the value that was added to the "ambiguous_count" field in this mutation.
+func (m *AnnouncementEmailJobMutation) AddedAmbiguousCount() (r int64, exists bool) {
+	v := m.addambiguous_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAmbiguousCount resets all changes to the "ambiguous_count" field.
+func (m *AnnouncementEmailJobMutation) ResetAmbiguousCount() {
+	m.ambiguous_count = nil
+	m.addambiguous_count = nil
+}
+
+// SetSkippedCount sets the "skipped_count" field.
+func (m *AnnouncementEmailJobMutation) SetSkippedCount(i int64) {
+	m.skipped_count = &i
+	m.addskipped_count = nil
+}
+
+// SkippedCount returns the value of the "skipped_count" field in the mutation.
+func (m *AnnouncementEmailJobMutation) SkippedCount() (r int64, exists bool) {
+	v := m.skipped_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSkippedCount returns the old "skipped_count" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldSkippedCount(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSkippedCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSkippedCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSkippedCount: %w", err)
+	}
+	return oldValue.SkippedCount, nil
+}
+
+// AddSkippedCount adds i to the "skipped_count" field.
+func (m *AnnouncementEmailJobMutation) AddSkippedCount(i int64) {
+	if m.addskipped_count != nil {
+		*m.addskipped_count += i
+	} else {
+		m.addskipped_count = &i
+	}
+}
+
+// AddedSkippedCount returns the value that was added to the "skipped_count" field in this mutation.
+func (m *AnnouncementEmailJobMutation) AddedSkippedCount() (r int64, exists bool) {
+	v := m.addskipped_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSkippedCount resets all changes to the "skipped_count" field.
+func (m *AnnouncementEmailJobMutation) ResetSkippedCount() {
+	m.skipped_count = nil
+	m.addskipped_count = nil
+}
+
+// SetAttemptCount sets the "attempt_count" field.
+func (m *AnnouncementEmailJobMutation) SetAttemptCount(i int) {
+	m.attempt_count = &i
+	m.addattempt_count = nil
+}
+
+// AttemptCount returns the value of the "attempt_count" field in the mutation.
+func (m *AnnouncementEmailJobMutation) AttemptCount() (r int, exists bool) {
+	v := m.attempt_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAttemptCount returns the old "attempt_count" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldAttemptCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAttemptCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAttemptCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAttemptCount: %w", err)
+	}
+	return oldValue.AttemptCount, nil
+}
+
+// AddAttemptCount adds i to the "attempt_count" field.
+func (m *AnnouncementEmailJobMutation) AddAttemptCount(i int) {
+	if m.addattempt_count != nil {
+		*m.addattempt_count += i
+	} else {
+		m.addattempt_count = &i
+	}
+}
+
+// AddedAttemptCount returns the value that was added to the "attempt_count" field in this mutation.
+func (m *AnnouncementEmailJobMutation) AddedAttemptCount() (r int, exists bool) {
+	v := m.addattempt_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAttemptCount resets all changes to the "attempt_count" field.
+func (m *AnnouncementEmailJobMutation) ResetAttemptCount() {
+	m.attempt_count = nil
+	m.addattempt_count = nil
+}
+
+// SetCreatedBy sets the "created_by" field.
+func (m *AnnouncementEmailJobMutation) SetCreatedBy(i int64) {
+	m.created_by = &i
+	m.addcreated_by = nil
+}
+
+// CreatedBy returns the value of the "created_by" field in the mutation.
+func (m *AnnouncementEmailJobMutation) CreatedBy() (r int64, exists bool) {
+	v := m.created_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedBy returns the old "created_by" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldCreatedBy(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedBy is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedBy requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedBy: %w", err)
+	}
+	return oldValue.CreatedBy, nil
+}
+
+// AddCreatedBy adds i to the "created_by" field.
+func (m *AnnouncementEmailJobMutation) AddCreatedBy(i int64) {
+	if m.addcreated_by != nil {
+		*m.addcreated_by += i
+	} else {
+		m.addcreated_by = &i
+	}
+}
+
+// AddedCreatedBy returns the value that was added to the "created_by" field in this mutation.
+func (m *AnnouncementEmailJobMutation) AddedCreatedBy() (r int64, exists bool) {
+	v := m.addcreated_by
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearCreatedBy clears the value of the "created_by" field.
+func (m *AnnouncementEmailJobMutation) ClearCreatedBy() {
+	m.created_by = nil
+	m.addcreated_by = nil
+	m.clearedFields[announcementemailjob.FieldCreatedBy] = struct{}{}
+}
+
+// CreatedByCleared returns if the "created_by" field was cleared in this mutation.
+func (m *AnnouncementEmailJobMutation) CreatedByCleared() bool {
+	_, ok := m.clearedFields[announcementemailjob.FieldCreatedBy]
+	return ok
+}
+
+// ResetCreatedBy resets all changes to the "created_by" field.
+func (m *AnnouncementEmailJobMutation) ResetCreatedBy() {
+	m.created_by = nil
+	m.addcreated_by = nil
+	delete(m.clearedFields, announcementemailjob.FieldCreatedBy)
+}
+
+// SetLastErrorCode sets the "last_error_code" field.
+func (m *AnnouncementEmailJobMutation) SetLastErrorCode(s string) {
+	m.last_error_code = &s
+}
+
+// LastErrorCode returns the value of the "last_error_code" field in the mutation.
+func (m *AnnouncementEmailJobMutation) LastErrorCode() (r string, exists bool) {
+	v := m.last_error_code
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastErrorCode returns the old "last_error_code" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldLastErrorCode(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastErrorCode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastErrorCode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastErrorCode: %w", err)
+	}
+	return oldValue.LastErrorCode, nil
+}
+
+// ClearLastErrorCode clears the value of the "last_error_code" field.
+func (m *AnnouncementEmailJobMutation) ClearLastErrorCode() {
+	m.last_error_code = nil
+	m.clearedFields[announcementemailjob.FieldLastErrorCode] = struct{}{}
+}
+
+// LastErrorCodeCleared returns if the "last_error_code" field was cleared in this mutation.
+func (m *AnnouncementEmailJobMutation) LastErrorCodeCleared() bool {
+	_, ok := m.clearedFields[announcementemailjob.FieldLastErrorCode]
+	return ok
+}
+
+// ResetLastErrorCode resets all changes to the "last_error_code" field.
+func (m *AnnouncementEmailJobMutation) ResetLastErrorCode() {
+	m.last_error_code = nil
+	delete(m.clearedFields, announcementemailjob.FieldLastErrorCode)
+}
+
+// SetAnnouncementTitle sets the "announcement_title" field.
+func (m *AnnouncementEmailJobMutation) SetAnnouncementTitle(s string) {
+	m.announcement_title = &s
+}
+
+// AnnouncementTitle returns the value of the "announcement_title" field in the mutation.
+func (m *AnnouncementEmailJobMutation) AnnouncementTitle() (r string, exists bool) {
+	v := m.announcement_title
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAnnouncementTitle returns the old "announcement_title" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldAnnouncementTitle(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAnnouncementTitle is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAnnouncementTitle requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAnnouncementTitle: %w", err)
+	}
+	return oldValue.AnnouncementTitle, nil
+}
+
+// ResetAnnouncementTitle resets all changes to the "announcement_title" field.
+func (m *AnnouncementEmailJobMutation) ResetAnnouncementTitle() {
+	m.announcement_title = nil
+}
+
+// SetAnnouncementContent sets the "announcement_content" field.
+func (m *AnnouncementEmailJobMutation) SetAnnouncementContent(s string) {
+	m.announcement_content = &s
+}
+
+// AnnouncementContent returns the value of the "announcement_content" field in the mutation.
+func (m *AnnouncementEmailJobMutation) AnnouncementContent() (r string, exists bool) {
+	v := m.announcement_content
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAnnouncementContent returns the old "announcement_content" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldAnnouncementContent(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAnnouncementContent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAnnouncementContent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAnnouncementContent: %w", err)
+	}
+	return oldValue.AnnouncementContent, nil
+}
+
+// ResetAnnouncementContent resets all changes to the "announcement_content" field.
+func (m *AnnouncementEmailJobMutation) ResetAnnouncementContent() {
+	m.announcement_content = nil
+}
+
+// SetAnnouncementStartsAt sets the "announcement_starts_at" field.
+func (m *AnnouncementEmailJobMutation) SetAnnouncementStartsAt(t time.Time) {
+	m.announcement_starts_at = &t
+}
+
+// AnnouncementStartsAt returns the value of the "announcement_starts_at" field in the mutation.
+func (m *AnnouncementEmailJobMutation) AnnouncementStartsAt() (r time.Time, exists bool) {
+	v := m.announcement_starts_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAnnouncementStartsAt returns the old "announcement_starts_at" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldAnnouncementStartsAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAnnouncementStartsAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAnnouncementStartsAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAnnouncementStartsAt: %w", err)
+	}
+	return oldValue.AnnouncementStartsAt, nil
+}
+
+// ClearAnnouncementStartsAt clears the value of the "announcement_starts_at" field.
+func (m *AnnouncementEmailJobMutation) ClearAnnouncementStartsAt() {
+	m.announcement_starts_at = nil
+	m.clearedFields[announcementemailjob.FieldAnnouncementStartsAt] = struct{}{}
+}
+
+// AnnouncementStartsAtCleared returns if the "announcement_starts_at" field was cleared in this mutation.
+func (m *AnnouncementEmailJobMutation) AnnouncementStartsAtCleared() bool {
+	_, ok := m.clearedFields[announcementemailjob.FieldAnnouncementStartsAt]
+	return ok
+}
+
+// ResetAnnouncementStartsAt resets all changes to the "announcement_starts_at" field.
+func (m *AnnouncementEmailJobMutation) ResetAnnouncementStartsAt() {
+	m.announcement_starts_at = nil
+	delete(m.clearedFields, announcementemailjob.FieldAnnouncementStartsAt)
+}
+
+// SetLeaseOwner sets the "lease_owner" field.
+func (m *AnnouncementEmailJobMutation) SetLeaseOwner(s string) {
+	m.lease_owner = &s
+}
+
+// LeaseOwner returns the value of the "lease_owner" field in the mutation.
+func (m *AnnouncementEmailJobMutation) LeaseOwner() (r string, exists bool) {
+	v := m.lease_owner
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLeaseOwner returns the old "lease_owner" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldLeaseOwner(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLeaseOwner is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLeaseOwner requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLeaseOwner: %w", err)
+	}
+	return oldValue.LeaseOwner, nil
+}
+
+// ClearLeaseOwner clears the value of the "lease_owner" field.
+func (m *AnnouncementEmailJobMutation) ClearLeaseOwner() {
+	m.lease_owner = nil
+	m.clearedFields[announcementemailjob.FieldLeaseOwner] = struct{}{}
+}
+
+// LeaseOwnerCleared returns if the "lease_owner" field was cleared in this mutation.
+func (m *AnnouncementEmailJobMutation) LeaseOwnerCleared() bool {
+	_, ok := m.clearedFields[announcementemailjob.FieldLeaseOwner]
+	return ok
+}
+
+// ResetLeaseOwner resets all changes to the "lease_owner" field.
+func (m *AnnouncementEmailJobMutation) ResetLeaseOwner() {
+	m.lease_owner = nil
+	delete(m.clearedFields, announcementemailjob.FieldLeaseOwner)
+}
+
+// SetLeaseExpiresAt sets the "lease_expires_at" field.
+func (m *AnnouncementEmailJobMutation) SetLeaseExpiresAt(t time.Time) {
+	m.lease_expires_at = &t
+}
+
+// LeaseExpiresAt returns the value of the "lease_expires_at" field in the mutation.
+func (m *AnnouncementEmailJobMutation) LeaseExpiresAt() (r time.Time, exists bool) {
+	v := m.lease_expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLeaseExpiresAt returns the old "lease_expires_at" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldLeaseExpiresAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLeaseExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLeaseExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLeaseExpiresAt: %w", err)
+	}
+	return oldValue.LeaseExpiresAt, nil
+}
+
+// ClearLeaseExpiresAt clears the value of the "lease_expires_at" field.
+func (m *AnnouncementEmailJobMutation) ClearLeaseExpiresAt() {
+	m.lease_expires_at = nil
+	m.clearedFields[announcementemailjob.FieldLeaseExpiresAt] = struct{}{}
+}
+
+// LeaseExpiresAtCleared returns if the "lease_expires_at" field was cleared in this mutation.
+func (m *AnnouncementEmailJobMutation) LeaseExpiresAtCleared() bool {
+	_, ok := m.clearedFields[announcementemailjob.FieldLeaseExpiresAt]
+	return ok
+}
+
+// ResetLeaseExpiresAt resets all changes to the "lease_expires_at" field.
+func (m *AnnouncementEmailJobMutation) ResetLeaseExpiresAt() {
+	m.lease_expires_at = nil
+	delete(m.clearedFields, announcementemailjob.FieldLeaseExpiresAt)
+}
+
+// SetLastError sets the "last_error" field.
+func (m *AnnouncementEmailJobMutation) SetLastError(s string) {
+	m.last_error = &s
+}
+
+// LastError returns the value of the "last_error" field in the mutation.
+func (m *AnnouncementEmailJobMutation) LastError() (r string, exists bool) {
+	v := m.last_error
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastError returns the old "last_error" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldLastError(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastError is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastError requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastError: %w", err)
+	}
+	return oldValue.LastError, nil
+}
+
+// ClearLastError clears the value of the "last_error" field.
+func (m *AnnouncementEmailJobMutation) ClearLastError() {
+	m.last_error = nil
+	m.clearedFields[announcementemailjob.FieldLastError] = struct{}{}
+}
+
+// LastErrorCleared returns if the "last_error" field was cleared in this mutation.
+func (m *AnnouncementEmailJobMutation) LastErrorCleared() bool {
+	_, ok := m.clearedFields[announcementemailjob.FieldLastError]
+	return ok
+}
+
+// ResetLastError resets all changes to the "last_error" field.
+func (m *AnnouncementEmailJobMutation) ResetLastError() {
+	m.last_error = nil
+	delete(m.clearedFields, announcementemailjob.FieldLastError)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *AnnouncementEmailJobMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *AnnouncementEmailJobMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *AnnouncementEmailJobMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *AnnouncementEmailJobMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *AnnouncementEmailJobMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *AnnouncementEmailJobMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetStartedAt sets the "started_at" field.
+func (m *AnnouncementEmailJobMutation) SetStartedAt(t time.Time) {
+	m.started_at = &t
+}
+
+// StartedAt returns the value of the "started_at" field in the mutation.
+func (m *AnnouncementEmailJobMutation) StartedAt() (r time.Time, exists bool) {
+	v := m.started_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStartedAt returns the old "started_at" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldStartedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStartedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStartedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStartedAt: %w", err)
+	}
+	return oldValue.StartedAt, nil
+}
+
+// ClearStartedAt clears the value of the "started_at" field.
+func (m *AnnouncementEmailJobMutation) ClearStartedAt() {
+	m.started_at = nil
+	m.clearedFields[announcementemailjob.FieldStartedAt] = struct{}{}
+}
+
+// StartedAtCleared returns if the "started_at" field was cleared in this mutation.
+func (m *AnnouncementEmailJobMutation) StartedAtCleared() bool {
+	_, ok := m.clearedFields[announcementemailjob.FieldStartedAt]
+	return ok
+}
+
+// ResetStartedAt resets all changes to the "started_at" field.
+func (m *AnnouncementEmailJobMutation) ResetStartedAt() {
+	m.started_at = nil
+	delete(m.clearedFields, announcementemailjob.FieldStartedAt)
+}
+
+// SetFinishedAt sets the "finished_at" field.
+func (m *AnnouncementEmailJobMutation) SetFinishedAt(t time.Time) {
+	m.finished_at = &t
+}
+
+// FinishedAt returns the value of the "finished_at" field in the mutation.
+func (m *AnnouncementEmailJobMutation) FinishedAt() (r time.Time, exists bool) {
+	v := m.finished_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFinishedAt returns the old "finished_at" field's value of the AnnouncementEmailJob entity.
+// If the AnnouncementEmailJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AnnouncementEmailJobMutation) OldFinishedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFinishedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFinishedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFinishedAt: %w", err)
+	}
+	return oldValue.FinishedAt, nil
+}
+
+// ClearFinishedAt clears the value of the "finished_at" field.
+func (m *AnnouncementEmailJobMutation) ClearFinishedAt() {
+	m.finished_at = nil
+	m.clearedFields[announcementemailjob.FieldFinishedAt] = struct{}{}
+}
+
+// FinishedAtCleared returns if the "finished_at" field was cleared in this mutation.
+func (m *AnnouncementEmailJobMutation) FinishedAtCleared() bool {
+	_, ok := m.clearedFields[announcementemailjob.FieldFinishedAt]
+	return ok
+}
+
+// ResetFinishedAt resets all changes to the "finished_at" field.
+func (m *AnnouncementEmailJobMutation) ResetFinishedAt() {
+	m.finished_at = nil
+	delete(m.clearedFields, announcementemailjob.FieldFinishedAt)
+}
+
+// ClearAnnouncement clears the "announcement" edge to the Announcement entity.
+func (m *AnnouncementEmailJobMutation) ClearAnnouncement() {
+	m.clearedannouncement = true
+	m.clearedFields[announcementemailjob.FieldAnnouncementID] = struct{}{}
+}
+
+// AnnouncementCleared reports if the "announcement" edge to the Announcement entity was cleared.
+func (m *AnnouncementEmailJobMutation) AnnouncementCleared() bool {
+	return m.clearedannouncement
+}
+
+// AnnouncementIDs returns the "announcement" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// AnnouncementID instead. It exists only for internal usage by the builders.
+func (m *AnnouncementEmailJobMutation) AnnouncementIDs() (ids []int64) {
+	if id := m.announcement; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetAnnouncement resets all changes to the "announcement" edge.
+func (m *AnnouncementEmailJobMutation) ResetAnnouncement() {
+	m.announcement = nil
+	m.clearedannouncement = false
+}
+
+// AddDeliveryIDs adds the "deliveries" edge to the AnnouncementEmailDelivery entity by ids.
+func (m *AnnouncementEmailJobMutation) AddDeliveryIDs(ids ...int64) {
+	if m.deliveries == nil {
+		m.deliveries = make(map[int64]struct{})
+	}
+	for i := range ids {
+		m.deliveries[ids[i]] = struct{}{}
+	}
+}
+
+// ClearDeliveries clears the "deliveries" edge to the AnnouncementEmailDelivery entity.
+func (m *AnnouncementEmailJobMutation) ClearDeliveries() {
+	m.cleareddeliveries = true
+}
+
+// DeliveriesCleared reports if the "deliveries" edge to the AnnouncementEmailDelivery entity was cleared.
+func (m *AnnouncementEmailJobMutation) DeliveriesCleared() bool {
+	return m.cleareddeliveries
+}
+
+// RemoveDeliveryIDs removes the "deliveries" edge to the AnnouncementEmailDelivery entity by IDs.
+func (m *AnnouncementEmailJobMutation) RemoveDeliveryIDs(ids ...int64) {
+	if m.removeddeliveries == nil {
+		m.removeddeliveries = make(map[int64]struct{})
+	}
+	for i := range ids {
+		delete(m.deliveries, ids[i])
+		m.removeddeliveries[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedDeliveries returns the removed IDs of the "deliveries" edge to the AnnouncementEmailDelivery entity.
+func (m *AnnouncementEmailJobMutation) RemovedDeliveriesIDs() (ids []int64) {
+	for id := range m.removeddeliveries {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// DeliveriesIDs returns the "deliveries" edge IDs in the mutation.
+func (m *AnnouncementEmailJobMutation) DeliveriesIDs() (ids []int64) {
+	for id := range m.deliveries {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetDeliveries resets all changes to the "deliveries" edge.
+func (m *AnnouncementEmailJobMutation) ResetDeliveries() {
+	m.deliveries = nil
+	m.cleareddeliveries = false
+	m.removeddeliveries = nil
+}
+
+// Where appends a list predicates to the AnnouncementEmailJobMutation builder.
+func (m *AnnouncementEmailJobMutation) Where(ps ...predicate.AnnouncementEmailJob) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the AnnouncementEmailJobMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *AnnouncementEmailJobMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.AnnouncementEmailJob, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *AnnouncementEmailJobMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *AnnouncementEmailJobMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (AnnouncementEmailJob).
+func (m *AnnouncementEmailJobMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *AnnouncementEmailJobMutation) Fields() []string {
+	fields := make([]string, 0, 25)
+	if m.announcement != nil {
+		fields = append(fields, announcementemailjob.FieldAnnouncementID)
+	}
+	if m.status != nil {
+		fields = append(fields, announcementemailjob.FieldStatus)
+	}
+	if m.scheduled_at != nil {
+		fields = append(fields, announcementemailjob.FieldScheduledAt)
+	}
+	if m.recipient_cutoff_id != nil {
+		fields = append(fields, announcementemailjob.FieldRecipientCutoffID)
+	}
+	if m.preparation_cursor_id != nil {
+		fields = append(fields, announcementemailjob.FieldPreparationCursorID)
+	}
+	if m.recipient_count != nil {
+		fields = append(fields, announcementemailjob.FieldRecipientCount)
+	}
+	if m.pending_count != nil {
+		fields = append(fields, announcementemailjob.FieldPendingCount)
+	}
+	if m.sending_count != nil {
+		fields = append(fields, announcementemailjob.FieldSendingCount)
+	}
+	if m.sent_count != nil {
+		fields = append(fields, announcementemailjob.FieldSentCount)
+	}
+	if m.failed_count != nil {
+		fields = append(fields, announcementemailjob.FieldFailedCount)
+	}
+	if m.ambiguous_count != nil {
+		fields = append(fields, announcementemailjob.FieldAmbiguousCount)
+	}
+	if m.skipped_count != nil {
+		fields = append(fields, announcementemailjob.FieldSkippedCount)
+	}
+	if m.attempt_count != nil {
+		fields = append(fields, announcementemailjob.FieldAttemptCount)
+	}
+	if m.created_by != nil {
+		fields = append(fields, announcementemailjob.FieldCreatedBy)
+	}
+	if m.last_error_code != nil {
+		fields = append(fields, announcementemailjob.FieldLastErrorCode)
+	}
+	if m.announcement_title != nil {
+		fields = append(fields, announcementemailjob.FieldAnnouncementTitle)
+	}
+	if m.announcement_content != nil {
+		fields = append(fields, announcementemailjob.FieldAnnouncementContent)
+	}
+	if m.announcement_starts_at != nil {
+		fields = append(fields, announcementemailjob.FieldAnnouncementStartsAt)
+	}
+	if m.lease_owner != nil {
+		fields = append(fields, announcementemailjob.FieldLeaseOwner)
+	}
+	if m.lease_expires_at != nil {
+		fields = append(fields, announcementemailjob.FieldLeaseExpiresAt)
+	}
+	if m.last_error != nil {
+		fields = append(fields, announcementemailjob.FieldLastError)
+	}
+	if m.created_at != nil {
+		fields = append(fields, announcementemailjob.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, announcementemailjob.FieldUpdatedAt)
+	}
+	if m.started_at != nil {
+		fields = append(fields, announcementemailjob.FieldStartedAt)
+	}
+	if m.finished_at != nil {
+		fields = append(fields, announcementemailjob.FieldFinishedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *AnnouncementEmailJobMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case announcementemailjob.FieldAnnouncementID:
+		return m.AnnouncementID()
+	case announcementemailjob.FieldStatus:
+		return m.Status()
+	case announcementemailjob.FieldScheduledAt:
+		return m.ScheduledAt()
+	case announcementemailjob.FieldRecipientCutoffID:
+		return m.RecipientCutoffID()
+	case announcementemailjob.FieldPreparationCursorID:
+		return m.PreparationCursorID()
+	case announcementemailjob.FieldRecipientCount:
+		return m.RecipientCount()
+	case announcementemailjob.FieldPendingCount:
+		return m.PendingCount()
+	case announcementemailjob.FieldSendingCount:
+		return m.SendingCount()
+	case announcementemailjob.FieldSentCount:
+		return m.SentCount()
+	case announcementemailjob.FieldFailedCount:
+		return m.FailedCount()
+	case announcementemailjob.FieldAmbiguousCount:
+		return m.AmbiguousCount()
+	case announcementemailjob.FieldSkippedCount:
+		return m.SkippedCount()
+	case announcementemailjob.FieldAttemptCount:
+		return m.AttemptCount()
+	case announcementemailjob.FieldCreatedBy:
+		return m.CreatedBy()
+	case announcementemailjob.FieldLastErrorCode:
+		return m.LastErrorCode()
+	case announcementemailjob.FieldAnnouncementTitle:
+		return m.AnnouncementTitle()
+	case announcementemailjob.FieldAnnouncementContent:
+		return m.AnnouncementContent()
+	case announcementemailjob.FieldAnnouncementStartsAt:
+		return m.AnnouncementStartsAt()
+	case announcementemailjob.FieldLeaseOwner:
+		return m.LeaseOwner()
+	case announcementemailjob.FieldLeaseExpiresAt:
+		return m.LeaseExpiresAt()
+	case announcementemailjob.FieldLastError:
+		return m.LastError()
+	case announcementemailjob.FieldCreatedAt:
+		return m.CreatedAt()
+	case announcementemailjob.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case announcementemailjob.FieldStartedAt:
+		return m.StartedAt()
+	case announcementemailjob.FieldFinishedAt:
+		return m.FinishedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *AnnouncementEmailJobMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case announcementemailjob.FieldAnnouncementID:
+		return m.OldAnnouncementID(ctx)
+	case announcementemailjob.FieldStatus:
+		return m.OldStatus(ctx)
+	case announcementemailjob.FieldScheduledAt:
+		return m.OldScheduledAt(ctx)
+	case announcementemailjob.FieldRecipientCutoffID:
+		return m.OldRecipientCutoffID(ctx)
+	case announcementemailjob.FieldPreparationCursorID:
+		return m.OldPreparationCursorID(ctx)
+	case announcementemailjob.FieldRecipientCount:
+		return m.OldRecipientCount(ctx)
+	case announcementemailjob.FieldPendingCount:
+		return m.OldPendingCount(ctx)
+	case announcementemailjob.FieldSendingCount:
+		return m.OldSendingCount(ctx)
+	case announcementemailjob.FieldSentCount:
+		return m.OldSentCount(ctx)
+	case announcementemailjob.FieldFailedCount:
+		return m.OldFailedCount(ctx)
+	case announcementemailjob.FieldAmbiguousCount:
+		return m.OldAmbiguousCount(ctx)
+	case announcementemailjob.FieldSkippedCount:
+		return m.OldSkippedCount(ctx)
+	case announcementemailjob.FieldAttemptCount:
+		return m.OldAttemptCount(ctx)
+	case announcementemailjob.FieldCreatedBy:
+		return m.OldCreatedBy(ctx)
+	case announcementemailjob.FieldLastErrorCode:
+		return m.OldLastErrorCode(ctx)
+	case announcementemailjob.FieldAnnouncementTitle:
+		return m.OldAnnouncementTitle(ctx)
+	case announcementemailjob.FieldAnnouncementContent:
+		return m.OldAnnouncementContent(ctx)
+	case announcementemailjob.FieldAnnouncementStartsAt:
+		return m.OldAnnouncementStartsAt(ctx)
+	case announcementemailjob.FieldLeaseOwner:
+		return m.OldLeaseOwner(ctx)
+	case announcementemailjob.FieldLeaseExpiresAt:
+		return m.OldLeaseExpiresAt(ctx)
+	case announcementemailjob.FieldLastError:
+		return m.OldLastError(ctx)
+	case announcementemailjob.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case announcementemailjob.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case announcementemailjob.FieldStartedAt:
+		return m.OldStartedAt(ctx)
+	case announcementemailjob.FieldFinishedAt:
+		return m.OldFinishedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown AnnouncementEmailJob field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *AnnouncementEmailJobMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case announcementemailjob.FieldAnnouncementID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAnnouncementID(v)
+		return nil
+	case announcementemailjob.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case announcementemailjob.FieldScheduledAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetScheduledAt(v)
+		return nil
+	case announcementemailjob.FieldRecipientCutoffID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRecipientCutoffID(v)
+		return nil
+	case announcementemailjob.FieldPreparationCursorID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPreparationCursorID(v)
+		return nil
+	case announcementemailjob.FieldRecipientCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRecipientCount(v)
+		return nil
+	case announcementemailjob.FieldPendingCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPendingCount(v)
+		return nil
+	case announcementemailjob.FieldSendingCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSendingCount(v)
+		return nil
+	case announcementemailjob.FieldSentCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSentCount(v)
+		return nil
+	case announcementemailjob.FieldFailedCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailedCount(v)
+		return nil
+	case announcementemailjob.FieldAmbiguousCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAmbiguousCount(v)
+		return nil
+	case announcementemailjob.FieldSkippedCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSkippedCount(v)
+		return nil
+	case announcementemailjob.FieldAttemptCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAttemptCount(v)
+		return nil
+	case announcementemailjob.FieldCreatedBy:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedBy(v)
+		return nil
+	case announcementemailjob.FieldLastErrorCode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastErrorCode(v)
+		return nil
+	case announcementemailjob.FieldAnnouncementTitle:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAnnouncementTitle(v)
+		return nil
+	case announcementemailjob.FieldAnnouncementContent:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAnnouncementContent(v)
+		return nil
+	case announcementemailjob.FieldAnnouncementStartsAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAnnouncementStartsAt(v)
+		return nil
+	case announcementemailjob.FieldLeaseOwner:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLeaseOwner(v)
+		return nil
+	case announcementemailjob.FieldLeaseExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLeaseExpiresAt(v)
+		return nil
+	case announcementemailjob.FieldLastError:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastError(v)
+		return nil
+	case announcementemailjob.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case announcementemailjob.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case announcementemailjob.FieldStartedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStartedAt(v)
+		return nil
+	case announcementemailjob.FieldFinishedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFinishedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown AnnouncementEmailJob field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *AnnouncementEmailJobMutation) AddedFields() []string {
+	var fields []string
+	if m.addrecipient_cutoff_id != nil {
+		fields = append(fields, announcementemailjob.FieldRecipientCutoffID)
+	}
+	if m.addpreparation_cursor_id != nil {
+		fields = append(fields, announcementemailjob.FieldPreparationCursorID)
+	}
+	if m.addrecipient_count != nil {
+		fields = append(fields, announcementemailjob.FieldRecipientCount)
+	}
+	if m.addpending_count != nil {
+		fields = append(fields, announcementemailjob.FieldPendingCount)
+	}
+	if m.addsending_count != nil {
+		fields = append(fields, announcementemailjob.FieldSendingCount)
+	}
+	if m.addsent_count != nil {
+		fields = append(fields, announcementemailjob.FieldSentCount)
+	}
+	if m.addfailed_count != nil {
+		fields = append(fields, announcementemailjob.FieldFailedCount)
+	}
+	if m.addambiguous_count != nil {
+		fields = append(fields, announcementemailjob.FieldAmbiguousCount)
+	}
+	if m.addskipped_count != nil {
+		fields = append(fields, announcementemailjob.FieldSkippedCount)
+	}
+	if m.addattempt_count != nil {
+		fields = append(fields, announcementemailjob.FieldAttemptCount)
+	}
+	if m.addcreated_by != nil {
+		fields = append(fields, announcementemailjob.FieldCreatedBy)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *AnnouncementEmailJobMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case announcementemailjob.FieldRecipientCutoffID:
+		return m.AddedRecipientCutoffID()
+	case announcementemailjob.FieldPreparationCursorID:
+		return m.AddedPreparationCursorID()
+	case announcementemailjob.FieldRecipientCount:
+		return m.AddedRecipientCount()
+	case announcementemailjob.FieldPendingCount:
+		return m.AddedPendingCount()
+	case announcementemailjob.FieldSendingCount:
+		return m.AddedSendingCount()
+	case announcementemailjob.FieldSentCount:
+		return m.AddedSentCount()
+	case announcementemailjob.FieldFailedCount:
+		return m.AddedFailedCount()
+	case announcementemailjob.FieldAmbiguousCount:
+		return m.AddedAmbiguousCount()
+	case announcementemailjob.FieldSkippedCount:
+		return m.AddedSkippedCount()
+	case announcementemailjob.FieldAttemptCount:
+		return m.AddedAttemptCount()
+	case announcementemailjob.FieldCreatedBy:
+		return m.AddedCreatedBy()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *AnnouncementEmailJobMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case announcementemailjob.FieldRecipientCutoffID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRecipientCutoffID(v)
+		return nil
+	case announcementemailjob.FieldPreparationCursorID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPreparationCursorID(v)
+		return nil
+	case announcementemailjob.FieldRecipientCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRecipientCount(v)
+		return nil
+	case announcementemailjob.FieldPendingCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPendingCount(v)
+		return nil
+	case announcementemailjob.FieldSendingCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSendingCount(v)
+		return nil
+	case announcementemailjob.FieldSentCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSentCount(v)
+		return nil
+	case announcementemailjob.FieldFailedCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFailedCount(v)
+		return nil
+	case announcementemailjob.FieldAmbiguousCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAmbiguousCount(v)
+		return nil
+	case announcementemailjob.FieldSkippedCount:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSkippedCount(v)
+		return nil
+	case announcementemailjob.FieldAttemptCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAttemptCount(v)
+		return nil
+	case announcementemailjob.FieldCreatedBy:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCreatedBy(v)
+		return nil
+	}
+	return fmt.Errorf("unknown AnnouncementEmailJob numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *AnnouncementEmailJobMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(announcementemailjob.FieldCreatedBy) {
+		fields = append(fields, announcementemailjob.FieldCreatedBy)
+	}
+	if m.FieldCleared(announcementemailjob.FieldLastErrorCode) {
+		fields = append(fields, announcementemailjob.FieldLastErrorCode)
+	}
+	if m.FieldCleared(announcementemailjob.FieldAnnouncementStartsAt) {
+		fields = append(fields, announcementemailjob.FieldAnnouncementStartsAt)
+	}
+	if m.FieldCleared(announcementemailjob.FieldLeaseOwner) {
+		fields = append(fields, announcementemailjob.FieldLeaseOwner)
+	}
+	if m.FieldCleared(announcementemailjob.FieldLeaseExpiresAt) {
+		fields = append(fields, announcementemailjob.FieldLeaseExpiresAt)
+	}
+	if m.FieldCleared(announcementemailjob.FieldLastError) {
+		fields = append(fields, announcementemailjob.FieldLastError)
+	}
+	if m.FieldCleared(announcementemailjob.FieldStartedAt) {
+		fields = append(fields, announcementemailjob.FieldStartedAt)
+	}
+	if m.FieldCleared(announcementemailjob.FieldFinishedAt) {
+		fields = append(fields, announcementemailjob.FieldFinishedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *AnnouncementEmailJobMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *AnnouncementEmailJobMutation) ClearField(name string) error {
+	switch name {
+	case announcementemailjob.FieldCreatedBy:
+		m.ClearCreatedBy()
+		return nil
+	case announcementemailjob.FieldLastErrorCode:
+		m.ClearLastErrorCode()
+		return nil
+	case announcementemailjob.FieldAnnouncementStartsAt:
+		m.ClearAnnouncementStartsAt()
+		return nil
+	case announcementemailjob.FieldLeaseOwner:
+		m.ClearLeaseOwner()
+		return nil
+	case announcementemailjob.FieldLeaseExpiresAt:
+		m.ClearLeaseExpiresAt()
+		return nil
+	case announcementemailjob.FieldLastError:
+		m.ClearLastError()
+		return nil
+	case announcementemailjob.FieldStartedAt:
+		m.ClearStartedAt()
+		return nil
+	case announcementemailjob.FieldFinishedAt:
+		m.ClearFinishedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown AnnouncementEmailJob nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *AnnouncementEmailJobMutation) ResetField(name string) error {
+	switch name {
+	case announcementemailjob.FieldAnnouncementID:
+		m.ResetAnnouncementID()
+		return nil
+	case announcementemailjob.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case announcementemailjob.FieldScheduledAt:
+		m.ResetScheduledAt()
+		return nil
+	case announcementemailjob.FieldRecipientCutoffID:
+		m.ResetRecipientCutoffID()
+		return nil
+	case announcementemailjob.FieldPreparationCursorID:
+		m.ResetPreparationCursorID()
+		return nil
+	case announcementemailjob.FieldRecipientCount:
+		m.ResetRecipientCount()
+		return nil
+	case announcementemailjob.FieldPendingCount:
+		m.ResetPendingCount()
+		return nil
+	case announcementemailjob.FieldSendingCount:
+		m.ResetSendingCount()
+		return nil
+	case announcementemailjob.FieldSentCount:
+		m.ResetSentCount()
+		return nil
+	case announcementemailjob.FieldFailedCount:
+		m.ResetFailedCount()
+		return nil
+	case announcementemailjob.FieldAmbiguousCount:
+		m.ResetAmbiguousCount()
+		return nil
+	case announcementemailjob.FieldSkippedCount:
+		m.ResetSkippedCount()
+		return nil
+	case announcementemailjob.FieldAttemptCount:
+		m.ResetAttemptCount()
+		return nil
+	case announcementemailjob.FieldCreatedBy:
+		m.ResetCreatedBy()
+		return nil
+	case announcementemailjob.FieldLastErrorCode:
+		m.ResetLastErrorCode()
+		return nil
+	case announcementemailjob.FieldAnnouncementTitle:
+		m.ResetAnnouncementTitle()
+		return nil
+	case announcementemailjob.FieldAnnouncementContent:
+		m.ResetAnnouncementContent()
+		return nil
+	case announcementemailjob.FieldAnnouncementStartsAt:
+		m.ResetAnnouncementStartsAt()
+		return nil
+	case announcementemailjob.FieldLeaseOwner:
+		m.ResetLeaseOwner()
+		return nil
+	case announcementemailjob.FieldLeaseExpiresAt:
+		m.ResetLeaseExpiresAt()
+		return nil
+	case announcementemailjob.FieldLastError:
+		m.ResetLastError()
+		return nil
+	case announcementemailjob.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case announcementemailjob.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case announcementemailjob.FieldStartedAt:
+		m.ResetStartedAt()
+		return nil
+	case announcementemailjob.FieldFinishedAt:
+		m.ResetFinishedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown AnnouncementEmailJob field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *AnnouncementEmailJobMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.announcement != nil {
+		edges = append(edges, announcementemailjob.EdgeAnnouncement)
+	}
+	if m.deliveries != nil {
+		edges = append(edges, announcementemailjob.EdgeDeliveries)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *AnnouncementEmailJobMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case announcementemailjob.EdgeAnnouncement:
+		if id := m.announcement; id != nil {
+			return []ent.Value{*id}
+		}
+	case announcementemailjob.EdgeDeliveries:
+		ids := make([]ent.Value, 0, len(m.deliveries))
+		for id := range m.deliveries {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *AnnouncementEmailJobMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.removeddeliveries != nil {
+		edges = append(edges, announcementemailjob.EdgeDeliveries)
+	}
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *AnnouncementEmailJobMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case announcementemailjob.EdgeDeliveries:
+		ids := make([]ent.Value, 0, len(m.removeddeliveries))
+		for id := range m.removeddeliveries {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *AnnouncementEmailJobMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedannouncement {
+		edges = append(edges, announcementemailjob.EdgeAnnouncement)
+	}
+	if m.cleareddeliveries {
+		edges = append(edges, announcementemailjob.EdgeDeliveries)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *AnnouncementEmailJobMutation) EdgeCleared(name string) bool {
+	switch name {
+	case announcementemailjob.EdgeAnnouncement:
+		return m.clearedannouncement
+	case announcementemailjob.EdgeDeliveries:
+		return m.cleareddeliveries
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *AnnouncementEmailJobMutation) ClearEdge(name string) error {
+	switch name {
+	case announcementemailjob.EdgeAnnouncement:
+		m.ClearAnnouncement()
+		return nil
+	}
+	return fmt.Errorf("unknown AnnouncementEmailJob unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *AnnouncementEmailJobMutation) ResetEdge(name string) error {
+	switch name {
+	case announcementemailjob.EdgeAnnouncement:
+		m.ResetAnnouncement()
+		return nil
+	case announcementemailjob.EdgeDeliveries:
+		m.ResetDeliveries()
+		return nil
+	}
+	return fmt.Errorf("unknown AnnouncementEmailJob edge %s", name)
 }
 
 // AnnouncementReadMutation represents an operation that mutates the AnnouncementRead nodes in the graph.

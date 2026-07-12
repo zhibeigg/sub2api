@@ -270,6 +270,24 @@ func TestLoadDefaultIdempotencyConfig(t *testing.T) {
 	}
 }
 
+func TestLoadAnnouncementEmailConfigAndBounds(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("ANNOUNCEMENT_EMAIL_DELIVERY_WORKER_COUNT", "99")
+	t.Setenv("ANNOUNCEMENT_EMAIL_RECIPIENT_BATCH_SIZE", "99999")
+	t.Setenv("ANNOUNCEMENT_EMAIL_DELIVERY_BATCH_SIZE", "9999")
+	t.Setenv("ANNOUNCEMENT_EMAIL_RETRY_BASE_SECONDS", "45")
+	t.Setenv("ANNOUNCEMENT_EMAIL_SEND_TIMEOUT_SECONDS", "999")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, 32, cfg.AnnouncementEmail.DeliveryWorkerCount)
+	require.Equal(t, 5000, cfg.AnnouncementEmail.RecipientBatchSize)
+	require.Equal(t, 500, cfg.AnnouncementEmail.DeliveryBatchSize)
+	require.Equal(t, 45, cfg.AnnouncementEmail.RetryBaseSeconds)
+	require.Equal(t, 300, cfg.AnnouncementEmail.SendTimeoutSeconds)
+	require.GreaterOrEqual(t, cfg.AnnouncementEmail.LeaseSeconds, cfg.AnnouncementEmail.SendTimeoutSeconds+30)
+}
+
 func TestLoadDefaultBatchImageQueueDisabled(t *testing.T) {
 	resetViperWithJWTSecret(t)
 
