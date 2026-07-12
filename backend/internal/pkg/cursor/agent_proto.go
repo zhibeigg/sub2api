@@ -362,11 +362,96 @@ func encodeAgentMCPResult(id uint64, execID, text string, isError bool) []byte {
 		success = appendVarint(success, 2, 1)
 	}
 	result := appendBytes(nil, 1, success)
+	return encodeAgentExecClientMessage(id, execID, 11, result)
+}
+
+func encodeAgentShellResult(id uint64, execID string, action *Action, text string, isError, streamed bool) [][]byte {
+	command, workingDirectory := "", ""
+	if action != nil {
+		for _, key := range []string{"command", "cmd", "script", "input"} {
+			if value, ok := action.Arguments[key]; ok {
+				command = fmt.Sprint(value)
+				break
+			}
+		}
+		for _, key := range []string{"working_directory", "workingDirectory", "cwd", "workdir", "work_dir"} {
+			if value, ok := action.Arguments[key]; ok {
+				workingDirectory = fmt.Sprint(value)
+				break
+			}
+		}
+	}
+
+	details := appendString(nil, 1, command)
+	details = appendString(details, 2, workingDirectory)
+	if isError {
+		details = appendVarint(details, 3, 1)
+		details = appendString(details, 6, text)
+	} else {
+		details = appendVarint(details, 3, 0)
+		details = appendString(details, 5, text)
+	}
+	details = appendVarint(details, 7, 0)
+	var shellResult []byte
+	if isError {
+		shellResult = appendBytes(shellResult, 2, details)
+	} else {
+		shellResult = appendBytes(shellResult, 1, details)
+	}
+
+	messages := make([][]byte, 0, 5)
+	if streamed {
+		messages = append(messages, encodeAgentShellStream(id, execID, 4, nil))
+		if text != "" {
+			output := appendString(nil, 1, text)
+			field := protowire.Number(1)
+			if isError {
+				field = 2
+			}
+			messages = append(messages, encodeAgentShellStream(id, execID, field, output))
+		}
+		exit := appendVarint(nil, 1, boolVarint(isError))
+		exit = appendString(exit, 2, workingDirectory)
+		messages = append(messages, encodeAgentShellStream(id, execID, 3, exit))
+	}
+	messages = append(messages, encodeAgentExecClientMessage(id, execID, 2, shellResult))
+	if streamed {
+		messages = append(messages, encodeAgentExecStreamClose(id))
+	}
+	return messages
+}
+
+func encodeAgentShellStream(id uint64, execID string, field protowire.Number, value []byte) []byte {
+	stream := appendBytes(nil, field, value)
+	return encodeAgentExecClientMessage(id, execID, 14, stream)
+}
+
+func encodeAgentExecStreamClose(id uint64) []byte {
+	closeMessage := appendVarint(nil, 1, id)
+	control := appendBytes(nil, 1, closeMessage)
+	return appendBytes(nil, 5, control)
+}
+
+func encodeAgentRequestContextResult(id uint64, execID string, tools []ToolDefinition, provider string) ([]byte, error) {
+	encodedTools, err := encodeAgentMCPTools(tools, provider)
+	if err != nil {
+		return nil, err
+	}
+	var requestContext []byte
+	for _, tool := range allProtoBytes(encodedTools, 1) {
+		requestContext = appendBytes(requestContext, 7, tool)
+	}
+	success := appendBytes(nil, 1, requestContext)
+	result := appendBytes(nil, 1, success)
+	return encodeAgentExecClientMessage(id, execID, 10, result), nil
+}
+
+func encodeAgentExecClientMessage(id uint64, execID string, field protowire.Number, result []byte) []byte {
 	exec := appendVarint(nil, 1, id)
 	if execID != "" {
 		exec = appendString(exec, 15, execID)
 	}
-	exec = appendBytes(exec, 11, result)
+	exec = appendBytes(exec, field, result)
 	return appendBytes(nil, 2, exec)
 }
 

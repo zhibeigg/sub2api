@@ -267,14 +267,120 @@ func TestAgentStreamKVAndMCPResponsesPreserveRequestIDs(t *testing.T) {
 	}
 }
 
-func TestAgentExecOnlyRecognizesMCP(t *testing.T) {
-	shell := appendString(nil, 1, "rm -rf /")
-	exec := appendVarint(nil, 1, 3)
-	exec = appendString(exec, 15, "exec-local")
-	exec = appendBytes(exec, 2, shell)
-	events := parseAgentExecServerMessage(exec)
-	if len(events) != 1 || events[0].Type != AgentEventUnsupportedExec || events[0].Unsupported.Field != 2 || events[0].Unsupported.ExecID != "exec-local" {
-		t.Fatalf("unexpected local exec handling: %#v", events)
+func TestAgentToolCallFieldOneDecodesShell(t *testing.T) {
+	shellArgs := appendString(nil, 1, "go test ./...")
+	shellArgs = appendString(shellArgs, 2, "D:/repo")
+	shellArgs = appendString(shellArgs, 4, "call-shell")
+	shellToolCall := appendBytes(nil, 1, shellArgs)
+	toolCall := appendBytes(nil, 1, shellToolCall)
+	completed := appendString(nil, 1, "call-shell")
+	completed = appendBytes(completed, 2, toolCall)
+	interaction := appendBytes(nil, 3, completed)
+	serverMessage := appendBytes(nil, 1, interaction)
+	frame, _ := EncodeConnectFrame(serverMessage, false)
+	frame = append(frame, encodeAgentConnectEndStream()...)
+	stream := &AgentStream{response: &http.Response{Body: io.NopCloser(bytes.NewReader(frame))}, decoder: NewConnectDecoder(4096, 8192), tools: make(map[string]*agentToolAccumulator), maxToolBytes: 4096}
+
+	event, err := stream.Next()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event.Type != AgentEventToolCompleted || event.Tool == nil || event.Tool.ID != "call-shell" || event.Tool.Name != "shell" {
+		t.Fatalf("unexpected shell ToolCall field 1 event: %#v", event)
+	}
+	if event.Tool.Arguments["command"] != "go test ./..." || event.Tool.Arguments["working_directory"] != "D:/repo" {
+		t.Fatalf("unexpected shell ToolCall field 1 args: %#v", event.Tool.Arguments)
+	}
+}
+
+func TestAgentStreamShellAndRequestContextResponsesPreserveProtocolFields(t *testing.T) {
+	stream := &AgentStream{ctx: context.Background(), send: make(chan []byte, 8)}
+	action := &Action{ID: "call-shell", Name: "shell", Arguments: map[string]any{"command": "pwd", "working_directory": "D:/repo"}}
+	if err := stream.SendShellResult(21, "exec-shell", action, "D:/repo\n", false, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := stream.SendShellResult(22, "exec-stream", action, "failed", true, true); err != nil {
+		t.Fatal(err)
+	}
+	tools := []ToolDefinition{{Name: "lookup", Description: "Search", InputSchema: json.RawMessage(`{"type":"object"}`)}}
+	if err := stream.SendRequestContextResult(23, "exec-context", tools, "sub2api"); err != nil {
+		t.Fatal(err)
+	}
+
+	shellMessage := <-stream.send
+	shellExec := firstBytesField(t, shellMessage, 2)
+	shellResult := firstBytesField(t, shellExec, 2)
+	shellSuccess := firstBytesField(t, shellResult, 1)
+	if firstProtoVarint(shellExec, 1) != 21 || firstProtoString(shellExec, 15) != "exec-shell" || firstProtoString(shellSuccess, 1) != "pwd" || firstProtoString(shellSuccess, 2) != "D:/repo" || firstProtoString(shellSuccess, 5) != "D:/repo\n" {
+		t.Fatalf("shell result = %x", shellMessage)
+	}
+
+	streamStart := firstBytesField(t, firstBytesField(t, <-stream.send, 2), 14)
+	if firstProtoBytes(streamStart, 4) == nil {
+		t.Fatalf("shell stream start missing: %x", streamStart)
+	}
+	streamStderr := firstBytesField(t, firstBytesField(t, <-stream.send, 2), 14)
+	if firstProtoString(firstBytesField(t, streamStderr, 2), 1) != "failed" {
+		t.Fatalf("shell stream stderr = %x", streamStderr)
+	}
+	streamExit := firstBytesField(t, firstBytesField(t, <-stream.send, 2), 14)
+	if firstProtoVarint(firstBytesField(t, streamExit, 3), 1) != 1 {
+		t.Fatalf("shell stream exit = %x", streamExit)
+	}
+	streamResultMessage := <-stream.send
+	streamExec := firstBytesField(t, streamResultMessage, 2)
+	streamFailure := firstBytesField(t, firstBytesField(t, streamExec, 2), 2)
+	if firstProtoVarint(streamExec, 1) != 22 || firstProtoString(streamExec, 15) != "exec-stream" || firstProtoVarint(streamFailure, 3) != 1 || firstProtoString(streamFailure, 6) != "failed" {
+		t.Fatalf("shell stream final result = %x", streamResultMessage)
+	}
+	streamClose := <-stream.send
+	control := firstBytesField(t, streamClose, 5)
+	if firstProtoVarint(firstBytesField(t, control, 1), 1) != 22 {
+		t.Fatalf("shell stream close = %x", streamClose)
+	}
+
+	contextMessage := <-stream.send
+	contextExec := firstBytesField(t, contextMessage, 2)
+	contextResult := firstBytesField(t, contextExec, 10)
+	contextSuccess := firstBytesField(t, contextResult, 1)
+	requestContext := firstBytesField(t, contextSuccess, 1)
+	contextTool := firstBytesField(t, requestContext, 7)
+	if firstProtoVarint(contextExec, 1) != 23 || firstProtoString(contextExec, 15) != "exec-context" || firstProtoString(contextTool, 1) != "lookup" || firstProtoString(contextTool, 4) != "sub2api" {
+		t.Fatalf("request context result = %x", contextMessage)
+	}
+}
+
+func TestAgentExecRecognizesShellAndRequestContext(t *testing.T) {
+	shell := appendString(nil, 1, "pwd")
+	shell = appendString(shell, 2, "D:/repo")
+	shell = appendVarint(shell, 3, 5000)
+	shell = appendString(shell, 4, "call-shell")
+	for _, field := range []protowire.Number{2, 14} {
+		exec := appendVarint(nil, 1, 3)
+		exec = appendString(exec, 15, "exec-local")
+		exec = appendBytes(exec, field, shell)
+		events := parseAgentExecServerMessage(exec)
+		if len(events) != 1 || events[0].Type != AgentEventExecShell || events[0].ExecField != int(field) || events[0].ExecRequestID != 3 || events[0].ExecID != "exec-local" {
+			t.Fatalf("unexpected shell exec handling for field %d: %#v", field, events)
+		}
+		if events[0].ExecShell == nil || events[0].ExecShell.ID != "call-shell" || events[0].ExecShell.Arguments["command"] != "pwd" || events[0].ExecShell.Arguments["working_directory"] != "D:/repo" {
+			t.Fatalf("unexpected shell args for field %d: %#v", field, events[0].ExecShell)
+		}
+	}
+
+	requestContext := appendVarint(nil, 1, 4)
+	requestContext = appendString(requestContext, 15, "exec-context")
+	requestContext = appendBytes(requestContext, 10, nil)
+	events := parseAgentExecServerMessage(requestContext)
+	if len(events) != 1 || events[0].Type != AgentEventExecRequestContext || events[0].ExecRequestID != 4 || events[0].ExecID != "exec-context" {
+		t.Fatalf("unexpected request context handling: %#v", events)
+	}
+
+	unsupported := appendVarint(nil, 1, 5)
+	unsupported = appendBytes(unsupported, 3, nil)
+	events = parseAgentExecServerMessage(unsupported)
+	if len(events) != 1 || events[0].Type != AgentEventUnsupportedExec || events[0].Unsupported.Field != 3 {
+		t.Fatalf("unexpected unsupported exec handling: %#v", events)
 	}
 }
 

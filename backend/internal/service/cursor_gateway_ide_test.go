@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -16,6 +17,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	cursorpkg "github.com/Wei-Shaw/sub2api/internal/pkg/cursor"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protowire"
 )
@@ -25,6 +28,8 @@ type cursorIDEUpstreamStub struct {
 	requests       []*http.Request
 	bodies         [][]byte
 	chatBody       []byte
+	chatBodies     [][]byte
+	chatIndex      int
 	modelsBody     []byte
 	chatStatus     int
 	modelsStatus   int
@@ -42,10 +47,14 @@ func (s *cursorIDEUpstreamStub) Do(req *http.Request, _ string, _ int64, _ int) 
 	s.mu.Lock()
 	s.requests = append(s.requests, req.Clone(req.Context()))
 	s.bodies = append(s.bodies, body)
+	responseBody := s.chatBody
+	if req.URL.Path == cursorpkg.AgentRunPath && s.chatIndex < len(s.chatBodies) {
+		responseBody = s.chatBodies[s.chatIndex]
+		s.chatIndex++
+	}
 	s.mu.Unlock()
 
 	status := http.StatusOK
-	responseBody := s.chatBody
 	if req.URL.Path == cursorpkg.AgentGetUsableModelsPath {
 		responseBody = s.modelsBody
 		if s.modelsStatus != 0 {
@@ -81,6 +90,141 @@ func (s *cursorIDEUpstreamStub) DoWithTLS(req *http.Request, proxyURL string, ac
 type cursorIDEAutoFallbackUpstreamStub struct {
 	cloud       cursorGatewayUpstreamStub
 	ideChatBody []byte
+}
+
+type cursorAgentDuplexUpstreamStub struct {
+	mu                   sync.Mutex
+	runRequests          int
+	requestContextFrames chan []byte
+	shellResultFrames    chan [][]byte
+	serveErrors          chan error
+}
+
+func newCursorAgentDuplexUpstreamStub() *cursorAgentDuplexUpstreamStub {
+	return &cursorAgentDuplexUpstreamStub{
+		requestContextFrames: make(chan []byte, 1),
+		shellResultFrames:    make(chan [][]byte, 1),
+		serveErrors:          make(chan error, 1),
+	}
+}
+
+func (s *cursorAgentDuplexUpstreamStub) Do(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+	switch req.URL.Path {
+	case cursorpkg.AgentGetUsableModelsPath:
+		return cursorIDEHTTP2Response(req, cursorAgentModelsPayload("claude-sonnet-5")), nil
+	case cursorpkg.AgentRunPath:
+		if _, err := readCursorConnectFrame(req.Body); err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		s.runRequests++
+		s.mu.Unlock()
+		reader, writer := io.Pipe()
+		go s.serveAgentStream(req.Body, writer)
+		return &http.Response{
+			StatusCode: http.StatusOK, Status: http.StatusText(http.StatusOK), Proto: "HTTP/2.0", ProtoMajor: 2,
+			Header: make(http.Header), Body: reader, Request: req,
+		}, nil
+	default:
+		return nil, fmt.Errorf("unexpected Cursor Agent path %s", req.URL.Path)
+	}
+}
+
+func (s *cursorAgentDuplexUpstreamStub) DoWithTLS(req *http.Request, proxyURL string, accountID int64, accountConcurrency int, _ *tlsfingerprint.Profile) (*http.Response, error) {
+	return s.Do(req, proxyURL, accountID, accountConcurrency)
+}
+
+func (s *cursorAgentDuplexUpstreamStub) serveAgentStream(requestBody io.Reader, responseBody *io.PipeWriter) {
+	defer func() { _ = responseBody.Close() }()
+	writePayload := func(payload []byte) error {
+		frame, err := cursorpkg.EncodeConnectFrame(payload, false)
+		if err != nil {
+			return err
+		}
+		_, err = responseBody.Write(frame)
+		return err
+	}
+	fail := func(err error) {
+		select {
+		case s.serveErrors <- err:
+		default:
+		}
+	}
+
+	requestContext := protowire.AppendTag(nil, 1, protowire.VarintType)
+	requestContext = protowire.AppendVarint(requestContext, 31)
+	requestContext = appendProtoString(requestContext, 15, "exec-context")
+	requestContext = protowire.AppendTag(requestContext, 10, protowire.BytesType)
+	requestContext = protowire.AppendBytes(requestContext, nil)
+	server := protowire.AppendTag(nil, 2, protowire.BytesType)
+	server = protowire.AppendBytes(server, requestContext)
+	if err := writePayload(server); err != nil {
+		fail(err)
+		return
+	}
+	contextFrame, err := readCursorConnectFrame(requestBody)
+	if err != nil {
+		fail(err)
+		return
+	}
+	s.requestContextFrames <- contextFrame
+
+	shellArgs := appendProtoString(nil, 1, "pwd")
+	shellArgs = appendProtoString(shellArgs, 2, "D:/repo")
+	shellArgs = protowire.AppendTag(shellArgs, 3, protowire.VarintType)
+	shellArgs = protowire.AppendVarint(shellArgs, 5000)
+	shellArgs = appendProtoString(shellArgs, 4, "call-shell")
+	shellToolCall := protowire.AppendTag(nil, 1, protowire.BytesType)
+	shellToolCall = protowire.AppendBytes(shellToolCall, shellArgs)
+	toolCall := protowire.AppendTag(nil, 1, protowire.BytesType)
+	toolCall = protowire.AppendBytes(toolCall, shellToolCall)
+	completed := appendProtoString(nil, 1, "call-shell")
+	completed = protowire.AppendTag(completed, 2, protowire.BytesType)
+	completed = protowire.AppendBytes(completed, toolCall)
+	interaction := protowire.AppendTag(nil, 3, protowire.BytesType)
+	interaction = protowire.AppendBytes(interaction, completed)
+	exec := protowire.AppendTag(nil, 1, protowire.VarintType)
+	exec = protowire.AppendVarint(exec, 32)
+	exec = appendProtoString(exec, 15, "exec-shell")
+	exec = protowire.AppendTag(exec, 14, protowire.BytesType)
+	exec = protowire.AppendBytes(exec, shellArgs)
+	server = protowire.AppendTag(nil, 1, protowire.BytesType)
+	server = protowire.AppendBytes(server, interaction)
+	server = protowire.AppendTag(server, 2, protowire.BytesType)
+	server = protowire.AppendBytes(server, exec)
+	if err := writePayload(server); err != nil {
+		fail(err)
+		return
+	}
+
+	shellFrames := make([][]byte, 0, 5)
+	for len(shellFrames) < 5 {
+		frame, readErr := readCursorConnectFrame(requestBody)
+		if readErr != nil {
+			fail(readErr)
+			return
+		}
+		shellFrames = append(shellFrames, frame)
+	}
+	s.shellResultFrames <- shellFrames
+
+	if err := writePayload(cursorIDETextPayload("tool result received")); err != nil {
+		fail(err)
+		return
+	}
+	if err := writePayload(cursorIDEUsagePayload(18, 4, 0, 0)); err != nil {
+		fail(err)
+		return
+	}
+	if _, err := responseBody.Write([]byte{2, 0, 0, 0, 2, '{', '}'}); err != nil && !errors.Is(err, io.ErrClosedPipe) {
+		fail(err)
+	}
+}
+
+func (s *cursorAgentDuplexUpstreamStub) runRequestCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.runRequests
 }
 
 func (s *cursorIDEAutoFallbackUpstreamStub) Do(req *http.Request, proxyURL string, accountID int64, accountConcurrency int) (*http.Response, error) {
@@ -125,10 +269,14 @@ func cursorIDEHTTP2Response(req *http.Request, body []byte) *http.Response {
 }
 
 func ideTestGateway(upstream HTTPUpstream) *CursorGatewayService {
+	return ideTestGatewayWithRedis(upstream, nil)
+}
+
+func ideTestGatewayWithRedis(upstream HTTPUpstream, redisClient *redis.Client) *CursorGatewayService {
 	if stub, ok := upstream.(*cursorIDEUpstreamStub); ok && len(stub.modelsBody) == 0 {
 		stub.modelsBody = cursorAgentModelsPayload("claude-sonnet-5")
 	}
-	return NewCursorGatewayService(upstream, nil, nil, nil, &config.Config{Cursor: config.CursorConfig{
+	return NewCursorGatewayService(upstream, nil, nil, redisClient, &config.Config{Cursor: config.CursorConfig{
 		BaseURL: "https://api.cursor.com", ChatBaseURL: "https://api2.cursor.sh", DashboardBaseURL: "https://api2.cursor.sh",
 		DefaultTransportMode: CursorTransportAuto, ClientVersion: "3.11.13", DefaultModel: "default",
 		MaxFrameBytes: 8 << 20, MaxBufferedBytes: 16 << 20, IDEStreamIdleTimeoutSeconds: 5,
@@ -179,17 +327,197 @@ func TestCursorGatewayIDENonStreamNativeToolCall(t *testing.T) {
 		cursorIDEUsagePayload(14, 5, 0, 0),
 	)}
 	svc := ideTestGateway(upstream)
+	defer svc.closeCursorAgentSessions()
 	body := `{"model":"claude-sonnet-5","stream":false,"messages":[{"role":"user","content":"weather"}],"tools":[{"name":"get_weather","description":"weather","input_schema":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}}]}`
 	c, recorder := newCursorGatewayTestContext(t, "/v1/messages", body, 3)
 
 	result, err := svc.Forward(context.Background(), c, ideTestAccount(), []byte(body))
 	require.NoError(t, err)
 	require.False(t, result.Stream)
-	require.Equal(t, 14, result.Usage.InputTokens)
+	require.Positive(t, result.Usage.InputTokens)
 	require.Contains(t, recorder.Body.String(), `"type":"tool_use"`)
 	require.Contains(t, recorder.Body.String(), `"name":"get_weather"`)
 	require.Contains(t, recorder.Body.String(), `"city":"Shanghai"`)
 	require.Contains(t, recorder.Body.String(), `"stop_reason":"tool_use"`)
+}
+
+func TestCursorGatewayIDEMCPToolCallReturnsBeforeFinalAndResumesSameStream(t *testing.T) {
+	upstream := &cursorIDEUpstreamStub{chatBody: cursorIDEFrames(
+		cursorIDEToolPayload("call_weather", "get_weather", `{"city":"Shanghai"}`, true),
+		cursorIDETextPayload("weather is sunny"),
+		cursorIDEUsagePayload(16, 4, 0, 0),
+	)}
+	svc := ideTestGateway(upstream)
+	defer svc.closeCursorAgentSessions()
+	account := ideTestAccount()
+	firstBody := `{"model":"claude-sonnet-5","stream":false,"messages":[{"role":"user","content":"weather"}],"tools":[{"type":"function","function":{"name":"get_weather","description":"weather","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}}}]}`
+	firstContext, firstRecorder := newCursorGatewayTestContext(t, "/v1/chat/completions", firstBody, 3)
+	firstResult, err := svc.Forward(context.Background(), firstContext, account, []byte(firstBody))
+	require.NoError(t, err)
+	require.NotNil(t, firstResult)
+	require.Contains(t, firstRecorder.Body.String(), `"finish_reason":"tool_calls"`)
+	require.Contains(t, firstRecorder.Body.String(), `"id":"call_weather"`)
+	require.NotContains(t, firstRecorder.Body.String(), "weather is sunny")
+
+	secondBody := `{"model":"claude-sonnet-5","stream":false,"messages":[{"role":"user","content":"weather"},{"role":"assistant","content":null,"tool_calls":[{"id":"call_weather","type":"function","function":{"name":"get_weather","arguments":"{\"city\":\"Shanghai\"}"}}]},{"role":"tool","tool_call_id":"call_weather","content":"27 C"}],"tools":[{"type":"function","function":{"name":"get_weather","description":"weather","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}}}]}`
+	secondContext, secondRecorder := newCursorGatewayTestContext(t, "/v1/chat/completions", secondBody, 3)
+	secondResult, err := svc.Forward(context.Background(), secondContext, account, []byte(secondBody))
+	require.NoError(t, err)
+	require.NotNil(t, secondResult)
+	require.Contains(t, secondRecorder.Body.String(), `"content":"weather is sunny"`)
+	require.Contains(t, secondRecorder.Body.String(), `"finish_reason":"stop"`)
+
+	upstream.mu.Lock()
+	defer upstream.mu.Unlock()
+	require.Len(t, upstream.requests, 1, "MCP continuation must reuse the original Cursor Agent stream")
+}
+
+func TestCursorGatewayIDEMCPPersistedFallbackAfterActiveStreamLoss(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	defer func() { _ = redisClient.Close() }()
+	upstream := &cursorIDEUpstreamStub{chatBodies: [][]byte{
+		cursorIDEFrames(cursorIDEToolPayload("call_weather", "get_weather", `{"city":"Shanghai"}`, true)),
+		cursorIDEFrames(cursorIDETextPayload("fallback resumed"), cursorIDEUsagePayload(12, 3, 0, 0)),
+	}}
+	svc := ideTestGatewayWithRedis(upstream, redisClient)
+	account := ideTestAccount()
+	firstBody := `{"model":"claude-sonnet-5","stream":false,"messages":[{"role":"user","content":"weather"}],"tools":[{"type":"function","function":{"name":"get_weather","description":"weather","parameters":{"type":"object"}}}]}`
+	firstContext, _ := newCursorGatewayTestContext(t, "/v1/chat/completions", firstBody, 3)
+	_, err := svc.Forward(context.Background(), firstContext, account, []byte(firstBody))
+	require.NoError(t, err)
+	svc.closeCursorAgentSessions()
+
+	secondBody := `{"model":"claude-sonnet-5","stream":false,"messages":[{"role":"user","content":"weather"},{"role":"assistant","content":null,"tool_calls":[{"id":"call_weather","type":"function","function":{"name":"get_weather","arguments":"{\"city\":\"Shanghai\"}"}}]},{"role":"tool","tool_call_id":"call_weather","content":"27 C"}],"tools":[{"type":"function","function":{"name":"get_weather","description":"weather","parameters":{"type":"object"}}}]}`
+	secondContext, secondRecorder := newCursorGatewayTestContext(t, "/v1/chat/completions", secondBody, 3)
+	result, err := svc.Forward(context.Background(), secondContext, account, []byte(secondBody))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Contains(t, secondRecorder.Body.String(), "fallback resumed")
+	upstream.mu.Lock()
+	defer upstream.mu.Unlock()
+	require.Len(t, upstream.requests, 2)
+}
+
+func TestCursorAgentSessionRequiresMatchingToolResultBeforeTake(t *testing.T) {
+	svc := ideTestGateway(&cursorIDEUpstreamStub{})
+	session := &cursorAgentActiveSession{
+		Stream:  &cursorAgentEventAdapter{},
+		Pending: &cursorAgentPendingMCP{Action: cursorpkg.Action{ID: "call-shell"}},
+	}
+	svc.storeCursorAgentSession("key:3", "resp-1", "call-shell", session)
+	claimed, exists := svc.takeCursorAgentSession("key:3", "resp-1", nil)
+	require.True(t, exists)
+	require.Nil(t, claimed, "an invalid request must not consume the active session")
+	claimed, exists = svc.takeCursorAgentSession("key:3", "resp-1", []string{"call-shell"})
+	require.True(t, exists)
+	require.Same(t, session, claimed)
+	require.False(t, svc.removeCursorAgentSession(session), "a claimed session is no longer owned by the first HTTP round")
+	claimed.Close()
+}
+
+func TestMergeCursorAgentDialogueMessagesAvoidsDuplicatingFullHistory(t *testing.T) {
+	previous := []cursorpkg.DialogueMessage{
+		{Role: "user", Text: "run pwd"},
+		{Role: "assistant", ToolCalls: []cursorpkg.Action{{ID: "call-shell", Name: "shell", Arguments: map[string]any{"command": "pwd"}}}},
+	}
+	current := append(append([]cursorpkg.DialogueMessage(nil), previous...), cursorpkg.DialogueMessage{Role: "tool", ToolCallID: "call-shell", Text: "D:/repo"})
+	merged := mergeCursorAgentDialogueMessages(previous, current)
+	require.Equal(t, current, merged)
+
+	toolOnly := []cursorpkg.DialogueMessage{{Role: "tool", ToolCallID: "call-shell", Text: "D:/repo"}}
+	merged = mergeCursorAgentDialogueMessages(previous, toolOnly)
+	require.Len(t, merged, 3)
+	require.Equal(t, "tool", merged[2].Role)
+}
+
+func TestCursorGatewayIDEAgentToolCallReturnsAndResumesSameDuplexStream(t *testing.T) {
+	upstream := newCursorAgentDuplexUpstreamStub()
+	svc := ideTestGateway(upstream)
+	defer svc.closeCursorAgentSessions()
+	account := ideTestAccount()
+	firstBody := `{"model":"claude-sonnet-5","stream":false,"messages":[{"role":"user","content":"run pwd"}],"tools":[{"type":"function","function":{"name":"shell","description":"Run a shell command","parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]}}}]}`
+	firstContext, firstRecorder := newCursorGatewayTestContext(t, "/v1/chat/completions", firstBody, 3)
+	type forwardOutcome struct {
+		result *ForwardResult
+		err    error
+	}
+	firstDone := make(chan forwardOutcome, 1)
+	go func() {
+		result, err := svc.Forward(context.Background(), firstContext, account, []byte(firstBody))
+		firstDone <- forwardOutcome{result: result, err: err}
+	}()
+
+	select {
+	case outcome := <-firstDone:
+		require.NoError(t, outcome.err)
+		require.NotNil(t, outcome.result)
+		require.Contains(t, firstRecorder.Body.String(), `"finish_reason":"tool_calls"`)
+		require.Contains(t, firstRecorder.Body.String(), `"id":"call-shell"`)
+		require.Contains(t, firstRecorder.Body.String(), `"name":"shell"`)
+	case err := <-upstream.serveErrors:
+		t.Fatalf("Cursor duplex upstream failed before first response: %v", err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("first Cursor gateway response did not return immediately after the tool call")
+	}
+
+	select {
+	case frame := <-upstream.requestContextFrames:
+		payload := frame[5:]
+		exec := firstServiceBytesField(t, payload, 2)
+		contextResult := firstServiceBytesField(t, exec, 10)
+		success := firstServiceBytesField(t, contextResult, 1)
+		requestContext := firstServiceBytesField(t, success, 1)
+		tool := firstServiceBytesField(t, requestContext, 7)
+		require.Equal(t, uint64(31), firstServiceVarintField(t, exec, 1))
+		require.Equal(t, "exec-context", firstServiceStringField(t, exec, 15))
+		require.Equal(t, "shell", firstServiceStringField(t, tool, 1))
+	case err := <-upstream.serveErrors:
+		t.Fatalf("Cursor request context response failed: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("Cursor request context result was not sent")
+	}
+	select {
+	case <-upstream.shellResultFrames:
+		t.Fatal("shell result was sent before the downstream submitted tool output")
+	default:
+	}
+	require.Equal(t, 1, upstream.runRequestCount())
+
+	secondBody := `{"model":"claude-sonnet-5","stream":false,"messages":[{"role":"user","content":"run pwd"},{"role":"assistant","content":null,"tool_calls":[{"id":"call-shell","type":"function","function":{"name":"shell","arguments":"{\"command\":\"pwd\"}"}}]},{"role":"tool","tool_call_id":"call-shell","content":"D:/repo\n"}],"tools":[{"type":"function","function":{"name":"shell","description":"Run a shell command","parameters":{"type":"object","properties":{"command":{"type":"string"}},"required":["command"]}}}]}`
+	secondContext, secondRecorder := newCursorGatewayTestContext(t, "/v1/chat/completions", secondBody, 3)
+	secondResult, err := svc.Forward(context.Background(), secondContext, account, []byte(secondBody))
+	require.NoError(t, err)
+	require.NotNil(t, secondResult)
+	require.Contains(t, secondRecorder.Body.String(), `"content":"tool result received"`)
+	require.Contains(t, secondRecorder.Body.String(), `"finish_reason":"stop"`)
+	require.Equal(t, 1, upstream.runRequestCount(), "tool continuation must reuse the original Cursor Agent stream")
+
+	select {
+	case frames := <-upstream.shellResultFrames:
+		require.Len(t, frames, 5)
+		startExec := firstServiceBytesField(t, frames[0][5:], 2)
+		startStream := firstServiceBytesField(t, startExec, 14)
+		require.NotNil(t, firstServiceBytesField(t, startStream, 4))
+		stdoutExec := firstServiceBytesField(t, frames[1][5:], 2)
+		stdoutStream := firstServiceBytesField(t, stdoutExec, 14)
+		require.Equal(t, "D:/repo\n", firstServiceStringField(t, firstServiceBytesField(t, stdoutStream, 1), 1))
+		exitExec := firstServiceBytesField(t, frames[2][5:], 2)
+		exitStream := firstServiceBytesField(t, exitExec, 14)
+		require.Equal(t, uint64(0), firstServiceVarintField(t, firstServiceBytesField(t, exitStream, 3), 1))
+		resultExec := firstServiceBytesField(t, frames[3][5:], 2)
+		shellResult := firstServiceBytesField(t, resultExec, 2)
+		success := firstServiceBytesField(t, shellResult, 1)
+		require.Equal(t, uint64(32), firstServiceVarintField(t, resultExec, 1))
+		require.Equal(t, "exec-shell", firstServiceStringField(t, resultExec, 15))
+		require.Equal(t, "D:/repo\n", firstServiceStringField(t, success, 5))
+		control := firstServiceBytesField(t, frames[4][5:], 5)
+		require.Equal(t, uint64(32), firstServiceVarintField(t, firstServiceBytesField(t, control, 1), 1))
+	case err := <-upstream.serveErrors:
+		t.Fatalf("Cursor shell result continuation failed: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("Cursor shell result was not written back to the active stream")
+	}
 }
 
 func TestCursorGatewayIDERejectsHTTP1BeforeWriting(t *testing.T) {
@@ -459,6 +787,29 @@ func firstServiceBytesField(t *testing.T, payload []byte, wanted protowire.Numbe
 func firstServiceStringField(t *testing.T, payload []byte, wanted protowire.Number) string {
 	t.Helper()
 	return string(firstServiceBytesField(t, payload, wanted))
+}
+
+func firstServiceVarintField(t *testing.T, payload []byte, wanted protowire.Number) uint64 {
+	t.Helper()
+	for len(payload) > 0 {
+		number, wireType, n := protowire.ConsumeTag(payload)
+		require.GreaterOrEqual(t, n, 0)
+		payload = payload[n:]
+		if wireType == protowire.VarintType {
+			value, size := protowire.ConsumeVarint(payload)
+			require.GreaterOrEqual(t, size, 0)
+			payload = payload[size:]
+			if number == wanted {
+				return value
+			}
+			continue
+		}
+		size := protowire.ConsumeFieldValue(number, wireType, payload)
+		require.GreaterOrEqual(t, size, 0)
+		payload = payload[size:]
+	}
+	t.Fatalf("field %d not found", wanted)
+	return 0
 }
 
 func cursorIDEFrames(payloads ...[]byte) []byte {

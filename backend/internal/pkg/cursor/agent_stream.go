@@ -53,6 +53,30 @@ func (s *AgentStream) SendMCPResult(id uint64, execID, text string, isError bool
 	return s.SendClientMessage(encodeAgentMCPResult(id, execID, text, isError))
 }
 
+func (s *AgentStream) SendShellResult(id uint64, execID string, action *Action, text string, isError, streamed bool) error {
+	messages := encodeAgentShellResult(id, execID, action, text, isError, streamed)
+	for _, message := range messages {
+		if err := s.SendClientMessage(message); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *AgentStream) SendRequestContextResult(id uint64, execID string, tools []ToolDefinition, provider string) error {
+	message, err := encodeAgentRequestContextResult(id, execID, tools, provider)
+	if err != nil {
+		return err
+	}
+	return s.SendClientMessage(message)
+}
+
+func (s *AgentStream) Cancel() {
+	if s != nil && s.cancel != nil {
+		s.cancel()
+	}
+}
+
 func (s *AgentStream) CloseSend() error {
 	if s == nil {
 		return nil
@@ -349,19 +373,41 @@ func decodeAgentToolCall(payload []byte) (*Action, bool, int) {
 			break
 		}
 		payload = payload[size:]
-		if number == 15 {
+		switch number {
+		case 1:
+			action := decodeAgentShellArgs(firstProtoBytes(value, 1))
+			if action != nil && action.ID == "" {
+				action.ID = id
+			}
+			return action, true, 1
+		case 15:
 			args := firstProtoBytes(value, 1)
 			action := decodeAgentMCPArgs(args)
 			if action != nil && action.ID == "" {
 				action.ID = id
 			}
 			return action, true, 15
-		}
-		if number != 54 && number != 57 {
+		case 54, 57:
+			continue
+		default:
 			return nil, false, int(number)
 		}
 	}
 	return nil, true, 0
+}
+
+func decodeAgentShellArgs(payload []byte) *Action {
+	if len(payload) == 0 {
+		return nil
+	}
+	arguments := map[string]any{"command": firstProtoString(payload, 1)}
+	if workingDirectory := firstProtoString(payload, 2); workingDirectory != "" {
+		arguments["working_directory"] = workingDirectory
+	}
+	if timeout := firstProtoVarint(payload, 3); timeout > 0 {
+		arguments["timeout"] = int(timeout)
+	}
+	return &Action{ID: firstProtoString(payload, 4), Name: "shell", Arguments: arguments}
 }
 
 func decodeAgentMCPArgs(payload []byte) *Action {
@@ -405,11 +451,18 @@ func parseAgentExecServerMessage(payload []byte) []AgentEvent {
 			break
 		}
 		payload = payload[size:]
-		if number == 11 {
+		switch number {
+		case 2, 14:
+			action := decodeAgentShellArgs(value)
+			return []AgentEvent{{Type: AgentEventExecShell, ExecShell: action, Tool: action, ExecRequestID: id, ExecID: execID, ExecField: int(number)}}
+		case 10:
+			return []AgentEvent{{Type: AgentEventExecRequestContext, ExecRequestID: id, ExecID: execID, ExecField: int(number)}}
+		case 11:
 			action := decodeAgentMCPArgs(value)
-			return []AgentEvent{{Type: AgentEventExecMCP, ExecMCP: action, Tool: action, ExecRequestID: id, ExecID: execID}}
-		}
-		if number != 15 && number != 19 {
+			return []AgentEvent{{Type: AgentEventExecMCP, ExecMCP: action, Tool: action, ExecRequestID: id, ExecID: execID, ExecField: int(number)}}
+		case 15, 19:
+			continue
+		default:
 			return []AgentEvent{{Type: AgentEventUnsupportedExec, Unsupported: &AgentUnsupportedExec{ID: id, ExecID: execID, Field: int(number), Payload: append([]byte(nil), value...)}}}
 		}
 	}

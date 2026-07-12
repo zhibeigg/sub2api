@@ -93,23 +93,25 @@ type AgentModel struct {
 type AgentEventType string
 
 const (
-	AgentEventText            AgentEventType = "text"
-	AgentEventThinking        AgentEventType = "thinking"
-	AgentEventToolStarted     AgentEventType = "tool_started"
-	AgentEventToolPartial     AgentEventType = "tool_partial"
-	AgentEventToolCompleted   AgentEventType = "tool_completed"
-	AgentEventTurnEnded       AgentEventType = "turn_ended"
-	AgentEventUsage           AgentEventType = "usage"
-	AgentEventCheckpoint      AgentEventType = "checkpoint"
-	AgentEventKVGet           AgentEventType = "kv_get"
-	AgentEventKVSet           AgentEventType = "kv_set"
-	AgentEventExecMCP         AgentEventType = "exec_mcp"
-	AgentEventUnsupportedExec AgentEventType = "unsupported_exec"
-	AgentEventHeartbeat       AgentEventType = "heartbeat"
-	AgentEventStepStarted     AgentEventType = "step_started"
-	AgentEventStepCompleted   AgentEventType = "step_completed"
-	AgentEventFinish          AgentEventType = "finish"
-	AgentEventError           AgentEventType = "error"
+	AgentEventText               AgentEventType = "text"
+	AgentEventThinking           AgentEventType = "thinking"
+	AgentEventToolStarted        AgentEventType = "tool_started"
+	AgentEventToolPartial        AgentEventType = "tool_partial"
+	AgentEventToolCompleted      AgentEventType = "tool_completed"
+	AgentEventTurnEnded          AgentEventType = "turn_ended"
+	AgentEventUsage              AgentEventType = "usage"
+	AgentEventCheckpoint         AgentEventType = "checkpoint"
+	AgentEventKVGet              AgentEventType = "kv_get"
+	AgentEventKVSet              AgentEventType = "kv_set"
+	AgentEventExecMCP            AgentEventType = "exec_mcp"
+	AgentEventExecShell          AgentEventType = "exec_shell"
+	AgentEventExecRequestContext AgentEventType = "exec_request_context"
+	AgentEventUnsupportedExec    AgentEventType = "unsupported_exec"
+	AgentEventHeartbeat          AgentEventType = "heartbeat"
+	AgentEventStepStarted        AgentEventType = "step_started"
+	AgentEventStepCompleted      AgentEventType = "step_completed"
+	AgentEventFinish             AgentEventType = "finish"
+	AgentEventError              AgentEventType = "error"
 )
 
 type AgentKVRequest struct {
@@ -137,8 +139,10 @@ type AgentEvent struct {
 	CheckpointRaw  []byte
 	KV             *AgentKVRequest
 	ExecMCP        *Action
+	ExecShell      *Action
 	ExecRequestID  uint64
 	ExecID         string
+	ExecField      int
 	Unsupported    *AgentUnsupportedExec
 	StepID         uint64
 	StepDuration   time.Duration

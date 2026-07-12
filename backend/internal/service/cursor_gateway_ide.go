@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"runtime"
 	"sort"
 	"strings"
@@ -582,23 +583,30 @@ type cursorIDEEventSource interface {
 }
 
 type cursorAgentEventAdapter struct {
-	stream     *cursorpkg.AgentStream
-	checkpoint *cursorpkg.AgentConversationState
-	blobs      map[string][]byte
-	pendingMCP *cursorAgentPendingMCP
-	emitted    map[string]struct{}
-	sawTool    bool
+	stream        *cursorpkg.AgentStream
+	checkpoint    *cursorpkg.AgentConversationState
+	blobs         map[string][]byte
+	tools         []cursorpkg.ToolDefinition
+	pendingMCP    *cursorAgentPendingMCP
+	lastTool      *cursorpkg.Action
+	emitted       map[string]struct{}
+	sawTool       bool
+	pendingFinish bool
 }
 
-func newCursorAgentEventAdapter(stream *cursorpkg.AgentStream, blobs map[string][]byte) *cursorAgentEventAdapter {
+func newCursorAgentEventAdapter(stream *cursorpkg.AgentStream, blobs map[string][]byte, tools []cursorpkg.ToolDefinition) *cursorAgentEventAdapter {
 	return &cursorAgentEventAdapter{
-		stream: stream, blobs: cloneCursorAgentBlobs(blobs), emitted: make(map[string]struct{}),
+		stream: stream, blobs: cloneCursorAgentBlobs(blobs), tools: append([]cursorpkg.ToolDefinition(nil), tools...), emitted: make(map[string]struct{}),
 	}
 }
 
 func (s *cursorAgentEventAdapter) Next() (cursorpkg.IDEEvent, error) {
 	if s == nil || s.stream == nil {
 		return cursorpkg.IDEEvent{}, io.EOF
+	}
+	if s.pendingFinish {
+		s.pendingFinish = false
+		return cursorpkg.IDEEvent{Type: cursorpkg.IDEEventFinish, FinishReason: "tool_calls"}, nil
 	}
 	for {
 		event, err := s.stream.Next()
@@ -613,17 +621,49 @@ func (s *cursorAgentEventAdapter) Next() (cursorpkg.IDEEvent, error) {
 		case cursorpkg.AgentEventUsage:
 			return cursorpkg.IDEEvent{Type: cursorpkg.IDEEventUsage, Usage: event.Usage}, nil
 		case cursorpkg.AgentEventToolCompleted:
-			if mapped, ok := s.mapTool(event.Tool); ok {
+			action := s.resolveTool(event.Tool)
+			if mapped, ok := s.mapTool(action); ok {
+				s.lastTool = cloneCursorAgentAction(action)
 				return mapped, nil
 			}
+			s.lastTool = nil
 		case cursorpkg.AgentEventExecMCP:
-			if event.ExecMCP != nil {
-				action := *event.ExecMCP
-				action.Arguments = shallowCopyAnyMap(event.ExecMCP.Arguments)
-				s.pendingMCP = &cursorAgentPendingMCP{RequestID: event.ExecRequestID, ExecID: event.ExecID, Action: action}
+			action := s.correlateExecTool(s.resolveTool(event.ExecMCP), event.ExecID, event.ExecRequestID)
+			if action != nil {
+				s.pendingMCP = &cursorAgentPendingMCP{
+					Kind: cursorAgentExecMCP, RequestID: event.ExecRequestID, ExecID: event.ExecID, ExecField: event.ExecField, Action: *action,
+					CursorAction: cloneCursorAgentAction(event.ExecMCP),
+				}
 			}
-			if mapped, ok := s.mapTool(event.ExecMCP); ok {
+			if mapped, ok := s.mapTool(action); ok {
+				s.pendingFinish = true
 				return mapped, nil
+			}
+			if s.pendingMCP != nil {
+				return cursorpkg.IDEEvent{Type: cursorpkg.IDEEventFinish, FinishReason: "tool_calls"}, nil
+			}
+		case cursorpkg.AgentEventExecShell:
+			action := s.correlateExecTool(s.resolveTool(event.ExecShell), event.ExecID, event.ExecRequestID)
+			if action != nil {
+				kind := cursorAgentExecShell
+				if event.ExecField == 14 {
+					kind = cursorAgentExecShellStream
+				}
+				s.pendingMCP = &cursorAgentPendingMCP{
+					Kind: kind, RequestID: event.ExecRequestID, ExecID: event.ExecID, ExecField: event.ExecField, Action: *action,
+					CursorAction: cloneCursorAgentAction(event.ExecShell),
+				}
+			}
+			if mapped, ok := s.mapTool(action); ok {
+				s.pendingFinish = true
+				return mapped, nil
+			}
+			if s.pendingMCP != nil {
+				return cursorpkg.IDEEvent{Type: cursorpkg.IDEEventFinish, FinishReason: "tool_calls"}, nil
+			}
+		case cursorpkg.AgentEventExecRequestContext:
+			if err := s.stream.SendRequestContextResult(event.ExecRequestID, event.ExecID, s.tools, "sub2api"); err != nil {
+				return cursorpkg.IDEEvent{}, err
 			}
 		case cursorpkg.AgentEventCheckpoint:
 			if event.Checkpoint != nil {
@@ -680,6 +720,150 @@ func (s *cursorAgentEventAdapter) Next() (cursorpkg.IDEEvent, error) {
 	}
 }
 
+func cloneCursorAgentAction(action *cursorpkg.Action) *cursorpkg.Action {
+	if action == nil {
+		return nil
+	}
+	cloned := *action
+	cloned.Arguments = shallowCopyAnyMap(action.Arguments)
+	return &cloned
+}
+
+func (s *cursorAgentEventAdapter) resolveTool(action *cursorpkg.Action) *cursorpkg.Action {
+	if action == nil {
+		return nil
+	}
+	resolved := *action
+	resolved.Arguments = shallowCopyAnyMap(action.Arguments)
+	if !strings.EqualFold(strings.TrimSpace(resolved.Name), "shell") {
+		return &resolved
+	}
+
+	bestScore := 0
+	var best *cursorpkg.ToolDefinition
+	for index := range s.tools {
+		tool := &s.tools[index]
+		score := cursorAgentShellToolScore(*tool)
+		if score > bestScore {
+			bestScore = score
+			best = tool
+		}
+	}
+	if best == nil {
+		return &resolved
+	}
+	resolved.Name = best.Name
+	resolved.Arguments = cursorAgentShellToolArguments(resolved.Arguments, best.InputSchema)
+	return &resolved
+}
+
+func (s *cursorAgentEventAdapter) correlateExecTool(action *cursorpkg.Action, execID string, requestID uint64) *cursorpkg.Action {
+	if action == nil {
+		action = cloneCursorAgentAction(s.lastTool)
+	}
+	if action == nil {
+		return nil
+	}
+	if s.lastTool != nil && strings.EqualFold(strings.TrimSpace(action.Name), strings.TrimSpace(s.lastTool.Name)) {
+		if strings.TrimSpace(action.ID) == "" {
+			action.ID = strings.TrimSpace(s.lastTool.ID)
+		}
+		if len(action.Arguments) == 0 {
+			action.Arguments = shallowCopyAnyMap(s.lastTool.Arguments)
+		}
+	}
+	if strings.TrimSpace(action.ID) == "" {
+		action.ID = strings.TrimSpace(execID)
+	}
+	if strings.TrimSpace(action.ID) == "" {
+		action.ID = fmt.Sprintf("call_cursor_%d", requestID)
+	}
+	s.lastTool = nil
+	return action
+}
+
+func cursorAgentShellToolScore(tool cursorpkg.ToolDefinition) int {
+	name := strings.ToLower(strings.TrimSpace(tool.Name))
+	base := name
+	if parts := strings.FieldsFunc(name, func(r rune) bool {
+		return r == '.' || r == '/' || r == ':' || r == '\\' || r == '-'
+	}); len(parts) > 0 {
+		base = parts[len(parts)-1]
+	}
+	score := 0
+	switch base {
+	case "bash", "shell":
+		score = 120
+	case "terminal", "run_terminal_cmd", "execute_command", "run_command", "command":
+		score = 100
+	default:
+		if strings.Contains(base, "shell") || strings.Contains(base, "bash") || strings.Contains(base, "terminal") {
+			score = 90
+		}
+	}
+	if strings.Contains(strings.ToLower(tool.Description), "shell") || strings.Contains(strings.ToLower(tool.Description), "terminal") {
+		score += 10
+	}
+	properties := cursorAgentToolSchemaProperties(tool.InputSchema)
+	if cursorAgentSchemaProperty(properties, "command", "cmd", "script") != "" {
+		score += 40
+	}
+	return score
+}
+
+func cursorAgentShellToolArguments(arguments map[string]any, schema json.RawMessage) map[string]any {
+	properties := cursorAgentToolSchemaProperties(schema)
+	if len(properties) == 0 {
+		return shallowCopyAnyMap(arguments)
+	}
+	mapped := make(map[string]any)
+	if command, ok := arguments["command"]; ok {
+		key := cursorAgentSchemaProperty(properties, "command", "cmd", "script", "input")
+		if key == "" {
+			key = "command"
+		}
+		mapped[key] = command
+	}
+	if workingDirectory, ok := arguments["working_directory"]; ok {
+		if key := cursorAgentSchemaProperty(properties, "working_directory", "workingDirectory", "cwd", "workdir", "work_dir"); key != "" {
+			mapped[key] = workingDirectory
+		}
+	}
+	if timeout, ok := arguments["timeout"]; ok {
+		if key := cursorAgentSchemaProperty(properties, "timeout", "timeout_ms", "timeoutMs"); key != "" {
+			mapped[key] = timeout
+		}
+	}
+	if key := cursorAgentSchemaProperty(properties, "description"); key != "" {
+		mapped[key] = "Run a Cursor Agent shell command"
+	}
+	return mapped
+}
+
+func cursorAgentToolSchemaProperties(schema json.RawMessage) map[string]json.RawMessage {
+	if len(schema) == 0 {
+		return nil
+	}
+	var decoded struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	if err := json.Unmarshal(schema, &decoded); err != nil {
+		return nil
+	}
+	return decoded.Properties
+}
+
+func cursorAgentSchemaProperty(properties map[string]json.RawMessage, candidates ...string) string {
+	for _, candidate := range candidates {
+		for property := range properties {
+			if strings.EqualFold(property, candidate) {
+				return property
+			}
+		}
+	}
+	return ""
+}
+
 func (s *cursorAgentEventAdapter) mapTool(action *cursorpkg.Action) (cursorpkg.IDEEvent, bool) {
 	if action == nil || strings.TrimSpace(action.Name) == "" {
 		return cursorpkg.IDEEvent{}, false
@@ -696,6 +880,12 @@ func (s *cursorAgentEventAdapter) mapTool(action *cursorpkg.Action) (cursorpkg.I
 	s.sawTool = true
 	copyAction := *action
 	return cursorpkg.IDEEvent{Type: cursorpkg.IDEEventToolCall, ToolCall: &copyAction}, true
+}
+
+func (s *cursorAgentEventAdapter) Cancel() {
+	if s != nil && s.stream != nil {
+		s.stream.Cancel()
+	}
 }
 
 func (s *cursorAgentEventAdapter) Close() error {
@@ -726,11 +916,35 @@ func (s *cursorAgentEventAdapter) PendingMCP() *cursorAgentPendingMCP {
 	return cloneCursorAgentPendingMCP(s.pendingMCP)
 }
 
-func (s *cursorAgentEventAdapter) SendMCPResult(pending *cursorAgentPendingMCP, result cursorpkg.DialogueMessage) error {
+func (s *cursorAgentEventAdapter) SendPendingResult(pending *cursorAgentPendingMCP, result cursorpkg.DialogueMessage) error {
 	if s == nil || s.stream == nil || pending == nil {
-		return errors.New("Cursor Agent MCP resume state is unavailable")
+		return errors.New("Cursor Agent tool resume state is unavailable")
 	}
-	return s.stream.SendMCPResult(pending.RequestID, pending.ExecID, result.Text, result.IsError)
+	kind := strings.TrimSpace(pending.Kind)
+	if kind == "" {
+		kind = cursorAgentExecMCP
+	}
+	var err error
+	switch kind {
+	case cursorAgentExecMCP:
+		err = s.stream.SendMCPResult(pending.RequestID, pending.ExecID, result.Text, result.IsError)
+	case cursorAgentExecShell, cursorAgentExecShellStream:
+		action := pending.CursorAction
+		if action == nil {
+			action = &pending.Action
+		}
+		err = s.stream.SendShellResult(pending.RequestID, pending.ExecID, action, result.Text, result.IsError, kind == cursorAgentExecShellStream)
+	default:
+		err = fmt.Errorf("unsupported Cursor Agent pending tool kind %q", kind)
+	}
+	if err != nil {
+		return err
+	}
+	s.pendingMCP = nil
+	s.pendingFinish = false
+	s.sawTool = false
+	s.lastTool = nil
+	return nil
 }
 
 func cursorAgentToolResult(dialogue *cursorpkg.Dialogue, pending *cursorAgentPendingMCP) (cursorpkg.DialogueMessage, bool) {
@@ -744,6 +958,47 @@ func cursorAgentToolResult(dialogue *cursorpkg.Dialogue, pending *cursorAgentPen
 		}
 	}
 	return cursorpkg.DialogueMessage{}, false
+}
+
+func mergeCursorAgentDialogueMessages(previous, current []cursorpkg.DialogueMessage) []cursorpkg.DialogueMessage {
+	if len(previous) == 0 {
+		return append([]cursorpkg.DialogueMessage(nil), current...)
+	}
+	maxOverlap := len(previous)
+	if len(current) < maxOverlap {
+		maxOverlap = len(current)
+	}
+	for overlap := maxOverlap; overlap > 0; overlap-- {
+		if reflect.DeepEqual(previous[len(previous)-overlap:], current[:overlap]) {
+			merged := append([]cursorpkg.DialogueMessage(nil), previous...)
+			return append(merged, current[overlap:]...)
+		}
+	}
+	merged := append([]cursorpkg.DialogueMessage(nil), previous...)
+	return append(merged, current...)
+}
+
+func cursorAgentToolResultIDs(dialogue *cursorpkg.Dialogue) []string {
+	if dialogue == nil {
+		return nil
+	}
+	ids := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, message := range dialogue.Messages {
+		if message.Role != "tool" {
+			continue
+		}
+		id := strings.TrimSpace(message.ToolCallID)
+		if id == "" {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, account *Account, body []byte, protocol cursorpkg.Protocol) (*ForwardResult, error) {
@@ -778,16 +1033,45 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 	if err != nil {
 		return nil, mapCursorError(err)
 	}
+	incomingToolResultIDs := cursorAgentToolResultIDs(dialogue)
+	owner, ownerErr := cursorResponseOwner(c)
+	var activeSession *cursorAgentActiveSession
+	activeSessionExists := false
+	if ownerErr == nil {
+		activeSession, activeSessionExists = s.takeCursorAgentSession(owner, envelope.PreviousResponseID, incomingToolResultIDs)
+	}
+	if activeSession == nil && activeSessionExists {
+		return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte("Cursor Agent is waiting for the matching tool result")}
+	}
+
 	conversationID := uuid.NewString()
 	var agentState *cursorpkg.AgentConversationState
 	var agentBlobs map[string][]byte
 	var pendingMCP *cursorAgentPendingMCP
-	if protocol == cursorpkg.ProtocolResponses && strings.TrimSpace(envelope.PreviousResponseID) != "" {
-		previous, loadErr := s.loadCursorStoredResponse(ctx, c, envelope.PreviousResponseID)
+	var previous *cursorStoredResponse
+	if activeSession != nil {
+		previous = activeSession.Stored
+		pendingMCP = cloneCursorAgentPendingMCP(activeSession.Pending)
+	} else if protocol == cursorpkg.ProtocolResponses && strings.TrimSpace(envelope.PreviousResponseID) != "" {
+		loaded, loadErr := s.loadCursorStoredResponse(ctx, c, envelope.PreviousResponseID)
 		if loadErr != nil {
 			return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte(loadErr.Error())}
 		}
+		previous = loaded
+	} else {
+		for index := len(incomingToolResultIDs) - 1; index >= 0; index-- {
+			loaded, loadErr := s.loadCursorStoredResponse(ctx, c, "tool:"+incomingToolResultIDs[index])
+			if loadErr == nil {
+				previous = loaded
+				break
+			}
+		}
+	}
+	if previous != nil {
 		if previous.Dialogue == nil {
+			if activeSession != nil {
+				activeSession.Close()
+			}
 			return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte("previous_response_id has no stored dialogue")}
 		}
 		if strings.TrimSpace(dialogue.System) == "" {
@@ -796,75 +1080,117 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 		if len(dialogue.Tools) == 0 && len(previous.Dialogue.Tools) > 0 {
 			dialogue.Tools = append([]cursorpkg.ToolDefinition(nil), previous.Dialogue.Tools...)
 		}
-		dialogue.Messages = append(append([]cursorpkg.DialogueMessage(nil), previous.Dialogue.Messages...), dialogue.Messages...)
+		dialogue.Messages = mergeCursorAgentDialogueMessages(previous.Dialogue.Messages, dialogue.Messages)
 		if strings.TrimSpace(previous.AgentConversationID) != "" {
 			conversationID = strings.TrimSpace(previous.AgentConversationID)
 		}
 		agentState = previous.AgentState
 		agentBlobs = cloneCursorAgentBlobs(previous.AgentBlobs)
-		pendingMCP = cloneCursorAgentPendingMCP(previous.AgentPendingMCP)
-	} else {
-		for index := len(dialogue.Messages) - 1; index >= 0; index-- {
-			message := dialogue.Messages[index]
-			if message.Role != "tool" || strings.TrimSpace(message.ToolCallID) == "" {
-				continue
-			}
-			if previous, loadErr := s.loadCursorStoredResponse(ctx, c, "tool:"+message.ToolCallID); loadErr == nil {
-				if strings.TrimSpace(previous.AgentConversationID) != "" {
-					conversationID = strings.TrimSpace(previous.AgentConversationID)
-				}
-				agentState = previous.AgentState
-				agentBlobs = cloneCursorAgentBlobs(previous.AgentBlobs)
-				pendingMCP = cloneCursorAgentPendingMCP(previous.AgentPendingMCP)
-			}
-			break
+		if pendingMCP == nil {
+			pendingMCP = cloneCursorAgentPendingMCP(previous.AgentPendingMCP)
 		}
 	}
 	trimCursorDialogue(dialogue, s.cursorConfig().MaxHistoryMessages, s.cursorConfig().MaxHistoryTokens)
 	mode := prepareCursorAgentMode(dialogue)
 	estimatedInput := estimateCursorDialogueTokens(dialogue)
 	variantPreference := envelope.variantPreference()
+	if activeSession != nil && strings.TrimSpace(activeSession.UpstreamModel) != "" {
+		upstreamModel = strings.TrimSpace(activeSession.UpstreamModel)
+	}
 	selection := cursorIDEModelSelection{ServerName: upstreamModel}
 	if variantPreference.Thinking != nil {
 		selection.Thinking = *variantPreference.Thinking
 	}
-	resolvedSelection, resolveErr := s.resolveCursorIDEModel(ctx, account, upstreamModel, variantPreference)
-	if resolveErr != nil {
-		slog.Warn("cursor_ide_model_resolution_failed", "account_id", account.ID, "model", upstreamModel, "error", resolveErr.Error())
-	} else if resolvedSelection.ServerName != "" {
-		selection = resolvedSelection
-		upstreamModel = resolvedSelection.ServerName
+	if activeSession == nil {
+		resolvedSelection, resolveErr := s.resolveCursorIDEModel(ctx, account, upstreamModel, variantPreference)
+		if resolveErr != nil {
+			slog.Warn("cursor_ide_model_resolution_failed", "account_id", account.ID, "model", upstreamModel, "error", resolveErr.Error())
+		} else if resolvedSelection.ServerName != "" {
+			selection = resolvedSelection
+			upstreamModel = resolvedSelection.ServerName
+		}
 	}
 
-	toolResult, resumeAttempt := cursorAgentToolResult(dialogue, pendingMCP)
-	resumeAttempt = resumeAttempt && strings.TrimSpace(conversationID) != ""
+	toolResult, hasToolResult := cursorAgentToolResult(dialogue, pendingMCP)
+	if activeSession != nil && (!hasToolResult || pendingMCP == nil) {
+		activeSession.Close()
+		return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte("Cursor Agent is waiting for the matching tool result")}
+	}
+	resumeStoredMCP := false
+	if activeSession == nil && pendingMCP != nil {
+		if !hasToolResult {
+			return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte("Cursor Agent is waiting for the matching tool result")}
+		}
+		kind := strings.TrimSpace(pendingMCP.Kind)
+		if kind == "" {
+			kind = cursorAgentExecMCP
+		}
+		if kind != cursorAgentExecMCP {
+			return nil, &UpstreamFailoverError{StatusCode: http.StatusConflict, ResponseBody: []byte("cursor_agent_tool_session_expired: active Cursor Agent tool session is unavailable; retry the original request")}
+		}
+		resumeStoredMCP = true
+	}
+
 	runOptions := cursorpkg.AgentRunOptions{
 		Model: upstreamModel, DisplayModel: requestModel, ConversationID: conversationID, Mode: mode,
-		ConversationState: agentState, Resume: resumeAttempt, MCPProviderIdentifier: "sub2api",
+		ConversationState: agentState, Resume: resumeStoredMCP, MCPProviderIdentifier: "sub2api",
 		RequestContext: cursorpkg.AgentRequestContext{
 			OSVersion: runtime.GOOS, TimeZone: time.Now().Location().String(), MCPInfoComplete: true, EnvInfoComplete: true,
 		},
 	}
-	activeAccount, resp, stream, err := s.openCursorAgentStream(ctx, account, dialogue, runOptions, agentBlobs)
-	if err == nil && resumeAttempt {
-		err = stream.SendMCPResult(pendingMCP, toolResult)
-	}
-	if err != nil && resumeAttempt {
-		if stream != nil {
-			_ = stream.Close()
+	activeAccount := account
+	var resp *http.Response
+	var stream *cursorAgentEventAdapter
+	var runCancel context.CancelFunc
+	var stopRequestCancel func() bool
+	reusedActiveSession := activeSession != nil
+	if reusedActiveSession {
+		stream = activeSession.Stream
+		stopRequestCancel = context.AfterFunc(ctx, stream.Cancel)
+		if activeSession.AccountID > 0 && activeSession.AccountID != account.ID {
+			slog.Info("cursor_agent_active_session_account_reused", "selected_account_id", account.ID, "stream_account_id", activeSession.AccountID, "model", upstreamModel)
 		}
-		slog.Warn("cursor_agent_resume_failed_rebuilding_history", "account_id", account.ID, "model", upstreamModel, "error", err.Error())
-		conversationID = uuid.NewString()
-		runOptions.ConversationID = conversationID
-		runOptions.ConversationState = nil
-		runOptions.Resume = false
-		activeAccount, resp, stream, err = s.openCursorAgentStream(ctx, account, dialogue, runOptions, nil)
+		err = stream.SendPendingResult(pendingMCP, toolResult)
+	} else {
+		var runCtx context.Context
+		runCtx, runCancel = context.WithCancel(context.WithoutCancel(ctx))
+		stopRequestCancel = context.AfterFunc(ctx, runCancel)
+		activeAccount, resp, stream, err = s.openCursorAgentStream(ctx, runCtx, account, dialogue, runOptions, agentBlobs)
+		if err == nil && resumeStoredMCP {
+			err = stream.SendPendingResult(pendingMCP, toolResult)
+		}
+		if err != nil && resumeStoredMCP {
+			if stream != nil {
+				_ = stream.Close()
+			}
+			slog.Warn("cursor_agent_resume_failed_rebuilding_history", "account_id", account.ID, "model", upstreamModel, "error", err.Error())
+			conversationID = uuid.NewString()
+			runOptions.ConversationID = conversationID
+			runOptions.ConversationState = nil
+			runOptions.Resume = false
+			activeAccount, resp, stream, err = s.openCursorAgentStream(ctx, runCtx, account, dialogue, runOptions, nil)
+		}
 	}
 	if err != nil {
-		slog.Warn("cursor_agent_open_stream_failed", "account_id", account.ID, "model", upstreamModel, "error", err.Error())
+		if stopRequestCancel != nil {
+			stopRequestCancel()
+		}
+		if runCancel != nil {
+			runCancel()
+		}
+		if activeSession != nil {
+			activeSession.Close()
+		}
+		slog.Warn("cursor_agent_open_stream_failed", "account_id", account.ID, "model", upstreamModel, "reused_active_session", reusedActiveSession, "error", err.Error())
 		return nil, mapCursorError(err)
 	}
-	if resp == nil || resp.ProtoMajor != 2 {
+	if !reusedActiveSession && (resp == nil || resp.ProtoMajor != 2) {
+		if stopRequestCancel != nil {
+			stopRequestCancel()
+		}
+		if runCancel != nil {
+			runCancel()
+		}
 		if stream != nil {
 			_ = stream.Close()
 		}
@@ -874,7 +1200,18 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 		}
 		return nil, mapCursorError(cursorpkg.HTTPError(http.StatusBadGateway, "Agent run request", "Cursor Agent RPC requires HTTP/2; negotiated "+proto))
 	}
-	defer func() { _ = stream.Close() }()
+	closeStream := true
+	defer func() {
+		if stopRequestCancel != nil {
+			stopRequestCancel()
+		}
+		if closeStream && stream != nil {
+			_ = stream.Close()
+		}
+		if closeStream && runCancel != nil {
+			runCancel()
+		}
+	}()
 
 	responseID := cursorResponseID(protocol)
 	writer := newCursorIDEStreamWriter(c, protocol, responseID, requestModel)
@@ -980,20 +1317,46 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 	storedDialogue := &cursorpkg.Dialogue{System: dialogue.System, Tools: dialogue.Tools, ToolChoice: dialogue.ToolChoice, Messages: append([]cursorpkg.DialogueMessage(nil), dialogue.Messages...)}
 	storedDialogue.Messages = append(storedDialogue.Messages, cursorpkg.DialogueMessage{Role: "assistant", Text: collected.CleanText, ToolCalls: collected.Actions})
 	pending := stream.PendingMCP()
+	if pending != nil && stopRequestCancel != nil {
+		stopRequestCancel()
+		stopRequestCancel = nil
+	}
+	storedResponse := &cursorStoredResponse{
+		Dialogue: storedDialogue, AgentConversationID: strings.TrimSpace(conversationID), AgentState: stream.Checkpoint(),
+		AgentBlobs: cloneCursorAgentBlobs(stream.Blobs()), AgentPendingMCP: cloneCursorAgentPendingMCP(pending),
+	}
 	if protocol == cursorpkg.ProtocolResponses && (envelope.Store == nil || *envelope.Store) {
-		if saveErr := s.saveCursorAgentResponse(ctx, c, responseID, storedDialogue, conversationID, stream.Checkpoint(), stream.Blobs(), pending); saveErr != nil {
+		if saveErr := s.saveCursorStoredResponse(ctx, c, responseID, storedResponse); saveErr != nil {
 			if committed {
 				_ = writer.WriteError("failed to store Cursor response continuation")
 			}
 			return nil, &UpstreamFailoverError{StatusCode: http.StatusServiceUnavailable, ResponseBody: []byte("failed to store Cursor response continuation: " + saveErr.Error())}
 		}
 	} else if pending != nil && strings.TrimSpace(pending.Action.ID) != "" {
-		if saveErr := s.saveCursorAgentResponse(ctx, c, "tool:"+pending.Action.ID, storedDialogue, conversationID, stream.Checkpoint(), stream.Blobs(), pending); saveErr != nil {
+		if saveErr := s.saveCursorStoredResponse(ctx, c, "tool:"+pending.Action.ID, storedResponse); saveErr != nil {
 			slog.Warn("cursor_agent_tool_continuation_store_failed", "account_id", account.ID, "error", saveErr.Error())
 		}
 	}
+	var registeredSession *cursorAgentActiveSession
+	if pending != nil && strings.TrimSpace(pending.Action.ID) != "" {
+		if ownerErr != nil {
+			return nil, &UpstreamFailoverError{StatusCode: http.StatusInternalServerError, ResponseBody: []byte(ownerErr.Error())}
+		}
+		accountID := account.ID
+		if activeAccount != nil && activeAccount.ID > 0 {
+			accountID = activeAccount.ID
+		}
+		registeredSession = &cursorAgentActiveSession{
+			Stream: stream, Stored: storedResponse, Pending: cloneCursorAgentPendingMCP(pending), AccountID: accountID, UpstreamModel: upstreamModel,
+		}
+		s.storeCursorAgentSession(owner, responseID, pending.Action.ID, registeredSession)
+		closeStream = false
+	}
 	if envelope.Stream {
 		if err := writer.Finish(collected); err != nil {
+			if registeredSession != nil && s.removeCursorAgentSession(registeredSession) {
+				registeredSession.Close()
+			}
 			return nil, err
 		}
 	} else {
@@ -1018,7 +1381,7 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 	return result, nil
 }
 
-func (s *CursorGatewayService) openCursorAgentStream(ctx context.Context, account *Account, dialogue *cursorpkg.Dialogue, options cursorpkg.AgentRunOptions, blobs map[string][]byte) (*Account, *http.Response, *cursorAgentEventAdapter, error) {
+func (s *CursorGatewayService) openCursorAgentStream(ctx, runCtx context.Context, account *Account, dialogue *cursorpkg.Dialogue, options cursorpkg.AgentRunOptions, blobs map[string][]byte) (*Account, *http.Response, *cursorAgentEventAdapter, error) {
 	activeAccount := account
 	if s.dashboardAuth != nil && activeAccount != nil && activeAccount.ID > 0 {
 		refreshed, _, err := s.dashboardAuth.RefreshIfNeeded(ctx, activeAccount)
@@ -1033,7 +1396,7 @@ func (s *CursorGatewayService) openCursorAgentStream(ctx context.Context, accoun
 	if err != nil {
 		return activeAccount, nil, nil, err
 	}
-	resp, agentStream, err := client.Run(ctx, credential, dialogue, options)
+	resp, agentStream, err := client.Run(runCtx, credential, dialogue, options)
 	if err == nil || !cursorpkg.IsKind(err, cursorpkg.ErrorUnauthorized) || s.dashboardAuth == nil || activeAccount.ID <= 0 {
 		if agentStream == nil {
 			if err == nil {
@@ -1041,7 +1404,7 @@ func (s *CursorGatewayService) openCursorAgentStream(ctx context.Context, accoun
 			}
 			return activeAccount, resp, nil, err
 		}
-		return activeAccount, resp, newCursorAgentEventAdapter(agentStream, blobs), err
+		return activeAccount, resp, newCursorAgentEventAdapter(agentStream, blobs, dialogue.Tools), err
 	}
 	refreshed, refreshErr := s.dashboardAuth.forceRefresh(ctx, activeAccount)
 	if refreshErr != nil {
@@ -1051,14 +1414,14 @@ func (s *CursorGatewayService) openCursorAgentStream(ctx context.Context, accoun
 	if err != nil {
 		return refreshed, nil, nil, err
 	}
-	resp, agentStream, err = client.Run(ctx, credential, dialogue, options)
+	resp, agentStream, err = client.Run(runCtx, credential, dialogue, options)
 	if agentStream == nil {
 		if err == nil {
 			err = errors.New("Cursor Agent stream is unavailable")
 		}
 		return refreshed, resp, nil, err
 	}
-	return refreshed, resp, newCursorAgentEventAdapter(agentStream, blobs), err
+	return refreshed, resp, newCursorAgentEventAdapter(agentStream, blobs, dialogue.Tools), err
 }
 
 func (s *CursorGatewayService) openCursorIDEStream(ctx context.Context, account *Account, dialogue *cursorpkg.Dialogue, options cursorpkg.IDEChatOptions) (*Account, *http.Response, *cursorpkg.IDEEventStream, error) {

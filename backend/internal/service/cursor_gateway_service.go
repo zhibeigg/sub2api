@@ -34,12 +34,16 @@ type CursorGatewayService struct {
 	ideModelMu      sync.RWMutex
 	ideModelCache   map[int64]cursorIDEModelCatalogCache
 	ideModelRefresh singleflight.Group
+
+	agentSessionMu sync.Mutex
+	agentSessions  map[string]*cursorAgentActiveSession
 }
 
 func NewCursorGatewayService(httpUpstream HTTPUpstream, proxyRepo ProxyRepository, _ *TLSFingerprintProfileService, redisClient *redis.Client, cfg *config.Config) *CursorGatewayService {
 	return &CursorGatewayService{
 		httpUpstream: httpUpstream, proxyRepo: proxyRepo, redisClient: redisClient, cfg: cfg,
 		ideModelCache: make(map[int64]cursorIDEModelCatalogCache),
+		agentSessions: make(map[string]*cursorAgentActiveSession),
 	}
 }
 
@@ -148,10 +152,41 @@ func normalizeCursorCloudModel(model string, preference cursorVariantPreference)
 	return logical, preference
 }
 
+const (
+	cursorAgentExecMCP         = "mcp"
+	cursorAgentExecShell       = "shell"
+	cursorAgentExecShellStream = "shell_stream"
+)
+
 type cursorAgentPendingMCP struct {
-	RequestID uint64           `json:"request_id"`
-	ExecID    string           `json:"exec_id,omitempty"`
-	Action    cursorpkg.Action `json:"action"`
+	Kind         string            `json:"kind,omitempty"`
+	RequestID    uint64            `json:"request_id"`
+	ExecID       string            `json:"exec_id,omitempty"`
+	ExecField    int               `json:"exec_field,omitempty"`
+	Action       cursorpkg.Action  `json:"action"`
+	CursorAction *cursorpkg.Action `json:"cursor_action,omitempty"`
+}
+
+type cursorAgentActiveSession struct {
+	Stream        *cursorAgentEventAdapter
+	Stored        *cursorStoredResponse
+	Pending       *cursorAgentPendingMCP
+	AccountID     int64
+	UpstreamModel string
+	refs          []string
+	timer         *time.Timer
+	closeOnce     sync.Once
+}
+
+func (s *cursorAgentActiveSession) Close() {
+	if s == nil {
+		return
+	}
+	s.closeOnce.Do(func() {
+		if s.Stream != nil {
+			_ = s.Stream.Close()
+		}
+	})
 }
 
 type cursorStoredResponse struct {
@@ -161,6 +196,197 @@ type cursorStoredResponse struct {
 	AgentState          *cursorpkg.AgentConversationState `json:"agent_state,omitempty"`
 	AgentBlobs          map[string][]byte                 `json:"agent_blobs,omitempty"`
 	AgentPendingMCP     *cursorAgentPendingMCP            `json:"agent_pending_mcp,omitempty"`
+}
+
+func cursorAgentSessionRef(owner, kind, value string) string {
+	value = strings.TrimSpace(value)
+	if owner == "" || value == "" {
+		return ""
+	}
+	return owner + "\x00" + kind + "\x00" + value
+}
+
+func (s *CursorGatewayService) cursorAgentSessionTTL() time.Duration {
+	ttl := durationSeconds(s.cursorConfig().ResponsesTTLSeconds, 600)
+	if ttl < 30*time.Second {
+		return 30 * time.Second
+	}
+	if ttl > 10*time.Minute {
+		return 10 * time.Minute
+	}
+	return ttl
+}
+
+func (s *CursorGatewayService) detachCursorAgentSessionLocked(session *cursorAgentActiveSession) {
+	if session == nil {
+		return
+	}
+	for _, ref := range session.refs {
+		if s.agentSessions[ref] == session {
+			delete(s.agentSessions, ref)
+		}
+	}
+	session.refs = nil
+	if session.timer != nil {
+		session.timer.Stop()
+		session.timer = nil
+	}
+}
+
+func (s *CursorGatewayService) storeCursorAgentSession(owner, responseID, toolCallID string, session *cursorAgentActiveSession) {
+	if s == nil || session == nil || session.Stream == nil {
+		return
+	}
+	refs := make([]string, 0, 2)
+	for _, ref := range []string{
+		cursorAgentSessionRef(owner, "response", responseID),
+		cursorAgentSessionRef(owner, "tool", toolCallID),
+	} {
+		if ref != "" {
+			refs = append(refs, ref)
+		}
+	}
+	if len(refs) == 0 {
+		session.Close()
+		return
+	}
+
+	replacedSet := make(map[*cursorAgentActiveSession]struct{}, len(refs))
+	s.agentSessionMu.Lock()
+	if s.agentSessions == nil {
+		s.agentSessions = make(map[string]*cursorAgentActiveSession)
+	}
+	for _, ref := range refs {
+		if previous := s.agentSessions[ref]; previous != nil && previous != session {
+			replacedSet[previous] = struct{}{}
+		}
+	}
+	for previous := range replacedSet {
+		s.detachCursorAgentSessionLocked(previous)
+	}
+	s.detachCursorAgentSessionLocked(session)
+	for _, ref := range refs {
+		s.agentSessions[ref] = session
+	}
+	session.refs = append([]string(nil), refs...)
+	session.timer = time.AfterFunc(s.cursorAgentSessionTTL(), func() {
+		s.expireCursorAgentSession(session)
+	})
+	s.agentSessionMu.Unlock()
+	for previous := range replacedSet {
+		previous.Close()
+	}
+}
+
+func (s *CursorGatewayService) takeCursorAgentSession(owner, responseID string, toolCallIDs []string) (*cursorAgentActiveSession, bool) {
+	if s == nil {
+		return nil, false
+	}
+	toolIDs := make(map[string]struct{}, len(toolCallIDs))
+	for _, toolCallID := range toolCallIDs {
+		if toolCallID = strings.TrimSpace(toolCallID); toolCallID != "" {
+			toolIDs[toolCallID] = struct{}{}
+		}
+	}
+
+	s.agentSessionMu.Lock()
+	defer s.agentSessionMu.Unlock()
+	responseRef := cursorAgentSessionRef(owner, "response", responseID)
+	if responseRef != "" {
+		if session := s.agentSessions[responseRef]; session != nil {
+			pendingID := ""
+			if session.Pending != nil {
+				pendingID = strings.TrimSpace(session.Pending.Action.ID)
+			}
+			if _, matches := toolIDs[pendingID]; pendingID == "" || !matches {
+				return nil, true
+			}
+			s.detachCursorAgentSessionLocked(session)
+			return session, true
+		}
+	}
+
+	for index := len(toolCallIDs) - 1; index >= 0; index-- {
+		toolCallID := strings.TrimSpace(toolCallIDs[index])
+		if toolCallID == "" {
+			continue
+		}
+		ref := cursorAgentSessionRef(owner, "tool", toolCallID)
+		session := s.agentSessions[ref]
+		if session == nil {
+			continue
+		}
+		pendingID := ""
+		if session.Pending != nil {
+			pendingID = strings.TrimSpace(session.Pending.Action.ID)
+		}
+		if pendingID == "" || pendingID != toolCallID {
+			continue
+		}
+		s.detachCursorAgentSessionLocked(session)
+		return session, true
+	}
+	return nil, false
+}
+
+func (s *CursorGatewayService) expireCursorAgentSession(session *cursorAgentActiveSession) {
+	if s == nil || session == nil {
+		return
+	}
+	s.agentSessionMu.Lock()
+	registered := false
+	for _, ref := range session.refs {
+		if s.agentSessions[ref] == session {
+			registered = true
+			break
+		}
+	}
+	if registered {
+		s.detachCursorAgentSessionLocked(session)
+	}
+	s.agentSessionMu.Unlock()
+	if registered {
+		session.Close()
+	}
+}
+
+func (s *CursorGatewayService) removeCursorAgentSession(session *cursorAgentActiveSession) bool {
+	if s == nil || session == nil {
+		return false
+	}
+	s.agentSessionMu.Lock()
+	registered := false
+	for _, ref := range session.refs {
+		if s.agentSessions[ref] == session {
+			registered = true
+			break
+		}
+	}
+	if registered {
+		s.detachCursorAgentSessionLocked(session)
+	}
+	s.agentSessionMu.Unlock()
+	return registered
+}
+
+func (s *CursorGatewayService) closeCursorAgentSessions() {
+	if s == nil {
+		return
+	}
+	s.agentSessionMu.Lock()
+	unique := make(map[*cursorAgentActiveSession]struct{}, len(s.agentSessions))
+	for _, session := range s.agentSessions {
+		if session != nil {
+			unique[session] = struct{}{}
+		}
+	}
+	for session := range unique {
+		s.detachCursorAgentSessionLocked(session)
+	}
+	s.agentSessionMu.Unlock()
+	for session := range unique {
+		session.Close()
+	}
 }
 
 type cursorCollected struct {
@@ -1160,19 +1386,17 @@ func (s *CursorGatewayService) saveCursorResponse(ctx context.Context, c *gin.Co
 	return s.saveCursorStoredResponse(ctx, c, responseID, &cursorStoredResponse{Dialogue: dialogue})
 }
 
-func (s *CursorGatewayService) saveCursorAgentResponse(ctx context.Context, c *gin.Context, responseID string, dialogue *cursorpkg.Dialogue, conversationID string, state *cursorpkg.AgentConversationState, blobs map[string][]byte, pending *cursorAgentPendingMCP) error {
-	return s.saveCursorStoredResponse(ctx, c, responseID, &cursorStoredResponse{
-		Dialogue: dialogue, AgentConversationID: strings.TrimSpace(conversationID), AgentState: state,
-		AgentBlobs: cloneCursorAgentBlobs(blobs), AgentPendingMCP: cloneCursorAgentPendingMCP(pending),
-	})
-}
-
 func cloneCursorAgentPendingMCP(pending *cursorAgentPendingMCP) *cursorAgentPendingMCP {
 	if pending == nil {
 		return nil
 	}
 	cloned := *pending
 	cloned.Action.Arguments = shallowCopyAnyMap(pending.Action.Arguments)
+	if pending.CursorAction != nil {
+		cursorAction := *pending.CursorAction
+		cursorAction.Arguments = shallowCopyAnyMap(pending.CursorAction.Arguments)
+		cloned.CursorAction = &cursorAction
+	}
 	return &cloned
 }
 
