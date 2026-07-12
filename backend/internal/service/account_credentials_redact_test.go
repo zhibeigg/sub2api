@@ -29,6 +29,25 @@ func TestMergePreservingSensitiveCreds_PreservesSensitiveWhenIncomingMissing(t *
 	require.Equal(t, map[string]any{"foo": "bar"}, out["model_mapping"])
 }
 
+func TestMergePreservingSensitiveCreds_PreservesCursorServerManagedFields(t *testing.T) {
+	existing := map[string]any{
+		"dashboard_access_token": "dashboard-token",
+		"cursor_machine_id":      "11111111-1111-4111-8111-111111111111",
+		"_token_version":         int64(1737654321000),
+		"cursor_transport_mode":  "auto",
+	}
+	incoming := map[string]any{
+		"cursor_transport_mode": "ide_chat",
+	}
+
+	out := MergePreservingSensitiveCreds(existing, incoming)
+
+	require.Equal(t, "dashboard-token", out["dashboard_access_token"])
+	require.Equal(t, "11111111-1111-4111-8111-111111111111", out["cursor_machine_id"])
+	require.Equal(t, int64(1737654321000), out["_token_version"])
+	require.Equal(t, "ide_chat", out["cursor_transport_mode"])
+}
+
 func TestMergePreservingSensitiveCreds_OverwritesWhenIncomingProvidesSensitive(t *testing.T) {
 	existing := map[string]any{
 		"refresh_token": "rt-old",
