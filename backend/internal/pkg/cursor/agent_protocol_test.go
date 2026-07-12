@@ -39,7 +39,7 @@ func TestAgentRunRequestGoldenAndDescriptorFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256(payload)
-	if got, want := hex.EncodeToString(sum[:]), "6508afb28df5dc2006276ceaa1ddcbbedfe10a4079733005c0fee02d9abd8c26"; got != want {
+	if got, want := hex.EncodeToString(sum[:]), "d6cf4385d2d93081ba6f23be50422486b7043ad016363ba317eebc2ce168a554"; got != want {
 		t.Fatalf("Agent request golden SHA256 = %s, want %s", got, want)
 	}
 

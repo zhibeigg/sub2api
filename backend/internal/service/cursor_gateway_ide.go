@@ -803,6 +803,22 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 		agentState = previous.AgentState
 		agentBlobs = cloneCursorAgentBlobs(previous.AgentBlobs)
 		pendingMCP = cloneCursorAgentPendingMCP(previous.AgentPendingMCP)
+	} else {
+		for index := len(dialogue.Messages) - 1; index >= 0; index-- {
+			message := dialogue.Messages[index]
+			if message.Role != "tool" || strings.TrimSpace(message.ToolCallID) == "" {
+				continue
+			}
+			if previous, loadErr := s.loadCursorStoredResponse(ctx, c, "tool:"+message.ToolCallID); loadErr == nil {
+				if strings.TrimSpace(previous.AgentConversationID) != "" {
+					conversationID = strings.TrimSpace(previous.AgentConversationID)
+				}
+				agentState = previous.AgentState
+				agentBlobs = cloneCursorAgentBlobs(previous.AgentBlobs)
+				pendingMCP = cloneCursorAgentPendingMCP(previous.AgentPendingMCP)
+			}
+			break
+		}
 	}
 	trimCursorDialogue(dialogue, s.cursorConfig().MaxHistoryMessages, s.cursorConfig().MaxHistoryTokens)
 	mode := prepareCursorAgentMode(dialogue)
@@ -821,7 +837,7 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 	}
 
 	toolResult, resumeAttempt := cursorAgentToolResult(dialogue, pendingMCP)
-	resumeAttempt = resumeAttempt && agentState != nil
+	resumeAttempt = resumeAttempt && strings.TrimSpace(conversationID) != ""
 	runOptions := cursorpkg.AgentRunOptions{
 		Model: upstreamModel, DisplayModel: requestModel, ConversationID: conversationID, Mode: mode,
 		ConversationState: agentState, Resume: resumeAttempt, MCPProviderIdentifier: "sub2api",
@@ -961,14 +977,19 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 	}
 	collected.Usage.TotalTokens = collected.Usage.InputTokens + collected.Usage.OutputTokens + collected.Usage.CacheWriteTokens + collected.Usage.CacheReadTokens
 
+	storedDialogue := &cursorpkg.Dialogue{System: dialogue.System, Tools: dialogue.Tools, ToolChoice: dialogue.ToolChoice, Messages: append([]cursorpkg.DialogueMessage(nil), dialogue.Messages...)}
+	storedDialogue.Messages = append(storedDialogue.Messages, cursorpkg.DialogueMessage{Role: "assistant", Text: collected.CleanText, ToolCalls: collected.Actions})
+	pending := stream.PendingMCP()
 	if protocol == cursorpkg.ProtocolResponses && (envelope.Store == nil || *envelope.Store) {
-		storedDialogue := &cursorpkg.Dialogue{System: dialogue.System, Tools: dialogue.Tools, ToolChoice: dialogue.ToolChoice, Messages: append([]cursorpkg.DialogueMessage(nil), dialogue.Messages...)}
-		storedDialogue.Messages = append(storedDialogue.Messages, cursorpkg.DialogueMessage{Role: "assistant", Text: collected.CleanText, ToolCalls: collected.Actions})
-		if saveErr := s.saveCursorAgentResponse(ctx, c, responseID, storedDialogue, conversationID, stream.Checkpoint(), stream.Blobs(), stream.PendingMCP()); saveErr != nil {
+		if saveErr := s.saveCursorAgentResponse(ctx, c, responseID, storedDialogue, conversationID, stream.Checkpoint(), stream.Blobs(), pending); saveErr != nil {
 			if committed {
 				_ = writer.WriteError("failed to store Cursor response continuation")
 			}
 			return nil, &UpstreamFailoverError{StatusCode: http.StatusServiceUnavailable, ResponseBody: []byte("failed to store Cursor response continuation: " + saveErr.Error())}
+		}
+	} else if pending != nil && strings.TrimSpace(pending.Action.ID) != "" {
+		if saveErr := s.saveCursorAgentResponse(ctx, c, "tool:"+pending.Action.ID, storedDialogue, conversationID, stream.Checkpoint(), stream.Blobs(), pending); saveErr != nil {
+			slog.Warn("cursor_agent_tool_continuation_store_failed", "account_id", account.ID, "error", saveErr.Error())
 		}
 	}
 	if envelope.Stream {
