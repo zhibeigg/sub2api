@@ -233,6 +233,7 @@ func TestAgentEventStreamMCPAggregationKVExecAndUsage(t *testing.T) {
 	turn := appendVarint(nil, 1, 10)
 	turn = appendVarint(turn, 2, 4)
 	turn = appendVarint(turn, 3, 2)
+	turn = appendVarint(turn, 4, 3)
 	turn = appendVarint(turn, 5, 1)
 	interaction := appendBytes(nil, 2, started)
 	interaction = appendBytes(interaction, 7, partial)
@@ -274,7 +275,7 @@ func TestAgentEventStreamMCPAggregationKVExecAndUsage(t *testing.T) {
 	if events[2].Tool.Name != "lookup" || events[2].Tool.Arguments["q"] != "go" {
 		t.Fatalf("completed tool = %#v", events[2].Tool)
 	}
-	if events[3].Type != AgentEventUsage || events[3].Usage.TotalTokens != 14 || events[3].Usage.CacheReadTokens != 2 {
+	if events[3].Type != AgentEventUsage || events[3].Usage.InputTokens != 5 || events[3].Usage.TotalTokens != 14 || events[3].Usage.CacheReadTokens != 2 || events[3].Usage.CacheWriteTokens != 3 {
 		t.Fatalf("usage = %#v", events[3])
 	}
 	if events[5].Type != AgentEventFinish {
@@ -285,6 +286,35 @@ func TestAgentEventStreamMCPAggregationKVExecAndUsage(t *testing.T) {
 	}
 	if events[7].Type != AgentEventKVGet || string(events[7].KV.BlobID) != "blob" || string(events[7].KV.Metadata) != "trace-metadata" {
 		t.Fatalf("KV = %#v", events[7])
+	}
+}
+
+func TestParseAgentTurnUsageNormalizesCachedInput(t *testing.T) {
+	tests := []struct {
+		name       string
+		rawInput   uint64
+		output     uint64
+		cacheRead  uint64
+		cacheWrite uint64
+		wantInput  int
+		wantTotal  int
+	}{
+		{name: "cache write", rawInput: 24054, output: 17, cacheWrite: 24052, wantInput: 2, wantTotal: 24071},
+		{name: "cache read", rawInput: 207612, output: 1371, cacheRead: 163456, wantInput: 44156, wantTotal: 208983},
+		{name: "cache fields exceed raw input", rawInput: 2, output: 5, cacheRead: 3, cacheWrite: 4, wantInput: 0, wantTotal: 12},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := appendVarint(nil, 1, tt.rawInput)
+			payload = appendVarint(payload, 2, tt.output)
+			payload = appendVarint(payload, 3, tt.cacheRead)
+			payload = appendVarint(payload, 4, tt.cacheWrite)
+
+			usage := parseAgentTurnUsage(payload)
+			if usage.InputTokens != tt.wantInput || usage.OutputTokens != int(tt.output) || usage.CacheReadTokens != int(tt.cacheRead) || usage.CacheWriteTokens != int(tt.cacheWrite) || usage.TotalTokens != tt.wantTotal {
+				t.Fatalf("usage = %#v", usage)
+			}
+		})
 	}
 }
 

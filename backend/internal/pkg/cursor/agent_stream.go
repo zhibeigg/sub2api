@@ -493,11 +493,19 @@ func parseAgentKVServerMessage(payload []byte) *AgentEvent {
 }
 
 func parseAgentTurnUsage(payload []byte) Usage {
-	usage := Usage{
-		InputTokens: int(firstProtoVarint(payload, 1)), OutputTokens: int(firstProtoVarint(payload, 2)),
-		CacheReadTokens: int(firstProtoVarint(payload, 3)), CacheWriteTokens: int(firstProtoVarint(payload, 4)), ReasoningTokens: int(firstProtoVarint(payload, 5)),
+	// Cursor reports field 1 as total input, including cache reads and writes.
+	rawInputTokens := int(firstProtoVarint(payload, 1))
+	cacheReadTokens := int(firstProtoVarint(payload, 3))
+	cacheWriteTokens := int(firstProtoVarint(payload, 4))
+	inputTokens := rawInputTokens - cacheReadTokens - cacheWriteTokens
+	if inputTokens < 0 {
+		inputTokens = 0
 	}
-	usage.TotalTokens = usage.InputTokens + usage.OutputTokens
+	usage := Usage{
+		InputTokens: inputTokens, OutputTokens: int(firstProtoVarint(payload, 2)),
+		CacheReadTokens: cacheReadTokens, CacheWriteTokens: cacheWriteTokens, ReasoningTokens: int(firstProtoVarint(payload, 5)),
+	}
+	usage.TotalTokens = usage.InputTokens + usage.CacheReadTokens + usage.CacheWriteTokens + usage.OutputTokens
 	return usage
 }
 

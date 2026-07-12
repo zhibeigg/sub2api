@@ -1270,6 +1270,7 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 	var firstTokenMs *int
 	committed := false
 	finished := false
+	usageReported := false
 
 	for !finished {
 		event, nextErr := nextCursorIDEEvent(stream, durationSeconds(s.cursorConfig().IDEStreamIdleTimeoutSeconds, 60))
@@ -1329,6 +1330,7 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 		case cursorpkg.IDEEventUsage:
 			if event.Usage != nil {
 				collected.Usage = *event.Usage
+				usageReported = true
 			}
 		case cursorpkg.IDEEventFinish:
 			if event.FinishReason != "" {
@@ -1357,17 +1359,16 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 		}
 		return nil, &UpstreamFailoverError{StatusCode: http.StatusBadGateway, ResponseBody: []byte(err.Error())}
 	}
-	if collected.Usage.InputTokens <= 0 {
+	pending := stream.PendingMCP()
+	// Tool-result boundaries are not terminal turns; the final TurnEnded usage covers the whole Agent run.
+	if !usageReported && pending == nil {
 		collected.Usage.InputTokens = estimatedInput
-	}
-	if collected.Usage.OutputTokens <= 0 {
 		collected.Usage.OutputTokens = cursorpkg.EstimateTokens(collected.CleanText) + cursorpkg.EstimateTokens(collected.Reasoning) + estimateCursorActionTokens(collected.Actions)
 	}
 	collected.Usage.TotalTokens = collected.Usage.InputTokens + collected.Usage.OutputTokens + collected.Usage.CacheWriteTokens + collected.Usage.CacheReadTokens
 
 	storedDialogue := &cursorpkg.Dialogue{System: dialogue.System, Tools: dialogue.Tools, ToolChoice: dialogue.ToolChoice, Messages: append([]cursorpkg.DialogueMessage(nil), dialogue.Messages...)}
 	storedDialogue.Messages = append(storedDialogue.Messages, cursorpkg.DialogueMessage{Role: "assistant", Text: collected.CleanText, ToolCalls: collected.Actions})
-	pending := stream.PendingMCP()
 	if pending != nil && stopRequestCancel != nil {
 		stopRequestCancel()
 		stopRequestCancel = nil

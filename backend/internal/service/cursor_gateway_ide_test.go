@@ -19,6 +19,7 @@ import (
 	cursorpkg "github.com/Wei-Shaw/sub2api/internal/pkg/cursor"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/alicebob/miniredis/v2"
+	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protowire"
@@ -294,6 +295,31 @@ func ideTestAccount() *Account {
 	}}
 }
 
+func TestCursorCompatibilityUsageDoesNotDoubleCountCachedInput(t *testing.T) {
+	usage := cursorpkg.Usage{
+		InputTokens: 2, OutputTokens: 7, CacheReadTokens: 3, CacheWriteTokens: 5, ReasoningTokens: 1,
+	}
+
+	openAIUsage := cursorOpenAIUsage(usage)
+	require.Equal(t, 10, openAIUsage["prompt_tokens"])
+	require.Equal(t, 7, openAIUsage["completion_tokens"])
+	require.Equal(t, 17, openAIUsage["total_tokens"])
+	require.Equal(t, gin.H{"cached_tokens": 3, "cache_write_tokens": 5}, openAIUsage["prompt_tokens_details"])
+
+	responsesUsage := cursorResponsesUsage(usage)
+	require.Equal(t, 10, responsesUsage["input_tokens"])
+	require.Equal(t, 7, responsesUsage["output_tokens"])
+	require.Equal(t, 17, responsesUsage["total_tokens"])
+	require.Equal(t, gin.H{"cached_tokens": 3, "cache_write_tokens": 5}, responsesUsage["input_tokens_details"])
+	require.Equal(t, gin.H{"reasoning_tokens": 1}, responsesUsage["output_tokens_details"])
+
+	anthropicUsage := cursorAnthropicUsage(usage, true)
+	require.Equal(t, 2, anthropicUsage["input_tokens"])
+	require.Equal(t, 7, anthropicUsage["output_tokens"])
+	require.Equal(t, 5, anthropicUsage["cache_creation_input_tokens"])
+	require.Equal(t, 3, anthropicUsage["cache_read_input_tokens"])
+}
+
 func TestCursorGatewayIDEAnthropicStreamsImmediately(t *testing.T) {
 	upstream := &cursorIDEUpstreamStub{chatBody: cursorIDEFrames(
 		cursorIDETextPayload("hello "), cursorIDETextPayload("world"), cursorIDEUsagePayload(9, 2, 1, 3),
@@ -306,8 +332,10 @@ func TestCursorGatewayIDEAnthropicStreamsImmediately(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, result.Stream)
 	require.NotNil(t, result.FirstTokenMs)
-	require.Equal(t, 9, result.Usage.InputTokens)
+	require.Equal(t, 5, result.Usage.InputTokens)
 	require.Equal(t, 2, result.Usage.OutputTokens)
+	require.Equal(t, 1, result.Usage.CacheCreationInputTokens)
+	require.Equal(t, 3, result.Usage.CacheReadInputTokens)
 	require.Contains(t, recorder.Body.String(), `"text":"hello "`)
 	require.Contains(t, recorder.Body.String(), `"text":"world"`)
 	require.Contains(t, recorder.Body.String(), `event: message_stop`)
@@ -335,7 +363,10 @@ func TestCursorGatewayIDENonStreamNativeToolCall(t *testing.T) {
 	result, err := svc.Forward(context.Background(), c, ideTestAccount(), []byte(body))
 	require.NoError(t, err)
 	require.False(t, result.Stream)
-	require.Positive(t, result.Usage.InputTokens)
+	require.Zero(t, result.Usage.InputTokens)
+	require.Zero(t, result.Usage.OutputTokens)
+	require.Zero(t, result.Usage.CacheCreationInputTokens)
+	require.Zero(t, result.Usage.CacheReadInputTokens)
 	require.Contains(t, recorder.Body.String(), `"type":"tool_use"`)
 	require.Contains(t, recorder.Body.String(), `"name":"get_weather"`)
 	require.Contains(t, recorder.Body.String(), `"city":"Shanghai"`)
@@ -346,7 +377,7 @@ func TestCursorGatewayIDEMCPToolCallReturnsBeforeFinalAndResumesSameStream(t *te
 	upstream := &cursorIDEUpstreamStub{chatBody: cursorIDEFrames(
 		cursorIDEToolPayload("call_weather", "get_weather", `{"city":"Shanghai"}`, true),
 		cursorIDETextPayload("weather is sunny"),
-		cursorIDEUsagePayload(16, 4, 0, 0),
+		cursorIDEUsagePayload(16, 4, 7, 6),
 	)}
 	svc := ideTestGateway(upstream)
 	defer svc.closeCursorAgentSessions()
@@ -356,6 +387,11 @@ func TestCursorGatewayIDEMCPToolCallReturnsBeforeFinalAndResumesSameStream(t *te
 	firstResult, err := svc.Forward(context.Background(), firstContext, account, []byte(firstBody))
 	require.NoError(t, err)
 	require.NotNil(t, firstResult)
+	require.Zero(t, firstResult.Usage.InputTokens)
+	require.Zero(t, firstResult.Usage.OutputTokens)
+	require.Zero(t, firstResult.Usage.CacheCreationInputTokens)
+	require.Zero(t, firstResult.Usage.CacheReadInputTokens)
+	require.Contains(t, firstRecorder.Body.String(), `"prompt_tokens":0`)
 	require.Contains(t, firstRecorder.Body.String(), `"finish_reason":"tool_calls"`)
 	require.Contains(t, firstRecorder.Body.String(), `"id":"call_weather"`)
 	require.NotContains(t, firstRecorder.Body.String(), "weather is sunny")
@@ -365,6 +401,15 @@ func TestCursorGatewayIDEMCPToolCallReturnsBeforeFinalAndResumesSameStream(t *te
 	secondResult, err := svc.Forward(context.Background(), secondContext, account, []byte(secondBody))
 	require.NoError(t, err)
 	require.NotNil(t, secondResult)
+	require.Equal(t, 3, secondResult.Usage.InputTokens)
+	require.Equal(t, 4, secondResult.Usage.OutputTokens)
+	require.Equal(t, 7, secondResult.Usage.CacheCreationInputTokens)
+	require.Equal(t, 6, secondResult.Usage.CacheReadInputTokens)
+	require.Contains(t, secondRecorder.Body.String(), `"prompt_tokens":16`)
+	require.Contains(t, secondRecorder.Body.String(), `"completion_tokens":4`)
+	require.Contains(t, secondRecorder.Body.String(), `"total_tokens":20`)
+	require.Contains(t, secondRecorder.Body.String(), `"cached_tokens":6`)
+	require.Contains(t, secondRecorder.Body.String(), `"cache_write_tokens":7`)
 	require.Contains(t, secondRecorder.Body.String(), `"content":"weather is sunny"`)
 	require.Contains(t, secondRecorder.Body.String(), `"finish_reason":"stop"`)
 
