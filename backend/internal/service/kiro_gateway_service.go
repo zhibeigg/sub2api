@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -680,6 +682,9 @@ func (s *KiroGatewayService) callKiroWithAuthRetry(
 	}
 
 	err := call(ctx, cred, payload, callback)
+	if err != nil {
+		logKiroUpstreamCallError("initial", account, cred, payload, err)
+	}
 	if !isKiroUnauthorized(err) || s.tokenProvider == nil || account == nil || cred == nil {
 		return err
 	}
@@ -695,7 +700,58 @@ func (s *KiroGatewayService) callKiroWithAuthRetry(
 
 	cred.AccessToken = accessToken
 	slog.Info("kiro upstream 401 retrying after forced refresh", "account_id", account.ID)
-	return call(ctx, cred, payload, callback)
+	retryErr := call(ctx, cred, payload, callback)
+	if retryErr != nil {
+		logKiroUpstreamCallError("after_forced_refresh", account, cred, payload, retryErr)
+	}
+	return retryErr
+}
+
+func logKiroUpstreamCallError(phase string, account *Account, cred *kiro.Credential, payload *kiro.KiroPayload, err error) {
+	attrs := []any{
+		"phase", phase,
+		"error_type", fmt.Sprintf("%T", err),
+		"error", logredact.RedactText(err.Error()),
+	}
+	if account != nil {
+		attrs = append(attrs, "account_id", account.ID)
+	}
+	if cred != nil {
+		attrs = append(attrs,
+			"access_token_hash", kiroDiagnosticHash(cred.AccessToken),
+			"profile_arn_hash", kiroDiagnosticHash(cred.ProfileArn),
+			"region", cred.Region,
+		)
+	}
+	if payload != nil {
+		userInput := payload.ConversationState.CurrentMessage.UserInputMessage
+		attrs = append(attrs,
+			"model", userInput.ModelID,
+			"conversation_id", payload.ConversationState.ConversationID,
+			"agent_task_type", payload.ConversationState.AgentTaskType,
+			"has_agent_continuation_id", strings.TrimSpace(payload.ConversationState.AgentContinuationId) != "",
+		)
+		if encoded, marshalErr := json.Marshal(payload); marshalErr == nil {
+			attrs = append(attrs, "payload_hash", kiroDiagnosticHash(string(encoded)), "payload_bytes", len(encoded))
+		}
+	}
+	var apiErr *kiro.APIError
+	if errors.As(err, &apiErr) {
+		attrs = append(attrs,
+			"upstream_status", apiErr.StatusCode,
+			"upstream_endpoint", apiErr.Endpoint,
+			"upstream_body", logredact.RedactText(apiErr.Body),
+		)
+	}
+	slog.Warn("kiro upstream call failed", attrs...)
+}
+
+func kiroDiagnosticHash(value string) string {
+	if value == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(value))
+	return fmt.Sprintf("%x", sum[:6])
 }
 
 func isKiroUnauthorized(err error) bool {
