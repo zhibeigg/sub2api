@@ -15,8 +15,22 @@ import (
 
 type kiroTokenProviderRepoStub struct {
 	refreshAPIAccountRepo
+	accounts         []*Account
+	getByIDCalls     int
 	tempUnschedCalls int
 	setErrorCalls    int
+}
+
+func (r *kiroTokenProviderRepoStub) GetByID(ctx context.Context, id int64) (*Account, error) {
+	if r.getByIDErr != nil {
+		return nil, r.getByIDErr
+	}
+	if r.getByIDCalls < len(r.accounts) {
+		account := r.accounts[r.getByIDCalls]
+		r.getByIDCalls++
+		return account, nil
+	}
+	return r.refreshAPIAccountRepo.GetByID(ctx, id)
 }
 
 func (r *kiroTokenProviderRepoStub) SetTempUnschedulable(_ context.Context, _ int64, _ time.Time, _ string) error {
@@ -100,6 +114,48 @@ func TestKiroTokenProvider_ReloadsLatestAccountBeforeRefreshFallback(t *testing.
 	require.Equal(t, 1, executor.refreshCalls)
 	require.Zero(t, repo.tempUnschedCalls)
 	require.Zero(t, repo.setErrorCalls)
+}
+
+func TestKiroTokenProvider_RefreshFailureReloadsCredentialsAgain(t *testing.T) {
+	expiresAt := time.Now().Add(-time.Minute)
+	staleAccount := &Account{
+		ID:       143,
+		Platform: PlatformKiro,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"refresh_token": "stale-refresh-token",
+			"expires_at":    expiresAt.Format(time.RFC3339),
+		},
+	}
+	latestAccount := &Account{
+		ID:       143,
+		Platform: PlatformKiro,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token":  "latest-raced-access-token",
+			"refresh_token": "latest-refresh-token",
+			"expires_at":    time.Now().Add(time.Hour).Format(time.RFC3339),
+		},
+	}
+	repo := &kiroTokenProviderRepoStub{
+		accounts: []*Account{staleAccount, staleAccount, latestAccount},
+	}
+	repo.account = latestAccount
+	cache := &refreshAPICacheStub{lockResult: true}
+	executor := &refreshAPIExecutorStub{
+		needsRefresh: true,
+		err:          errors.New("OAuth 401: Invalid bearer token"),
+	}
+	provider := NewKiroTokenProvider(repo, cache)
+	provider.SetRefreshAPI(NewOAuthRefreshAPI(repo, cache), executor)
+
+	token, err := provider.GetAccessToken(context.Background(), staleAccount)
+
+	require.NoError(t, err)
+	require.Equal(t, "latest-raced-access-token", token)
+	require.Equal(t, 3, repo.getByIDCalls)
+	require.Equal(t, 1, executor.refreshCalls)
+	require.Zero(t, repo.tempUnschedCalls)
 }
 
 func TestKiroTokenProvider_RefreshFailureDefersExpiredTokenDecisionToUpstream(t *testing.T) {

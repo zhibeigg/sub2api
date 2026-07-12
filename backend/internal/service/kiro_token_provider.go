@@ -72,16 +72,7 @@ func (p *KiroTokenProvider) GetAccessToken(ctx context.Context, account *Account
 	// background token refresh. On a cache miss, reload the persisted account
 	// before evaluating expiry or attempting another refresh; otherwise a
 	// refresh failure can incorrectly reject a still-valid latest access token.
-	if p.accountRepo != nil {
-		if latestAccount, err := p.accountRepo.GetByID(ctx, account.ID); err == nil && latestAccount != nil {
-			account = latestAccount
-		} else if err != nil {
-			slog.Warn(kiroTokenProviderLogComponent+".latest_account_reload_failed",
-				"account_id", account.ID,
-				"error", logredact.RedactText(err.Error()),
-			)
-		}
-	}
+	account = p.reloadLatestAccount(ctx, account)
 
 	expiresAt := account.GetCredentialAsTime("expires_at")
 	needsRefresh := expiresAt == nil || time.Until(*expiresAt) <= kiroTokenRefreshSkew
@@ -96,6 +87,11 @@ func (p *KiroTokenProvider) GetAccessToken(ctx context.Context, account *Account
 		defer cancel()
 		result, err := p.refreshAPI.RefreshIfNeeded(refreshCtx, account, p.executor, kiroTokenRefreshSkew)
 		if err != nil {
+			// RefreshIfNeeded re-reads and may race with another credential update.
+			// Re-read once more after the failed refresh so the fallback decision and
+			// the token returned below are based on the latest persisted credentials.
+			account = p.reloadLatestAccount(ctx, account)
+			expiresAt = account.GetCredentialAsTime("expires_at")
 			// Kiro access tokens can remain usable even after the locally recorded
 			// expires_at and while the refresh endpoint rejects an outdated/rotated
 			// refresh token. Kiro-Go sends the current access token and lets the
@@ -196,6 +192,24 @@ func (p *KiroTokenProvider) ForceRefreshAccessToken(ctx context.Context, account
 		p.cacheAccessToken(ctx, cacheKey, accessToken, refreshedAccount.GetCredentialAsTime("expires_at"))
 	}
 	return accessToken, nil
+}
+
+func (p *KiroTokenProvider) reloadLatestAccount(ctx context.Context, account *Account) *Account {
+	if p == nil || p.accountRepo == nil || account == nil {
+		return account
+	}
+	latestAccount, err := p.accountRepo.GetByID(ctx, account.ID)
+	if err != nil {
+		slog.Warn(kiroTokenProviderLogComponent+".latest_account_reload_failed",
+			"account_id", account.ID,
+			"error", logredact.RedactText(err.Error()),
+		)
+		return account
+	}
+	if latestAccount == nil {
+		return account
+	}
+	return latestAccount
 }
 
 func (p *KiroTokenProvider) cacheAccessToken(ctx context.Context, cacheKey, accessToken string, expiresAt *time.Time) {
