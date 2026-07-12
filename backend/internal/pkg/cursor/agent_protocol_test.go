@@ -46,7 +46,7 @@ func TestAgentRunRequestGoldenAndDescriptorFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256(payload)
-	if got, want := hex.EncodeToString(sum[:]), "8213f0df03990882e61baade6aee8e55c5d25f209955c3bd4646bda19667c609"; got != want {
+	if got, want := hex.EncodeToString(sum[:]), "97e795b7fc274fb40df34b00df7a212a0a4978c0b75f0301b64068696cdc871e"; got != want {
 		t.Fatalf("Agent request golden SHA256 = %s, want %s", got, want)
 	}
 
@@ -83,6 +83,9 @@ func TestAgentRunRequestGoldenAndDescriptorFields(t *testing.T) {
 	}
 	turn := agentTestBlob(t, blobs, turnIDs[0])
 	agentTurn := firstBytesField(t, turn, 1)
+	if requestID := firstStringField(t, agentTurn, 3); requestID == "" {
+		t.Fatalf("history turn request_id missing: %x", agentTurn)
+	}
 	historyUser := agentTestBlob(t, blobs, firstBytesField(t, agentTurn, 1))
 	if firstStringField(t, historyUser, 1) != "old question" {
 		t.Fatalf("history user = %x", historyUser)

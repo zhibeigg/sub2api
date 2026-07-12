@@ -311,6 +311,7 @@ func encodeAgentConversationTurns(messages []DialogueMessage, blobs map[string][
 		for _, stepBlobID := range stepBlobIDs {
 			agentTurn = appendBytes(agentTurn, 2, stepBlobID)
 		}
+		agentTurn = appendString(agentTurn, 3, messageID())
 		conversationTurn := appendBytes(nil, 1, agentTurn)
 		turns = append(turns, storeAgentBlob(blobs, conversationTurn))
 	}
