@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/kiro"
 )
@@ -20,11 +23,14 @@ import (
 // gateway: Kiro's upstream is a single streaming call with automatic endpoint
 // fallback handled inside pkg/kiro.
 type KiroGatewayService struct {
-	accountRepo    AccountRepository
-	proxyRepo      ProxyRepository
-	tokenProvider  *KiroTokenProvider
-	responsesStore *kiro.ResponsesStore
-	promptCache    *kiro.PromptCacheTracker
+	accountRepo       AccountRepository
+	proxyRepo         ProxyRepository
+	tokenProvider     *KiroTokenProvider
+	responsesStore    *kiro.ResponsesStore
+	promptCache       *kiro.PromptCacheTracker
+	profileArnCache   sync.Map
+	profileArnFlight  singleflight.Group
+	resolveProfileArn func(context.Context, *kiro.Credential) (string, error)
 }
 
 // NewKiroGatewayService constructs a KiroGatewayService.
@@ -34,11 +40,12 @@ func NewKiroGatewayService(
 	tokenProvider *KiroTokenProvider,
 ) *KiroGatewayService {
 	return &KiroGatewayService{
-		accountRepo:    accountRepo,
-		proxyRepo:      proxyRepo,
-		tokenProvider:  tokenProvider,
-		responsesStore: kiro.NewResponsesStore(24 * time.Hour),
-		promptCache:    kiro.NewPromptCacheTracker(),
+		accountRepo:       accountRepo,
+		proxyRepo:         proxyRepo,
+		tokenProvider:     tokenProvider,
+		responsesStore:    kiro.NewResponsesStore(24 * time.Hour),
+		promptCache:       kiro.NewPromptCacheTracker(),
+		resolveProfileArn: kiro.ResolveProfileArn,
 	}
 }
 
@@ -88,8 +95,6 @@ func (s *KiroGatewayService) Forward(ctx context.Context, c *gin.Context, accoun
 		return nil, err
 	}
 
-	cred := s.buildCredential(ctx, account, accessToken)
-
 	isOpenAI := isOpenAIInboundPath(c)
 
 	var (
@@ -128,6 +133,7 @@ func (s *KiroGatewayService) Forward(ctx context.Context, c *gin.Context, accoun
 	}
 
 	upstreamModel := kiro.MapModel(requestModel)
+	cred := s.prepareCredential(ctx, account, accessToken)
 
 	if stream {
 		return s.forwardStream(ctx, c, account, cred, payload, requestModel, upstreamModel, isOpenAI, estimatedInput, cacheProfile, start)
@@ -184,7 +190,7 @@ func (s *KiroGatewayService) ForwardResponses(ctx context.Context, c *gin.Contex
 	if err != nil {
 		return nil, err
 	}
-	cred := s.buildCredential(ctx, account, accessToken)
+	cred := s.prepareCredential(ctx, account, accessToken)
 	respID := kiro.GenerateResponseID()
 
 	if req.Stream {
@@ -279,6 +285,82 @@ func (s *KiroGatewayService) forwardResponsesNonStream(
 		Usage:         ClaudeUsage{InputTokens: agg.InputTokens, OutputTokens: agg.OutputTokens},
 		KiroCredits:   credits,
 	}, nil
+}
+
+func (s *KiroGatewayService) prepareCredential(ctx context.Context, account *Account, accessToken string) *kiro.Credential {
+	cred := s.buildCredential(ctx, account, accessToken)
+	s.ensureProfileArn(ctx, account, cred)
+	return cred
+}
+
+func (s *KiroGatewayService) ensureProfileArn(ctx context.Context, account *Account, cred *kiro.Credential) {
+	if s == nil || account == nil || cred == nil {
+		return
+	}
+	cacheKey := kiroProfileArnCacheKey(account)
+	if profileArn := strings.TrimSpace(cred.ProfileArn); profileArn != "" {
+		s.profileArnCache.Store(cacheKey, profileArn)
+		return
+	}
+	if cached, ok := s.profileArnCache.Load(cacheKey); ok {
+		if profileArn, ok := cached.(string); ok && strings.TrimSpace(profileArn) != "" {
+			cred.ProfileArn = profileArn
+			return
+		}
+	}
+
+	resolver := s.resolveProfileArn
+	if resolver == nil {
+		resolver = kiro.ResolveProfileArn
+	}
+	resolved, err, _ := s.profileArnFlight.Do(cacheKey, func() (any, error) {
+		if cached, ok := s.profileArnCache.Load(cacheKey); ok {
+			if profileArn, ok := cached.(string); ok && strings.TrimSpace(profileArn) != "" {
+				return profileArn, nil
+			}
+		}
+		profileArn, resolveErr := resolver(ctx, cred)
+		profileArn = strings.TrimSpace(profileArn)
+		if resolveErr != nil {
+			return "", resolveErr
+		}
+		if profileArn == "" {
+			return "", errors.New("kiro profile ARN resolution returned an empty value")
+		}
+		s.profileArnCache.Store(cacheKey, profileArn)
+		if persistErr := persistKiroProfileArn(ctx, s.accountRepo, account, profileArn); persistErr != nil {
+			slog.Warn("kiro profile ARN persistence failed", "account_id", account.ID, "error", persistErr)
+		}
+		return profileArn, nil
+	})
+	if err != nil {
+		if kiro.IsProfileArnResolutionSoftError(err) {
+			slog.Debug("kiro profile ARN unavailable; using credential region", "account_id", account.ID, "region", cred.Region, "error", err)
+		} else {
+			slog.Warn("kiro profile ARN resolution failed; falling back to credential region", "account_id", account.ID, "region", cred.Region, "error", err)
+		}
+		return
+	}
+	if profileArn, ok := resolved.(string); ok {
+		cred.ProfileArn = profileArn
+	}
+}
+
+func kiroProfileArnCacheKey(account *Account) string {
+	if account == nil {
+		return "0"
+	}
+	return strconv.FormatInt(account.ID, 10) + "\x00" + account.GetCredential("region") + "\x00" + account.GetCredential("client_id")
+}
+
+func persistKiroProfileArn(ctx context.Context, repo accountUpdater, account *Account, profileArn string) error {
+	profileArn = strings.TrimSpace(profileArn)
+	if repo == nil || account == nil || profileArn == "" || account.GetCredential("profile_arn") == profileArn {
+		return nil
+	}
+	accountCopy := *account
+	credentials := MergeCredentials(account.Credentials, map[string]any{"profile_arn": profileArn})
+	return persistAccountCredentials(ctx, repo, &accountCopy, credentials)
 }
 
 func (s *KiroGatewayService) buildCredential(ctx context.Context, account *Account, accessToken string) *kiro.Credential {

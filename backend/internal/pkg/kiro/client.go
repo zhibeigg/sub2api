@@ -132,7 +132,7 @@ func CallKiroAPI(ctx context.Context, cred *Credential, payload *KiroPayload, ca
 	var lastErr error
 	for _, ep := range kiroEndpoints {
 		payload.ConversationState.CurrentMessage.UserInputMessage.Origin = ep.Origin
-		epURL := regionalizeURLForProfile(ep.URL, payload.ProfileArn)
+		epURL := regionalizeURLForProfile(ep.URL, cred, payload.ProfileArn)
 
 		reqBody, _ := json.Marshal(payload)
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, epURL, bytes.NewReader(reqBody))
@@ -200,12 +200,12 @@ func proxyOf(cred *Credential) string {
 	return ""
 }
 
-// regionalizeURLForProfile rewrites the host to the profile's data-plane region
-// when the profileArn encodes a non us-east-1 region.
-// profileArn format: arn:aws:codewhisperer:{region}:{account}:profile/{id}
-func regionalizeURLForProfile(rawURL, profileArn string) string {
-	region := regionFromProfileArn(profileArn)
-	if region == "" || region == "us-east-1" {
+// regionalizeURLForProfile rewrites the host to the profile's data-plane region.
+// Prefer profileArn because the OIDC region can differ from the profile region;
+// fall back to the credential region when the ARN has not been resolved yet.
+func regionalizeURLForProfile(rawURL string, cred *Credential, profileArn string) string {
+	region := kiroRegionForProfile(cred, profileArn)
+	if region == "us-east-1" {
 		return rawURL
 	}
 	u, err := url.Parse(rawURL)

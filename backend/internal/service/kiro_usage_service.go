@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -121,6 +122,7 @@ func (s *KiroUsageService) ProbeUsage(ctx context.Context, accountID int64) (*Ki
 		s.handleProbeError(ctx, account, err)
 		return nil, infraerrors.Newf(http.StatusBadGateway, "KIRO_USAGE_PROBE_FAILED", "usage probe failed: %v", err)
 	}
+	s.persistResolvedProfileArn(ctx, account, cred)
 
 	snapshot := &KiroUsageSnapshot{
 		SubscriptionType: info.SubscriptionType,
@@ -171,6 +173,7 @@ func (s *KiroUsageService) SetOverage(ctx context.Context, accountID int64, enab
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "KIRO_OVERAGE_SET_FAILED", "set overage failed: %v", err)
 	}
+	s.persistResolvedProfileArn(ctx, account, cred)
 
 	snapshot := s.loadSnapshot(account)
 	if snapshot == nil {
@@ -266,6 +269,7 @@ func (s *KiroUsageService) ListUpstreamModels(ctx context.Context, account *Acco
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "KIRO_LIST_MODELS_FAILED", "failed to list upstream models: %v", err)
 	}
+	s.persistResolvedProfileArn(ctx, account, cred)
 	rememberKiroModels(models)
 
 	seen := make(map[string]struct{}, len(models))
@@ -303,9 +307,17 @@ func (s *KiroUsageService) resolveProxyURL(ctx context.Context, account *Account
 	return ""
 }
 
-// persistSnapshot writes the snapshot to Account.Extra. The resolved profile
-// ARN (if newly discovered) is cached in-process by pkg/kiro, so it does not
-// need to be persisted here.
+// persistResolvedProfileArn writes a newly discovered profile ARN back to the
+// account so gateway requests can immediately target the correct data-plane region.
+func (s *KiroUsageService) persistResolvedProfileArn(ctx context.Context, account *Account, cred *kiro.Credential) {
+	if s == nil || cred == nil {
+		return
+	}
+	if err := persistKiroProfileArn(ctx, s.accountRepo, account, cred.ProfileArn); err != nil {
+		slog.Warn("kiro usage profile ARN persistence failed", "account_id", account.ID, "error", err)
+	}
+}
+
 func (s *KiroUsageService) persistSnapshot(ctx context.Context, account *Account, snapshot *KiroUsageSnapshot) {
 	if s.accountRepo == nil || account == nil || snapshot == nil {
 		return

@@ -92,11 +92,13 @@ func ProvideAccountUsageService(
 	adobeTokenProvider *AdobeTokenProvider,
 	cursorGatewayService *CursorGatewayService,
 	cursorDashboardAuthService *CursorDashboardAuthService,
+	kiroUsageService *KiroUsageService,
 ) *AccountUsageService {
 	service := NewAccountUsageService(accountRepo, usageLogRepo, usageFetcher, geminiQuotaService, antigravityQuotaFetcher, grokQuotaFetcher, openAIQuotaService, cache, identityCache, tlsFPProfileService)
 	service.SetAdobeTokenProvider(adobeTokenProvider)
 	service.SetCursorUsageProber(cursorGatewayService)
 	service.SetCursorDashboardFetcher(cursorDashboardAuthService)
+	service.SetKiroUsageService(kiroUsageService)
 	return service
 }
 
@@ -117,10 +119,12 @@ func ProvideAccountTestService(
 	tlsFPProfileService *TLSFingerprintProfileService,
 	adobeTokenProvider *AdobeTokenProvider,
 	cursorGatewayService *CursorGatewayService,
+	kiroUsageService *KiroUsageService,
 ) *AccountTestService {
 	service := NewAccountTestService(accountRepo, geminiTokenProvider, claudeTokenProvider, grokTokenProvider, antigravityGatewayService, httpUpstream, cfg, tlsFPProfileService)
 	service.SetAdobeTokenProvider(adobeTokenProvider)
 	service.SetCursorGatewayService(cursorGatewayService)
+	service.SetKiroUsageService(kiroUsageService)
 	return service
 }
 

@@ -463,6 +463,12 @@ func isProfileArnResolutionSoftError(err error) bool {
 		strings.Contains(msg, "profile ARN unsupported for Builder ID account")
 }
 
+// IsProfileArnResolutionSoftError reports whether streaming requests may safely
+// continue without a profile ARN and fall back to the credential region.
+func IsProfileArnResolutionSoftError(err error) bool {
+	return isProfileArnResolutionSoftError(err)
+}
+
 // RefreshAccountInfo fetches usage limits and normalizes them into AccountInfo.
 // It returns a sentinel-wrapped error when the account is suspended or the token
 // is invalid so callers can react (disable / re-auth). Ban detection mirrors

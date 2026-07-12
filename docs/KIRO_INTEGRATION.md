@@ -50,7 +50,7 @@ sub2api 支持接入 **Kiro** 平台：把 AWS Kiro / CodeWhisperer 账户作为
 | `authMethod` | 否 | `idc`（默认）或 `social` |
 | `clientId` / `clientSecret` | idc 刷新必填 | AWS OIDC client 凭证（`authMethod=idc` 且要刷新时必填） |
 | `region` | 否 | OIDC 区域，默认 `us-east-1` |
-| `profileArn` | 建议 | CodeWhisperer profile ARN，生成请求需要；缺失时会尝试自动解析 |
+| `profileArn` | 建议 | CodeWhisperer profile ARN，生成请求需要；缺失时会在首次请求或用量探测时自动解析并持久化，解析期间按 `region` 回退选择数据平面区域 |
 | `machineId` | 否 | 写入 User-Agent 尾巴，用于请求追踪 |
 | `expiresAt` | 否 | access token 过期 Unix 秒；缺失则视为需刷新 |
 

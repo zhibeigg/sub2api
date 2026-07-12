@@ -317,12 +317,17 @@ func TestRegionFromProfileArn(t *testing.T) {
 	if got := regionFromProfileArn(arn); got != "eu-west-1" {
 		t.Errorf("region = %q, want eu-west-1", got)
 	}
-	if got := regionalizeURLForProfile("https://q.us-east-1.amazonaws.com/x", arn); got != "https://q.eu-west-1.amazonaws.com/x" {
+	if got := regionalizeURLForProfile("https://q.us-east-1.amazonaws.com/x", nil, arn); got != "https://q.eu-west-1.amazonaws.com/x" {
 		t.Errorf("regionalized url = %q", got)
 	}
 	// us-east-1 stays unchanged.
 	usArn := "arn:aws:codewhisperer:us-east-1:1:profile/x"
-	if got := regionalizeURLForProfile("https://q.us-east-1.amazonaws.com/x", usArn); got != "https://q.us-east-1.amazonaws.com/x" {
+	if got := regionalizeURLForProfile("https://q.us-east-1.amazonaws.com/x", nil, usArn); got != "https://q.us-east-1.amazonaws.com/x" {
 		t.Errorf("us-east-1 url should be unchanged, got %q", got)
+	}
+	// Missing profile ARN falls back to the credential region.
+	cred := &Credential{Region: "eu-central-1"}
+	if got := regionalizeURLForProfile("https://codewhisperer.us-east-1.amazonaws.com/x", cred, ""); got != "https://q.eu-central-1.amazonaws.com/x" {
+		t.Errorf("credential-region fallback url = %q", got)
 	}
 }
