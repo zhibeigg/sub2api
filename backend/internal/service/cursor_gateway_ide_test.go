@@ -350,6 +350,22 @@ func TestCursorGatewayIDEAnthropicStreamsImmediately(t *testing.T) {
 	require.NotEmpty(t, upstream.bodies[0])
 }
 
+func TestCursorGatewayIDEEstimatesUsageWhenTurnEndedOmitsUsage(t *testing.T) {
+	upstream := &cursorIDEUpstreamStub{chatBody: cursorIDEFrames(
+		cursorIDETextPayload("fallback usage"), cursorIDETurnEndedPayload(nil),
+	)}
+	svc := ideTestGateway(upstream)
+	body := `{"model":"claude-sonnet-5","stream":false,"messages":[{"role":"user","content":"hi"}]}`
+	c, _ := newCursorGatewayTestContext(t, "/v1/messages", body, 3)
+
+	result, err := svc.Forward(context.Background(), c, ideTestAccount(), []byte(body))
+	require.NoError(t, err)
+	require.Positive(t, result.Usage.InputTokens)
+	require.Positive(t, result.Usage.OutputTokens)
+	require.Zero(t, result.Usage.CacheCreationInputTokens)
+	require.Zero(t, result.Usage.CacheReadInputTokens)
+}
+
 func TestCursorGatewayIDENonStreamNativeToolCall(t *testing.T) {
 	upstream := &cursorIDEUpstreamStub{chatBody: cursorIDEFrames(
 		cursorIDEToolPayload("call_weather", "get_weather", `{"city":"Shanghai"}`, true),
@@ -970,8 +986,19 @@ func cursorIDEUsagePayload(input, output, cacheWrite, cacheRead int) []byte {
 		usage = protowire.AppendTag(usage, field, protowire.VarintType)
 		usage = protowire.AppendVarint(usage, uint64(value))
 	}
+	return cursorIDETurnEndedPayload(usage)
+}
+
+func cursorIDETurnEndedPayload(usage []byte) []byte {
+	var turnEnded []byte
+	if usage != nil {
+		turnEnded = protowire.AppendTag(turnEnded, 1, protowire.BytesType)
+		turnEnded = protowire.AppendBytes(turnEnded, usage)
+	}
+	turnEnded = protowire.AppendTag(turnEnded, 2, protowire.VarintType)
+	turnEnded = protowire.AppendVarint(turnEnded, 1)
 	interaction := protowire.AppendTag(nil, 14, protowire.BytesType)
-	interaction = protowire.AppendBytes(interaction, usage)
+	interaction = protowire.AppendBytes(interaction, turnEnded)
 	server := protowire.AppendTag(nil, 1, protowire.BytesType)
 	return protowire.AppendBytes(server, interaction)
 }

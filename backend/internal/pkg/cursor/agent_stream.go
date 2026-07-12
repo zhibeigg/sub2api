@@ -287,11 +287,13 @@ func (s *AgentStream) parseInteractionUpdate(payload []byte) []AgentEvent {
 		case 13:
 			events = append(events, AgentEvent{Type: AgentEventHeartbeat})
 		case 14:
-			usage := parseAgentTurnUsage(value)
+			usage := parseAgentTurnEndedUsage(value)
+			if usage != nil {
+				events = append(events, AgentEvent{Type: AgentEventUsage, Usage: usage})
+			}
 			events = append(events,
-				AgentEvent{Type: AgentEventUsage, Usage: &usage},
-				AgentEvent{Type: AgentEventTurnEnded, Usage: &usage, FinishReason: "stop"},
-				AgentEvent{Type: AgentEventFinish, Usage: &usage, FinishReason: "stop"},
+				AgentEvent{Type: AgentEventTurnEnded, Usage: usage, FinishReason: "stop"},
+				AgentEvent{Type: AgentEventFinish, Usage: usage, FinishReason: "stop"},
 			)
 		case 16:
 			events = append(events, AgentEvent{Type: AgentEventStepStarted, StepID: firstProtoVarint(value, 1)})
@@ -490,6 +492,15 @@ func parseAgentKVServerMessage(payload []byte) *AgentEvent {
 		}}
 	}
 	return nil
+}
+
+func parseAgentTurnEndedUsage(payload []byte) *Usage {
+	usagePayload := firstProtoBytes(payload, 1)
+	if usagePayload == nil {
+		return nil
+	}
+	usage := parseAgentTurnUsage(usagePayload)
+	return &usage
 }
 
 func parseAgentTurnUsage(payload []byte) Usage {

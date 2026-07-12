@@ -230,15 +230,17 @@ func TestAgentEventStreamMCPAggregationKVExecAndUsage(t *testing.T) {
 	partial = appendString(partial, 3, `{"q":"go"}`)
 	completed := appendString(nil, 1, "call-1")
 	completed = appendBytes(completed, 2, toolCall)
-	turn := appendVarint(nil, 1, 10)
-	turn = appendVarint(turn, 2, 4)
-	turn = appendVarint(turn, 3, 2)
-	turn = appendVarint(turn, 4, 3)
-	turn = appendVarint(turn, 5, 1)
+	usage := appendVarint(nil, 1, 10)
+	usage = appendVarint(usage, 2, 4)
+	usage = appendVarint(usage, 3, 2)
+	usage = appendVarint(usage, 4, 3)
+	usage = appendVarint(usage, 5, 1)
+	turnEnded := appendBytes(nil, 1, usage)
+	turnEnded = appendVarint(turnEnded, 2, 1)
 	interaction := appendBytes(nil, 2, started)
 	interaction = appendBytes(interaction, 7, partial)
 	interaction = appendBytes(interaction, 3, completed)
-	interaction = appendBytes(interaction, 14, turn)
+	interaction = appendBytes(interaction, 14, turnEnded)
 
 	execArgs := appendString(nil, 3, "exec-call")
 	execArgs = appendString(execArgs, 5, "lookup")
@@ -286,6 +288,22 @@ func TestAgentEventStreamMCPAggregationKVExecAndUsage(t *testing.T) {
 	}
 	if events[7].Type != AgentEventKVGet || string(events[7].KV.BlobID) != "blob" || string(events[7].KV.Metadata) != "trace-metadata" {
 		t.Fatalf("KV = %#v", events[7])
+	}
+}
+
+func TestAgentTurnEndedWithoutUsageDoesNotEmitZeroUsage(t *testing.T) {
+	turnEnded := appendVarint(nil, 2, 1)
+	interaction := appendBytes(nil, 14, turnEnded)
+
+	events := (&AgentStream{}).parseInteractionUpdate(interaction)
+	if len(events) != 2 {
+		t.Fatalf("event count = %d: %#v", len(events), events)
+	}
+	if events[0].Type != AgentEventTurnEnded || events[0].Usage != nil {
+		t.Fatalf("turn ended event = %#v", events[0])
+	}
+	if events[1].Type != AgentEventFinish || events[1].Usage != nil {
+		t.Fatalf("finish event = %#v", events[1])
 	}
 }
 
