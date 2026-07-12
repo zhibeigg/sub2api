@@ -248,6 +248,15 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 				return
 			}
 			result, err = h.geminiCompatService.ForwardAsChatCompletions(c.Request.Context(), c, account, forwardBody)
+		} else if account.Platform == service.PlatformKiro && account.Type != service.AccountTypeAPIKey {
+			if h.kiroGatewayService == nil {
+				h.chatCompletionsErrorResponse(c, http.StatusBadGateway, "upstream_error", "Kiro gateway service is not configured")
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+				return
+			}
+			result, err = h.kiroGatewayService.Forward(c.Request.Context(), c, account, forwardBody)
 		} else {
 			result, err = h.gatewayService.ForwardAsChatCompletions(c.Request.Context(), c, account, forwardBody, parsedReq)
 		}
