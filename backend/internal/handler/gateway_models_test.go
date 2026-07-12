@@ -535,6 +535,192 @@ func TestGatewayModels_OpenAICustomModelsListKeepsOpenAIResponseShapeForDefaultF
 	require.Empty(t, got.Data[0].CreatedAt)
 }
 
+func TestGatewayModels_MultiGroupAggregatesMappedModelsAndDeduplicates(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	anthropicGroup := &service.Group{ID: 31, Platform: service.PlatformAnthropic, Status: service.StatusActive}
+	openAIGroup := &service.Group{ID: 32, Platform: service.PlatformOpenAI, Status: service.StatusActive}
+	geminiGroup := &service.Group{ID: 33, Platform: service.PlatformGemini, Status: service.StatusActive}
+	h := newGatewayModelsHandlerForTest(
+		&gatewayModelsAccountRepoStub{
+			byGroup: map[int64][]service.Account{
+				anthropicGroup.ID: {
+					{
+						ID:       1,
+						Platform: service.PlatformAnthropic,
+						Credentials: map[string]any{
+							"model_mapping": map[string]any{
+								"claude-sonnet-4-6": "claude-sonnet-4-6",
+								"shared-model":      "shared-model",
+							},
+						},
+					},
+				},
+				openAIGroup.ID: {
+					{
+						ID:       2,
+						Platform: service.PlatformOpenAI,
+						Credentials: map[string]any{
+							"model_mapping": map[string]any{
+								"gpt-5.4":      "gpt-5.4",
+								"shared-model": "shared-model",
+							},
+						},
+					},
+				},
+				geminiGroup.ID: {
+					{
+						ID:       3,
+						Platform: service.PlatformGemini,
+						Credentials: map[string]any{
+							"model_mapping": map[string]any{
+								"gemini-2.5-flash": "gemini-2.5-flash",
+							},
+						},
+					},
+				},
+			},
+		},
+	)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
+		GroupID: &anthropicGroup.ID,
+		Group:   anthropicGroup,
+		GroupBindings: []service.APIKeyGroupBinding{
+			{GroupID: anthropicGroup.ID, Priority: 0, Group: anthropicGroup},
+			{GroupID: openAIGroup.ID, Priority: 1, Group: openAIGroup},
+			{GroupID: geminiGroup.ID, Priority: 2, Group: geminiGroup},
+		},
+	})
+
+	h.Models(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var got gatewayModelsResponseForTest
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Equal(t, []string{
+		"claude-sonnet-4-6",
+		"shared-model",
+		"gpt-5.4",
+		"gemini-2.5-flash",
+	}, modelIDsForTest(got.Data))
+}
+
+func TestGatewayModels_MultiGroupAppliesEachGroupsCustomModelList(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	anthropicGroup := &service.Group{
+		ID:       34,
+		Platform: service.PlatformAnthropic,
+		Status:   service.StatusActive,
+		ModelsListConfig: service.GroupModelsListConfig{
+			Enabled: true,
+			Models:  []string{"claude-opus-4-8", "claude-sonnet-4-6"},
+		},
+	}
+	openAIGroup := &service.Group{ID: 35, Platform: service.PlatformOpenAI, Status: service.StatusActive}
+	h := newGatewayModelsHandlerForTest(
+		&gatewayModelsAccountRepoStub{
+			byGroup: map[int64][]service.Account{
+				anthropicGroup.ID: {
+					{
+						ID:       1,
+						Platform: service.PlatformAnthropic,
+						Credentials: map[string]any{
+							"model_mapping": map[string]any{
+								"claude-sonnet-4-6": "claude-sonnet-4-6",
+								"claude-opus-4-8":   "claude-opus-4-8",
+							},
+						},
+					},
+				},
+				openAIGroup.ID: {
+					{
+						ID:       2,
+						Platform: service.PlatformOpenAI,
+						Credentials: map[string]any{
+							"model_mapping": map[string]any{"gpt-5.4": "gpt-5.4"},
+						},
+					},
+				},
+			},
+		},
+	)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
+		GroupID: &anthropicGroup.ID,
+		Group:   anthropicGroup,
+		GroupBindings: []service.APIKeyGroupBinding{
+			{GroupID: anthropicGroup.ID, Priority: 0, Group: anthropicGroup},
+			{GroupID: openAIGroup.ID, Priority: 1, Group: openAIGroup},
+		},
+	})
+
+	h.Models(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var got gatewayModelsResponseForTest
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Equal(t, []string{"claude-opus-4-8", "claude-sonnet-4-6", "gpt-5.4"}, modelIDsForTest(got.Data))
+}
+
+func TestGatewayModels_ExplicitGroupSelectionDoesNotAggregateOtherBindings(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	anthropicGroup := &service.Group{ID: 36, Platform: service.PlatformAnthropic, Status: service.StatusActive}
+	openAIGroup := &service.Group{ID: 37, Platform: service.PlatformOpenAI, Status: service.StatusActive}
+	h := newGatewayModelsHandlerForTest(
+		&gatewayModelsAccountRepoStub{
+			byGroup: map[int64][]service.Account{
+				anthropicGroup.ID: {
+					{
+						ID:       1,
+						Platform: service.PlatformAnthropic,
+						Credentials: map[string]any{
+							"model_mapping": map[string]any{"claude-sonnet-4-6": "claude-sonnet-4-6"},
+						},
+					},
+				},
+				openAIGroup.ID: {
+					{
+						ID:       2,
+						Platform: service.PlatformOpenAI,
+						Credentials: map[string]any{
+							"model_mapping": map[string]any{"gpt-5.4": "gpt-5.4"},
+						},
+					},
+				},
+			},
+		},
+	)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
+		GroupID:                &openAIGroup.ID,
+		Group:                  openAIGroup,
+		ExplicitGroupSelection: true,
+		GroupBindings: []service.APIKeyGroupBinding{
+			{GroupID: anthropicGroup.ID, Priority: 0, Group: anthropicGroup},
+			{GroupID: openAIGroup.ID, Priority: 1, Group: openAIGroup},
+		},
+	})
+
+	h.Models(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var got gatewayModelsResponseForTest
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	require.Equal(t, []string{"gpt-5.4"}, modelIDsForTest(got.Data))
+}
+
 func modelIDsForTest(models []gatewayModelItemForTest) []string {
 	ids := make([]string, 0, len(models))
 	for _, model := range models {

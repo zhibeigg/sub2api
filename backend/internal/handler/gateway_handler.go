@@ -1009,13 +1009,27 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 
 	var groupID *int64
 	var platform string
+	var forcedPlatform string
 
 	if apiKey != nil && apiKey.Group != nil {
 		groupID = &apiKey.Group.ID
 		platform = apiKey.Group.Platform
 	}
-	if forcedPlatform, ok := middleware2.GetForcePlatformFromContext(c); ok && strings.TrimSpace(forcedPlatform) != "" {
+	if selectedPlatform, ok := middleware2.GetForcePlatformFromContext(c); ok && strings.TrimSpace(selectedPlatform) != "" {
+		forcedPlatform = strings.TrimSpace(selectedPlatform)
 		platform = forcedPlatform
+	}
+
+	// A multi-group key keeps the highest-priority binding in apiKey.Group for
+	// backwards compatibility. Model discovery is different from request
+	// dispatch: clients need the union of every bound group's callable models so
+	// they can subsequently submit a model and let normal multi-group routing pick
+	// the effective group. An explicit group selector remains pinned to one group.
+	if apiKey != nil && !apiKey.ExplicitGroupSelection && len(apiKey.GroupBindings) > 1 {
+		if models, handled := h.availableModelsForAPIKeyBindings(c.Request.Context(), apiKey, forcedPlatform); handled {
+			writeModelsList(c, models)
+			return
+		}
 	}
 
 	// Get available models from account configurations for the selected group platform.
@@ -1053,6 +1067,51 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 		"object": "list",
 		"data":   claude.DefaultModels,
 	})
+}
+
+func (h *GatewayHandler) availableModelsForAPIKeyBindings(ctx context.Context, apiKey *service.APIKey, forcedPlatform string) ([]string, bool) {
+	if apiKey == nil || len(apiKey.GroupBindings) == 0 {
+		return nil, false
+	}
+
+	forcedPlatform = service.NormalizePlatform(forcedPlatform)
+	aggregated := make([]string, 0)
+	handled := false
+	for _, binding := range apiKey.GroupBindings {
+		group := binding.Group
+		if group == nil || group.ID <= 0 || !group.IsActive() {
+			continue
+		}
+		groupPlatform := service.NormalizePlatform(group.Platform)
+		if forcedPlatform != "" && groupPlatform != forcedPlatform {
+			continue
+		}
+
+		handled = true
+		groupID := group.ID
+		available := h.gatewayService.GetAvailableModels(ctx, &groupID, groupPlatform)
+		aggregated = mergeModelIDs(aggregated, modelsForGatewayGroup(group, available))
+	}
+	return aggregated, handled
+}
+
+func modelsForGatewayGroup(group *service.Group, available []string) []string {
+	if group == nil {
+		return nil
+	}
+	platform := service.NormalizePlatform(group.Platform)
+	fallbackModels := defaultModelIDsForPlatform(platform)
+	if group.CustomModelsListEnabled() {
+		return filterModelsByCustomList(
+			customModelsListSource(platform, available, fallbackModels),
+			fallbackModels,
+			group.ModelsListConfig.Models,
+		)
+	}
+	if len(available) > 0 {
+		return available
+	}
+	return fallbackModels
 }
 
 func writeModelsList(c *gin.Context, modelIDs []string) {
