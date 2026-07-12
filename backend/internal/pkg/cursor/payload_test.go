@@ -111,3 +111,25 @@ func TestEstimateAndTrimHistory(t *testing.T) {
 		t.Fatalf("unexpected trimmed history: %+v", trimmed)
 	}
 }
+
+func TestTrimHistoryDoesNotChargeProtectedPreambleToHistoryBudget(t *testing.T) {
+	messages := []Message{
+		newMessage("user", strings.Repeat("fixed system and tool schema ", 10000), 0),
+		newMessage("user", "remember ORBIT-4836", 1),
+		newMessage("assistant", "remembered", 2),
+		newMessage("user", "what was the code?", 3),
+	}
+	historyBudget := 0
+	for _, message := range messages[1:] {
+		historyBudget += EstimateMessageTokens(message)
+	}
+	if EstimateMessageTokens(messages[0]) <= historyBudget {
+		t.Fatal("test preamble must exceed the history budget")
+	}
+
+	trimmed := TrimHistory(messages, 1, 100, historyBudget, 0)
+
+	if len(trimmed) != len(messages) {
+		t.Fatalf("protected preamble evicted conversation history: got %d messages, want %d", len(trimmed), len(messages))
+	}
+}

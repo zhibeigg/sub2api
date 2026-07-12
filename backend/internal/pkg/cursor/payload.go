@@ -166,10 +166,13 @@ func TrimHistory(messages []Message, protected, maxMessages, maxTokens, overhead
 		history = history[len(history)-maxMessages:]
 	}
 	if maxTokens > 0 {
+		// maxTokens is the conversation-history budget. Protected preamble
+		// messages contain fixed system instructions and tool schemas, which can
+		// be larger than the configured history budget for agent clients such as
+		// NarraFork. Charging that fixed overhead against history would evict all
+		// prior turns even though the upstream request must include the preamble
+		// regardless.
 		budget := maxTokens - overhead
-		for _, message := range prefix {
-			budget -= EstimateMessageTokens(message)
-		}
 		if budget < 0 {
 			budget = 0
 		}

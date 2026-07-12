@@ -10,6 +10,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -429,6 +430,54 @@ func TestMergeCursorAgentDialogueMessagesAvoidsDuplicatingFullHistory(t *testing
 	merged = mergeCursorAgentDialogueMessages(previous, toolOnly)
 	require.Len(t, merged, 3)
 	require.Equal(t, "tool", merged[2].Role)
+}
+
+func TestTrimCursorDialogueDoesNotChargeFixedAgentOverheadToHistory(t *testing.T) {
+	schema, err := json.Marshal(map[string]any{
+		"type":        "object",
+		"description": strings.Repeat("large tool schema ", 10000),
+	})
+	require.NoError(t, err)
+	dialogue := &cursorpkg.Dialogue{
+		System: strings.Repeat("fixed system instructions ", 1000),
+		Tools: []cursorpkg.ToolDefinition{{
+			Name: "large_tool", Description: "Large NarraFork-style tool", InputSchema: schema,
+		}},
+		Messages: []cursorpkg.DialogueMessage{
+			{Role: "user", Text: "Remember that the release code is ORBIT-4836."},
+			{Role: "assistant", Text: "I will remember ORBIT-4836."},
+			{Role: "user", Text: "What release code did I give you?"},
+		},
+	}
+	original := append([]cursorpkg.DialogueMessage(nil), dialogue.Messages...)
+	require.Greater(t, estimateCursorDialogueFixedTokens(dialogue), 12000)
+	require.Less(t, estimateCursorDialogueHistoryTokens(dialogue), 12000)
+	require.Greater(t, estimateCursorDialogueTokens(dialogue), 12000)
+
+	trimCursorDialogue(dialogue, 100, 12000)
+
+	require.Equal(t, original, dialogue.Messages)
+}
+
+func TestTrimCursorDialogueStillLimitsConversationHistory(t *testing.T) {
+	messages := []cursorpkg.DialogueMessage{
+		{Role: "user", Text: strings.Repeat("old user one ", 1000)},
+		{Role: "assistant", Text: strings.Repeat("old answer one ", 1000)},
+		{Role: "user", Text: strings.Repeat("recent user ", 1000)},
+		{Role: "assistant", Text: strings.Repeat("recent answer ", 1000)},
+		{Role: "user", Text: strings.Repeat("latest question ", 1000)},
+	}
+	dialogue := &cursorpkg.Dialogue{
+		System:   strings.Repeat("fixed ", 10000),
+		Messages: append([]cursorpkg.DialogueMessage(nil), messages...),
+	}
+	retained := &cursorpkg.Dialogue{Messages: append([]cursorpkg.DialogueMessage(nil), messages[2:]...)}
+	budget := estimateCursorDialogueHistoryTokens(retained)
+	require.Greater(t, estimateCursorDialogueHistoryTokens(dialogue), budget)
+
+	trimCursorDialogue(dialogue, 100, budget)
+
+	require.Equal(t, messages[2:], dialogue.Messages)
 }
 
 func TestCursorGatewayIDEAgentToolCallReturnsAndResumesSameDuplexStream(t *testing.T) {

@@ -1090,7 +1090,20 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 			pendingMCP = cloneCursorAgentPendingMCP(previous.AgentPendingMCP)
 		}
 	}
+	historyMessagesBefore := len(dialogue.Messages)
+	historyTokensBefore := estimateCursorDialogueHistoryTokens(dialogue)
+	fixedTokens := estimateCursorDialogueFixedTokens(dialogue)
 	trimCursorDialogue(dialogue, s.cursorConfig().MaxHistoryMessages, s.cursorConfig().MaxHistoryTokens)
+	if len(dialogue.Messages) < historyMessagesBefore {
+		slog.Info("cursor_agent_history_trimmed",
+			"before_messages", historyMessagesBefore,
+			"after_messages", len(dialogue.Messages),
+			"history_tokens_before", historyTokensBefore,
+			"history_tokens_after", estimateCursorDialogueHistoryTokens(dialogue),
+			"fixed_tokens", fixedTokens,
+			"max_history_messages", s.cursorConfig().MaxHistoryMessages,
+			"max_history_tokens", s.cursorConfig().MaxHistoryTokens)
+	}
 	mode := prepareCursorAgentMode(dialogue)
 	estimatedInput := estimateCursorDialogueTokens(dialogue)
 	variantPreference := envelope.variantPreference()
@@ -1569,11 +1582,22 @@ func appendCursorSystemConstraint(system, constraint string) string {
 	return strings.TrimSpace(system) + "\n\n" + constraint
 }
 
-func estimateCursorDialogueTokens(dialogue *cursorpkg.Dialogue) int {
+func estimateCursorDialogueFixedTokens(dialogue *cursorpkg.Dialogue) int {
 	if dialogue == nil {
 		return 0
 	}
 	total := cursorpkg.EstimateTokens(dialogue.System)
+	for _, tool := range dialogue.Tools {
+		total += cursorpkg.EstimateTokens(tool.Name) + cursorpkg.EstimateTokens(tool.Description) + cursorpkg.EstimateTokens(string(tool.InputSchema))
+	}
+	return total
+}
+
+func estimateCursorDialogueHistoryTokens(dialogue *cursorpkg.Dialogue) int {
+	if dialogue == nil {
+		return 0
+	}
+	total := 0
 	for _, message := range dialogue.Messages {
 		total += 4 + cursorpkg.EstimateTokens(message.Text)
 		for _, action := range message.ToolCalls {
@@ -1581,10 +1605,11 @@ func estimateCursorDialogueTokens(dialogue *cursorpkg.Dialogue) int {
 			total += cursorpkg.EstimateTokens(action.Name) + cursorpkg.EstimateTokens(string(encoded))
 		}
 	}
-	for _, tool := range dialogue.Tools {
-		total += cursorpkg.EstimateTokens(tool.Name) + cursorpkg.EstimateTokens(tool.Description) + cursorpkg.EstimateTokens(string(tool.InputSchema))
-	}
 	return total
+}
+
+func estimateCursorDialogueTokens(dialogue *cursorpkg.Dialogue) int {
+	return estimateCursorDialogueFixedTokens(dialogue) + estimateCursorDialogueHistoryTokens(dialogue)
 }
 
 func trimCursorDialogue(dialogue *cursorpkg.Dialogue, maxMessages, maxTokens int) {
@@ -1597,7 +1622,10 @@ func trimCursorDialogue(dialogue *cursorpkg.Dialogue, maxMessages, maxTokens int
 	if maxTokens <= 0 {
 		return
 	}
-	for len(dialogue.Messages) > 1 && estimateCursorDialogueTokens(dialogue) > maxTokens {
+	// maxTokens limits replayed conversation history only. System instructions
+	// and MCP tool schemas are fixed request overhead; counting them against the
+	// history budget causes large agent clients to lose every prior turn.
+	for len(dialogue.Messages) > 1 && estimateCursorDialogueHistoryTokens(dialogue) > maxTokens {
 		dialogue.Messages = dialogue.Messages[1:]
 	}
 }
