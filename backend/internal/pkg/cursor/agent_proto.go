@@ -246,23 +246,17 @@ func PrepareAgentConversationState(dialogue *Dialogue, state *AgentConversationS
 		}
 	}
 
+	history := agentConversationHistoryPrefix(dialogue.Messages)
 	if len(prepared.RootPromptMessagesJSON) == 0 {
-		system := strings.TrimSpace(dialogue.System)
-		if system == "" {
-			system = "You are a helpful assistant."
-		}
-		rootPrompt, err := json.Marshal(struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		}{Role: "system", Content: system})
+		rootPromptIDs, err := encodeAgentRootPromptMessages(dialogue.System, history, blobs)
 		if err != nil {
-			return nil, blobs, badRequest("encode Agent root prompt", err)
+			return nil, blobs, badRequest("encode Agent root prompt messages", err)
 		}
-		prepared.RootPromptMessagesJSON = [][]byte{storeAgentBlob(blobs, rootPrompt)}
+		prepared.RootPromptMessagesJSON = rootPromptIDs
 	}
 
 	if len(prepared.Turns) == 0 {
-		turns, err := encodeAgentConversationTurns(agentConversationHistoryPrefix(dialogue.Messages), blobs, messageID)
+		turns, err := encodeAgentConversationTurns(history, blobs, messageID)
 		if err != nil {
 			return nil, blobs, badRequest("encode Agent conversation turns", err)
 		}
@@ -277,6 +271,55 @@ func agentConversationHistoryPrefix(messages []DialogueMessage) []DialogueMessag
 		end--
 	}
 	return messages[:end]
+}
+
+type agentRootPromptTextPart struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+func encodeAgentRootPromptMessages(system string, history []DialogueMessage, blobs map[string][]byte) ([][]byte, error) {
+	system = strings.TrimSpace(system)
+	if system == "" {
+		system = "You are a helpful assistant."
+	}
+	rootPrompt, err := json.Marshal(struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	}{Role: "system", Content: system})
+	if err != nil {
+		return nil, err
+	}
+	rootPromptIDs := [][]byte{storeAgentBlob(blobs, rootPrompt)}
+	for _, message := range history {
+		role := message.Role
+		text := message.Text
+		switch message.Role {
+		case "user":
+		case "assistant":
+			text, err = agentHistoryStepText(message)
+		case "tool":
+			role = "user"
+			text, err = agentHistoryStepText(message)
+		default:
+			err = fmt.Errorf("unsupported dialogue role %q", message.Role)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(text) == "" {
+			continue
+		}
+		rootMessage, marshalErr := json.Marshal(struct {
+			Role    string                    `json:"role"`
+			Content []agentRootPromptTextPart `json:"content"`
+		}{Role: role, Content: []agentRootPromptTextPart{{Type: "text", Text: text}}})
+		if marshalErr != nil {
+			return nil, marshalErr
+		}
+		rootPromptIDs = append(rootPromptIDs, storeAgentBlob(blobs, rootMessage))
+	}
+	return rootPromptIDs, nil
 }
 
 func encodeAgentConversationTurns(messages []DialogueMessage, blobs map[string][]byte, messageID func() string) ([][]byte, error) {

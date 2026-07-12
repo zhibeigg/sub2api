@@ -46,7 +46,7 @@ func TestAgentRunRequestGoldenAndDescriptorFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256(payload)
-	if got, want := hex.EncodeToString(sum[:]), "97e795b7fc274fb40df34b00df7a212a0a4978c0b75f0301b64068696cdc871e"; got != want {
+	if got, want := hex.EncodeToString(sum[:]), "cea53d231081b1f467a0476c80ae8ca40d91809e8a9426207635eb8a824a85d4"; got != want {
 		t.Fatalf("Agent request golden SHA256 = %s, want %s", got, want)
 	}
 
@@ -74,12 +74,24 @@ func TestAgentRunRequestGoldenAndDescriptorFields(t *testing.T) {
 	encodedState := firstBytesField(t, runRequest, 1)
 	rootPromptIDs := bytesFields(encodedState, 1)
 	turnIDs := bytesFields(encodedState, 8)
-	if len(rootPromptIDs) != 1 || len(turnIDs) != 1 {
+	if len(rootPromptIDs) != 4 || len(turnIDs) != 1 {
 		t.Fatalf("conversation state root=%d turns=%d", len(rootPromptIDs), len(turnIDs))
 	}
 	rootPrompt := agentTestBlob(t, blobs, rootPromptIDs[0])
 	if !bytes.Contains(rootPrompt, []byte(`"content":"Be concise."`)) {
 		t.Fatalf("root prompt blob = %s", rootPrompt)
+	}
+	historyUserRoot := agentTestBlob(t, blobs, rootPromptIDs[1])
+	if !bytes.Contains(historyUserRoot, []byte(`"role":"user"`)) || !bytes.Contains(historyUserRoot, []byte("old question")) {
+		t.Fatalf("history user root prompt blob = %s", historyUserRoot)
+	}
+	historyAssistantRoot := agentTestBlob(t, blobs, rootPromptIDs[2])
+	if !bytes.Contains(historyAssistantRoot, []byte(`"role":"assistant"`)) || !bytes.Contains(historyAssistantRoot, []byte("calling")) || !bytes.Contains(historyAssistantRoot, []byte("[Tool: lookup]")) {
+		t.Fatalf("history assistant root prompt blob = %s", historyAssistantRoot)
+	}
+	historyToolRoot := agentTestBlob(t, blobs, rootPromptIDs[3])
+	if !bytes.Contains(historyToolRoot, []byte(`"role":"user"`)) || !bytes.Contains(historyToolRoot, []byte("old result")) {
+		t.Fatalf("history tool root prompt blob = %s", historyToolRoot)
 	}
 	turn := agentTestBlob(t, blobs, turnIDs[0])
 	agentTurn := firstBytesField(t, turn, 1)
