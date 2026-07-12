@@ -264,10 +264,47 @@ func (s *CursorGatewayService) CountTokens(body []byte, protocol cursorpkg.Proto
 }
 
 func (s *CursorGatewayService) forward(ctx context.Context, c *gin.Context, account *Account, body []byte, protocol cursorpkg.Protocol) (*ForwardResult, error) {
-	if s.cursorForwardTransportMode(account) == CursorTransportIDEChat {
-		return s.forwardIDE(ctx, c, account, body, protocol)
+	if s.cursorForwardTransportMode(account) != CursorTransportIDEChat {
+		return s.forwardCloud(ctx, c, account, body, protocol)
 	}
+
+	result, err := s.forwardIDE(ctx, c, account, body, protocol)
+	if err == nil || !s.shouldFallbackCursorIDEToCloud(c, account, err) {
+		return result, err
+	}
+
+	accountID := int64(0)
+	if account != nil {
+		accountID = account.ID
+	}
+	statusCode := 0
+	var upstreamErr *UpstreamFailoverError
+	if errors.As(err, &upstreamErr) {
+		statusCode = upstreamErr.StatusCode
+	}
+	slog.Warn("cursor_ide_auto_fallback", "account_id", accountID, "status_code", statusCode, "fallback", CursorTransportCloudAgent, "error", err.Error())
 	return s.forwardCloud(ctx, c, account, body, protocol)
+}
+
+func (s *CursorGatewayService) shouldFallbackCursorIDEToCloud(c *gin.Context, account *Account, err error) bool {
+	if err == nil || account == nil || strings.TrimSpace(account.GetCredential("api_key")) == "" {
+		return false
+	}
+	if c != nil && c.Writer != nil && c.Writer.Written() {
+		return false
+	}
+	rawMode := cursorAccountSetting(account, "cursor_transport_mode")
+	if strings.TrimSpace(rawMode) == "" {
+		rawMode = s.cursorConfig().DefaultTransportMode
+	}
+	if NormalizeCursorTransportMode(rawMode) != CursorTransportAuto {
+		return false
+	}
+	var upstreamErr *UpstreamFailoverError
+	if !errors.As(err, &upstreamErr) {
+		return false
+	}
+	return upstreamErr.StatusCode == http.StatusTooManyRequests || upstreamErr.StatusCode >= http.StatusInternalServerError
 }
 
 func (s *CursorGatewayService) forwardCloud(ctx context.Context, c *gin.Context, account *Account, body []byte, protocol cursorpkg.Protocol) (*ForwardResult, error) {

@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"sync"
@@ -65,6 +66,38 @@ func (s *cursorIDEUpstreamStub) Do(req *http.Request, _ string, _ int64, _ int) 
 
 func (s *cursorIDEUpstreamStub) DoWithTLS(req *http.Request, proxyURL string, accountID int64, accountConcurrency int, _ *tlsfingerprint.Profile) (*http.Response, error) {
 	return s.Do(req, proxyURL, accountID, accountConcurrency)
+}
+
+type cursorIDEAutoFallbackUpstreamStub struct {
+	cloud       cursorGatewayUpstreamStub
+	ideChatBody []byte
+}
+
+func (s *cursorIDEAutoFallbackUpstreamStub) Do(req *http.Request, proxyURL string, accountID int64, accountConcurrency int) (*http.Response, error) {
+	switch req.URL.Path {
+	case cursorpkg.IDEModelsPath:
+		return cursorIDEHTTP2Response(req, cursorIDEFrames(appendProtoString(nil, 1, "claude-sonnet-5"))), nil
+	case cursorpkg.IDEChatPath:
+		return cursorIDEHTTP2Response(req, s.ideChatBody), nil
+	default:
+		return s.cloud.Do(req, proxyURL, accountID, accountConcurrency)
+	}
+}
+
+func (s *cursorIDEAutoFallbackUpstreamStub) DoWithTLS(req *http.Request, proxyURL string, accountID int64, accountConcurrency int, _ *tlsfingerprint.Profile) (*http.Response, error) {
+	return s.Do(req, proxyURL, accountID, accountConcurrency)
+}
+
+func cursorIDEHTTP2Response(req *http.Request, body []byte) *http.Response {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Status:     http.StatusText(http.StatusOK),
+		Proto:      "HTTP/2.0",
+		ProtoMajor: 2,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(bytes.NewReader(body)),
+		Request:    req,
+	}
 }
 
 func ideTestGateway(upstream HTTPUpstream) *CursorGatewayService {
@@ -142,6 +175,38 @@ func TestCursorGatewayIDERejectsHTTP1BeforeWriting(t *testing.T) {
 	_, err := svc.Forward(context.Background(), c, ideTestAccount(), []byte(body))
 	require.Error(t, err)
 	require.Equal(t, 0, recorder.Body.Len())
+}
+
+func TestCursorGatewayAutoFallsBackToCloudBeforeIDEStreamCommit(t *testing.T) {
+	upstream := &cursorIDEAutoFallbackUpstreamStub{ideChatBody: cursorIDEErrorFrame("resource_exhausted", "Error")}
+	svc := ideTestGateway(upstream)
+	account := ideTestAccount()
+	account.Credentials["api_key"] = "cloud-key"
+	account.Credentials["cursor_transport_mode"] = CursorTransportAuto
+	body := `{"model":"claude-sonnet-5","stream":false,"messages":[{"role":"user","content":"hi"}]}`
+	c, recorder := newCursorGatewayTestContext(t, "/v1/messages", body, 3)
+
+	result, err := svc.Forward(context.Background(), c, account, []byte(body))
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Contains(t, recorder.Body.String(), "hello")
+	require.Equal(t, 1, upstream.cloud.nextAgent)
+}
+
+func TestCursorGatewayForcedIDEDoesNotFallbackToCloud(t *testing.T) {
+	upstream := &cursorIDEAutoFallbackUpstreamStub{ideChatBody: cursorIDEErrorFrame("resource_exhausted", "Error")}
+	svc := ideTestGateway(upstream)
+	account := ideTestAccount()
+	account.Credentials["api_key"] = "cloud-key"
+	body := `{"model":"claude-sonnet-5","stream":false,"messages":[{"role":"user","content":"hi"}]}`
+	c, recorder := newCursorGatewayTestContext(t, "/v1/messages", body, 3)
+
+	_, err := svc.Forward(context.Background(), c, account, []byte(body))
+
+	require.Error(t, err)
+	require.Empty(t, recorder.Body.String())
+	require.Equal(t, 0, upstream.cloud.nextAgent)
 }
 
 func TestCursorIDEModelProbeUsesAvailableModels(t *testing.T) {
@@ -301,6 +366,19 @@ func cursorIDEFrames(payloads ...[]byte) []byte {
 		result = append(result, frame...)
 	}
 	return append(result, 2, 0, 0, 0, 2, '{', '}')
+}
+
+func cursorIDEErrorFrame(code, message string) []byte {
+	payload, err := json.Marshal(map[string]any{"error": map[string]any{"code": code, "message": message}})
+	if err != nil {
+		panic(err)
+	}
+	frame, err := cursorpkg.EncodeConnectFrame(payload, false)
+	if err != nil {
+		panic(err)
+	}
+	frame[0] = 2
+	return frame
 }
 
 func cursorIDETextPayload(text string) []byte {
