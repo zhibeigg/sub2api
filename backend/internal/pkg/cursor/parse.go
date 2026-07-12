@@ -112,6 +112,11 @@ func parseAnthropicMessage(msg rawMessage) ([]DialogueMessage, error) {
 		switch block.Type {
 		case "text", "input_text":
 			current.Text += block.Text
+		case "thinking", "redacted_thinking":
+			// Cursor receives a flattened conversation transcript rather than native
+			// Anthropic thinking blocks. Ignore prior assistant reasoning so a
+			// follow-up request can replay responses emitted by this gateway.
+			continue
 		case "tool_use":
 			if msg.Role != "assistant" {
 				return nil, fmt.Errorf("tool_use is only valid for assistant messages")

@@ -128,6 +128,19 @@ func TestSleepWithContext(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestHandleFailoverError_BasicSwitch(t *testing.T) {
+	t.Run("Cursor请求错误不切换账号", func(t *testing.T) {
+		mock := &mockTempUnscheduler{}
+		fs := NewFailoverState(3, false)
+		err := newTestFailoverErr(400, false, false)
+
+		action := fs.HandleFailoverError(context.Background(), mock, 100, service.PlatformCursor, err)
+
+		require.Equal(t, FailoverExhausted, action)
+		require.Equal(t, 0, fs.SwitchCount)
+		require.Empty(t, fs.FailedAccountIDs)
+		require.Equal(t, err, fs.LastFailoverErr)
+	})
+
 	t.Run("非重试错误_非Antigravity_直接切换", func(t *testing.T) {
 		mock := &mockTempUnscheduler{}
 		fs := NewFailoverState(3, false)

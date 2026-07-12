@@ -71,6 +71,12 @@ func (s *FailoverState) HandleFailoverError(
 ) FailoverAction {
 	s.LastFailoverErr = failoverErr
 
+	// Cursor 兼容层和 Cursor 上游返回的 400 都表示请求本身不可接受，
+	// 切换账号不会改变结果。立即结束并保留原始错误供客户端和运维日志诊断。
+	if platform == service.PlatformCursor && failoverErr.StatusCode == http.StatusBadRequest && !failoverErr.RetryableOnSameAccount {
+		return FailoverExhausted
+	}
+
 	// 缓存计费判断
 	if needForceCacheBilling(s.hasBoundSession, failoverErr) {
 		s.ForceCacheBilling = true

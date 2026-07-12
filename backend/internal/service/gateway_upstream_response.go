@@ -304,7 +304,21 @@ func extractUpstreamErrorMessage(body []byte) string {
 	}
 
 	// 兜底：尝试顶层 message
-	return gjson.GetBytes(body, "message").String()
+	if m := strings.TrimSpace(gjson.GetBytes(body, "message").String()); m != "" {
+		return m
+	}
+
+	// 部分兼容层错误是纯文本而不是 JSON。保留有限长度的文本，避免
+	// 运维日志把真实的本地解析错误丢成空字符串。
+	if !json.Valid(body) {
+		const maxPlainErrorBytes = 2048
+		plain := strings.TrimSpace(string(body))
+		if len(plain) > maxPlainErrorBytes {
+			plain = plain[:maxPlainErrorBytes]
+		}
+		return plain
+	}
+	return ""
 }
 
 func extractUpstreamErrorCode(body []byte) string {

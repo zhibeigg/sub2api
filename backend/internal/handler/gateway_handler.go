@@ -1637,6 +1637,18 @@ func (h *GatewayHandler) handleFailoverExhausted(c *gin.Context, failoverErr *se
 		}
 	}
 
+	// Cursor 的 400 包含兼容层解析错误或 Cursor 返回的具体请求错误。
+	// 这类错误与账号无关，应按客户端请求错误返回，而不是统一改写成 502。
+	if platform == service.PlatformCursor && statusCode == http.StatusBadRequest {
+		msg := service.ExtractUpstreamErrorMessage(responseBody)
+		if strings.TrimSpace(msg) == "" {
+			msg = "Cursor rejected the request"
+		}
+		service.SetOpsUpstreamError(c, statusCode, msg, "")
+		h.handleStreamingAwareError(c, http.StatusBadRequest, "invalid_request_error", msg, streamStarted)
+		return
+	}
+
 	// 记录原始上游状态码，以便 ops 错误日志捕获真实的上游错误
 	upstreamMsg := service.ExtractUpstreamErrorMessage(responseBody)
 	service.SetOpsUpstreamError(c, statusCode, upstreamMsg, "")

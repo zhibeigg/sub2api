@@ -502,7 +502,7 @@ func TestHandleStreamingResponse_SSEErrorEvent_AfterPartialStreamOutput(t *testi
 
 // 对抗用例：上游发 event:error 但 data 行不是合法 JSON。
 // RawData 必须保留原始字节，ExtractUpstreamErrorMessage 不得 panic，
-// upstreamMsg 回退为空字符串（不再丢失原始诊断线索 — Detail 字段仍保留原始 body）。
+// 并应回退到有限长度的纯文本消息，供运维日志保留真实诊断信息。
 func TestHandleStreamingResponse_SSEErrorEvent_NonJSONDataLine(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := newMinimalGatewayService()
@@ -527,9 +527,8 @@ func TestHandleStreamingResponse_SSEErrorEvent_NonJSONDataLine(t *testing.T) {
 	require.True(t, errors.As(err, &sseErr))
 	require.Equal(t, "not-a-json-payload", sseErr.RawData)
 
-	// gjson 对非 JSON 输入返回空字符串，不 panic — Forward 主流程靠这个 invariant 安全地走下去
 	require.NotPanics(t, func() {
 		_ = ExtractUpstreamErrorMessage([]byte(sseErr.RawData))
 	})
-	require.Equal(t, "", ExtractUpstreamErrorMessage([]byte(sseErr.RawData)))
+	require.Equal(t, "not-a-json-payload", ExtractUpstreamErrorMessage([]byte(sseErr.RawData)))
 }

@@ -192,6 +192,26 @@ func TestCursorGatewayForwardAnthropicCloudAgent(t *testing.T) {
 	require.Contains(t, bodies[0], "hi")
 }
 
+func TestCursorGatewayForwardAnthropicFollowUpWithThinkingHistory(t *testing.T) {
+	upstream := &cursorGatewayUpstreamStub{outputs: []string{"follow-up answer"}}
+	svc := newCursorGatewayForTest(upstream, nil)
+	body := `{"model":"claude-fable-5","stream":false,"messages":[{"role":"user","content":[{"type":"text","text":"first"}]},{"role":"assistant","content":[{"type":"thinking","thinking":"private reasoning","signature":""},{"type":"text","text":"visible answer"}]},{"role":"user","content":[{"type":"text","text":"follow up"}]}]}`
+	c, recorder := newCursorGatewayTestContext(t, "/v1/messages", body, 3)
+
+	result, err := svc.Forward(context.Background(), c, cursorAPIKeyAccount(), []byte(body))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), `"text":"follow-up answer"`)
+	require.NotNil(t, result)
+
+	requests, bodies, _, _ := upstream.snapshot()
+	require.NotEmpty(t, requests)
+	require.Equal(t, "/v1/agents", requests[0].URL.Path)
+	require.Contains(t, bodies[0], "visible answer")
+	require.Contains(t, bodies[0], "follow up")
+	require.NotContains(t, bodies[0], "private reasoning")
+}
+
 func TestCursorGatewayPollsRunWhenStreamEndsBeforeResult(t *testing.T) {
 	cleanupCh := make(chan string, 1)
 	upstream := &cursorGatewayUpstreamStub{streamWithoutResult: true, cleanupCh: cleanupCh}

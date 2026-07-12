@@ -120,3 +120,22 @@ func TestStreamWrittenGuard_NoByteWritten_GuardNotTriggered(t *testing.T) {
 	require.False(t, guardTriggered,
 		"未写入任何字节时，守卫条件必须为 false，应允许正常 failover 继续")
 }
+
+func TestHandleFailoverExhaustedReturnsCursorBadRequestDetail(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+
+	failoverErr := &service.UpstreamFailoverError{
+		StatusCode:   http.StatusBadRequest,
+		ResponseBody: []byte(`parse anthropic message: unsupported content type "thinking"`),
+	}
+
+	h := &GatewayHandler{}
+	h.handleFailoverExhausted(c, failoverErr, service.PlatformCursor, false)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Contains(t, w.Body.String(), `unsupported content type \"thinking\"`)
+	require.Contains(t, w.Body.String(), `"type":"invalid_request_error"`)
+}
