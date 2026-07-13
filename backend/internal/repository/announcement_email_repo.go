@@ -180,13 +180,23 @@ func (r *announcementEmailRepository) PrepareRecipients(ctx context.Context, job
 	}
 	defer rows.Close()
 	last := job.PreparationCursorID
-	inserted := 0
+	recipients := make([]service.AnnouncementEmailRecipient, 0, batchSize)
 	for rows.Next() {
 		var rec service.AnnouncementEmailRecipient
 		if err = rows.Scan(&rec.UserID, &rec.Email, &rec.Username); err != nil {
 			return false, err
 		}
 		last = rec.UserID
+		recipients = append(recipients, rec)
+	}
+	if err = rows.Err(); err != nil {
+		return false, err
+	}
+	if err = rows.Close(); err != nil {
+		return false, err
+	}
+	inserted := 0
+	for _, rec := range recipients {
 		res, e := tx.ExecContext(ctx, `INSERT INTO announcement_email_deliveries(job_id,user_id,recipient_email,recipient_name,status,max_attempts,next_attempt_at,created_at,updated_at)
 			VALUES($1,$2,$3,$4,'pending',$5,NOW(),NOW(),NOW()) ON CONFLICT(job_id,user_id) DO NOTHING`, job.JobID, rec.UserID, rec.Email, rec.Username, maxAttempts)
 		if e != nil {
@@ -195,9 +205,6 @@ func (r *announcementEmailRepository) PrepareRecipients(ctx context.Context, job
 		if n, _ := res.RowsAffected(); n > 0 {
 			inserted++
 		}
-	}
-	if err = rows.Err(); err != nil {
-		return false, err
 	}
 	done := last >= cutoff || inserted < batchSize
 	status := "preparing"
