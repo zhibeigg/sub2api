@@ -39,12 +39,17 @@ func TestAPIKeyRepository_GetByKeyForAuth_PreservesMessagesDispatchModelConfig_S
 	ctx := context.Background()
 	user := mustCreateAPIKeyRepoUser(t, ctx, client, "getbykey-auth-dispatch-unit@test.com")
 
+	modelRateMultipliers := map[string]float64{
+		"grok-4.5": 0.60,
+		"gpt-*":    0.65,
+	}
 	group, err := client.Group.Create().
 		SetName("g-auth-dispatch-unit").
 		SetPlatform(service.PlatformOpenAI).
 		SetStatus(service.StatusActive).
 		SetSubscriptionType(service.SubscriptionTypeStandard).
 		SetRateMultiplier(1).
+		SetModelRateMultipliers(modelRateMultipliers).
 		SetAllowMessagesDispatch(true).
 		SetDefaultMappedModel("gpt-5.4").
 		SetMessagesDispatchModelConfig(service.OpenAIMessagesDispatchModelConfig{
@@ -72,4 +77,5 @@ func TestAPIKeyRepository_GetByKeyForAuth_PreservesMessagesDispatchModelConfig_S
 	require.Equal(t, key.Name, got.Name)
 	require.NotNil(t, got.Group)
 	require.Equal(t, group.MessagesDispatchModelConfig, got.Group.MessagesDispatchModelConfig)
+	require.Equal(t, modelRateMultipliers, got.Group.ModelRateMultipliers)
 }
