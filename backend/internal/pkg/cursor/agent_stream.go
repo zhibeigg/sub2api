@@ -495,11 +495,17 @@ func parseAgentKVServerMessage(payload []byte) *AgentEvent {
 }
 
 func parseAgentTurnEndedUsage(payload []byte) *Usage {
-	usagePayload := firstProtoBytes(payload, 1)
-	if usagePayload == nil {
+	// Newer Agent models wrap usage in field 1, while Grok still returns the
+	// usage counters directly on TurnEnded. Accept both layouts without treating
+	// a wrapper that only contains the finish-reason field as zero usage.
+	if usagePayload := firstProtoBytes(payload, 1); len(usagePayload) > 0 {
+		usage := parseAgentTurnUsage(usagePayload)
+		return &usage
+	}
+	if _, ok := firstProtoVarintPresent(payload, 1); !ok {
 		return nil
 	}
-	usage := parseAgentTurnUsage(usagePayload)
+	usage := parseAgentTurnUsage(payload)
 	return &usage
 }
 
@@ -580,30 +586,35 @@ func firstProtoString(payload []byte, wanted protowire.Number) string {
 }
 
 func firstProtoVarint(payload []byte, wanted protowire.Number) uint64 {
+	value, _ := firstProtoVarintPresent(payload, wanted)
+	return value
+}
+
+func firstProtoVarintPresent(payload []byte, wanted protowire.Number) (uint64, bool) {
 	for len(payload) > 0 {
 		number, wireType, n := protowire.ConsumeTag(payload)
 		if n < 0 {
-			return 0
+			return 0, false
 		}
 		payload = payload[n:]
 		if wireType == protowire.VarintType {
 			value, size := protowire.ConsumeVarint(payload)
 			if size < 0 {
-				return 0
+				return 0, false
 			}
 			payload = payload[size:]
 			if number == wanted {
-				return value
+				return value, true
 			}
 			continue
 		}
 		size := protowire.ConsumeFieldValue(number, wireType, payload)
 		if size < 0 {
-			return 0
+			return 0, false
 		}
 		payload = payload[size:]
 	}
-	return 0
+	return 0, false
 }
 
 func decodeJSONObject(raw string) (map[string]any, error) {

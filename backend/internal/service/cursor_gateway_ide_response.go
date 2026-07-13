@@ -235,7 +235,7 @@ func (w *cursorIDEStreamWriter) Finish(result cursorCollected) error {
 		if err := w.write("message_delta", gin.H{
 			"type":  "message_delta",
 			"delta": gin.H{"stop_reason": cursorAnthropicStopReason(result), "stop_sequence": nil},
-			"usage": gin.H{"output_tokens": result.Usage.OutputTokens},
+			"usage": cursorAnthropicUsage(result.Usage, true),
 		}); err != nil {
 			return err
 		}

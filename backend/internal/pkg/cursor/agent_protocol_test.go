@@ -291,6 +291,27 @@ func TestAgentEventStreamMCPAggregationKVExecAndUsage(t *testing.T) {
 	}
 }
 
+func TestAgentGrokTurnEndedDirectUsageIsParsed(t *testing.T) {
+	turnEnded := appendVarint(nil, 1, 10)
+	turnEnded = appendVarint(turnEnded, 2, 4)
+	turnEnded = appendVarint(turnEnded, 3, 2)
+	turnEnded = appendVarint(turnEnded, 4, 3)
+	turnEnded = appendVarint(turnEnded, 5, 1)
+	interaction := appendBytes(nil, 14, turnEnded)
+
+	events := (&AgentStream{}).parseInteractionUpdate(interaction)
+	if len(events) != 3 {
+		t.Fatalf("event count = %d: %#v", len(events), events)
+	}
+	usage := events[0].Usage
+	if events[0].Type != AgentEventUsage || usage == nil || usage.InputTokens != 5 || usage.OutputTokens != 4 || usage.CacheReadTokens != 2 || usage.CacheWriteTokens != 3 || usage.TotalTokens != 14 {
+		t.Fatalf("usage event = %#v", events[0])
+	}
+	if events[1].Type != AgentEventTurnEnded || events[1].Usage == nil || events[2].Type != AgentEventFinish || events[2].Usage == nil {
+		t.Fatalf("terminal events = %#v", events[1:])
+	}
+}
+
 func TestAgentTurnEndedWithoutUsageDoesNotEmitZeroUsage(t *testing.T) {
 	turnEnded := appendVarint(nil, 2, 1)
 	interaction := appendBytes(nil, 14, turnEnded)

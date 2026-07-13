@@ -350,6 +350,28 @@ func TestCursorGatewayIDEAnthropicStreamsImmediately(t *testing.T) {
 	require.NotEmpty(t, upstream.bodies[0])
 }
 
+func TestCursorGatewayIDEAnthropicGrokDirectUsageRestoresStreamAndBillingCache(t *testing.T) {
+	upstream := &cursorIDEUpstreamStub{chatBody: cursorIDEFrames(
+		cursorIDETextPayload("grok response"), cursorIDEGrokUsagePayload(9, 2, 1, 3),
+	)}
+	svc := ideTestGateway(upstream)
+	body := `{"model":"grok-4.5","stream":true,"messages":[{"role":"user","content":"hi"}]}`
+	c, recorder := newCursorGatewayTestContext(t, "/v1/messages", body, 3)
+
+	result, err := svc.Forward(context.Background(), c, ideTestAccount(), []byte(body))
+	require.NoError(t, err)
+	require.True(t, result.Stream)
+	require.Equal(t, 5, result.Usage.InputTokens)
+	require.Equal(t, 2, result.Usage.OutputTokens)
+	require.Equal(t, 1, result.Usage.CacheCreationInputTokens)
+	require.Equal(t, 3, result.Usage.CacheReadInputTokens)
+
+	streamBody := recorder.Body.String()
+	require.Contains(t, streamBody, `"text":"grok response"`)
+	require.Contains(t, streamBody, `"usage":{"cache_creation_input_tokens":1,"cache_read_input_tokens":3,"input_tokens":5,"output_tokens":2}`)
+	require.Contains(t, streamBody, `event: message_stop`)
+}
+
 func TestCursorGatewayIDEEstimatesUsageWhenTurnEndedOmitsUsage(t *testing.T) {
 	upstream := &cursorIDEUpstreamStub{chatBody: cursorIDEFrames(
 		cursorIDETextPayload("fallback usage"), cursorIDETurnEndedPayload(nil),
@@ -987,6 +1009,26 @@ func cursorIDEUsagePayload(input, output, cacheWrite, cacheRead int) []byte {
 		usage = protowire.AppendVarint(usage, uint64(value))
 	}
 	return cursorIDETurnEndedPayload(usage)
+}
+
+func cursorIDEGrokUsagePayload(input, output, cacheWrite, cacheRead int) []byte {
+	var turnEnded []byte
+	for _, field := range []struct {
+		number protowire.Number
+		value  int
+	}{
+		{number: 1, value: input},
+		{number: 2, value: output},
+		{number: 3, value: cacheRead},
+		{number: 4, value: cacheWrite},
+	} {
+		turnEnded = protowire.AppendTag(turnEnded, field.number, protowire.VarintType)
+		turnEnded = protowire.AppendVarint(turnEnded, uint64(field.value))
+	}
+	interaction := protowire.AppendTag(nil, 14, protowire.BytesType)
+	interaction = protowire.AppendBytes(interaction, turnEnded)
+	server := protowire.AppendTag(nil, 1, protowire.BytesType)
+	return protowire.AppendBytes(server, interaction)
 }
 
 func cursorIDETurnEndedPayload(usage []byte) []byte {
