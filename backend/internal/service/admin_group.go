@@ -139,6 +139,10 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	if input.RateMultiplier <= 0 {
 		return nil, errors.New("rate_multiplier must be > 0")
 	}
+	modelRateMultipliers, err := NormalizeModelRateMultipliers(input.ModelRateMultipliers)
+	if err != nil {
+		return nil, err
+	}
 
 	platform := NormalizePlatform(input.Platform)
 	if platform == "" {
@@ -272,6 +276,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		Description:                     input.Description,
 		Platform:                        platform,
 		RateMultiplier:                  input.RateMultiplier,
+		ModelRateMultipliers:            modelRateMultipliers,
 		IsExclusive:                     input.IsExclusive,
 		Status:                          StatusActive,
 		SubscriptionType:                subscriptionType,
@@ -466,6 +471,13 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 			return nil, errors.New("rate_multiplier must be > 0")
 		}
 		group.RateMultiplier = *input.RateMultiplier
+	}
+	if input.ModelRateMultipliers != nil {
+		modelRateMultipliers, err := NormalizeModelRateMultipliers(*input.ModelRateMultipliers)
+		if err != nil {
+			return nil, err
+		}
+		group.ModelRateMultipliers = modelRateMultipliers
 	}
 	if input.IsExclusive != nil {
 		group.IsExclusive = *input.IsExclusive

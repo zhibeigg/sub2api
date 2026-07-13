@@ -156,6 +156,9 @@ type Group struct {
 type AdminGroup struct {
 	Group
 
+	// 分组模型级倍率（仅管理员可见，不修改模型价格）
+	ModelRateMultipliers map[string]float64 `json:"model_rate_multipliers"`
+
 	// 模型路由配置（仅 anthropic 平台使用）
 	ModelRouting        map[string][]int64 `json:"model_routing"`
 	ModelRoutingEnabled bool               `json:"model_routing_enabled"`

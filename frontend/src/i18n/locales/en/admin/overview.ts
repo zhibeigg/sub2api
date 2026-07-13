@@ -845,6 +845,26 @@ export default {
       groupUpdatedSuccess: 'Group updated successfully',
       groupDeletedSuccess: 'Group deleted successfully',
       rateMultiplierHint: 'Cost multiplier for this group (e.g., 1.5 = 150% of base cost)',
+      modelRateMultipliers: {
+        title: 'Model-level Multipliers',
+        hint: 'Supports the * wildcard. Requests that match no rule fall back to the group base multiplier. Exact rules take priority; wildcard rules use the most specific match. Channel pricing is not modified, and user-specific multipliers take priority.',
+        pattern: 'Model Pattern',
+        multiplier: 'Multiplier',
+        placeholders: {
+          pattern: 'e.g. claude-opus-*',
+          multiplier: 'e.g. 1.5'
+        },
+        add: 'Add Rule',
+        remove: 'Remove',
+        empty: 'No model-level multiplier rules',
+        validation: {
+          emptyPattern: 'Model pattern in rule {index} cannot be empty',
+          invalidMultiplier: 'Multiplier in rule {index} must be a finite number greater than 0',
+          duplicatePattern: 'Model pattern "{pattern}" is duplicated after normalization',
+          tooMany: 'A maximum of {max} model-level multiplier rules is allowed',
+          invalid: 'The model-level multiplier rules are invalid. Please review them and try again.'
+        }
+      },
       exclusiveHint: 'Exclusive group, manually assign to specific users',
       exclusiveTooltip: {
         title: 'What is an exclusive group?',

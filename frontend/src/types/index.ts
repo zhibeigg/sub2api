@@ -598,6 +598,9 @@ export interface Group {
 }
 
 export interface AdminGroup extends Group {
+  // 模型级倍率配置（仅管理员可见，模型匹配模式 -> 倍率）
+  model_rate_multipliers?: Record<string, number>
+
   // 模型路由配置（仅管理员可见，内部信息）
   model_routing: Record<string, number[]> | null
   model_routing_enabled: boolean
@@ -712,6 +715,7 @@ export interface CreateGroupRequest {
   description?: string | null
   platform?: GroupPlatform
   rate_multiplier?: number
+  model_rate_multipliers?: Record<string, number>
   is_exclusive?: boolean
   subscription_type?: SubscriptionType
   daily_limit_usd?: number | null
@@ -758,6 +762,7 @@ export interface UpdateGroupRequest {
   description?: string | null
   platform?: GroupPlatform
   rate_multiplier?: number
+  model_rate_multipliers?: Record<string, number>
   is_exclusive?: boolean
   status?: 'active' | 'inactive'
   subscription_type?: SubscriptionType

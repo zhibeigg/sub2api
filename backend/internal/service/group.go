@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -14,11 +15,12 @@ type OpenAIMessagesDispatchModelConfig = domain.OpenAIMessagesDispatchModelConfi
 type GroupModelsListConfig = domain.GroupModelsListConfig
 
 type Group struct {
-	ID             int64
-	Name           string
-	Description    string
-	Platform       string
-	RateMultiplier float64
+	ID                   int64
+	Name                 string
+	Description          string
+	Platform             string
+	RateMultiplier       float64
+	ModelRateMultipliers map[string]float64
 	// 高峰时段倍率：peak_rate_enabled 为 true 且当前时刻处于 [PeakStart, PeakEnd) 时，
 	// token 计费倍率额外乘以 PeakRateMultiplier。详见 PeakMultiplierAt。
 	PeakRateEnabled    bool
@@ -92,6 +94,140 @@ type Group struct {
 	AccountCount            int64
 	ActiveAccountCount      int64
 	RateLimitedAccountCount int64
+}
+
+const (
+	maxGroupModelRateMultiplierRules = 100
+	maxGroupModelRatePatternLength   = 200
+)
+
+// NormalizeModelRateMultipliers 校验并归一化分组模型倍率配置。
+// 模型模式大小写不敏感，保存时统一转为小写；仅支持 * 作为通配符。
+func NormalizeModelRateMultipliers(input map[string]float64) (map[string]float64, error) {
+	if len(input) > maxGroupModelRateMultiplierRules {
+		return nil, fmt.Errorf("model_rate_multipliers supports at most %d rules", maxGroupModelRateMultiplierRules)
+	}
+
+	result := make(map[string]float64, len(input))
+	for rawPattern, multiplier := range input {
+		pattern := strings.ToLower(strings.TrimSpace(rawPattern))
+		if pattern == "" {
+			return nil, errors.New("model_rate_multipliers pattern must not be empty")
+		}
+		if len(pattern) > maxGroupModelRatePatternLength {
+			return nil, fmt.Errorf("model_rate_multipliers pattern %q exceeds %d bytes", pattern, maxGroupModelRatePatternLength)
+		}
+		if math.IsNaN(multiplier) || math.IsInf(multiplier, 0) || multiplier <= 0 {
+			return nil, fmt.Errorf("model_rate_multipliers multiplier must be finite and > 0 (pattern=%q)", pattern)
+		}
+		if _, exists := result[pattern]; exists {
+			return nil, fmt.Errorf("duplicate model_rate_multipliers pattern after normalization: %q", pattern)
+		}
+		result[pattern] = multiplier
+	}
+	return result, nil
+}
+
+// RateMultiplierForModel 返回指定计费模型的分组默认倍率。
+// 精确匹配优先；多个通配规则同时命中时，非通配字符最多的规则优先，
+// 同等具体度时按模式字典序选择，保证结果不受 Go map 迭代顺序影响。
+func (g *Group) RateMultiplierForModel(model string) float64 {
+	if g == nil {
+		return 0
+	}
+	fallback := g.RateMultiplier
+	model = strings.ToLower(strings.TrimSpace(model))
+	if model == "" || len(g.ModelRateMultipliers) == 0 {
+		return fallback
+	}
+	if multiplier, ok := g.ModelRateMultipliers[model]; ok && isValidModelRateMultiplier(multiplier) {
+		return multiplier
+	}
+
+	exactFound := false
+	exactPattern := ""
+	exactRawPattern := ""
+	exactMultiplier := fallback
+	bestSpecificity := -1
+	bestPattern := ""
+	bestRawPattern := ""
+	bestMultiplier := fallback
+
+	for rawPattern, multiplier := range g.ModelRateMultipliers {
+		if !isValidModelRateMultiplier(multiplier) {
+			continue
+		}
+		pattern := strings.ToLower(strings.TrimSpace(rawPattern))
+		if pattern == "" {
+			continue
+		}
+		if pattern == model {
+			if !exactFound || pattern < exactPattern || (pattern == exactPattern && rawPattern < exactRawPattern) {
+				exactFound = true
+				exactPattern = pattern
+				exactRawPattern = rawPattern
+				exactMultiplier = multiplier
+			}
+			continue
+		}
+		if !strings.Contains(pattern, "*") || !modelRatePatternMatches(pattern, model) {
+			continue
+		}
+		specificity := modelRatePatternSpecificity(pattern)
+		if specificity > bestSpecificity ||
+			(specificity == bestSpecificity && (bestPattern == "" || pattern < bestPattern)) ||
+			(specificity == bestSpecificity && pattern == bestPattern && rawPattern < bestRawPattern) {
+			bestSpecificity = specificity
+			bestPattern = pattern
+			bestRawPattern = rawPattern
+			bestMultiplier = multiplier
+		}
+	}
+	if exactFound {
+		return exactMultiplier
+	}
+	if bestSpecificity >= 0 {
+		return bestMultiplier
+	}
+	return fallback
+}
+
+func isValidModelRateMultiplier(multiplier float64) bool {
+	return multiplier > 0 && !math.IsNaN(multiplier) && !math.IsInf(multiplier, 0)
+}
+
+func modelRatePatternSpecificity(pattern string) int {
+	return len(pattern) - strings.Count(pattern, "*")
+}
+
+// modelRatePatternMatches 对仅含 * 通配符的模式执行线性匹配。
+func modelRatePatternMatches(pattern, model string) bool {
+	patternIndex, modelIndex := 0, 0
+	starIndex, starModelIndex := -1, 0
+	for modelIndex < len(model) {
+		if patternIndex < len(pattern) && pattern[patternIndex] == model[modelIndex] {
+			patternIndex++
+			modelIndex++
+			continue
+		}
+		if patternIndex < len(pattern) && pattern[patternIndex] == '*' {
+			starIndex = patternIndex
+			patternIndex++
+			starModelIndex = modelIndex
+			continue
+		}
+		if starIndex >= 0 {
+			patternIndex = starIndex + 1
+			starModelIndex++
+			modelIndex = starModelIndex
+			continue
+		}
+		return false
+	}
+	for patternIndex < len(pattern) && pattern[patternIndex] == '*' {
+		patternIndex++
+	}
+	return patternIndex == len(pattern)
 }
 
 func (g *Group) IsActive() bool {

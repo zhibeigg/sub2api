@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 15 // v15: multi-group priority bindings + group video pricing fields
+const apiKeyAuthSnapshotVersion = 16 // v16: group model-level rate multipliers
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -278,6 +278,7 @@ func groupToAuthSnapshot(g *Group) *APIKeyAuthGroupSnapshot {
 		Status:                          g.Status,
 		SubscriptionType:                g.SubscriptionType,
 		RateMultiplier:                  g.RateMultiplier,
+		ModelRateMultipliers:            g.ModelRateMultipliers,
 		DailyLimitUSD:                   g.DailyLimitUSD,
 		WeeklyLimitUSD:                  g.WeeklyLimitUSD,
 		MonthlyLimitUSD:                 g.MonthlyLimitUSD,
@@ -382,6 +383,7 @@ func groupFromAuthSnapshot(g *APIKeyAuthGroupSnapshot) *Group {
 		Hydrated:                        true,
 		SubscriptionType:                g.SubscriptionType,
 		RateMultiplier:                  g.RateMultiplier,
+		ModelRateMultipliers:            g.ModelRateMultipliers,
 		DailyLimitUSD:                   g.DailyLimitUSD,
 		WeeklyLimitUSD:                  g.WeeklyLimitUSD,
 		MonthlyLimitUSD:                 g.MonthlyLimitUSD,

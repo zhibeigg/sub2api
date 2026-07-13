@@ -821,6 +821,26 @@ export default {
           '公开分组费率 0.8，您可以创建一个费率 0.7 的专属分组，手动分配给 VIP 用户，让他们享受更优惠的价格。'
       },
       rateMultiplierHint: '1.0 = 标准费率，0.5 = 半价，2.0 = 双倍',
+      modelRateMultipliers: {
+        title: '模型级倍率',
+        hint: '支持 * 通配符。未命中任何规则时回退分组基础倍率；精确规则优先，通配规则按最具体匹配。渠道定价不会被修改，用户专属倍率优先于这里的规则。',
+        pattern: '模型模式',
+        multiplier: '倍率',
+        placeholders: {
+          pattern: '例如 claude-opus-*',
+          multiplier: '例如 1.5'
+        },
+        add: '添加规则',
+        remove: '删除',
+        empty: '暂无模型级倍率规则',
+        validation: {
+          emptyPattern: '第 {index} 条规则的模型模式不能为空',
+          invalidMultiplier: '第 {index} 条规则的倍率必须是大于 0 的有限数字',
+          duplicatePattern: '模型模式“{pattern}”规范化后重复',
+          tooMany: '模型级倍率规则最多允许 {max} 条',
+          invalid: '模型级倍率规则无效，请检查后重试'
+        }
+      },
       platforms: {
         all: '全部平台',
         anthropic: 'Anthropic',

@@ -581,6 +581,73 @@
           />
           <p class="input-hint">{{ t("admin.groups.rateMultiplierHint") }}</p>
         </div>
+
+        <div class="border-t pt-4">
+          <div class="flex items-center justify-between gap-3">
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {{ t("admin.groups.modelRateMultipliers.title") }}
+            </label>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              @click="addCreateModelRateMultiplierRow"
+            >
+              <Icon name="plus" size="sm" class="mr-1" />
+              {{ t("admin.groups.modelRateMultipliers.add") }}
+            </button>
+          </div>
+          <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+            {{ t("admin.groups.modelRateMultipliers.hint") }}
+          </p>
+          <div
+            v-if="createModelRateMultiplierRows.length"
+            class="mt-3 space-y-3"
+          >
+            <div
+              v-for="row in createModelRateMultiplierRows"
+              :key="getCreateModelRateMultiplierRowKey(row)"
+              class="grid grid-cols-1 gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 sm:grid-cols-[minmax(0,1fr)_10rem_auto] sm:items-end dark:border-dark-600 dark:bg-dark-800/50"
+            >
+              <div>
+                <label class="input-label">{{
+                  t("admin.groups.modelRateMultipliers.pattern")
+                }}</label>
+                <input
+                  v-model="row.pattern"
+                  type="text"
+                  class="input"
+                  :placeholder="t('admin.groups.modelRateMultipliers.placeholders.pattern')"
+                />
+              </div>
+              <div>
+                <label class="input-label">{{
+                  t("admin.groups.modelRateMultipliers.multiplier")
+                }}</label>
+                <input
+                  v-model.number="row.multiplier"
+                  type="number"
+                  min="0.000001"
+                  step="any"
+                  class="input"
+                  :placeholder="t('admin.groups.modelRateMultipliers.placeholders.multiplier')"
+                />
+              </div>
+              <button
+                type="button"
+                class="btn btn-secondary text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                :title="t('admin.groups.modelRateMultipliers.remove')"
+                @click="removeCreateModelRateMultiplierRow(row)"
+              >
+                <Icon name="trash" size="sm" class="mr-1" />
+                {{ t("admin.groups.modelRateMultipliers.remove") }}
+              </button>
+            </div>
+          </div>
+          <p v-else class="mt-3 text-sm text-gray-400 dark:text-gray-500">
+            {{ t("admin.groups.modelRateMultipliers.empty") }}
+          </p>
+        </div>
+
         <div>
           <label class="input-label">{{ t("admin.groups.form.rpmLimit") }}</label>
           <input
@@ -2058,7 +2125,75 @@
             class="input"
             data-tour="group-form-multiplier"
           />
+          <p class="input-hint">{{ t("admin.groups.rateMultiplierHint") }}</p>
         </div>
+
+        <div class="border-t pt-4">
+          <div class="flex items-center justify-between gap-3">
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {{ t("admin.groups.modelRateMultipliers.title") }}
+            </label>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              @click="addEditModelRateMultiplierRow"
+            >
+              <Icon name="plus" size="sm" class="mr-1" />
+              {{ t("admin.groups.modelRateMultipliers.add") }}
+            </button>
+          </div>
+          <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+            {{ t("admin.groups.modelRateMultipliers.hint") }}
+          </p>
+          <div
+            v-if="editModelRateMultiplierRows.length"
+            class="mt-3 space-y-3"
+          >
+            <div
+              v-for="row in editModelRateMultiplierRows"
+              :key="getEditModelRateMultiplierRowKey(row)"
+              class="grid grid-cols-1 gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 sm:grid-cols-[minmax(0,1fr)_10rem_auto] sm:items-end dark:border-dark-600 dark:bg-dark-800/50"
+            >
+              <div>
+                <label class="input-label">{{
+                  t("admin.groups.modelRateMultipliers.pattern")
+                }}</label>
+                <input
+                  v-model="row.pattern"
+                  type="text"
+                  class="input"
+                  :placeholder="t('admin.groups.modelRateMultipliers.placeholders.pattern')"
+                />
+              </div>
+              <div>
+                <label class="input-label">{{
+                  t("admin.groups.modelRateMultipliers.multiplier")
+                }}</label>
+                <input
+                  v-model.number="row.multiplier"
+                  type="number"
+                  min="0.000001"
+                  step="any"
+                  class="input"
+                  :placeholder="t('admin.groups.modelRateMultipliers.placeholders.multiplier')"
+                />
+              </div>
+              <button
+                type="button"
+                class="btn btn-secondary text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                :title="t('admin.groups.modelRateMultipliers.remove')"
+                @click="removeEditModelRateMultiplierRow(row)"
+              >
+                <Icon name="trash" size="sm" class="mr-1" />
+                {{ t("admin.groups.modelRateMultipliers.remove") }}
+              </button>
+            </div>
+          </div>
+          <p v-else class="mt-3 text-sm text-gray-400 dark:text-gray-500">
+            {{ t("admin.groups.modelRateMultipliers.empty") }}
+          </p>
+        </div>
+
         <div>
           <label class="input-label">{{ t("admin.groups.form.rpmLimit") }}</label>
           <input
@@ -3540,6 +3675,13 @@ import {
   type MessagesDispatchMappingRow,
 } from "./groupsMessagesDispatch";
 import {
+  MAX_MODEL_RATE_MULTIPLIER_RULES,
+  ModelRateMultiplierValidationError,
+  modelRateMultiplierRowsToMap,
+  modelRateMultipliersToRows,
+  type ModelRateMultiplierRow,
+} from "./groupsModelRateMultipliers";
+import {
   buildModelsListConfig,
   createModelsListState as createInitialModelsListState,
   invertModelsListSelection,
@@ -3880,6 +4022,8 @@ const createModelsListSelectedCount = computed(
 const editModelsListSelectedCount = computed(
   () => editModelsListState.items.filter((item) => item.selected).length,
 );
+const createModelRateMultiplierRows = ref<ModelRateMultiplierRow[]>([]);
+const editModelRateMultiplierRows = ref<ModelRateMultiplierRow[]>([]);
 
 const createForm = reactive({
   name: "",
@@ -3968,6 +4112,14 @@ const resolveEditMessagesDispatchRowKey =
   createStableObjectKeyResolver<MessagesDispatchMappingRow>(
     "edit-messages-dispatch-row",
   );
+const resolveCreateModelRateMultiplierRowKey =
+  createStableObjectKeyResolver<ModelRateMultiplierRow>(
+    "create-model-rate-multiplier-row",
+  );
+const resolveEditModelRateMultiplierRowKey =
+  createStableObjectKeyResolver<ModelRateMultiplierRow>(
+    "edit-model-rate-multiplier-row",
+  );
 
 const getCreateRuleRenderKey = (rule: ModelRoutingRule) =>
   resolveCreateRuleKey(rule);
@@ -3977,6 +4129,10 @@ const getCreateMessagesDispatchRowKey = (row: MessagesDispatchMappingRow) =>
   resolveCreateMessagesDispatchRowKey(row);
 const getEditMessagesDispatchRowKey = (row: MessagesDispatchMappingRow) =>
   resolveEditMessagesDispatchRowKey(row);
+const getCreateModelRateMultiplierRowKey = (row: ModelRateMultiplierRow) =>
+  resolveCreateModelRateMultiplierRowKey(row);
+const getEditModelRateMultiplierRowKey = (row: ModelRateMultiplierRow) =>
+  resolveEditModelRateMultiplierRowKey(row);
 
 const getCreateRuleSearchKey = (rule: ModelRoutingRule) =>
   `create-${resolveCreateRuleKey(rule)}`;
@@ -4650,6 +4806,60 @@ const closeCreateModal = () => {
   createForm.rpm_limit = 0;
   resetModelsListState(createModelsListState);
   createModelRoutingRules.value = [];
+  createModelRateMultiplierRows.value = [];
+};
+
+const showModelRateMultiplierValidationError = (error: unknown) => {
+  if (error instanceof ModelRateMultiplierValidationError) {
+    appStore.showError(
+      t(
+        `admin.groups.modelRateMultipliers.validation.${error.code}`,
+        error.details,
+      ),
+    );
+    return;
+  }
+
+  appStore.showError(t("admin.groups.modelRateMultipliers.validation.invalid"));
+};
+
+const addCreateModelRateMultiplierRow = () => {
+  if (
+    createModelRateMultiplierRows.value.length >=
+    MAX_MODEL_RATE_MULTIPLIER_RULES
+  ) {
+    showModelRateMultiplierValidationError(
+      new ModelRateMultiplierValidationError("tooMany", {
+        max: MAX_MODEL_RATE_MULTIPLIER_RULES,
+      }),
+    );
+    return;
+  }
+  createModelRateMultiplierRows.value.push({ pattern: "", multiplier: 1 });
+};
+
+const addEditModelRateMultiplierRow = () => {
+  if (
+    editModelRateMultiplierRows.value.length >= MAX_MODEL_RATE_MULTIPLIER_RULES
+  ) {
+    showModelRateMultiplierValidationError(
+      new ModelRateMultiplierValidationError("tooMany", {
+        max: MAX_MODEL_RATE_MULTIPLIER_RULES,
+      }),
+    );
+    return;
+  }
+  editModelRateMultiplierRows.value.push({ pattern: "", multiplier: 1 });
+};
+
+const removeCreateModelRateMultiplierRow = (row: ModelRateMultiplierRow) => {
+  const index = createModelRateMultiplierRows.value.indexOf(row);
+  if (index !== -1) createModelRateMultiplierRows.value.splice(index, 1);
+};
+
+const removeEditModelRateMultiplierRow = (row: ModelRateMultiplierRow) => {
+  const index = editModelRateMultiplierRows.value.indexOf(row);
+  if (index !== -1) editModelRateMultiplierRows.value.splice(index, 1);
 };
 
 const normalizeOptionalLimit = (
@@ -4686,6 +4896,17 @@ const handleCreateGroup = async () => {
     appStore.showError(t("admin.groups.nameRequired"));
     return;
   }
+
+  let modelRateMultipliers: Record<string, number>;
+  try {
+    modelRateMultipliers = modelRateMultiplierRowsToMap(
+      createModelRateMultiplierRows.value,
+    );
+  } catch (error) {
+    showModelRateMultiplierValidationError(error);
+    return;
+  }
+
   submitting.value = true;
   try {
     // 构建请求数据，包含模型路由配置
@@ -4703,6 +4924,7 @@ const handleCreateGroup = async () => {
       model_routing: convertRoutingRulesToApiFormat(
         createModelRoutingRules.value,
       ),
+      model_rate_multipliers: modelRateMultipliers,
       models_list_config: buildModelsListConfig(createModelsListState),
       supported_model_scopes: normalizeSupportedModelScopesForPlatform(
         createForm.platform,
@@ -4828,6 +5050,9 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.mcp_xml_inject = group.mcp_xml_inject ?? true;
   editForm.copy_accounts_from_group_ids = []; // 复制账号字段每次编辑时重置为空
   editForm.rpm_limit = group.rpm_limit ?? 0;
+  editModelRateMultiplierRows.value = modelRateMultipliersToRows(
+    group.model_rate_multipliers,
+  );
   resetModelsListState(editModelsListState, group.models_list_config);
   // 加载模型路由规则（异步加载账号名称）
   editModelRoutingRules.value = await convertApiFormatToRoutingRules(
@@ -4857,12 +5082,23 @@ const closeEditModal = () => {
   editForm.video_price_1080p = null;
   resetMessagesDispatchFormState(editForm);
   resetModelsListState(editModelsListState);
+  editModelRateMultiplierRows.value = [];
 };
 
 const handleUpdateGroup = async () => {
   if (!editingGroup.value) return;
   if (!editForm.name.trim()) {
     appStore.showError(t("admin.groups.nameRequired"));
+    return;
+  }
+
+  let modelRateMultipliers: Record<string, number>;
+  try {
+    modelRateMultipliers = modelRateMultiplierRowsToMap(
+      editModelRateMultiplierRows.value,
+    );
+  } catch (error) {
+    showModelRateMultiplierValidationError(error);
     return;
   }
 
@@ -4889,6 +5125,7 @@ const handleUpdateGroup = async () => {
       model_routing: convertRoutingRulesToApiFormat(
         editModelRoutingRules.value,
       ),
+      model_rate_multipliers: modelRateMultipliers,
       models_list_config: buildModelsListConfig(editModelsListState),
       supported_model_scopes: normalizeSupportedModelScopesForPlatform(
         editForm.platform,

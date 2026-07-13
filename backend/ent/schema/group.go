@@ -45,6 +45,10 @@ func (Group) Fields() []ent.Field {
 		field.Float("rate_multiplier").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
 			Default(1.0),
+		field.JSON("model_rate_multipliers", map[string]float64{}).
+			Default(map[string]float64{}).
+			SchemaType(map[string]string{dialect.Postgres: "jsonb"}).
+			Comment("分组模型级倍率：模型匹配模式 -> 正数倍率；仅影响最终计费倍率，不修改模型价格"),
 		// 高峰时段倍率（added by migration 158）
 		field.Bool("peak_rate_enabled").
 			Default(false).
