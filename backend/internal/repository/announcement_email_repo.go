@@ -94,7 +94,7 @@ func (r *announcementEmailRepository) ClaimJob(ctx context.Context, owner string
 	leaseUntil := now.Add(lease)
 	jobRow := tx.QueryRowContext(ctx, `UPDATE announcement_email_jobs SET
 		status=CASE WHEN status='pending' THEN 'preparing' ELSE status END,
-		lease_owner=$2, lease_expires_at=$3, attempt_count=attempt_count+1, started_at=COALESCE(started_at,$1), updated_at=$1
+		lease_owner=$2, lease_expires_at=$3::timestamptz, attempt_count=attempt_count+1, started_at=COALESCE(started_at,$1), updated_at=$1
 		WHERE id=$4 RETURNING id, announcement_id, status, scheduled_at, recipient_count, pending_count,
 		sending_count, sent_count, failed_count, ambiguous_count, skipped_count, attempt_count, created_by, last_error_code, preparation_cursor_id, recipient_cutoff_id,
 		last_error, created_at, updated_at, started_at, finished_at, announcement_title, announcement_content, announcement_starts_at`, now, owner, leaseUntil, id)
@@ -231,7 +231,7 @@ func (r *announcementEmailRepository) ClaimDeliveries(ctx context.Context, jobID
 	rows, err := tx.QueryContext(ctx, `WITH candidates AS (SELECT id FROM announcement_email_deliveries WHERE job_id=$1
 		AND ((status='pending' AND next_attempt_at<=$2) OR (status='sending' AND lease_expires_at<$2))
 		AND attempt_count<max_attempts ORDER BY next_attempt_at,id FOR UPDATE SKIP LOCKED LIMIT $3)
-		UPDATE announcement_email_deliveries d SET status='sending',lease_owner=$4,lease_expires_at=$5,
+		UPDATE announcement_email_deliveries d SET status='sending',lease_owner=$4,lease_expires_at=$5::timestamptz,
 		attempt_count=d.attempt_count+1,updated_at=$2 FROM candidates c WHERE d.id=c.id
 		RETURNING d.id,d.job_id,d.user_id,d.recipient_email,d.recipient_name,d.locale,d.attempt_count,d.max_attempts`, jobID, now, limit, owner, now.Add(lease))
 	if err != nil {
@@ -267,7 +267,7 @@ func (r *announcementEmailRepository) MarkDeliveryFailed(ctx context.Context, id
 	if next != nil {
 		status = "pending"
 	}
-	_, err := r.db.ExecContext(ctx, `UPDATE announcement_email_deliveries SET status=$1,next_attempt_at=COALESCE($2,next_attempt_at),lease_owner=NULL,lease_expires_at=NULL,last_error_class=$3,last_error=$4,updated_at=NOW() WHERE id=$5 AND lease_owner=$6 AND status='sending'`, status, next, class, message, id, owner)
+	_, err := r.db.ExecContext(ctx, `UPDATE announcement_email_deliveries SET status=$1,next_attempt_at=COALESCE($2::timestamptz,next_attempt_at),lease_owner=NULL,lease_expires_at=NULL,last_error_class=$3,last_error=$4,updated_at=NOW() WHERE id=$5 AND lease_owner=$6 AND status='sending'`, status, next, class, message, id, owner)
 	return err
 }
 func (r *announcementEmailRepository) RefreshJob(ctx context.Context, jobID int64, owner string, now time.Time, lease time.Duration) (*service.AnnouncementEmailJob, error) {
@@ -283,7 +283,7 @@ func (r *announcementEmailRepository) RefreshJob(ctx context.Context, jobID int6
 			ELSE 'sending' END,
 		finished_at=CASE WHEN NOT EXISTS(SELECT 1 FROM announcement_email_deliveries WHERE job_id=j.id AND status IN('pending','sending')) THEN COALESCE(finished_at,$1) ELSE NULL END,
 		lease_owner=CASE WHEN NOT EXISTS(SELECT 1 FROM announcement_email_deliveries WHERE job_id=j.id AND status IN('pending','sending')) THEN NULL ELSE $2 END,
-		lease_expires_at=CASE WHEN NOT EXISTS(SELECT 1 FROM announcement_email_deliveries WHERE job_id=j.id AND status IN('pending','sending')) THEN NULL ELSE $3 END,updated_at=$1
+		lease_expires_at=CASE WHEN NOT EXISTS(SELECT 1 FROM announcement_email_deliveries WHERE job_id=j.id AND status IN('pending','sending')) THEN NULL::timestamptz ELSE $3::timestamptz END,updated_at=$1
 		WHERE j.id=$4 AND (j.lease_owner=$2 OR j.lease_expires_at<$1)
 		RETURNING id,announcement_id,status,scheduled_at,recipient_count,pending_count,sending_count,sent_count,failed_count,ambiguous_count,skipped_count,attempt_count,created_by,last_error_code,preparation_cursor_id,recipient_cutoff_id,last_error,created_at,updated_at,started_at,finished_at,announcement_title,announcement_content,announcement_starts_at`, now, owner, now.Add(lease), jobID)
 	return scanAnnouncementEmailJob(row)
