@@ -137,6 +137,7 @@ func normalizeCursorCloudModel(model string, preference cursorVariantPreference)
 	}
 	logical := cursorIDEVariantFamily(lower)
 	logicalAliases := map[string]string{
+		"cursor-grok-4.5":   "grok-4.5",
 		"claude-4-sonnet":   "claude-sonnet-4",
 		"claude-4.5-haiku":  "claude-haiku-4-5",
 		"claude-4.5-opus":   "claude-opus-4-5",

@@ -336,11 +336,14 @@ func (s *CursorGatewayService) fetchIDEModelCatalogUncached(ctx context.Context,
 func (s *CursorGatewayService) resolveCursorIDEModel(ctx context.Context, account *Account, requested string, preference cursorVariantPreference) (cursorIDEModelSelection, error) {
 	requested = strings.TrimSpace(requested)
 	fallback := cursorIDEModelSelection{ServerName: requested}
+	if strings.EqualFold(requested, "grok-4.5") || strings.EqualFold(requested, "cursor-grok-4.5") {
+		// The logical Cloud model name is not accepted by Agent Run. Keep the first
+		// request off the model-discovery hot path while using Cursor's default Grok
+		// execution variant until the prewarmed catalog becomes available.
+		fallback.ServerName = "cursor-grok-4.5-high"
+	}
 	catalog, state := s.cachedIDEModelCatalogState(account)
 	if state == cursorIDEModelCatalogMiss {
-		// Model discovery is deliberately kept off the chat hot path. Agent Run can
-		// accept the requested model directly while startup/authorization prewarm
-		// fills the catalog for later variant resolution.
 		return fallback, nil
 	}
 	if state == cursorIDEModelCatalogStale {
@@ -427,6 +430,13 @@ func (s *CursorGatewayService) resolveCursorIDEModel(ctx context.Context, accoun
 		}
 		if len(nonThinking) > 0 {
 			filtered = nonThinking
+		}
+	}
+	if preference.Effort == "" && (strings.EqualFold(requested, "grok-4.5") || strings.EqualFold(requested, "cursor-grok-4.5")) {
+		for _, item := range filtered {
+			if strings.EqualFold(item.ServerName, "cursor-grok-4.5-high") {
+				return cursorIDESelection(item), nil
+			}
 		}
 	}
 	if preference.Effort == "" {

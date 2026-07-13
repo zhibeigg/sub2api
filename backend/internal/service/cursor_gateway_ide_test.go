@@ -716,6 +716,9 @@ func TestCursorIDEOnlyModelSyncCollapsesExecutionVariants(t *testing.T) {
 		cursorIDEModel{Name: "claude-fable-5-thinking-low", ServerName: "claude-fable-5-thinking-low"},
 		cursorIDEModel{Name: "claude-fable-5-thinking-high", ServerName: "claude-fable-5-thinking-high"},
 		cursorIDEModel{Name: "claude-4.6-sonnet-medium-thinking", ServerName: "claude-4.6-sonnet-medium-thinking"},
+		cursorIDEModel{Name: "cursor-grok-4.5-high", ServerName: "cursor-grok-4.5-high"},
+		cursorIDEModel{Name: "cursor-grok-4.5-low", ServerName: "cursor-grok-4.5-low"},
+		cursorIDEModel{Name: "cursor-grok-4.5-medium", ServerName: "cursor-grok-4.5-medium"},
 	)}
 	gateway := ideTestGateway(upstream)
 	svc := NewAccountTestService(nil, nil, nil, nil, nil, nil, &config.Config{}, nil)
@@ -723,7 +726,7 @@ func TestCursorIDEOnlyModelSyncCollapsesExecutionVariants(t *testing.T) {
 
 	models, err := svc.FetchUpstreamSupportedModels(context.Background(), ideTestAccount())
 	require.NoError(t, err)
-	require.Equal(t, []string{"claude-fable-5", "claude-sonnet-4-6"}, models)
+	require.Equal(t, []string{"claude-fable-5", "claude-sonnet-4-6", "grok-4.5"}, models)
 }
 
 func TestDecodeCursorIDEModelsResponseJSON(t *testing.T) {
@@ -757,6 +760,54 @@ func TestCursorIDEModelResolutionUsesServerModelName(t *testing.T) {
 	model := firstServiceBytesField(t, runRequest, 3)
 	require.Equal(t, "claude-4.6-sonnet-medium", firstServiceStringField(t, model, 1))
 	require.False(t, hasServiceProtoField(runRequest, 12), "exclude_workspace_context must stay omitted")
+}
+
+func TestCursorIDEGrokLogicalModelResolvesColdCatalogAndRestoresUsage(t *testing.T) {
+	upstream := &cursorIDEUpstreamStub{
+		modelsBody: cursorAgentDetailedModelsPayload(
+			cursorIDEModel{Name: "cursor-grok-4.5-high", ServerName: "cursor-grok-4.5-high", LegacySlugs: []string{"grok-4.5-xhigh"}},
+			cursorIDEModel{Name: "cursor-grok-4.5-low", ServerName: "cursor-grok-4.5-low", LegacySlugs: []string{"grok-4.5-medium"}},
+			cursorIDEModel{Name: "cursor-grok-4.5-medium", ServerName: "cursor-grok-4.5-medium", LegacySlugs: []string{"grok-4.5-high"}},
+		),
+		chatBody: cursorIDEFrames(cursorIDETextPayload("grok response"), cursorIDEGrokUsagePayload(9497, 12, 0, 1536)),
+	}
+	svc := ideTestGateway(upstream)
+	body := `{"model":"grok-4.5","stream":true,"messages":[{"role":"user","content":"hi"}]}`
+	c, recorder := newCursorGatewayTestContext(t, "/v1/messages", body, 3)
+
+	result, err := svc.Forward(context.Background(), c, ideTestAccount(), []byte(body))
+	require.NoError(t, err)
+	require.Equal(t, 7961, result.Usage.InputTokens)
+	require.Equal(t, 12, result.Usage.OutputTokens)
+	require.Equal(t, 1536, result.Usage.CacheReadInputTokens)
+	require.Contains(t, recorder.Body.String(), `"cache_read_input_tokens":1536`)
+
+	upstream.mu.Lock()
+	defer upstream.mu.Unlock()
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, cursorpkg.AgentRunPath, upstream.requests[0].URL.Path)
+	frames, decodeErr := cursorpkg.NewConnectDecoder(8<<20, 16<<20).Feed(upstream.bodies[0])
+	require.NoError(t, decodeErr)
+	require.Len(t, frames, 1)
+	runRequest := firstServiceBytesField(t, frames[0].Payload, 1)
+	model := firstServiceBytesField(t, runRequest, 3)
+	require.Equal(t, "cursor-grok-4.5-high", firstServiceStringField(t, model, 1))
+}
+
+func TestCursorIDEGrokLogicalModelPrefersDefaultPrewarmedVariant(t *testing.T) {
+	upstream := &cursorIDEUpstreamStub{modelsBody: cursorAgentDetailedModelsPayload(
+		cursorIDEModel{Name: "cursor-grok-4.5-high", ServerName: "cursor-grok-4.5-high"},
+		cursorIDEModel{Name: "cursor-grok-4.5-low", ServerName: "cursor-grok-4.5-low"},
+		cursorIDEModel{Name: "cursor-grok-4.5-medium", ServerName: "cursor-grok-4.5-medium"},
+	)}
+	svc := ideTestGateway(upstream)
+	account := ideTestAccount()
+	_, err := svc.fetchIDEModelCatalog(context.Background(), account)
+	require.NoError(t, err)
+
+	selection, err := svc.resolveCursorIDEModel(context.Background(), account, "grok-4.5", cursorVariantPreference{})
+	require.NoError(t, err)
+	require.Equal(t, "cursor-grok-4.5-high", selection.ServerName)
 }
 
 func TestCursorIDEModelResolutionInfersUnaliasedAgentVariants(t *testing.T) {
