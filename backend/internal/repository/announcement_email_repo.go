@@ -141,7 +141,7 @@ func scanAnnouncementEmailJob(row interface{ Scan(...any) error }) (*service.Ann
 }
 
 const eligibleAnnouncementEmailRecipientsSQL = `FROM users u WHERE u.status='active' AND u.deleted_at IS NULL
-	AND BTRIM(u.email) <> '' AND BTRIM(u.email) ~* '^[A-Z0-9._%+\\-]+@[A-Z0-9.\\-]+\\.[A-Z]{2,}$'
+	AND BTRIM(u.email) <> '' AND BTRIM(u.email) ~* '^[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}$'
 	AND LOWER(BTRIM(u.email)) NOT LIKE '%@linuxdo-connect.invalid'
 	AND LOWER(BTRIM(u.email)) NOT LIKE '%@oidc-connect.invalid'
 	AND LOWER(BTRIM(u.email)) NOT LIKE '%@wechat-connect.invalid'

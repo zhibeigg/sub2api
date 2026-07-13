@@ -4,12 +4,20 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/require"
 )
+
+func TestEligibleAnnouncementEmailRecipientsSQLUsesSinglePostgresEscapes(t *testing.T) {
+	require.Contains(t, eligibleAnnouncementEmailRecipientsSQL, `~* '^[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}$'`)
+	require.NotContains(t, eligibleAnnouncementEmailRecipientsSQL, `\\-`)
+	require.NotContains(t, eligibleAnnouncementEmailRecipientsSQL, `\\.`)
+	require.True(t, strings.Contains(eligibleAnnouncementEmailRecipientsSQL, "verified_at IS NOT NULL"))
+}
 
 func TestAnnouncementEmailRepositoryRefreshJobCastsLeaseExpiryParameter(t *testing.T) {
 	db, mock, err := sqlmock.New()
