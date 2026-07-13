@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 16 // v16: group model-level rate multipliers
+const apiKeyAuthSnapshotVersion = 17 // v17: invalidate snapshots missing legacy group model-rate projection
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
