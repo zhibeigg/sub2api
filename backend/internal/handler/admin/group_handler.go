@@ -67,8 +67,10 @@ func (f optionalLimitField) ToServiceInput() *float64 {
 	if f.value != nil {
 		return f.value
 	}
-	zero := 0.0
-	return &zero
+	// JSON null / empty input means unlimited. The service layer normalizes
+	// negative limits to nil while preserving an explicit numeric zero.
+	unlimited := -1.0
+	return &unlimited
 }
 
 // NewGroupHandler creates a new admin group handler
