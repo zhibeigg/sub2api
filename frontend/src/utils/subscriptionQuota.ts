@@ -8,6 +8,8 @@ export interface RemainingDurationParts {
   minutes: number
 }
 
+export type SubscriptionQuotaPeriod = 'daily' | 'weekly' | 'monthly'
+
 export function isOneTimeDailyQuota(
   subscription: Pick<UserSubscription, 'starts_at' | 'expires_at'>
 ): boolean {
@@ -39,4 +41,20 @@ export function getRemainingDurationParts(
   const minutes = totalMinutes % 60
 
   return { days, hours, minutes }
+}
+
+export function getEffectiveSubscriptionQuotaLimit(
+  subscription: UserSubscription,
+  period: SubscriptionQuotaPeriod
+): number | null {
+  const key = `${period}_limit_usd` as
+    | 'daily_limit_usd'
+    | 'weekly_limit_usd'
+    | 'monthly_limit_usd'
+
+  if (subscription.quota_snapshotted) {
+    return subscription[key] ?? null
+  }
+
+  return subscription.group?.[key] ?? null
 }

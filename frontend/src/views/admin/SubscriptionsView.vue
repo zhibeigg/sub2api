@@ -765,6 +765,7 @@ import type { SubscriptionPlan } from '@/types/payment'
 import type { SimpleUser } from '@/api/admin/usage'
 import type { Column } from '@/components/common/types'
 import { formatDateOnly } from '@/utils/format'
+import { getEffectiveSubscriptionQuotaLimit, type SubscriptionQuotaPeriod } from '@/utils/subscriptionQuota'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
@@ -1347,15 +1348,8 @@ function getPlanGroups(plan: SubscriptionPlan): SubscriptionPlan['groups'] {
     .filter((group): group is Group => Boolean(group))
 }
 
-type QuotaPeriod = 'daily' | 'weekly' | 'monthly'
-
-function getQuotaLimit(subscription: UserSubscription, period: QuotaPeriod): number | null {
-  const key = `${period}_limit_usd` as 'daily_limit_usd' | 'weekly_limit_usd' | 'monthly_limit_usd'
-  const instanceLimit = subscription[key]
-  if (instanceLimit !== undefined || subscription.quota_snapshotted) {
-    return instanceLimit ?? null
-  }
-  return subscription.group?.[key] ?? null
+function getQuotaLimit(subscription: UserSubscription, period: SubscriptionQuotaPeriod): number | null {
+  return getEffectiveSubscriptionQuotaLimit(subscription, period)
 }
 
 function formatQuotaLimit(limit: number | null | undefined): string {
