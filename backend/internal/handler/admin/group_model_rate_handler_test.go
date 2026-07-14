@@ -78,6 +78,43 @@ func TestGroupHandlerMapsModelRateMultipliers(t *testing.T) {
 	require.Empty(t, *svc.updateInput.ModelRateMultipliers)
 }
 
+func TestGroupHandlerMapsNullSubscriptionLimitsToUnlimited(t *testing.T) {
+	router, svc := setupGroupModelRateHandler()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/groups/26", bytes.NewBufferString(`{
+		"subscription_type":"subscription",
+		"daily_limit_usd":60,
+		"weekly_limit_usd":null,
+		"monthly_limit_usd":null
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, svc.updateInput)
+	require.NotNil(t, svc.updateInput.DailyLimitUSD)
+	require.Equal(t, 60.0, *svc.updateInput.DailyLimitUSD)
+	require.NotNil(t, svc.updateInput.WeeklyLimitUSD)
+	require.Less(t, *svc.updateInput.WeeklyLimitUSD, 0.0)
+	require.NotNil(t, svc.updateInput.MonthlyLimitUSD)
+	require.Less(t, *svc.updateInput.MonthlyLimitUSD, 0.0)
+}
+
+func TestGroupHandlerPreservesExplicitZeroSubscriptionLimit(t *testing.T) {
+	router, svc := setupGroupModelRateHandler()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/admin/groups/26", bytes.NewBufferString(`{"weekly_limit_usd":0}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotNil(t, svc.updateInput)
+	require.NotNil(t, svc.updateInput.WeeklyLimitUSD)
+	require.Equal(t, 0.0, *svc.updateInput.WeeklyLimitUSD)
+}
+
 func TestGroupHandlerRejectsInvalidModelRateMultiplierJSONType(t *testing.T) {
 	router, svc := setupGroupModelRateHandler()
 
