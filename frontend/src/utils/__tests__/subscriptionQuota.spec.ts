@@ -39,12 +39,42 @@ describe('getEffectiveSubscriptionQuotaLimit', () => {
     expect(value).toBe(60)
   })
 
+  it('falls back to the matching group from groups when the legacy group field is omitted', () => {
+    const value = getEffectiveSubscriptionQuotaLimit(
+      subscription({
+        daily_limit_usd: null,
+        group: undefined,
+        groups: [
+          { id: 12, daily_limit_usd: 90 },
+          { id: 11, daily_limit_usd: 180 }
+        ] as UserSubscription['groups']
+      }),
+      'daily'
+    )
+
+    expect(value).toBe(180)
+  })
+
+  it('uses the first group as a compatibility fallback when the primary group id is absent', () => {
+    const value = getEffectiveSubscriptionQuotaLimit(
+      subscription({
+        daily_limit_usd: null,
+        group: undefined,
+        groups: [{ id: 12, weekly_limit_usd: 360 }] as UserSubscription['groups']
+      }),
+      'weekly'
+    )
+
+    expect(value).toBe(360)
+  })
+
   it('uses the subscription snapshot even when it explicitly has no limit', () => {
     const value = getEffectiveSubscriptionQuotaLimit(
       subscription({
         quota_snapshotted: true,
         daily_limit_usd: null,
-        group: { daily_limit_usd: 60 } as UserSubscription['group']
+        group: undefined,
+        groups: [{ id: 11, daily_limit_usd: 60 }] as UserSubscription['groups']
       }),
       'daily'
     )

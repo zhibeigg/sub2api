@@ -56,5 +56,10 @@ export function getEffectiveSubscriptionQuotaLimit(
     return subscription[key] ?? null
   }
 
-  return subscription.group?.[key] ?? null
+  const quotaGroup =
+    subscription.group ??
+    subscription.groups?.find((group) => group.id === subscription.group_id) ??
+    subscription.groups?.[0]
+
+  return quotaGroup?.[key] ?? null
 }
