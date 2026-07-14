@@ -295,6 +295,7 @@ import {
   writePaymentRecoverySnapshot,
 } from '@/components/payment/paymentFlow'
 import { platformAccentBarClass, platformBadgeLightClass, platformBadgeClass, platformTextClass, platformLabel } from '@/utils/platformColors'
+import { getEffectiveSubscriptionQuotaLimit } from '@/utils/subscriptionQuota'
 import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue'
 import PaymentStatusPanel from '@/components/payment/PaymentStatusPanel.vue'
 import Icon from '@/components/icons/Icon.vue'
@@ -338,10 +339,7 @@ function subscriptionPeakRateLabel(subscription: UserSubscription): string {
 }
 
 function getSubscriptionQuotaLimit(subscription: UserSubscription, period: 'daily' | 'weekly' | 'monthly'): number | null {
-  const key = `${period}_limit_usd` as 'daily_limit_usd' | 'weekly_limit_usd' | 'monthly_limit_usd'
-  const instanceLimit = subscription[key]
-  if (instanceLimit !== undefined || subscription.quota_snapshotted) return instanceLimit ?? null
-  return subscription.group?.[key] ?? null
+  return getEffectiveSubscriptionQuotaLimit(subscription, period)
 }
 
 function subscriptionHasUnlimitedQuota(subscription: UserSubscription): boolean {

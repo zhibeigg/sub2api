@@ -257,7 +257,13 @@ import Icon from '@/components/icons/Icon.vue'
 import { formatDateOnly } from '@/utils/format'
 import { hasPeakRate, formatPeakRateWindow, serverTimezoneLabel } from '@/utils/peak-rate'
 import { platformBorderClass, platformBadgeClass, platformButtonClass, platformLabel } from '@/utils/platformColors'
-import { getRemainingDurationParts, isOneTimeDailyQuota, type RemainingDurationParts } from '@/utils/subscriptionQuota'
+import {
+  getEffectiveSubscriptionQuotaLimit,
+  getRemainingDurationParts,
+  isOneTimeDailyQuota,
+  type RemainingDurationParts,
+  type SubscriptionQuotaPeriod
+} from '@/utils/subscriptionQuota'
 
 function platformAccentDotClass(p: string): string {
   switch (p) {
@@ -297,15 +303,8 @@ function subscriptionPeakRateLabel(subscription: UserSubscription): string {
     .join(' · ')
 }
 
-type QuotaPeriod = 'daily' | 'weekly' | 'monthly'
-
-function getQuotaLimit(subscription: UserSubscription, period: QuotaPeriod): number | null {
-  const key = `${period}_limit_usd` as 'daily_limit_usd' | 'weekly_limit_usd' | 'monthly_limit_usd'
-  const instanceLimit = subscription[key]
-  if (instanceLimit !== undefined || subscription.quota_snapshotted) {
-    return instanceLimit ?? null
-  }
-  return subscription.group?.[key] ?? null
+function getQuotaLimit(subscription: UserSubscription, period: SubscriptionQuotaPeriod): number | null {
+  return getEffectiveSubscriptionQuotaLimit(subscription, period)
 }
 
 function formatQuotaAmount(limit: number | null): string {
