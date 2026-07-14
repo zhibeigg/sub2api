@@ -528,42 +528,118 @@ func (s *CursorGatewayService) forward(ctx context.Context, c *gin.Context, acco
 	}
 
 	result, err := s.forwardIDE(ctx, c, account, body, protocol)
-	if err == nil || !s.shouldFallbackCursorIDEToCloud(c, account, err) {
-		return result, err
+	if err == nil {
+		return result, nil
 	}
-
 	accountID := int64(0)
 	if account != nil {
 		accountID = account.ID
 	}
-	statusCode := 0
-	var upstreamErr *UpstreamFailoverError
-	if errors.As(err, &upstreamErr) {
-		statusCode = upstreamErr.StatusCode
+	requestModel := cursorRequestModelForLog(body)
+	statusCode, upstreamErrorCode := cursorFailoverErrorMetadata(err)
+	shouldFallback, blockedReason := s.shouldFallbackCursorIDEToCloud(c, account, body, protocol, err)
+	if !shouldFallback {
+		if blockedReason != "" {
+			slog.Warn("cursor_ide_cloud_fallback_skipped",
+				"account_id", accountID,
+				"model", requestModel,
+				"status_code", statusCode,
+				"upstream_error_code", upstreamErrorCode,
+				"reason", blockedReason,
+				"error", err.Error(),
+			)
+		}
+		return result, err
 	}
-	slog.Warn("cursor_ide_auto_fallback", "account_id", accountID, "status_code", statusCode, "fallback", CursorTransportCloudAgent, "error", err.Error())
+
+	slog.Warn("cursor_ide_auto_fallback",
+		"account_id", accountID,
+		"model", requestModel,
+		"status_code", statusCode,
+		"upstream_error_code", upstreamErrorCode,
+		"fallback", CursorTransportCloudAgent,
+		"error", err.Error(),
+	)
 	return s.forwardCloud(ctx, c, account, body, protocol)
 }
 
-func (s *CursorGatewayService) shouldFallbackCursorIDEToCloud(c *gin.Context, account *Account, err error) bool {
+func cursorRequestModelForLog(body []byte) string {
+	var envelope cursorRequestEnvelope
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(envelope.Model)
+}
+
+func cursorFailoverErrorMetadata(err error) (int, string) {
+	var upstreamErr *UpstreamFailoverError
+	if !errors.As(err, &upstreamErr) || upstreamErr == nil {
+		return 0, ""
+	}
+	var envelope struct {
+		Error struct {
+			Type string `json:"type"`
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(upstreamErr.ResponseBody, &envelope) != nil {
+		return upstreamErr.StatusCode, ""
+	}
+	code := strings.TrimSpace(envelope.Error.Type)
+	if code == "" {
+		code = strings.TrimSpace(envelope.Error.Code)
+	}
+	return upstreamErr.StatusCode, code
+}
+
+func (s *CursorGatewayService) shouldFallbackCursorIDEToCloud(c *gin.Context, account *Account, body []byte, protocol cursorpkg.Protocol, err error) (bool, string) {
 	if !s.cursorConfig().AgentCloudFallbackEnabled || err == nil || account == nil || strings.TrimSpace(account.GetCredential("api_key")) == "" {
-		return false
+		return false, ""
 	}
 	if c != nil && c.Writer != nil && c.Writer.Written() {
-		return false
+		return false, ""
 	}
 	rawMode := cursorAccountSetting(account, "cursor_transport_mode")
 	if strings.TrimSpace(rawMode) == "" {
 		rawMode = s.cursorConfig().DefaultTransportMode
 	}
 	if NormalizeCursorTransportMode(rawMode) != CursorTransportAuto {
-		return false
+		return false, ""
 	}
 	var upstreamErr *UpstreamFailoverError
 	if !errors.As(err, &upstreamErr) {
-		return false
+		return false, ""
 	}
-	return upstreamErr.StatusCode == http.StatusTooManyRequests || upstreamErr.StatusCode >= http.StatusInternalServerError
+	if upstreamErr.StatusCode != http.StatusTooManyRequests && upstreamErr.StatusCode < http.StatusInternalServerError {
+		return false, ""
+	}
+	if required, reason := cursorRequestRequiresAgentRPC(body, protocol); required {
+		return false, reason
+	}
+	return true, ""
+}
+
+func cursorRequestRequiresAgentRPC(body []byte, protocol cursorpkg.Protocol) (bool, string) {
+	var envelope cursorRequestEnvelope
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return true, "request_parse_failed"
+	}
+	if protocol == cursorpkg.ProtocolResponses && strings.TrimSpace(envelope.PreviousResponseID) != "" {
+		return true, "responses_continuation"
+	}
+	dialogue, err := cursorpkg.ParseRequest(protocol, body)
+	if err != nil {
+		return true, "request_parse_failed"
+	}
+	if len(dialogue.Tools) > 0 {
+		return true, "client_tools"
+	}
+	for _, message := range dialogue.Messages {
+		if len(message.ToolCalls) > 0 || strings.TrimSpace(message.ToolCallID) != "" || strings.EqualFold(strings.TrimSpace(message.Role), "tool") {
+			return true, "tool_continuation"
+		}
+	}
+	return false, ""
 }
 
 func (s *CursorGatewayService) forwardCloud(ctx context.Context, c *gin.Context, account *Account, body []byte, protocol cursorpkg.Protocol) (*ForwardResult, error) {

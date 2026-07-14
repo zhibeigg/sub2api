@@ -12,7 +12,7 @@ Cursor API Key 账号通过 `credentials.cursor_transport_mode` 选择路径：
 
 | 模式 | 普通聊天路径 | 必需凭据 |
 |---|---|---|
-| `auto` | 优先 Agent RPC；仅当响应尚未提交且命中配置允许的安全错误时，才可回退 Cloud Agent | 至少配置一套凭据 |
+| `auto` | 优先 Agent RPC；仅当响应尚未提交、请求不依赖客户端工具/延续状态且命中配置允许的安全错误时，才可回退 Cloud Agent | 至少配置一套凭据 |
 | `ide_chat` | Agent RPC（兼容 IDE Chat 枚举） | `dashboard_access_token` |
 | `cloud_agent` | 仅 Cloud Agent 显式任务模式 | 官方 Cursor `api_key` |
 
@@ -20,7 +20,7 @@ Cursor API Key 账号通过 `credentials.cursor_transport_mode` 选择路径：
 - `AgentService/Run` 统一承载普通聊天，不再使用旧 ChatService RPC。网关映射文本、thinking/reasoning 和 MCP 工具调用增量；工具执行结果在下一轮请求中通过 Cursor 原生 history/state 恢复继续发送。
 - Agent RPC 只转发模型对话与工具协议，不在 Sub2API 本机执行 Cursor 请求中的 shell 命令或文件读写。工具调用由下游客户端执行并在下一轮回传结果。
 - Agent RPC 强制使用独立 HTTP/2 连接池和 `application/connect+proto`，不会参与 OpenAI 上游的 HTTP/2→HTTP/1.1 降级。
-- `auto` 的回退是可配置的安全兜底：只有在下游响应尚未提交、错误被明确归类为可安全重放且 Cloud Agent 凭据可用时，才能切换 Cloud Agent；一旦已发送响应事件，或错误可能产生副作用，就不会重放。
+- `auto` 的回退是可配置的安全兜底：只有在下游响应尚未提交、错误被明确归类为可安全重放、请求不携带客户端工具/工具结果/工具调用历史/Responses 延续状态且 Cloud Agent 凭据可用时，才能切换 Cloud Agent；一旦请求依赖本地工具语义、已发送响应事件或错误可能产生副作用，就不会重放。
 - Cloud Agent 仍用于创建和管理可自主执行任务的持久资源；它保持独立的显式任务模式，每次提示词执行对应一个 run，同一 Agent 同时只能有一个活跃 run。
 - 管理后台白名单优先以 `GET /v1/models` 返回的逻辑模型 ID 为准；仅配置 Dashboard Token 的账号使用内部 `GetUsableModels` 目录获得同样的逻辑目录与运行时变体，不会把 thinking、effort、fast 等执行变体逐项写入白名单。
 - Cursor 账号可显式启用混合调度。兼容层可承接三种普通聊天协议；Gemini 原生 `generateContent` 不会调度到 Cursor。不同上游的会话上下文与模型能力可能不同，应通过分组隔离账号，并只启用已同步且验证可用的模型。
@@ -29,11 +29,11 @@ Cursor API Key 账号通过 `credentials.cursor_transport_mode` 选择路径：
 ## 普通聊天兼容语义
 
 - 三种入站协议先归一化为统一对话结构，再编码为 `agent.v1.AgentService/Run` 双向流。Connect 请求和响应均使用 5 字节帧头，并支持 gzip 数据帧与 end-stream 错误帧。
-- `stream=true` 时，文本、thinking/reasoning、MCP 工具调用参数等增量和完成原因到达后立即映射到对应下游 SSE；上游在首个有效事件前失败时仍可返回标准网关错误，已经开始下游流后则写入协议对应的流内错误。
+- `stream=true` 时，文本、thinking/reasoning、MCP 工具调用参数等增量和完成原因到达后立即映射到对应下游 SSE；上游在首个有效事件前失败时仍可返回标准网关错误，已经开始下游流后则写入协议对应的流内错误。Connect `resource_exhausted` 映射为 HTTP 429，`unavailable` 与 `deadline_exceeded` 分别映射为 503 与 504。
 - 非流式请求也消费同一实时上游流，但只在结束后组装 JSON 响应。Token 用量优先采用上游事件；上游未提供时使用本地估算。
 - 工具定义通过 Cursor 原生 MCP 描述发送；本轮工具调用由下游客户端执行，下一轮携带的 tool result 会编码进 Agent RPC 原生 history/state，从已恢复状态继续对话，不伪造工具结果，也不在网关本机执行 shell/file 操作。
 - `previous_response_id` 仍由 Sub2API 在 Redis 中关联下游会话，但恢复到 Cursor 上游时使用 Agent RPC 原生 history/state，而不是旧聊天 RPC 或 Ask 状态。
-- 普通 Agent RPC 不会创建、轮询或删除 Cloud Agent。只有满足 `auto` 的响应未提交与安全错误条件时，才允许按配置回退；需要仓库任务、长期 Agent 或 run 管理时，应显式使用 Cloud Agent 任务模式。
+- 普通 Agent RPC 不会创建、轮询或删除 Cloud Agent。只有无客户端工具和延续状态的普通文本请求同时满足 `auto` 的响应未提交与安全错误条件时，才允许按配置回退；需要仓库任务、长期 Agent 或 run 管理时，应显式使用 Cloud Agent 任务模式。
 
 ## Agent RPC 认证与 Token 刷新
 
@@ -81,7 +81,7 @@ curl --fail-with-body \
 - 账号列表会自动读取 Sub2API 本地 usage logs，展示今日请求、总 Token、缓存写入 Token、缓存读取 Token 及本地计费。
 - 若 Cursor 账号配置了 Sub2API 的日、周或总额度，账号列表会复用统一的 `1d`、`7d`、`total` 进度条；这些是本地额度，不是 Cursor 官方套餐额度。
 - 点击“刷新检测”或刷新账号列表时，管理 API 会以 `force=true` 调用 Cursor `GET /v1/me` 验证当前 Cloud Agents API Key；普通自动加载不会批量探测上游。
-- Cursor Run 返回的 `cacheWriteTokens` 和 `cacheReadTokens` 分别保存为统一用量记录的 `cache_creation_tokens`（界面显示“缓存写入”）和 `cache_read_tokens`，并参与平台专属计费。
+- Cursor Run 返回的 `cacheWriteTokens` 和 `cacheReadTokens` 分别保存为统一用量记录的 `cache_creation_tokens`（界面显示“缓存写入”）和 `cache_read_tokens`，并参与平台专属计费。缓存字段只按实际上游响应上报；Cloud Agent 或其他未返回缓存明细的路径保持为 0，不根据客户端提示词估算或伪造缓存命中。
 
 ### Cursor Spending 官方套餐进度（可选）
 
@@ -394,6 +394,6 @@ Dashboard 登录成功后会同时保存该次 PKCE 流程的 UUID 作为 `curso
 - 普通 `/v1/messages`、`/v1/chat/completions`、`/v1/responses` 使用双向 HTTP/2 Connect-Protobuf `agent.v1.AgentService/Run`，不再使用 `StreamUnifiedChatWithTools`，也不创建临时 Cloud Agent；
 - Agent RPC 运行时模型目录使用内部 `GetUsableModels` 的 fresh/stale 缓存、singleflight、启动/授权预热与冷缓存直跑策略；Cloud Agent 检查仍使用 `/v1/me`，白名单同步优先使用 `/v1/models`；
 - 文本、thinking 与 MCP 工具增量实时映射；下一轮 tool result 通过原生 history/state 恢复，网关不执行本地 shell/file；
-- `auto` 只有在响应未提交且命中配置允许的安全错误时才可回退；Cloud Agent 调用继续使用 `/v1/agents` 与 run 端点，且只作为独立显式任务模式；
+- `auto` 只有在响应未提交、请求不含客户端工具/工具延续状态且命中配置允许的安全错误时才可回退；Cloud Agent 调用继续使用 `/v1/agents` 与 run 端点，且只作为独立显式任务模式；
 - 反向代理或 CDN 不得缓冲 SSE，并必须允许到 Cursor 上游的 HTTP/2；
 - Cursor 官方账单与 Sub2API 本地账单在 UI、API 和文档中明确分开。

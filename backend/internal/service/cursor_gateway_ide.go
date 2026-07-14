@@ -1348,18 +1348,24 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 			}
 			finished = true
 		case cursorpkg.IDEEventError:
-			message := "Cursor IDE chat stream failed"
-			if event.Error != nil {
-				message = strings.TrimSpace(event.Error.Message)
-				if event.Error.Code != "" {
-					message = event.Error.Code + ": " + message
-				}
+			statusCode, code, message, details := cursorAgentStreamFailure(event.Error)
+			clientMessage := message
+			if code != "" {
+				clientMessage = code + ": " + message
 			}
 			if committed {
-				_ = writer.WriteError(message)
+				_ = writer.WriteError(clientMessage)
 			}
-			slog.Warn("cursor_ide_stream_event_failed", "account_id", account.ID, "model", upstreamModel, "committed", committed, "error", message)
-			return nil, mapCursorError(cursorpkg.HTTPError(http.StatusBadGateway, "IDE chat stream", message))
+			slog.Warn("cursor_ide_stream_event_failed",
+				"account_id", account.ID,
+				"model", upstreamModel,
+				"committed", committed,
+				"status_code", statusCode,
+				"code", code,
+				"details", details,
+				"error", clientMessage,
+			)
+			return nil, cursorAgentStreamFailoverError(statusCode, code, message)
 		}
 	}
 
@@ -1443,6 +1449,91 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 	return result, nil
 }
 
+func cursorAgentStreamFailure(streamErr *cursorpkg.IDEStreamError) (statusCode int, code, message, details string) {
+	statusCode = http.StatusBadGateway
+	message = "Cursor Agent stream failed"
+	if streamErr == nil {
+		return statusCode, "", message, ""
+	}
+	code = strings.ToLower(strings.TrimSpace(streamErr.Code))
+	if text := strings.TrimSpace(streamErr.Message); text != "" {
+		message = text
+	}
+	if len(streamErr.Details) > 0 {
+		details = truncateString(strings.TrimSpace(string(streamErr.Details)), 2048)
+	}
+	switch code {
+	case "invalid_argument", "failed_precondition", "out_of_range":
+		statusCode = http.StatusBadRequest
+	case "unauthenticated":
+		statusCode = http.StatusUnauthorized
+	case "permission_denied":
+		statusCode = http.StatusForbidden
+	case "not_found":
+		statusCode = http.StatusNotFound
+	case "already_exists", "aborted":
+		statusCode = http.StatusConflict
+	case "resource_exhausted":
+		statusCode = http.StatusTooManyRequests
+	case "unimplemented":
+		statusCode = http.StatusNotImplemented
+	case "unavailable":
+		statusCode = http.StatusServiceUnavailable
+	case "deadline_exceeded":
+		statusCode = http.StatusGatewayTimeout
+	}
+	return statusCode, code, message, details
+}
+
+func cursorAgentStreamFailoverError(statusCode int, code, message string) error {
+	if statusCode == 0 {
+		statusCode = http.StatusBadGateway
+	}
+	if strings.TrimSpace(message) == "" {
+		message = "Cursor Agent stream failed"
+	}
+	body, err := json.Marshal(map[string]any{
+		"error": map[string]string{"type": code, "message": message},
+	})
+	if err != nil {
+		body = []byte(message)
+	}
+	return &UpstreamFailoverError{StatusCode: statusCode, ResponseBody: body}
+}
+
+func (s *CursorGatewayService) runCursorAgentWithOpenRetry(ctx context.Context, account *Account, client *cursorpkg.AgentClient, credential cursorpkg.IDECredential, dialogue *cursorpkg.Dialogue, options cursorpkg.AgentRunOptions) (*http.Response, *cursorpkg.AgentStream, error) {
+	resp, stream, err := client.Run(ctx, credential, dialogue, options)
+	if err == nil || ctx.Err() != nil || !isRetryableCursorAgentOpenError(err) {
+		return resp, stream, err
+	}
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
+	accountID := int64(0)
+	if account != nil {
+		accountID = account.ID
+	}
+	slog.Warn("cursor_agent_open_retry",
+		"account_id", accountID,
+		"model", options.Model,
+		"reason", "retryable_http2_transport",
+		"error", truncateString(err.Error(), 2048),
+	)
+	return client.Run(ctx, credential, dialogue, options)
+}
+
+func isRetryableCursorAgentOpenError(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var cursorErr *cursorpkg.Error
+	if !errors.As(err, &cursorErr) || cursorErr.Kind != cursorpkg.ErrorTransport {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "goaway") || strings.Contains(message, "refused_stream") || strings.Contains(message, "refused stream")
+}
+
 func (s *CursorGatewayService) openCursorAgentStream(ctx, runCtx context.Context, account *Account, dialogue *cursorpkg.Dialogue, options cursorpkg.AgentRunOptions, blobs map[string][]byte) (*Account, *http.Response, *cursorAgentEventAdapter, error) {
 	activeAccount := account
 	if s.dashboardAuth != nil && activeAccount != nil && activeAccount.ID > 0 {
@@ -1458,7 +1549,7 @@ func (s *CursorGatewayService) openCursorAgentStream(ctx, runCtx context.Context
 	if err != nil {
 		return activeAccount, nil, nil, err
 	}
-	resp, agentStream, err := client.Run(runCtx, credential, dialogue, options)
+	resp, agentStream, err := s.runCursorAgentWithOpenRetry(runCtx, activeAccount, client, credential, dialogue, options)
 	if err == nil || !cursorpkg.IsKind(err, cursorpkg.ErrorUnauthorized) || s.dashboardAuth == nil || activeAccount.ID <= 0 {
 		if agentStream == nil {
 			if err == nil {
@@ -1476,7 +1567,7 @@ func (s *CursorGatewayService) openCursorAgentStream(ctx, runCtx context.Context
 	if err != nil {
 		return refreshed, nil, nil, err
 	}
-	resp, agentStream, err = client.Run(runCtx, credential, dialogue, options)
+	resp, agentStream, err = s.runCursorAgentWithOpenRetry(runCtx, refreshed, client, credential, dialogue, options)
 	if agentStream == nil {
 		if err == nil {
 			err = errors.New("Cursor Agent stream is unavailable")

@@ -90,8 +90,11 @@ func (s *cursorIDEUpstreamStub) DoWithTLS(req *http.Request, proxyURL string, ac
 }
 
 type cursorIDEAutoFallbackUpstreamStub struct {
-	cloud       cursorGatewayUpstreamStub
-	ideChatBody []byte
+	mu             sync.Mutex
+	cloud          cursorGatewayUpstreamStub
+	ideChatBody    []byte
+	ideRunErrors   []error
+	ideRunRequests int
 }
 
 type cursorAgentDuplexUpstreamStub struct {
@@ -236,6 +239,17 @@ func (s *cursorIDEAutoFallbackUpstreamStub) Do(req *http.Request, proxyURL strin
 	case cursorpkg.AgentRunPath:
 		_, _ = readCursorConnectFrame(req.Body)
 		go func() { _, _ = io.Copy(io.Discard, req.Body) }()
+		s.mu.Lock()
+		s.ideRunRequests++
+		var runErr error
+		if len(s.ideRunErrors) > 0 {
+			runErr = s.ideRunErrors[0]
+			s.ideRunErrors = s.ideRunErrors[1:]
+		}
+		s.mu.Unlock()
+		if runErr != nil {
+			return nil, runErr
+		}
 		return cursorIDEHTTP2Response(req, s.ideChatBody), nil
 	default:
 		return s.cloud.Do(req, proxyURL, accountID, accountConcurrency)
@@ -244,6 +258,12 @@ func (s *cursorIDEAutoFallbackUpstreamStub) Do(req *http.Request, proxyURL strin
 
 func (s *cursorIDEAutoFallbackUpstreamStub) DoWithTLS(req *http.Request, proxyURL string, accountID int64, accountConcurrency int, _ *tlsfingerprint.Profile) (*http.Response, error) {
 	return s.Do(req, proxyURL, accountID, accountConcurrency)
+}
+
+func (s *cursorIDEAutoFallbackUpstreamStub) ideRunRequestCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.ideRunRequests
 }
 
 func readCursorConnectFrame(reader io.Reader) ([]byte, error) {
@@ -678,6 +698,118 @@ func TestCursorGatewayAutoFallsBackToCloudBeforeIDEStreamCommit(t *testing.T) {
 	require.NotNil(t, result)
 	require.Contains(t, recorder.Body.String(), "hello")
 	require.Equal(t, 1, upstream.cloud.nextAgent)
+}
+
+func TestCursorGatewayAutoDoesNotFallbackRequestsRequiringAgentRPC(t *testing.T) {
+	tests := []struct {
+		name      string
+		path      string
+		body      string
+		responses bool
+	}{
+		{
+			name: "anthropic tools",
+			path: "/v1/messages",
+			body: `{"model":"claude-sonnet-5","stream":false,"messages":[{"role":"user","content":"weather"}],"tools":[{"name":"get_weather","description":"weather","input_schema":{"type":"object"}}]}`,
+		},
+		{
+			name: "openai chat tools",
+			path: "/v1/chat/completions",
+			body: `{"model":"claude-sonnet-5","stream":false,"messages":[{"role":"user","content":"weather"}],"tools":[{"type":"function","function":{"name":"get_weather","description":"weather","parameters":{"type":"object"}}}]}`,
+		},
+		{
+			name:      "responses tools",
+			path:      "/v1/responses",
+			responses: true,
+			body:      `{"model":"claude-sonnet-5","stream":false,"input":"weather","tools":[{"type":"function","name":"get_weather","description":"weather","parameters":{"type":"object"}}]}`,
+		},
+		{
+			name: "openai tool continuation",
+			path: "/v1/chat/completions",
+			body: `{"model":"claude-sonnet-5","stream":false,"messages":[{"role":"assistant","content":null,"tool_calls":[{"id":"call_weather","type":"function","function":{"name":"get_weather","arguments":"{}"}}]},{"role":"tool","tool_call_id":"call_weather","content":"sunny"}]}`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			upstream := &cursorIDEAutoFallbackUpstreamStub{ideChatBody: cursorIDEErrorFrame("resource_exhausted", "temporary capacity exhausted")}
+			svc := ideTestGateway(upstream)
+			account := ideTestAccount()
+			account.Credentials["api_key"] = "cloud-key"
+			account.Credentials["cursor_transport_mode"] = CursorTransportAuto
+			c, recorder := newCursorGatewayTestContext(t, test.path, test.body, 3)
+
+			var result *ForwardResult
+			var err error
+			if test.responses {
+				result, err = svc.ForwardResponses(context.Background(), c, account, []byte(test.body))
+			} else {
+				result, err = svc.Forward(context.Background(), c, account, []byte(test.body))
+			}
+
+			require.Nil(t, result)
+			require.Error(t, err)
+			var failoverErr *UpstreamFailoverError
+			require.ErrorAs(t, err, &failoverErr)
+			require.Equal(t, http.StatusTooManyRequests, failoverErr.StatusCode)
+			require.Empty(t, recorder.Body.String())
+			require.Equal(t, 0, upstream.cloud.nextAgent)
+			require.Equal(t, 1, upstream.ideRunRequestCount())
+		})
+	}
+}
+
+func TestCursorAgentStreamFailureMapsConnectCodes(t *testing.T) {
+	tests := map[string]int{
+		"resource_exhausted": http.StatusTooManyRequests,
+		"unavailable":        http.StatusServiceUnavailable,
+		"deadline_exceeded":  http.StatusGatewayTimeout,
+		"invalid_argument":   http.StatusBadRequest,
+		"unknown":            http.StatusBadGateway,
+	}
+	for code, expectedStatus := range tests {
+		t.Run(code, func(t *testing.T) {
+			statusCode, actualCode, message, details := cursorAgentStreamFailure(&cursorpkg.IDEStreamError{Code: code, Message: "upstream failure", Details: json.RawMessage(`{"retryable":true}`)})
+			require.Equal(t, expectedStatus, statusCode)
+			require.Equal(t, code, actualCode)
+			require.Equal(t, "upstream failure", message)
+			require.JSONEq(t, `{"retryable":true}`, details)
+		})
+	}
+}
+
+func TestCursorRequestRequiresAgentRPCProtectsResponsesContinuation(t *testing.T) {
+	required, reason := cursorRequestRequiresAgentRPC([]byte(`{"model":"claude-sonnet-5","previous_response_id":"resp_previous","input":"continue"}`), cursorpkg.ProtocolResponses)
+	require.True(t, required)
+	require.Equal(t, "responses_continuation", reason)
+
+	required, reason = cursorRequestRequiresAgentRPC([]byte(`{"model":"claude-sonnet-5","messages":[{"role":"user","content":"hi"}]}`), cursorpkg.ProtocolAnthropic)
+	require.False(t, required)
+	require.Empty(t, reason)
+}
+
+func TestCursorGatewayRetriesAgentGOAWAYBeforeCloudFallback(t *testing.T) {
+	upstream := &cursorIDEAutoFallbackUpstreamStub{
+		ideRunErrors: []error{errors.New("http2: Transport: cannot retry err [GOAWAY] after Request.Body was written; define Request.GetBody to avoid this error")},
+		ideChatBody: cursorIDEFrames(
+			cursorIDETextPayload("retried on Agent RPC"),
+			cursorIDEUsagePayload(8, 3, 0, 0),
+		),
+	}
+	svc := ideTestGateway(upstream)
+	account := ideTestAccount()
+	account.Credentials["api_key"] = "cloud-key"
+	account.Credentials["cursor_transport_mode"] = CursorTransportAuto
+	body := `{"model":"claude-sonnet-5","stream":false,"messages":[{"role":"user","content":"hi"}]}`
+	c, recorder := newCursorGatewayTestContext(t, "/v1/messages", body, 3)
+
+	result, err := svc.Forward(context.Background(), c, account, []byte(body))
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Contains(t, recorder.Body.String(), "retried on Agent RPC")
+	require.Equal(t, 2, upstream.ideRunRequestCount())
+	require.Equal(t, 0, upstream.cloud.nextAgent)
 }
 
 func TestCursorGatewayForcedIDEDoesNotFallbackToCloud(t *testing.T) {

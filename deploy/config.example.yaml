@@ -1240,8 +1240,8 @@ cursor:
   # Enable the low-latency AgentService/Run path for Dashboard credentials.
   # 是否为 Dashboard 凭据启用低延迟 AgentService/Run 链路。
   agent_rpc_enabled: true
-  # Permit the existing safe Cloud Agent replay only before downstream response commitment and only for retryable errors.
-  # 仅在下游尚未提交且错误可安全重试时，允许沿用受控 Cloud Agent 回退。
+  # Permit Cloud Agent replay only for tool-free text requests, before downstream response commitment, and only for retryable errors.
+  # 仅对不含客户端工具或延续状态的文本请求，在下游尚未提交且错误可安全重试时允许 Cloud Agent 回退。
   agent_cloud_fallback_enabled: true
   # GetUsableModels catalog caching. Fresh entries are served directly; stale entries are served while one
   # singleflight background refresh runs. A cold chat request sends its requested model directly and never waits here.
