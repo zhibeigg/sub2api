@@ -53,6 +53,7 @@
   --vp-nav-height: 60px;
   --vp-layout-max-width: 1480px;
   --vp-sidebar-bg-color: var(--docs-surface);
+  --vp-nav-bg-color: var(--docs-bg);
   --vp-code-block-bg: oklch(92.5% 0.014 112);
 }
 
@@ -100,11 +101,22 @@ body {
   outline-offset: 3px;
 }
 
-/* Align the shared VitePress chrome with the public PokeAPI header. */
+/* Keep the fixed navigation fully opaque so page content never shows through it. */
+.VPNav,
+.VPNav .VPNavBar,
+.VPNav .VPNavBar.home.top,
+.VPNav .VPNavBar.has-sidebar:not(.home),
+.VPNavBar .wrapper,
+.VPNavBar .content-body {
+  background-color: var(--docs-bg) !important;
+  background-image: none !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 .VPNavBar,
 .VPNavBar.home.top {
   border-bottom: 1px solid var(--docs-line);
-  background: var(--docs-bg);
 }
 
 .VPNavBar .wrapper {
