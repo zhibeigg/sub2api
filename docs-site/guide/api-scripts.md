@@ -235,6 +235,10 @@ curl --silent --output /dev/null --write-out 'HTTP %{http_code}\n' \
 
 截至 **2026-07-15**，无密钥实测结果为真实的 `HTTP 401`。这表示接口鉴权正常拒绝了请求，但不能证明模型调用成功。
 
+![Windows PowerShell 无密钥请求返回真实 HTTP 401](/images/api-scripts/unauthorized-check.png)
+
+> **图：API 脚本鉴权失败实拍。** 来源：本站在 Windows PowerShell 中直接请求 Poke API 线上 `/v1/models` 接口；采集日期：2026-07-15。截图未发送、未显示任何 API Key，只用于证明真实服务会拒绝无凭据请求；错误文案、请求 ID 与响应头存在时效性，以当次线上响应为准。
+
 ### 有密钥时检查真实结果
 
 1. 运行本页的隐藏输入命令，确认 `POKE_API_KEY` 只存在于当前进程环境变量。
