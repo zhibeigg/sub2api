@@ -72,6 +72,19 @@ func ParseAnthropic(data []byte) (*Dialogue, error) {
 		}
 	}
 	for _, msg := range req.Messages {
+		if msg.Role == "system" || msg.Role == "developer" {
+			text, textErr := parseTextContent(msg.Content, true)
+			if textErr != nil {
+				return nil, badRequest("parse anthropic system message", textErr)
+			}
+			if strings.TrimSpace(text) != "" {
+				if strings.TrimSpace(d.System) != "" {
+					d.System += "\n\n"
+				}
+				d.System += text
+			}
+			continue
+		}
 		converted, convErr := parseAnthropicMessage(msg)
 		if convErr != nil {
 			return nil, badRequest("parse anthropic message", convErr)

@@ -30,6 +30,22 @@ func TestParseAnthropicIgnoresPriorThinkingBlocks(t *testing.T) {
 	}, dialogue.Messages)
 }
 
+func TestParseAnthropicMergesSystemMessagesIntoTopLevelPrompt(t *testing.T) {
+	body := []byte(`{
+		"system":"top-level system",
+		"messages":[
+			{"role":"user","content":"question"},
+			{"role":"system","content":"runtime system"},
+			{"role":"developer","content":[{"type":"text","text":"developer instructions"}]}
+		]
+	}`)
+
+	dialogue, err := ParseAnthropic(body)
+	require.NoError(t, err)
+	require.Equal(t, "top-level system\n\nruntime system\n\ndeveloper instructions", dialogue.System)
+	require.Equal(t, []DialogueMessage{{Role: "user", Text: "question"}}, dialogue.Messages)
+}
+
 func TestParseAnthropicIgnoresServerToolsAndTheirHistoryBlocks(t *testing.T) {
 	body := []byte(`{
 		"tools":[

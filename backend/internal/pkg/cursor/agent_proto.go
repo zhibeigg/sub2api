@@ -194,12 +194,14 @@ func encodeAgentRequestContext(options AgentRunOptions) []byte {
 }
 
 func encodeAgentMCPTools(tools []ToolDefinition, provider string) ([]byte, error) {
+	provider = strings.TrimSpace(provider)
 	if provider == "" {
 		provider = "sub2api"
 	}
 	var wrapper []byte
 	for _, tool := range tools {
-		if strings.TrimSpace(tool.Name) == "" {
+		toolName := strings.TrimSpace(tool.Name)
+		if toolName == "" {
 			return nil, errors.New("tool name is required")
 		}
 		schema := tool.InputSchema
@@ -210,12 +212,17 @@ func encodeAgentMCPTools(tools []ToolDefinition, provider string) ([]byte, error
 		if err != nil {
 			return nil, fmt.Errorf("tool %q schema: %w", tool.Name, err)
 		}
+		// McpToolDefinition.name is Cursor's internal unique name. Cursor itself
+		// composes it from server_identifier + "-" + tool_name; reusing the raw
+		// client name collides with native tools such as Glob, Grep, Read, and Write.
+		// Keep field 5 as the original client-visible name so returned MCP calls can
+		// still be decoded without an alias table.
 		// McpToolDefinition.input_schema is google.protobuf.Value, not Struct.
 		// JSON objects therefore need the Value.struct_value wrapper (field 5).
 		schemaValue := appendBytes(nil, 5, structValue)
-		encoded := appendString(nil, 1, tool.Name)
+		encoded := appendString(nil, 1, provider+"-"+toolName)
 		encoded = appendString(encoded, 4, provider)
-		encoded = appendString(encoded, 5, tool.Name)
+		encoded = appendString(encoded, 5, toolName)
 		encoded = appendString(encoded, 2, tool.Description)
 		encoded = appendBytes(encoded, 3, schemaValue)
 		wrapper = appendBytes(wrapper, 1, encoded)

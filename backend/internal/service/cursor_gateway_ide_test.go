@@ -623,7 +623,8 @@ func TestCursorGatewayIDEAgentToolCallReturnsAndResumesSameDuplexStream(t *testi
 		tool := firstServiceBytesField(t, requestContext, 7)
 		require.Equal(t, uint64(31), firstServiceVarintField(t, exec, 1))
 		require.Equal(t, "exec-context", firstServiceStringField(t, exec, 15))
-		require.Equal(t, "shell", firstServiceStringField(t, tool, 1))
+		require.Equal(t, "sub2api-shell", firstServiceStringField(t, tool, 1))
+		require.Equal(t, "shell", firstServiceStringField(t, tool, 5))
 	case err := <-upstream.serveErrors:
 		t.Fatalf("Cursor request context response failed: %v", err)
 	case <-time.After(time.Second):

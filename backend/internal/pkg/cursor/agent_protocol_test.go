@@ -46,7 +46,7 @@ func TestAgentRunRequestGoldenAndDescriptorFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256(payload)
-	if got, want := hex.EncodeToString(sum[:]), "cea53d231081b1f467a0476c80ae8ca40d91809e8a9426207635eb8a824a85d4"; got != want {
+	if got, want := hex.EncodeToString(sum[:]), "61caa916d2b8d9629949f8ba4b8dc8986cbf85ec084dda634481c799893318e5"; got != want {
 		t.Fatalf("Agent request golden SHA256 = %s, want %s", got, want)
 	}
 
@@ -117,12 +117,37 @@ func TestAgentRunRequestGoldenAndDescriptorFields(t *testing.T) {
 
 	mcpTools := firstBytesField(t, runRequest, 4)
 	tool := firstBytesField(t, mcpTools, 1)
-	if firstStringField(t, tool, 4) != "sub2api" || firstStringField(t, tool, 5) != "lookup" {
+	if firstStringField(t, tool, 1) != "sub2api-lookup" || firstStringField(t, tool, 4) != "sub2api" || firstStringField(t, tool, 5) != "lookup" {
 		t.Fatalf("unexpected MCP tool: %x", tool)
 	}
 	inputSchemaValue := firstBytesField(t, tool, 3)
 	if !hasField(allFields(inputSchemaValue), 5) {
 		t.Fatalf("MCP input schema is not wrapped as google.protobuf.Value.struct_value: %x", inputSchemaValue)
+	}
+}
+
+func TestAgentMCPToolNamesUseProviderScopedInternalName(t *testing.T) {
+	tools := []ToolDefinition{
+		{Name: "Glob", InputSchema: json.RawMessage(`{"type":"object"}`)},
+		{Name: "Grep", InputSchema: json.RawMessage(`{"type":"object"}`)},
+		{Name: "Read", InputSchema: json.RawMessage(`{"type":"object"}`)},
+		{Name: "Write", InputSchema: json.RawMessage(`{"type":"object"}`)},
+	}
+	encoded, err := encodeAgentMCPTools(tools, "sub2api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	definitions := bytesFields(encoded, 1)
+	if len(definitions) != len(tools) {
+		t.Fatalf("MCP tool count = %d, want %d", len(definitions), len(tools))
+	}
+	for index, definition := range definitions {
+		if got, want := firstProtoString(definition, 1), "sub2api-"+tools[index].Name; got != want {
+			t.Fatalf("MCP internal name = %q, want %q", got, want)
+		}
+		if got := firstProtoString(definition, 5); got != tools[index].Name {
+			t.Fatalf("MCP client-visible name = %q, want %q", got, tools[index].Name)
+		}
 	}
 }
 
@@ -218,7 +243,8 @@ func TestAgentGetUsableModelsUnaryCodec(t *testing.T) {
 }
 
 func TestAgentEventStreamMCPAggregationKVExecAndUsage(t *testing.T) {
-	mcpArgs := appendString(nil, 3, "call-1")
+	mcpArgs := appendString(nil, 1, "sub2api-lookup")
+	mcpArgs = appendString(mcpArgs, 3, "call-1")
 	mcpArgs = appendString(mcpArgs, 5, "lookup")
 	mcpCall := appendBytes(nil, 1, mcpArgs)
 	toolCall := appendBytes(nil, 15, mcpCall)
@@ -242,7 +268,8 @@ func TestAgentEventStreamMCPAggregationKVExecAndUsage(t *testing.T) {
 	interaction = appendBytes(interaction, 3, completed)
 	interaction = appendBytes(interaction, 14, turnEnded)
 
-	execArgs := appendString(nil, 3, "exec-call")
+	execArgs := appendString(nil, 1, "sub2api-lookup")
+	execArgs = appendString(execArgs, 3, "exec-call")
 	execArgs = appendString(execArgs, 5, "lookup")
 	exec := appendVarint(nil, 1, 9)
 	exec = appendString(exec, 15, "exec-1")
@@ -483,7 +510,7 @@ func TestAgentStreamShellAndRequestContextResponsesPreserveProtocolFields(t *tes
 	contextSuccess := firstBytesField(t, contextResult, 1)
 	requestContext := firstBytesField(t, contextSuccess, 1)
 	contextTool := firstBytesField(t, requestContext, 7)
-	if firstProtoVarint(contextExec, 1) != 23 || firstProtoString(contextExec, 15) != "exec-context" || firstProtoString(contextTool, 1) != "lookup" || firstProtoString(contextTool, 4) != "sub2api" {
+	if firstProtoVarint(contextExec, 1) != 23 || firstProtoString(contextExec, 15) != "exec-context" || firstProtoString(contextTool, 1) != "sub2api-lookup" || firstProtoString(contextTool, 4) != "sub2api" || firstProtoString(contextTool, 5) != "lookup" {
 		t.Fatalf("request context result = %x", contextMessage)
 	}
 }
