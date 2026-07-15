@@ -2,6 +2,7 @@ import { defineConfig } from "vitepress"
 
 const siteUrl = "https://docs.poke2api.com"
 const siteDescription = "Poke API - AI API 网关，一个 API Key 接入 Claude / OpenAI / Gemini"
+const brandLogo = "/logo.png?v=0.53.54"
 
 function canonicalPath(relativePath) {
   if (relativePath === "index.md") {
@@ -21,8 +22,8 @@ export default defineConfig({
     hostname: siteUrl
   },
   head: [
-    ["link", { rel: "icon", type: "image/png", sizes: "512x512", href: "/favicon.png" }],
-    ["link", { rel: "apple-touch-icon", sizes: "512x512", href: "/favicon.png" }],
+    ["link", { rel: "icon", type: "image/png", sizes: "512x512", href: brandLogo }],
+    ["link", { rel: "apple-touch-icon", sizes: "512x512", href: brandLogo }],
     ["meta", { name: "theme-color", content: "#111310" }],
     ["meta", { name: "robots", content: "index, follow" }]
   ],
@@ -65,7 +66,7 @@ export default defineConfig({
     ]
   },
   themeConfig: {
-    logo: { src: "/favicon.png", alt: "PokeAPI" },
+    logo: { src: brandLogo, alt: "PokeAPI" },
     siteTitle: "PokeAPI",
     nav: [
       { text: "首页", link: "/" },
