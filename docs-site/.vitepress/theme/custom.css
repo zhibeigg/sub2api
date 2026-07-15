@@ -187,7 +187,7 @@ body {
   background: var(--docs-accent-soft);
 }
 
-.VPNavBarMenuLink[href="https://www.poke2api.com/home"] {
+.VPNavBarMenuLink[href="https://www.poke2api.com/dashboard"] {
   align-self: center;
   height: 36px;
   min-height: 36px;
@@ -201,7 +201,7 @@ body {
   font-size: 13px;
 }
 
-.VPNavBarMenuLink[href="https://www.poke2api.com/home"]:hover {
+.VPNavBarMenuLink[href="https://www.poke2api.com/dashboard"]:hover {
   border-color: var(--docs-ink);
   color: var(--docs-ink);
   background: transparent;
@@ -1018,7 +1018,7 @@ body {
     padding-inline: 10px;
   }
 
-  .VPNavBarMenuLink[href="https://www.poke2api.com/home"] {
+  .VPNavBarMenuLink[href="https://www.poke2api.com/dashboard"] {
     margin-left: 2px;
     padding-inline: 13px;
   }
