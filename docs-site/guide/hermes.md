@@ -37,10 +37,16 @@ curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
 
 安装完成后重新打开终端；macOS / Linux / WSL2 也可以按安装器提示重新加载 shell 配置。
 
-<figure class="tutorial-media tutorial-media--terminal">
-  <img src="/images/hermes/installer-check.png" alt="Windows Terminal 中检查 Hermes 官方 PowerShell 安装脚本下载文件的实拍截图" loading="lazy">
-  <figcaption>实拍终端截图，采集于 2026-07-15：仅检查 Hermes 官方 <code>install.ps1</code> 已下载并显示文件长度。图中的状态文字不等于安装成功；官方脚本内容和大小会更新，应以运行当日官方地址为准。</figcaption>
-</figure>
+::: warning 不要把“脚本已下载”当成“安装成功”
+下载到 `install.ps1` / `install.sh`、查看文件大小或看到安装器启动，都不能证明 Hermes 已安装。必须在新终端中运行以下命令，并以真实输出为准：
+
+```bash
+hermes --version
+hermes --help
+```
+
+若命令不存在，或安装器出现 GitHub、Python、Git 等下载错误，应先解决原始错误，不能继续声称安装成功。
+:::
 
 ### 推荐：使用模型向导
 
