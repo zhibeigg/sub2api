@@ -38,6 +38,7 @@ frontend/dist/
 *.tsbuildinfo
 vite.config.d.ts
 vite.config.js.timestamp-*
+docs-site/.vitepress/cache/
 
 # 日志
 npm-debug.log*
