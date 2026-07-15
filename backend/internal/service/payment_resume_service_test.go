@@ -26,10 +26,11 @@ func TestNormalizeVisibleMethods(t *testing.T) {
 		" wxpay_direct ",
 		"wxpay",
 		"stripe",
+		"qqpay",
 		"ldc",
 	})
 
-	want := []string{"alipay", "wxpay", "stripe", "ldc"}
+	want := []string{"alipay", "wxpay", "stripe", "qqpay", "ldc"}
 	if len(got) != len(want) {
 		t.Fatalf("NormalizeVisibleMethods len = %d, want %d (%v)", len(got), len(want), got)
 	}
@@ -455,6 +456,8 @@ func TestNormalizeVisibleMethodSource(t *testing.T) {
 		{name: "alipay easypay alias", method: payment.TypeAlipay, input: "easypay", want: VisibleMethodSourceEasyPayAlipay},
 		{name: "wxpay official alias", method: payment.TypeWxpay, input: "wxpay", want: VisibleMethodSourceOfficialWechat},
 		{name: "wxpay easypay alias", method: payment.TypeWxpay, input: "easypay", want: VisibleMethodSourceEasyPayWechat},
+		{name: "qqpay easypay alias", method: payment.TypeQQPay, input: "easypay", want: VisibleMethodSourceEasyPayQQPay},
+		{name: "qqpay canonical source", method: payment.TypeQQPay, input: VisibleMethodSourceEasyPayQQPay, want: VisibleMethodSourceEasyPayQQPay},
 		{name: "unsupported source", method: payment.TypeWxpay, input: "stripe", want: ""},
 	}
 
@@ -482,6 +485,7 @@ func TestVisibleMethodProviderKeyForSource(t *testing.T) {
 		{name: "easypay alipay", method: payment.TypeAlipay, source: VisibleMethodSourceEasyPayAlipay, want: payment.TypeEasyPay, ok: true},
 		{name: "official wechat", method: payment.TypeWxpay, source: VisibleMethodSourceOfficialWechat, want: payment.TypeWxpay, ok: true},
 		{name: "easypay wechat", method: payment.TypeWxpay, source: VisibleMethodSourceEasyPayWechat, want: payment.TypeEasyPay, ok: true},
+		{name: "easypay qqpay", method: payment.TypeQQPay, source: VisibleMethodSourceEasyPayQQPay, want: payment.TypeEasyPay, ok: true},
 		{name: "mismatched method and source", method: payment.TypeAlipay, source: VisibleMethodSourceOfficialWechat, want: "", ok: false},
 	}
 
@@ -638,6 +642,40 @@ func TestVisibleMethodLoadBalancerUsesConfiguredSourceWhenMultipleProvidersEnabl
 				t.Fatalf("lastProviderKey = %q, want %q", inner.lastProviderKey, tt.wantProvider)
 			}
 		})
+	}
+}
+
+func TestVisibleMethodLoadBalancerRoutesQQPayToEasyPay(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	_, err := client.PaymentProviderInstance.Create().
+		SetProviderKey(payment.TypeEasyPay).
+		SetName("EasyPay QQPay").
+		SetConfig(`{"protocolVersion":"2"}`).
+		SetSupportedTypes(payment.TypeQQPay).
+		SetEnabled(true).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create easypay qqpay provider: %v", err)
+	}
+
+	inner := &captureLoadBalancer{}
+	configService := &PaymentConfigService{
+		entClient: client,
+		settingRepo: &paymentConfigSettingRepoStub{values: map[string]string{
+			SettingPaymentVisibleMethodQQPaySource:  VisibleMethodSourceEasyPayQQPay,
+			SettingPaymentVisibleMethodQQPayEnabled: "true",
+		}},
+	}
+	lb := newVisibleMethodLoadBalancer(inner, configService)
+	_, err = lb.SelectInstance(ctx, "", payment.TypeQQPay, payment.StrategyRoundRobin, 12.5)
+	if err != nil {
+		t.Fatalf("SelectInstance returned error: %v", err)
+	}
+	if inner.lastProviderKey != payment.TypeEasyPay {
+		t.Fatalf("lastProviderKey = %q, want %q", inner.lastProviderKey, payment.TypeEasyPay)
 	}
 }
 

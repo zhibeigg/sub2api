@@ -14,6 +14,9 @@ describe('admin settings payment visible method helpers', () => {
     expect(normalizePaymentVisibleMethodSource('wxpay', 'official')).toBe('official_wxpay')
     expect(normalizePaymentVisibleMethodSource('wxpay', 'wechat')).toBe('official_wxpay')
     expect(normalizePaymentVisibleMethodSource('wxpay', 'easypay')).toBe('easypay_wxpay')
+
+    expect(normalizePaymentVisibleMethodSource('qqpay', 'qqpay')).toBe('easypay_qqpay')
+    expect(normalizePaymentVisibleMethodSource('qqpay', 'easypay')).toBe('easypay_qqpay')
   })
 
   it('rejects unknown or cross-method source values', () => {
@@ -21,6 +24,7 @@ describe('admin settings payment visible method helpers', () => {
     expect(normalizePaymentVisibleMethodSource('wxpay', 'official_alipay')).toBe('')
     expect(normalizePaymentVisibleMethodSource('alipay', 'unknown')).toBe('')
     expect(normalizePaymentVisibleMethodSource('wxpay', null)).toBe('')
+    expect(normalizePaymentVisibleMethodSource('qqpay', 'official_wxpay')).toBe('')
   })
 
   it('exposes method-scoped source options instead of arbitrary strings', () => {
@@ -57,6 +61,19 @@ describe('admin settings payment visible method helpers', () => {
         value: 'easypay_wxpay',
         labelZh: '易支付微信',
         labelEn: 'EasyPay WeChat Pay',
+      },
+    ])
+
+    expect(getPaymentVisibleMethodSourceOptions('qqpay')).toEqual([
+      {
+        value: '',
+        labelZh: '未配置',
+        labelEn: 'Not configured',
+      },
+      {
+        value: 'easypay_qqpay',
+        labelZh: '易支付 QQ 钱包',
+        labelEn: 'EasyPay QQ Wallet',
       },
     ])
   })

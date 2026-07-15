@@ -83,8 +83,9 @@ function mountDialog(options: { editing?: ProviderInstance | null } = {}) {
           template: '<div><slot /><slot name="footer" /></div>',
         },
         Select: {
+          name: 'Select',
           props: ['modelValue', 'options', 'disabled'],
-          template: '<div />',
+          template: '<div class="select-stub" />',
         },
         ToggleSwitch: {
           template: '<div />',
@@ -163,6 +164,84 @@ describe('PaymentProviderDialog payment guide', () => {
 
     const payload = wrapper.emitted('save')?.[0]?.[0] as { config: Record<string, string> }
     expect(payload.config.accountId).toBe('')
+  })
+
+  it('defaults new EasyPay providers to V2 with QQ Wallet and V2 key fields', async () => {
+    const wrapper = mountDialog()
+
+    ;(wrapper.vm as unknown as { reset: (key: string) => void }).reset('easypay')
+    await nextTick()
+
+    expect(wrapper.text()).toContain('admin.settings.payment.field_merchantPrivateKey')
+    expect(wrapper.text()).toContain('admin.settings.payment.field_platformPublicKey')
+    expect(wrapper.text()).not.toContain('PKey')
+    expect(wrapper.text()).toContain('payment.methods.qqpay')
+
+    const protocolSelect = wrapper.findAllComponents({ name: 'Select' })
+      .find(select => select.props('modelValue') === '2')
+    expect(protocolSelect?.props('disabled')).toBe(false)
+  })
+
+  it('omits blank V2 sensitive fields while preserving the selected protocol on edit', async () => {
+    const provider = providerFactory({
+      provider_key: 'easypay',
+      name: 'EasyPay V2',
+      config: {
+        protocolVersion: '2',
+        pid: 'pid-v2',
+        apiBase: 'https://pay.example.com',
+        notifyUrl: 'https://example.com/api/v1/payment/webhook/easypay',
+        returnUrl: 'https://example.com/payment/result',
+      },
+      supported_types: ['alipay', 'wxpay', 'qqpay'],
+      payment_mode: 'qrcode',
+    })
+    const wrapper = mountDialog({ editing: provider })
+
+    ;(wrapper.vm as unknown as { loadProvider: (provider: ProviderInstance) => void }).loadProvider(provider)
+    await nextTick()
+    await wrapper.find('form').trigger('submit.prevent')
+
+    const payload = wrapper.emitted('save')?.[0]?.[0] as { config: Record<string, string> }
+    expect(payload.config.protocolVersion).toBe('2')
+    expect(payload.config).not.toHaveProperty('merchantPrivateKey')
+    expect(payload.config).not.toHaveProperty('platformPublicKey')
+  })
+
+  it('loads historical EasyPay providers as locked V1 and keeps custom qqpay', async () => {
+    const provider = providerFactory({
+      provider_key: 'easypay',
+      name: 'Legacy EasyPay',
+      config: {
+        pid: 'pid-legacy',
+        apiBase: 'https://pay.example.com',
+        customMethods: '[{"type":"qqpay","upstreamType":"qqpay","displayName":"QQ Wallet"}]',
+        notifyUrl: 'https://example.com/api/v1/payment/webhook/easypay',
+        returnUrl: 'https://example.com/payment/result',
+      },
+      supported_types: ['alipay', 'wxpay', 'qqpay'],
+      payment_mode: 'qrcode',
+    })
+    const wrapper = mountDialog({ editing: provider })
+
+    ;(wrapper.vm as unknown as { loadProvider: (provider: ProviderInstance) => void }).loadProvider(provider)
+    await nextTick()
+
+    expect(wrapper.text()).toContain('PKey')
+    expect(wrapper.text()).not.toContain('admin.settings.payment.field_merchantPrivateKey')
+    expect(wrapper.text()).toContain('QQ Wallet')
+    const protocolSelect = wrapper.findAllComponents({ name: 'Select' })
+      .find(select => select.props('modelValue') === '1')
+    expect(protocolSelect?.props('disabled')).toBe(true)
+
+    await wrapper.find('form').trigger('submit.prevent')
+    const payload = wrapper.emitted('save')?.[0]?.[0] as {
+      config: Record<string, string>
+      supported_types: string[]
+    }
+    expect(payload.config.protocolVersion).toBe('1')
+    expect(payload.config.customMethods).toContain('"type":"qqpay"')
+    expect(payload.supported_types).toContain('qqpay')
   })
 
   it('serializes EasyPay custom methods and adds them to supported_types', async () => {

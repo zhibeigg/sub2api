@@ -26,13 +26,16 @@ const (
 
 	SettingPaymentVisibleMethodAlipaySource  = "payment_visible_method_alipay_source"
 	SettingPaymentVisibleMethodWxpaySource   = "payment_visible_method_wxpay_source"
+	SettingPaymentVisibleMethodQQPaySource   = "payment_visible_method_qqpay_source"
 	SettingPaymentVisibleMethodAlipayEnabled = "payment_visible_method_alipay_enabled"
 	SettingPaymentVisibleMethodWxpayEnabled  = "payment_visible_method_wxpay_enabled"
+	SettingPaymentVisibleMethodQQPayEnabled  = "payment_visible_method_qqpay_enabled"
 
 	VisibleMethodSourceOfficialAlipay = "official_alipay"
 	VisibleMethodSourceEasyPayAlipay  = "easypay_alipay"
 	VisibleMethodSourceOfficialWechat = "official_wxpay"
 	VisibleMethodSourceEasyPayWechat  = "easypay_wxpay"
+	VisibleMethodSourceEasyPayQQPay   = "easypay_qqpay"
 
 	wechatPaymentResumeTokenType = "wechat_payment_resume"
 
@@ -164,6 +167,11 @@ func NormalizeVisibleMethodSource(method, source string) string {
 		case VisibleMethodSourceEasyPayWechat, payment.TypeEasyPay:
 			return VisibleMethodSourceEasyPayWechat
 		}
+	case payment.TypeQQPay:
+		switch strings.TrimSpace(strings.ToLower(source)) {
+		case VisibleMethodSourceEasyPayQQPay, payment.TypeEasyPay:
+			return VisibleMethodSourceEasyPayQQPay
+		}
 	}
 	return ""
 }
@@ -178,6 +186,8 @@ func VisibleMethodProviderKeyForSource(method, source string) (string, bool) {
 		return payment.TypeWxpay, NormalizeVisibleMethod(method) == payment.TypeWxpay
 	case VisibleMethodSourceEasyPayWechat:
 		return payment.TypeEasyPay, NormalizeVisibleMethod(method) == payment.TypeWxpay
+	case VisibleMethodSourceEasyPayQQPay:
+		return payment.TypeEasyPay, NormalizeVisibleMethod(method) == payment.TypeQQPay
 	default:
 		return "", false
 	}
@@ -196,7 +206,7 @@ func (lb *visibleMethodLoadBalancer) GetInstanceConfig(ctx context.Context, inst
 
 func (lb *visibleMethodLoadBalancer) SelectInstance(ctx context.Context, providerKey string, paymentType payment.PaymentType, strategy payment.Strategy, orderAmount float64) (*payment.InstanceSelection, error) {
 	visibleMethod := NormalizeVisibleMethod(paymentType)
-	if providerKey != "" || (visibleMethod != payment.TypeAlipay && visibleMethod != payment.TypeWxpay) {
+	if providerKey != "" || (visibleMethod != payment.TypeAlipay && visibleMethod != payment.TypeWxpay && visibleMethod != payment.TypeQQPay) {
 		return lb.inner.SelectInstance(ctx, providerKey, paymentType, strategy, orderAmount)
 	}
 
@@ -216,6 +226,8 @@ func visibleMethodEnabledSettingKey(method string) string {
 		return SettingPaymentVisibleMethodAlipayEnabled
 	case payment.TypeWxpay:
 		return SettingPaymentVisibleMethodWxpayEnabled
+	case payment.TypeQQPay:
+		return SettingPaymentVisibleMethodQQPayEnabled
 	default:
 		return ""
 	}
@@ -227,6 +239,8 @@ func visibleMethodSourceSettingKey(method string) string {
 		return SettingPaymentVisibleMethodAlipaySource
 	case payment.TypeWxpay:
 		return SettingPaymentVisibleMethodWxpaySource
+	case payment.TypeQQPay:
+		return SettingPaymentVisibleMethodQQPaySource
 	default:
 		return ""
 	}

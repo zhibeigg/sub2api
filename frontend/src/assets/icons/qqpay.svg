@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>QQ Wallet</title>
+  <rect width="64" height="64" rx="14" fill="#12B7F5"/>
+  <path fill="#fff" d="M15 20.5A5.5 5.5 0 0 1 20.5 15h23A5.5 5.5 0 0 1 49 20.5V24H20a3 3 0 0 0 0 6h29v13.5a5.5 5.5 0 0 1-5.5 5.5h-23a5.5 5.5 0 0 1-5.5-5.5v-23Z"/>
+  <path fill="#0D9FE0" d="M35 28h16v13H35a6.5 6.5 0 1 1 0-13Z"/>
+  <circle cx="39" cy="34.5" r="2.4" fill="#fff"/>
+  <path fill="#fff" d="M22 19h19a2 2 0 0 1 2 2v1H20v-1a2 2 0 0 1 2-2Z" opacity=".7"/>
+</svg>

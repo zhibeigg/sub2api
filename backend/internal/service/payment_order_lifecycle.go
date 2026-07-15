@@ -165,6 +165,14 @@ func (s *PaymentService) checkPaidWithOptions(ctx context.Context, o *dbent.Paym
 		slog.Warn("query upstream failed", "orderID", o.ID, "error", err)
 		return ""
 	}
+	if resp == nil {
+		return ""
+	}
+	if err := validateProviderSnapshotMetadata(o, prov.ProviderKey(), resp.Metadata); err != nil {
+		s.writeAuditLog(ctx, o.ID, "PAYMENT_PROVIDER_METADATA_MISMATCH", prov.ProviderKey(), map[string]any{"detail": err.Error(), "queryRef": queryRef})
+		slog.Warn("query upstream metadata mismatch", "orderID", o.ID, "queryRef", queryRef, "error", err)
+		return ""
+	}
 	if resp.Status == payment.ProviderStatusPaid {
 		if !isValidProviderAmount(resp.Amount) {
 			s.writeAuditLog(ctx, o.ID, "PAYMENT_INVALID_AMOUNT", prov.ProviderKey(), map[string]any{
@@ -176,6 +184,10 @@ func (s *PaymentService) checkPaidWithOptions(ctx context.Context, o *dbent.Paym
 			slog.Warn("query upstream returned invalid paid amount", "orderID", o.ID, "queryRef", queryRef, "paid", resp.Amount)
 			retriedResp, retryOK := requeryPaidOrderOnce(ctx, prov, queryRef)
 			if !retryOK {
+				return ""
+			}
+			if err := validateProviderSnapshotMetadata(o, prov.ProviderKey(), retriedResp.Metadata); err != nil {
+				s.writeAuditLog(ctx, o.ID, "PAYMENT_PROVIDER_METADATA_MISMATCH", prov.ProviderKey(), map[string]any{"detail": err.Error(), "queryRef": queryRef})
 				return ""
 			}
 			resp = retriedResp

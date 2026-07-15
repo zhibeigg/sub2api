@@ -170,6 +170,10 @@ func (s *PaymentService) resolveUserPromoSnapshot(ctx context.Context, user *Use
 }
 
 func (s *PaymentService) validateOrderInput(ctx context.Context, req CreateOrderRequest, cfg *PaymentConfig) (*dbent.SubscriptionPlan, error) {
+	if req.PaymentType == payment.TypeQQPay && (!cfg.VisibleMethodQQPayEnabled || cfg.VisibleMethodQQPaySource != VisibleMethodSourceEasyPayQQPay || !psSliceContains(cfg.EnabledTypes, payment.TypeQQPay)) {
+		return nil, infraerrors.ServiceUnavailable("PAYMENT_GATEWAY_ERROR", "method_not_configured").
+			WithMetadata(map[string]string{"payment_type": req.PaymentType})
+	}
 	if req.OrderType == payment.OrderTypeBalance && cfg.BalanceDisabled {
 		return nil, infraerrors.Forbidden("BALANCE_PAYMENT_DISABLED", "balance recharge has been disabled")
 	}
@@ -349,7 +353,7 @@ func buildPaymentOrderProviderSnapshot(sel *payment.InstanceSelection, req Creat
 	}
 
 	snapshot := map[string]any{}
-	snapshot["schema_version"] = 2
+	snapshot["schema_version"] = 3
 
 	instanceID := strings.TrimSpace(sel.InstanceID)
 	if instanceID != "" {
@@ -384,6 +388,11 @@ func buildPaymentOrderProviderSnapshot(sel *payment.InstanceSelection, req Creat
 		if merchantID := strings.TrimSpace(sel.Config["pid"]); merchantID != "" {
 			snapshot["merchant_id"] = merchantID
 		}
+		protocolVersion, err := easyPayProtocolVersion(sel.Config)
+		if err != nil {
+			protocolVersion = easyPayProtocolV1
+		}
+		snapshot["protocol_version"] = protocolVersion
 	}
 	if providerKey == payment.TypeStripe {
 		snapshot["currency"] = paymentProviderConfigCurrency(providerKey, sel.Config)

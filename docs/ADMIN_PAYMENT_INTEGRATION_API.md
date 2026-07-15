@@ -15,6 +15,7 @@
 - 多分组共享额度订阅：套餐使用 `group_ids`（兼容 `group_id`），并支持 `daily_limit_usd`、`weekly_limit_usd`、`monthly_limit_usd`
 - 管理员订阅分配：`POST /api/v1/admin/subscriptions/assign` 可传 `plan_id`，旧 `group_id` 格式继续兼容
 - 独立禁购设置：`balance_disabled` 与 `subscription_disabled`；被禁用类型的新订单会由后端拒绝
+- 内置支付设置与服务商实例管理，包括 EasyPay V1 MD5 / 彩虹易支付 2.0 RSA-SHA256 和 `qqpay`
 
 ### 基础地址
 - 生产：`https://<your-domain>`
@@ -27,6 +28,65 @@
 - 幂等接口额外传：`Idempotency-Key`
 
 说明：管理员 JWT 也可访问 admin 路由，但服务间调用建议使用 Admin API Key。
+
+### 内置支付设置与服务商实例 API
+
+支付全局配置：
+- `GET /api/v1/admin/payment/config`
+- `PUT /api/v1/admin/payment/config`
+
+前台统一展示支付宝、微信支付、QQ 支付；以下字段控制可见性与来源：
+
+| 字段 | 说明 |
+|---|---|
+| `payment_visible_method_alipay_enabled` | 是否展示支付宝 |
+| `payment_visible_method_alipay_source` | `official_alipay` 或 `easypay_alipay` |
+| `payment_visible_method_wxpay_enabled` | 是否展示微信支付 |
+| `payment_visible_method_wxpay_source` | `official_wxpay` 或 `easypay_wxpay` |
+| `payment_visible_method_qqpay_enabled` | 是否展示 QQ 支付 |
+| `payment_visible_method_qqpay_source` | `easypay_qqpay`；上游未开通 QQ 通道时应关闭 |
+
+服务商实例 CRUD：
+- `GET /api/v1/admin/payment/providers`
+- `POST /api/v1/admin/payment/providers`
+- `PUT /api/v1/admin/payment/providers/:id`
+- `DELETE /api/v1/admin/payment/providers/:id`
+
+创建和更新请求中的 `config` 是服务商专用字符串键值对象；实例还使用 `provider_key`、`name`、`supported_types`、`enabled`、`payment_mode`、`sort_order`、`limits`、`refund_enabled`、`allow_user_refund`。EasyPay 的 `provider_key` 始终为 `easypay`，不要为 V2 创建新的 provider key。
+
+EasyPay 协议约定：
+- `config.protocolVersion="1"` 使用 V1 MD5；历史 `config` 缺少该字段时也按 V1。
+- `config.protocolVersion="2"` 使用彩虹易支付 2.0 RSA-SHA256，配置 `pid`、`apiBase`、`merchantPrivateKey`、`platformPublicKey`、`notifyUrl`、`returnUrl`。
+- V1 的 `supported_types` 支持 `alipay`、`wxpay`；V2 支持 `alipay`、`wxpay`、`qqpay`，QQ 支付是否可用取决于上游通道。
+- V1/V2 共用 `/api/v1/payment/webhook/easypay`。V2 调用 `/api/pay/create`、`/api/pay/query`、`/api/pay/refund`、`/api/pay/refundquery`，允许 300 秒时钟偏差；回调需完成 RSA 验签及金额、PID、订单号校验后才返回 `success`。
+- 查询、退款和退款查询的已签名响应还会与原请求的订单号、退款单号、金额和状态交叉校验；字段缺失或不一致时安全失败。
+- 同一退款重试必须复用稳定的 `out_refund_no`。
+- 协议版本创建后不可切换；协议升级、PID 变更或密钥轮换必须新建实例，不要直接覆盖仍有关联订单的实例配置。
+- `GET` 响应不会回传私钥等敏感配置；`PUT` 可只提交需要变更的 `config` 字段，未提交的敏感字段保持原值。不要把真实凭证写入文档、日志或示例。
+
+V2 请求结构示例（仅占位符，不是可用密钥）：
+```json
+{
+  "provider_key": "easypay",
+  "name": "EasyPay V2",
+  "config": {
+    "protocolVersion": "2",
+    "pid": "<merchant-pid>",
+    "apiBase": "https://pay.example.com",
+    "merchantPrivateKey": "<merchant-private-key>",
+    "platformPublicKey": "<platform-public-key>",
+    "notifyUrl": "https://sub2api.example.com/api/v1/payment/webhook/easypay",
+    "returnUrl": "https://sub2api.example.com/payment/result"
+  },
+  "supported_types": ["alipay", "wxpay", "qqpay"],
+  "enabled": true,
+  "payment_mode": "qrcode",
+  "sort_order": 0,
+  "limits": "{}",
+  "refund_enabled": true,
+  "allow_user_refund": false
+}
+```
 
 ### 订阅套餐双类型
 
@@ -98,7 +158,7 @@
 | `user_id` | 正整数用户 ID |
 | `status` | 订单状态 |
 | `order_type` | `balance` 或 `subscription` |
-| `payment_type` | 支付方式 |
+| `payment_type` | 支付方式：`alipay`、`wxpay`、`qqpay` 等 |
 | `keyword` | 订单号、用户邮箱、用户名或注册优惠码，最多 100 字符 |
 | `promo_code_id` | 指定注册优惠码 ID |
 | `promo_attribution` | `all`、`attributed`、`none`、`legacy_unknown` |
@@ -233,6 +293,7 @@ This document describes the minimal Sub2API Admin API surface for external payme
 - User lookup
 - Manual balance correction
 - Purchase page query parameter forwarding
+- Built-in payment settings and provider instance management, including EasyPay V1 MD5 / Rainbow EasyPay 2.0 RSA-SHA256 and `qqpay`
 
 ### Base URL
 - Production: `https://<your-domain>`
@@ -245,6 +306,65 @@ Recommended headers:
 - `Idempotency-Key` for idempotent endpoints
 
 Note: Admin JWT can also access admin routes, but Admin API Key is recommended for server-to-server integration.
+
+### Built-in payment settings and provider APIs
+
+Global payment configuration:
+- `GET /api/v1/admin/payment/config`
+- `PUT /api/v1/admin/payment/config`
+
+The frontend exposes unified Alipay, WeChat Pay, and QQ Pay methods. These fields control visibility and routing:
+
+| Field | Description |
+|---|---|
+| `payment_visible_method_alipay_enabled` | Show Alipay |
+| `payment_visible_method_alipay_source` | `official_alipay` or `easypay_alipay` |
+| `payment_visible_method_wxpay_enabled` | Show WeChat Pay |
+| `payment_visible_method_wxpay_source` | `official_wxpay` or `easypay_wxpay` |
+| `payment_visible_method_qqpay_enabled` | Show QQ Pay |
+| `payment_visible_method_qqpay_source` | `easypay_qqpay`; keep disabled unless the upstream QQ channel is enabled |
+
+Provider instance CRUD:
+- `GET /api/v1/admin/payment/providers`
+- `POST /api/v1/admin/payment/providers`
+- `PUT /api/v1/admin/payment/providers/:id`
+- `DELETE /api/v1/admin/payment/providers/:id`
+
+The `config` member in create/update requests is a provider-specific string map. Instances also use `provider_key`, `name`, `supported_types`, `enabled`, `payment_mode`, `sort_order`, `limits`, `refund_enabled`, and `allow_user_refund`. EasyPay always uses `provider_key: "easypay"`; do not introduce a separate provider key for V2.
+
+EasyPay protocol contract:
+- `config.protocolVersion="1"` selects V1 MD5. A historical config without this field is also treated as V1.
+- `config.protocolVersion="2"` selects Rainbow EasyPay 2.0 RSA-SHA256 with `pid`, `apiBase`, `merchantPrivateKey`, `platformPublicKey`, `notifyUrl`, and `returnUrl`.
+- V1 `supported_types` supports `alipay` and `wxpay`; V2 supports `alipay`, `wxpay`, and `qqpay`. QQ Pay availability depends on the upstream channel.
+- V1 and V2 share `/api/v1/payment/webhook/easypay`. V2 calls `/api/pay/create`, `/api/pay/query`, `/api/pay/refund`, and `/api/pay/refundquery`, allows 300 seconds of clock skew, and returns `success` only after RSA verification plus amount, PID, and merchant-order validation.
+- Signed query, refund, and refund-query responses are cross-checked against the original order number, refund number, amount, and status; missing or inconsistent fields fail safely.
+- Retries of the same refund must reuse a stable `out_refund_no`.
+- The protocol version is immutable after creation. Use a new instance for protocol upgrades, PID changes, or key rotation instead of overwriting an instance that still has associated orders.
+- `GET` responses omit private keys and other sensitive config. A `PUT` may submit only changed `config` fields; omitted sensitive fields retain their stored values. Never place real credentials in documentation, logs, or examples.
+
+V2 request shape using placeholders only:
+```json
+{
+  "provider_key": "easypay",
+  "name": "EasyPay V2",
+  "config": {
+    "protocolVersion": "2",
+    "pid": "<merchant-pid>",
+    "apiBase": "https://pay.example.com",
+    "merchantPrivateKey": "<merchant-private-key>",
+    "platformPublicKey": "<platform-public-key>",
+    "notifyUrl": "https://sub2api.example.com/api/v1/payment/webhook/easypay",
+    "returnUrl": "https://sub2api.example.com/payment/result"
+  },
+  "supported_types": ["alipay", "wxpay", "qqpay"],
+  "enabled": true,
+  "payment_mode": "qrcode",
+  "sort_order": 0,
+  "limits": "{}",
+  "refund_enabled": true,
+  "allow_user_refund": false
+}
+```
 
 ### Dual subscription plan types
 
@@ -316,7 +436,7 @@ Common query parameters:
 | `user_id` | Positive user ID |
 | `status` | Order status |
 | `order_type` | `balance` or `subscription` |
-| `payment_type` | Payment method |
+| `payment_type` | Payment method, including `alipay`, `wxpay`, and `qqpay` |
 | `keyword` | Order number, user email/name, or registration promo code; max 100 characters |
 | `promo_code_id` | Exact registration promo ID |
 | `promo_attribution` | `all`, `attributed`, `none`, or `legacy_unknown` |

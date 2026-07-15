@@ -22,6 +22,23 @@ describe('PaymentMethodSelector', () => {
     expect(wrapper.text()).not.toContain('payment.methods.ldc')
   })
 
+  it('renders QQ Wallet with its dedicated icon, style, and order', () => {
+    const wrapper = mount(PaymentMethodSelector, {
+      props: {
+        selected: 'qqpay',
+        methods: [
+          { type: 'stripe', fee_rate: 0, available: true },
+          { type: 'qqpay', fee_rate: 0, available: true },
+        ],
+      },
+    })
+
+    const buttons = wrapper.findAll('button')
+    expect(buttons[0].text()).toContain('qqpay')
+    expect(buttons[0].classes()).toContain('border-[#12B7F5]')
+    expect(buttons[0].get('img').attributes('src')).toContain('qqpay.svg')
+  })
+
   it('uses the generic selected style for custom methods that contain built-in names', () => {
     const wrapper = mount(PaymentMethodSelector, {
       props: {

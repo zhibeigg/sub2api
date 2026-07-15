@@ -6925,7 +6925,44 @@
                     </a>
                   </p>
                 </div>
-                <!-- Row 5: Help image + text -->
+                <!-- Row 5: User-facing visible payment methods -->
+                <div class="space-y-3">
+                  <div
+                    v-for="method in paymentVisibleMethods"
+                    :key="method.type"
+                    class="rounded-lg border border-gray-200 p-3 dark:border-dark-700"
+                    :data-testid="`payment-visible-method-${method.type}`"
+                  >
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          {{ t("admin.settings.paymentVisibleMethods.methodLabel", { title: method.title }) }}
+                        </label>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          {{ t("admin.settings.paymentVisibleMethods.methodHint") }}
+                        </p>
+                      </div>
+                      <Toggle
+                        :model-value="isVisiblePaymentMethodEnabled(method.type)"
+                        :data-testid="`payment-visible-method-${method.type}-enabled`"
+                        @update:model-value="setVisiblePaymentMethodEnabled(method.type, $event)"
+                      />
+                    </div>
+                    <div class="mt-3">
+                      <label class="input-label">{{ t("admin.settings.paymentVisibleMethods.sourceLabel") }}</label>
+                      <Select
+                        :model-value="getVisiblePaymentMethodSource(method.type)"
+                        :options="method.sourceOptions"
+                        :data-testid="`payment-visible-method-${method.type}-source`"
+                        @update:model-value="setVisiblePaymentMethodSource(method.type, String($event || ''))"
+                      />
+                      <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                        {{ t("admin.settings.paymentVisibleMethods.sourceHint") }}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <!-- Row 6: Help image + text -->
                 <div class="grid grid-cols-2 gap-3">
                   <div>
                     <label class="input-label">{{
@@ -7486,6 +7523,8 @@ import {
   defaultWeChatConnectScopesForMode,
   deriveWeChatConnectStoredMode,
   normalizeDefaultSubscriptionSettings,
+  getPaymentVisibleMethodSourceOptions,
+  normalizePaymentVisibleMethodSource,
   resolveWeChatConnectModeCapabilities,
 } from "@/api/admin/settings";
 import type {
@@ -7496,6 +7535,8 @@ import type {
   DefaultSubscriptionSetting,
   DefaultPlatformQuotasMap,
   OpenAIFastPolicyRule,
+  PaymentVisibleMethod,
+  PaymentVisibleMethodSource,
   WeChatConnectMode,
   WebSearchEmulationConfig,
   WebSearchProviderConfig,
@@ -8244,6 +8285,12 @@ const form = reactive<SettingsForm>({
   payment_cancel_rate_limit_unit: "day",
   payment_cancel_rate_limit_window_mode: "rolling",
   payment_alipay_force_qrcode: false,
+  payment_visible_method_alipay_source: "",
+  payment_visible_method_wxpay_source: "",
+  payment_visible_method_qqpay_source: "",
+  payment_visible_method_alipay_enabled: false,
+  payment_visible_method_wxpay_enabled: false,
+  payment_visible_method_qqpay_enabled: false,
   table_default_page_size: tablePageSizeDefault,
   table_page_size_options: [10, 20, 50, 100],
   custom_menu_items: [] as Array<{
@@ -9189,6 +9236,16 @@ async function loadSettings() {
         (form as Record<string, unknown>)[key] = value;
       }
     }
+    for (const method of PAYMENT_VISIBLE_METHODS) {
+      setVisiblePaymentMethodSource(
+        method,
+        String(settings[`payment_visible_method_${method}_source`] || ""),
+      );
+      setVisiblePaymentMethodEnabled(
+        method,
+        settings[`payment_visible_method_${method}_enabled`] === true,
+      );
+    }
     if (!form.claude_oauth_system_prompt_blocks?.trim()) {
       form.claude_oauth_system_prompt_blocks =
         defaultClaudeOAuthSystemPromptBlocks;
@@ -9431,6 +9488,18 @@ async function saveSettings() {
     }
     form.chatwoot_base_url = normalizedChatwootBaseUrl;
     form.chatwoot_website_token = form.chatwoot_website_token.trim();
+
+    const visibleMethodWithoutSource = PAYMENT_VISIBLE_METHODS.find(
+      (method) => isVisiblePaymentMethodEnabled(method) && !getVisiblePaymentMethodSource(method),
+    );
+    if (visibleMethodWithoutSource) {
+      appStore.showError(
+        t("admin.settings.paymentVisibleMethods.sourceRequiredError", {
+          title: t(`payment.methods.${visibleMethodWithoutSource}`),
+        }),
+      );
+      return;
+    }
 
     const normalizedTableDefaultPageSize = Math.floor(
       Number(form.table_default_page_size),
@@ -9796,6 +9865,12 @@ async function saveSettings() {
       payment_cancel_rate_limit_window_mode:
         form.payment_cancel_rate_limit_window_mode,
       payment_alipay_force_qrcode: form.payment_alipay_force_qrcode,
+      payment_visible_method_alipay_source: getVisiblePaymentMethodSource("alipay"),
+      payment_visible_method_wxpay_source: getVisiblePaymentMethodSource("wxpay"),
+      payment_visible_method_qqpay_source: getVisiblePaymentMethodSource("qqpay"),
+      payment_visible_method_alipay_enabled: isVisiblePaymentMethodEnabled("alipay"),
+      payment_visible_method_wxpay_enabled: isVisiblePaymentMethodEnabled("wxpay"),
+      payment_visible_method_qqpay_enabled: isVisiblePaymentMethodEnabled("qqpay"),
       openai_advanced_scheduler_enabled: form.openai_advanced_scheduler_enabled,
       openai_advanced_scheduler_sticky_weighted_enabled:
         form.openai_advanced_scheduler_sticky_weighted_enabled,
@@ -9885,6 +9960,16 @@ async function saveSettings() {
       if (value !== null && value !== undefined) {
         (form as Record<string, unknown>)[key] = value;
       }
+    }
+    for (const method of PAYMENT_VISIBLE_METHODS) {
+      setVisiblePaymentMethodSource(
+        method,
+        String(updated[`payment_visible_method_${method}_source`] || ""),
+      );
+      setVisiblePaymentMethodEnabled(
+        method,
+        updated[`payment_visible_method_${method}_enabled`] === true,
+      );
     }
     Object.assign(authSourceDefaults, buildAuthSourceDefaultsState(updated));
     form.default_platform_quotas = normalizePlatformQuotasMap(updated.default_platform_quotas);
@@ -10416,10 +10501,43 @@ async function saveBetaPolicySettings() {
 
 // ==================== Provider Management ====================
 
+const PAYMENT_VISIBLE_METHODS: PaymentVisibleMethod[] = ["alipay", "wxpay", "qqpay"];
+
+const paymentVisibleMethods = computed(() =>
+  PAYMENT_VISIBLE_METHODS.map((type) => ({
+    type,
+    title: t(`payment.methods.${type}`),
+    sourceOptions: getPaymentVisibleMethodSourceOptions(type).map((option) => ({
+      value: option.value,
+      label: localText(option.labelZh, option.labelEn),
+    })),
+  })),
+);
+
+function getVisiblePaymentMethodSource(method: PaymentVisibleMethod): PaymentVisibleMethodSource {
+  return normalizePaymentVisibleMethodSource(
+    method,
+    form[`payment_visible_method_${method}_source`],
+  );
+}
+
+function setVisiblePaymentMethodSource(method: PaymentVisibleMethod, source: string): void {
+  form[`payment_visible_method_${method}_source`] = normalizePaymentVisibleMethodSource(method, source);
+}
+
+function isVisiblePaymentMethodEnabled(method: PaymentVisibleMethod): boolean {
+  return form[`payment_visible_method_${method}_enabled`] === true;
+}
+
+function setVisiblePaymentMethodEnabled(method: PaymentVisibleMethod, enabled: boolean): void {
+  form[`payment_visible_method_${method}_enabled`] = enabled;
+}
+
 const allPaymentTypes = computed(() => [
   { value: "easypay", label: t("payment.methods.easypay") },
   { value: "alipay", label: t("payment.methods.alipay") },
   { value: "wxpay", label: t("payment.methods.wxpay") },
+  { value: "qqpay", label: t("payment.methods.qqpay") },
   { value: "stripe", label: t("payment.methods.stripe") },
   { value: "airwallex", label: t("payment.methods.airwallex") },
 ]);
@@ -10524,7 +10642,7 @@ type ProviderEnablementCandidate = Pick<
 
 function getProviderVisibleMethods(
   provider: ProviderEnablementCandidate,
-): Array<"alipay" | "wxpay"> {
+): PaymentVisibleMethod[] {
   if (!provider.enabled) {
     return [];
   }
@@ -10532,10 +10650,10 @@ function getProviderVisibleMethods(
   const supportedTypes = Array.isArray(provider.supported_types)
     ? provider.supported_types
     : [];
-  const methods = new Set<"alipay" | "wxpay">();
+  const methods = new Set<PaymentVisibleMethod>();
   const addMethod = (type: string) => {
     const method = normalizeVisibleMethod(type);
-    if (method === "alipay" || method === "wxpay") {
+    if (method === "alipay" || method === "wxpay" || method === "qqpay") {
       methods.add(method);
     }
   };
@@ -10569,7 +10687,7 @@ function getProviderVisibleMethods(
 
 function findProviderEnablementConflict(
   candidate: ProviderEnablementCandidate,
-): { method: "alipay" | "wxpay"; conflicting: ProviderInstance } | null {
+): { method: PaymentVisibleMethod; conflicting: ProviderInstance } | null {
   const claimedMethods = getProviderVisibleMethods(candidate);
   if (claimedMethods.length === 0) {
     return null;
@@ -10577,6 +10695,11 @@ function findProviderEnablementConflict(
 
   for (const other of providers.value) {
     if (other.id === candidate.id || !other.enabled) {
+      continue;
+    }
+    // Multiple EasyPay instances (including mixed V1/V2) share the same source
+    // and are intentionally load-balanced by the backend.
+    if (candidate.provider_key === "easypay" && other.provider_key === "easypay") {
       continue;
     }
 
@@ -10596,7 +10719,7 @@ function findProviderEnablementConflict(
 }
 
 function showProviderEnablementConflict(
-  conflict: { method: "alipay" | "wxpay"; conflicting: ProviderInstance },
+  conflict: { method: PaymentVisibleMethod; conflicting: ProviderInstance },
 ) {
   appStore.showError(
     t("admin.settings.payment.enableConflict", {

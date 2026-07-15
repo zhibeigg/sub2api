@@ -32,12 +32,12 @@ An active `standard_quota` subscription takes priority over balance billing. Exh
 
 | Provider | Payment Methods | Description |
 |----------|----------------|-------------|
-| **EasyPay** | Alipay, WeChat Pay | Third-party aggregation via EasyPay protocol |
+| **EasyPay** | Alipay, WeChat Pay, QQ Pay | One `easypay` provider supports EasyPay V1 MD5 and Rainbow EasyPay 2.0 RSA-SHA256 through `protocolVersion=1/2`; QQ Pay availability depends on the upstream channel |
 | **Alipay (Direct)** | Desktop QR code, mobile Alipay redirect | Direct integration with Alipay Open Platform, returning desktop QR codes and mobile WAP/app launch links |
 | **WeChat Pay (Direct)** | Native QR, H5, MP/JSAPI Pay | Direct integration with WeChat Pay APIv3 with environment-aware routing |
 | **Stripe** | Card, Alipay, WeChat Pay, Link, etc. | International payments, multi-currency support |
 
-> Alipay/WeChat Pay direct and EasyPay can both exist as backend provider instances, but the frontend always exposes only two visible buttons: `Alipay` and `WeChat Pay`. Admins choose exactly one source for each visible method: direct or EasyPay. Direct channels connect to payment APIs directly with lower fees; EasyPay aggregates through third-party platforms with easier setup.
+> Direct Alipay/WeChat Pay and EasyPay can coexist as backend provider instances, while the frontend exposes three unified methods: `Alipay`, `WeChat Pay`, and `QQ Pay`. Administrators independently control visibility and choose one source for each method: Alipay and WeChat Pay may use direct or EasyPay sources, while QQ Pay uses EasyPay. Actual QQ Pay availability still depends on the upstream merchant channel being enabled.
 
 > **EasyPay Provider Recommendations**: Both options below are third-party aggregators compatible with the EasyPay protocol. Pick based on the funding channel and settlement currency you need:
 >
@@ -78,12 +78,12 @@ Configure the following in Admin Dashboard **Settings → Payment Settings**:
 
 ### Frontend Visible Method Routing
 
-The current payment UX keeps the frontend method list unified and does not expose provider brands directly:
+The frontend exposes three unified methods without showing backend provider brands directly:
 
-- **Alipay**: when enabled, this button must be routed to either `Alipay (Direct)` or `EasyPay Alipay`
-- **WeChat Pay**: when enabled, this button must be routed to either `WeChat Pay (Direct)` or `EasyPay WeChat`
-- Each visible method can route to only one source at a time
-- If a visible method is enabled without a selected source, the frontend will not expose that method
+- **Alipay**: `payment_visible_method_alipay_enabled` controls visibility, and `payment_visible_method_alipay_source` accepts `official_alipay` or `easypay_alipay`
+- **WeChat Pay**: `payment_visible_method_wxpay_enabled` controls visibility, and `payment_visible_method_wxpay_source` accepts `official_wxpay` or `easypay_wxpay`
+- **QQ Pay**: `payment_visible_method_qqpay_enabled` controls visibility, and `payment_visible_method_qqpay_source` uses `easypay_qqpay`; leave it disabled unless the upstream merchant has enabled QQ Pay
+- Each visible method can route to only one source. A method is hidden when no source or usable provider instance is available
 
 ### Load Balance Strategies
 
@@ -121,15 +121,30 @@ Each provider type requires different credentials. Select the type when adding a
 
 ### EasyPay
 
-Compatible with any payment service that implements the EasyPay protocol.
+A single `easypay` provider type selects the protocol through `protocolVersion`:
 
-| Parameter | Description | Required |
-|-----------|-------------|----------|
-| **Merchant ID (PID)** | EasyPay merchant ID | Yes |
-| **Merchant Key (PKey)** | EasyPay merchant secret key | Yes |
-| **API Base URL** | EasyPay API base address | Yes |
-| **Alipay Channel ID** | Specify Alipay channel (optional) | No |
-| **WeChat Channel ID** | Specify WeChat channel (optional) | No |
+| `protocolVersion` | Protocol | Signature |
+|---|---|---|
+| `1` | Traditional EasyPay V1 | MD5 |
+| `2` | Rainbow EasyPay 2.0 | RSA-SHA256 |
+
+Existing instances without `protocolVersion` are treated as V1 for backward compatibility, while new instances default to V2. The protocol version cannot be changed after creation. For a protocol upgrade, PID change, or key rotation, create a new provider instance and move traffic to it instead of overwriting an instance that still owns historical orders.
+
+**V1 configuration** keeps the existing `pid`, `pkey`, `apiBase`, `notifyUrl`, `returnUrl`, and optional channel fields.
+
+**V2 configuration:**
+
+| Config key | Description | Required |
+|---|---|---|
+| `protocolVersion` | Must be `2` | Yes |
+| `pid` | Rainbow EasyPay 2.0 merchant PID | Yes |
+| `apiBase` | Upstream API base URL | Yes |
+| `merchantPrivateKey` | Merchant RSA private key; store only the real production credential | Yes |
+| `platformPublicKey` | Platform RSA public key used for verification | Yes |
+| `notifyUrl` | Asynchronous notification URL using the Sub2API EasyPay webhook | Yes |
+| `returnUrl` | Synchronous browser return URL | Yes |
+
+EasyPay V1 supports `alipay` and `wxpay`; V2 supports `alipay`, `wxpay`, and `qqpay`. QQ Pay works only when enabled for the upstream merchant. Never copy keys from a local SDK, test project, or documentation sample.
 
 ### Alipay (Direct)
 
@@ -207,7 +222,16 @@ When adding a provider, the system auto-generates callback URLs from your site d
 | **WeChat Pay (Direct)** | `https://your-domain.com/api/v1/payment/webhook/wxpay` |
 | **Stripe** | `https://your-domain.com/api/v1/payment/webhook/stripe` |
 
-> Replace `your-domain.com` with your actual domain. For EasyPay / Alipay / WeChat Pay, the callback URL is auto-filled when adding the provider — no manual configuration needed.
+> Replace `your-domain.com` with your actual domain. EasyPay V1 and V2 share `/api/v1/payment/webhook/easypay`; do not create a separate V2 callback route. EasyPay / Alipay / WeChat Pay callback URLs are auto-filled when adding the provider.
+
+### EasyPay V2 endpoints and security requirements
+
+- The upstream endpoints are `POST /api/pay/create`, `POST /api/pay/query`, `POST /api/pay/refund`, and `POST /api/pay/refundquery`.
+- Requests, responses, and callbacks use RSA-SHA256. Verify the callback signature first, then validate the amount, PID, and merchant order number before crediting an order.
+- Query, refund, and refund-query responses are also checked against the original order number, refund number, amount, and status; missing or inconsistent fields fail safely.
+- The allowed timestamp clock skew is 300 seconds; keep the deployment host synchronized to a reliable time source.
+- Return plain-text `success` only after the notification has been verified and processed successfully.
+- Refunds require a stable `out_refund_no`; reuse the same value when retrying the same refund to prevent duplicate refunds.
 
 ### Stripe Webhook Setup
 
@@ -252,7 +276,7 @@ User selects amount and payment method
        │
        ▼
   User completes payment
-  ├─ EasyPay     → QR code / H5 redirect
+  ├─ EasyPay     → V1 MD5 or V2 RSA-SHA256; Alipay / WeChat / QQ QR or redirect
   ├─ Alipay      → Desktop QR payload (Face-to-Face preferred, Website Pay fallback) / mobile Alipay redirect
   ├─ WeChat Pay  → Desktop Native QR / non-WeChat H5 / in-WeChat JSAPI
   └─ Stripe      → Payment Element (card/Alipay/WeChat/etc.)
@@ -315,7 +339,7 @@ If you previously used [Sub2ApiPay](https://github.com/touwaeriol/sub2apipay) as
 | Aspect | Sub2ApiPay | Built-in Payment |
 |--------|-----------|-----------------|
 | Deployment | Separate service (Next.js + PostgreSQL) | Built into Sub2API, no extra deployment |
-| Payment Methods | EasyPay, Alipay, WeChat, Stripe | Same |
+| Payment Methods | EasyPay, Alipay, WeChat, Stripe | Built-in EasyPay V1/V2, Alipay, WeChat, upstream-enabled QQ Pay, and Stripe |
 | Configuration | Environment variables + separate admin UI | Unified in Sub2API admin dashboard |
 | Top-up Integration | Via Admin API callback | Internal processing, more reliable |
 | Subscription Plans | Supported | Built in, with native single-group and standard shared-quota modes |

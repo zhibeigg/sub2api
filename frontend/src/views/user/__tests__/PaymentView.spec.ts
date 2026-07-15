@@ -447,6 +447,68 @@ describe('PaymentView payment recovery', () => {
 
     expect(wrapper.find('[data-test="method-selector"]').text()).toBe('ldc')
   })
+
+  it('keeps QQ Wallet on QR flow even when a client secret is present', async () => {
+    getCheckoutInfo.mockResolvedValue(checkoutInfoFixture({
+      methods: {
+        qqpay: {
+          daily_limit: 0,
+          daily_used: 0,
+          daily_remaining: 0,
+          single_min: 0,
+          single_max: 0,
+          fee_rate: 0,
+          available: true,
+        },
+      },
+    }))
+    createOrder.mockResolvedValue({
+      order_id: 889,
+      amount: 66,
+      pay_amount: 66,
+      fee_rate: 0,
+      expires_at: '2099-01-01T00:10:00.000Z',
+      payment_type: 'qqpay',
+      qr_code: 'https://pay.example.com/qq/qr-889',
+      client_secret: 'not-a-stripe-secret-for-qq',
+      out_trade_no: 'sub2_qq_889',
+    })
+
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          AmountInput: {
+            template: '<button data-test="set-amount" @click="$emit(\'update:modelValue\', 66)" />',
+          },
+          PaymentMethodSelector: {
+            props: ['selected'],
+            template: '<div data-test="method-selector">{{ selected }}</div>',
+          },
+          Teleport: true,
+          Transition: false,
+        },
+      },
+    })
+    await flushPromises()
+    await wrapper.get('[data-test="set-amount"]').trigger('click')
+    await flushPromises()
+
+    const submitButton = wrapper.findAll('button')
+      .find(button => button.text().includes('payment.createOrder'))
+    if (!submitButton) throw new Error('payment submit button not found')
+    await submitButton.trigger('click')
+    await flushPromises()
+
+    expect(createOrder).toHaveBeenCalledWith(expect.objectContaining({
+      payment_type: 'qqpay',
+      payment_source: 'hosted_redirect',
+    }))
+    expect(routerResolve).not.toHaveBeenCalled()
+    expect(showError).not.toHaveBeenCalled()
+    expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toContain('https://pay.example.com/qq/qr-889')
+    expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toContain('"paymentType":"qqpay"')
+  })
 })
 
 describe('PaymentView WeChat JSAPI flow', () => {

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"testing"
 
+	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +29,7 @@ func TestBuildPaymentOrderProviderSnapshot_ExcludesSensitiveConfig(t *testing.T)
 
 	snapshot := buildPaymentOrderProviderSnapshot(sel, CreateOrderRequest{})
 	require.Equal(t, map[string]any{
-		"schema_version":       2,
+		"schema_version":       3,
 		"provider_instance_id": "12",
 		"provider_key":         payment.TypeWxpay,
 		"payment_mode":         "popup",
@@ -104,7 +105,7 @@ func TestCreateOrderInTx_WritesProviderSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, strconv.FormatInt(instance.ID, 10), valueOrEmpty(order.ProviderInstanceID))
 	require.Equal(t, payment.TypeAlipay, valueOrEmpty(order.ProviderKey))
-	require.Equal(t, float64(2), order.ProviderSnapshot["schema_version"])
+	require.Equal(t, float64(3), order.ProviderSnapshot["schema_version"])
 	require.Equal(t, strconv.FormatInt(instance.ID, 10), order.ProviderSnapshot["provider_instance_id"])
 	require.Equal(t, payment.TypeAlipay, order.ProviderSnapshot["provider_key"])
 	require.Equal(t, "redirect", order.ProviderSnapshot["payment_mode"])
@@ -164,6 +165,7 @@ func TestBuildPaymentOrderProviderSnapshot_IncludesEasyPayMerchantIdentity(t *te
 	}, CreateOrderRequest{PaymentType: payment.TypeAlipay})
 
 	require.Equal(t, "easypay-merchant-66", snapshot["merchant_id"])
+	require.Equal(t, easyPayProtocolV1, snapshot["protocol_version"])
 	require.NotContains(t, snapshot, "pkey")
 }
 
@@ -189,6 +191,54 @@ func TestBuildPaymentOrderProviderSnapshot_IncludesProviderCurrency(t *testing.T
 	}, CreateOrderRequest{})
 	require.Equal(t, "USD", airwallexSnapshot["currency"])
 	require.Equal(t, "acct-78", airwallexSnapshot["merchant_id"])
+}
+
+func TestBuildPaymentOrderProviderSnapshot_IncludesEasyPayV2Protocol(t *testing.T) {
+	t.Parallel()
+
+	snapshot := buildPaymentOrderProviderSnapshot(&payment.InstanceSelection{
+		InstanceID:  "67",
+		ProviderKey: payment.TypeEasyPay,
+		Config: map[string]string{
+			"pid":             "easypay-v2-merchant",
+			"protocolVersion": "2",
+		},
+	}, CreateOrderRequest{PaymentType: payment.TypeQQPay})
+
+	require.Equal(t, "easypay-v2-merchant", snapshot["merchant_id"])
+	require.Equal(t, easyPayProtocolV2, snapshot["protocol_version"])
+}
+
+func TestValidateProviderSnapshotMetadata_EasyPayProtocol(t *testing.T) {
+	t.Parallel()
+
+	order := &dbent.PaymentOrder{ProviderSnapshot: map[string]any{
+		"schema_version":   3,
+		"provider_key":     payment.TypeEasyPay,
+		"merchant_id":      "pid-1",
+		"protocol_version": 2,
+	}}
+
+	require.NoError(t, validateProviderSnapshotMetadata(order, payment.TypeEasyPay, map[string]string{
+		"pid": "pid-1", "protocol_version": "2",
+	}))
+	require.ErrorContains(t, validateProviderSnapshotMetadata(order, payment.TypeEasyPay, map[string]string{
+		"pid": "pid-1", "protocol_version": "1",
+	}), "protocol_version mismatch")
+	require.ErrorContains(t, validateProviderSnapshotMetadata(order, payment.TypeEasyPay, map[string]string{
+		"pid": "pid-other", "protocol_version": "2",
+	}), "pid mismatch")
+}
+
+func TestValidateProviderSnapshotMetadata_EasyPayMissingProtocolMeansV1(t *testing.T) {
+	t.Parallel()
+
+	order := &dbent.PaymentOrder{ProviderSnapshot: map[string]any{
+		"schema_version": 2,
+		"provider_key":   payment.TypeEasyPay,
+		"merchant_id":    "pid-v1",
+	}}
+	require.NoError(t, validateProviderSnapshotMetadata(order, payment.TypeEasyPay, map[string]string{"pid": "pid-v1"}))
 }
 
 func valueOrEmpty(v *string) string {

@@ -220,8 +220,10 @@ func TestSettingHandler_UpdateSettings_PersistsPaymentVisibleMethodsAndAdvancedS
 		"promo_code_enabled":                                      true,
 		"payment_visible_method_alipay_source":                    "easypay",
 		"payment_visible_method_wxpay_source":                     "wxpay",
+		"payment_visible_method_qqpay_source":                     "easypay",
 		"payment_visible_method_alipay_enabled":                   true,
 		"payment_visible_method_wxpay_enabled":                    false,
+		"payment_visible_method_qqpay_enabled":                    true,
 		"openai_advanced_scheduler_enabled":                       true,
 		"openai_advanced_scheduler_subscription_priority_enabled": true,
 	}
@@ -238,8 +240,10 @@ func TestSettingHandler_UpdateSettings_PersistsPaymentVisibleMethodsAndAdvancedS
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, service.VisibleMethodSourceEasyPayAlipay, repo.values[service.SettingPaymentVisibleMethodAlipaySource])
 	require.Equal(t, service.VisibleMethodSourceOfficialWechat, repo.values[service.SettingPaymentVisibleMethodWxpaySource])
+	require.Equal(t, service.VisibleMethodSourceEasyPayQQPay, repo.values[service.SettingPaymentVisibleMethodQQPaySource])
 	require.Equal(t, "true", repo.values[service.SettingPaymentVisibleMethodAlipayEnabled])
 	require.Equal(t, "false", repo.values[service.SettingPaymentVisibleMethodWxpayEnabled])
+	require.Equal(t, "true", repo.values[service.SettingPaymentVisibleMethodQQPayEnabled])
 	require.Equal(t, "true", repo.values["openai_advanced_scheduler_enabled"])
 	require.Equal(t, "true", repo.values[service.SettingKeyOpenAIAdvancedSchedulerSubscriptionPriorityEnabled])
 
@@ -249,8 +253,10 @@ func TestSettingHandler_UpdateSettings_PersistsPaymentVisibleMethodsAndAdvancedS
 	require.True(t, ok)
 	require.Equal(t, service.VisibleMethodSourceEasyPayAlipay, data["payment_visible_method_alipay_source"])
 	require.Equal(t, service.VisibleMethodSourceOfficialWechat, data["payment_visible_method_wxpay_source"])
+	require.Equal(t, service.VisibleMethodSourceEasyPayQQPay, data["payment_visible_method_qqpay_source"])
 	require.Equal(t, true, data["payment_visible_method_alipay_enabled"])
 	require.Equal(t, false, data["payment_visible_method_wxpay_enabled"])
+	require.Equal(t, true, data["payment_visible_method_qqpay_enabled"])
 	require.Equal(t, true, data["openai_advanced_scheduler_enabled"])
 	require.Equal(t, true, data["openai_advanced_scheduler_subscription_priority_enabled"])
 }
@@ -508,4 +514,20 @@ func TestDiffSettings_IncludesAuthSourceDefaultsAndForceEmail(t *testing.T) {
 	require.Contains(t, changed, "auth_source_default_email_grant_on_signup")
 	require.Contains(t, changed, "auth_source_default_email_grant_on_first_bind")
 	require.Contains(t, changed, "force_email_on_third_party_signup")
+}
+
+func TestDiffSettings_IncludesQQPayVisibleMethodChanges(t *testing.T) {
+	changed := diffSettings(
+		&service.SystemSettings{},
+		&service.SystemSettings{
+			PaymentVisibleMethodQQPaySource:  service.VisibleMethodSourceEasyPayQQPay,
+			PaymentVisibleMethodQQPayEnabled: true,
+		},
+		&service.AuthSourceDefaultSettings{},
+		&service.AuthSourceDefaultSettings{},
+		UpdateSettingsRequest{},
+	)
+
+	require.Contains(t, changed, service.SettingPaymentVisibleMethodQQPaySource)
+	require.Contains(t, changed, service.SettingPaymentVisibleMethodQQPayEnabled)
 }

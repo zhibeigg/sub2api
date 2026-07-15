@@ -37,6 +37,7 @@ describe('getVisibleMethods', () => {
     const visible = getVisibleMethods({
       alipay_direct: methodLimit({ single_min: 5 }),
       wxpay: methodLimit({ single_max: 100 }),
+      qqpay: methodLimit({ fee_rate: 0.6 }),
       stripe: methodLimit({ fee_rate: 3 }),
       airwallex: methodLimit({ single_min: 10 }),
     })
@@ -44,6 +45,7 @@ describe('getVisibleMethods', () => {
     expect(visible).toEqual({
       alipay: methodLimit({ single_min: 5 }),
       wxpay: methodLimit({ single_max: 100 }),
+      qqpay: methodLimit({ fee_rate: 0.6 }),
       stripe: methodLimit({ fee_rate: 3 }),
       airwallex: methodLimit({ single_min: 10 }),
     })
@@ -158,6 +160,37 @@ describe('decidePaymentLaunch', () => {
     expect(decision.recovery.paymentMode).toBe('popup')
     expect(decision.recovery.outTradeNo).toBe('sub2_abc')
     expect(decision.recovery.resumeToken).toBe('resume-2')
+  })
+
+  it('supports QQ Wallet QR and hosted redirect flows without entering WeChat or Stripe branches', () => {
+    const qrDecision = decidePaymentLaunch(createOrderResult({
+      qr_code: 'https://pay.example.com/qq/qr',
+      client_secret: 'must-not-be-treated-as-stripe',
+      result_type: 'oauth_required',
+      oauth: { authorize_url: '/wechat/oauth' },
+    }), {
+      visibleMethod: 'qqpay',
+      orderType: 'balance',
+      isMobile: false,
+      stripeRouteUrl: '/payment/stripe?wrong=1',
+    })
+
+    expect(qrDecision.kind).toBe('qr_waiting')
+    expect(qrDecision.paymentState.paymentType).toBe('qqpay')
+    expect(qrDecision.stripeMethod).toBeUndefined()
+    expect(qrDecision.oauth).toBeUndefined()
+
+    const redirectDecision = decidePaymentLaunch(createOrderResult({
+      pay_url: 'https://pay.example.com/qq/cashier',
+      payment_mode: 'redirect',
+    }), {
+      visibleMethod: 'qqpay',
+      orderType: 'subscription',
+      isMobile: true,
+    })
+
+    expect(redirectDecision.kind).toBe('redirect_waiting')
+    expect(redirectDecision.paymentState.payUrl).toContain('/qq/cashier')
   })
 
   it('prefers redirect on mobile when both pay_url and qr_code are present', () => {
@@ -280,6 +313,21 @@ describe('buildCreateOrderPayload', () => {
       return_url: 'https://app.example.com/payment/result',
       is_mobile: true,
       payment_source: 'hosted_redirect',
+    })
+  })
+
+  it('keeps QQ Wallet as its own payment type and hosted redirect source', () => {
+    expect(buildCreateOrderPayload({
+      amount: 66,
+      paymentType: 'qqpay',
+      orderType: 'balance',
+      origin: 'https://app.example.com',
+      isMobile: true,
+      isWechatBrowser: true,
+    })).toMatchObject({
+      payment_type: 'qqpay',
+      payment_source: 'hosted_redirect',
+      is_mobile: true,
     })
   })
 

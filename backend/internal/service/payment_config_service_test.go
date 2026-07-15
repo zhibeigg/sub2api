@@ -102,22 +102,27 @@ func TestParsePaymentConfig(t *testing.T) {
 		if len(cfg.EnabledTypes) != 0 {
 			t.Fatalf("expected empty EnabledTypes, got %v", cfg.EnabledTypes)
 		}
+		if cfg.VisibleMethodQQPayEnabled || cfg.VisibleMethodQQPaySource != "" {
+			t.Fatalf("expected QQPay visible method disabled by default, got enabled=%v source=%q", cfg.VisibleMethodQQPayEnabled, cfg.VisibleMethodQQPaySource)
+		}
 	})
 
 	t.Run("all values populated", func(t *testing.T) {
 		t.Parallel()
 		vals := map[string]string{
-			SettingPaymentEnabled:      "true",
-			SettingMinRechargeAmount:   "5.00",
-			SettingMaxRechargeAmount:   "1000.00",
-			SettingDailyRechargeLimit:  "5000.00",
-			SettingOrderTimeoutMinutes: "15",
-			SettingMaxPendingOrders:    "5",
-			SettingEnabledPaymentTypes: "alipay,wxpay,stripe",
-			SettingBalancePayDisabled:  "true",
-			SettingLoadBalanceStrategy: "least_amount",
-			SettingProductNamePrefix:   "PRE",
-			SettingProductNameSuffix:   "SUF",
+			SettingPaymentEnabled:                   "true",
+			SettingMinRechargeAmount:                "5.00",
+			SettingMaxRechargeAmount:                "1000.00",
+			SettingDailyRechargeLimit:               "5000.00",
+			SettingOrderTimeoutMinutes:              "15",
+			SettingMaxPendingOrders:                 "5",
+			SettingEnabledPaymentTypes:              "alipay,wxpay,stripe",
+			SettingBalancePayDisabled:               "true",
+			SettingLoadBalanceStrategy:              "least_amount",
+			SettingProductNamePrefix:                "PRE",
+			SettingProductNameSuffix:                "SUF",
+			SettingPaymentVisibleMethodQQPaySource:  VisibleMethodSourceEasyPayQQPay,
+			SettingPaymentVisibleMethodQQPayEnabled: "true",
 		}
 		cfg := svc.parsePaymentConfig(vals)
 
@@ -156,6 +161,9 @@ func TestParsePaymentConfig(t *testing.T) {
 		}
 		if cfg.ProductNameSuffix != "SUF" {
 			t.Fatalf("ProductNameSuffix = %q, want %q", cfg.ProductNameSuffix, "SUF")
+		}
+		if !cfg.VisibleMethodQQPayEnabled || cfg.VisibleMethodQQPaySource != VisibleMethodSourceEasyPayQQPay {
+			t.Fatalf("QQPay visible method = enabled:%v source:%q", cfg.VisibleMethodQQPayEnabled, cfg.VisibleMethodQQPaySource)
 		}
 	})
 
@@ -224,6 +232,7 @@ func TestGetBasePaymentType(t *testing.T) {
 		expected string
 	}{
 		{payment.TypeEasyPay, payment.TypeEasyPay},
+		{payment.TypeQQPay, payment.TypeQQPay},
 		{payment.TypeStripe, payment.TypeStripe},
 		{payment.TypeCard, payment.TypeStripe},
 		{payment.TypeLink, payment.TypeStripe},
@@ -302,7 +311,7 @@ func TestBuildVisibleMethodSourceAvailability(t *testing.T) {
 
 	instances := []*dbent.PaymentProviderInstance{
 		{ProviderKey: payment.TypeAlipay, SupportedTypes: "alipay"},
-		{ProviderKey: payment.TypeEasyPay, SupportedTypes: "wxpay_direct, alipay"},
+		{ProviderKey: payment.TypeEasyPay, SupportedTypes: "wxpay_direct, alipay, qqpay"},
 		{ProviderKey: payment.TypeWxpay, SupportedTypes: "wxpay_direct"},
 	}
 
@@ -318,6 +327,9 @@ func TestBuildVisibleMethodSourceAvailability(t *testing.T) {
 	}
 	if !got[VisibleMethodSourceEasyPayWechat] {
 		t.Fatalf("expected %q to be available", VisibleMethodSourceEasyPayWechat)
+	}
+	if !got[VisibleMethodSourceEasyPayQQPay] {
+		t.Fatalf("expected %q to be available", VisibleMethodSourceEasyPayQQPay)
 	}
 }
 
@@ -359,6 +371,50 @@ func TestGetPaymentConfigKeepsStoredEnabledTypes(t *testing.T) {
 			t.Fatalf("EnabledTypes[%d] = %q, want %q (full=%v)", i, cfg.EnabledTypes[i], want[i], cfg.EnabledTypes)
 		}
 	}
+}
+
+func TestGetPaymentConfigAppliesQQPayVisibleMethodSettings(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	_, err := client.PaymentProviderInstance.Create().
+		SetProviderKey(payment.TypeEasyPay).
+		SetName("EasyPay QQPay").
+		SetConfig(`{"protocolVersion":"2"}`).
+		SetSupportedTypes(payment.TypeQQPay).
+		SetEnabled(true).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create easypay qqpay instance: %v", err)
+	}
+
+	svc := &PaymentConfigService{entClient: client, settingRepo: &paymentConfigSettingRepoStub{values: map[string]string{
+		SettingEnabledPaymentTypes:              "alipay",
+		SettingPaymentVisibleMethodQQPaySource:  VisibleMethodSourceEasyPayQQPay,
+		SettingPaymentVisibleMethodQQPayEnabled: "true",
+	}}}
+	cfg, err := svc.GetPaymentConfig(ctx)
+	if err != nil {
+		t.Fatalf("GetPaymentConfig returned error: %v", err)
+	}
+	if !cfg.VisibleMethodQQPayEnabled || cfg.VisibleMethodQQPaySource != VisibleMethodSourceEasyPayQQPay {
+		t.Fatalf("QQPay settings not returned: %+v", cfg)
+	}
+	want := []string{payment.TypeAlipay, payment.TypeQQPay}
+	if !equalStringSlices(cfg.EnabledTypes, want) {
+		t.Fatalf("EnabledTypes = %v, want %v", cfg.EnabledTypes, want)
+	}
+}
+
+func equalStringSlices(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func newPaymentConfigServiceTestClient(t *testing.T) *dbent.Client {
@@ -425,11 +481,14 @@ func TestUpdatePaymentConfig_PersistsVisibleMethodRouting(t *testing.T) {
 
 	alipayEnabled := true
 	wxpayEnabled := false
+	qqpayEnabled := true
 	err := svc.UpdatePaymentConfig(context.Background(), UpdatePaymentConfigRequest{
 		VisibleMethodAlipayEnabled: &alipayEnabled,
 		VisibleMethodAlipaySource:  paymentConfigStrPtr(VisibleMethodSourceEasyPayAlipay),
 		VisibleMethodWxpayEnabled:  &wxpayEnabled,
 		VisibleMethodWxpaySource:   paymentConfigStrPtr(VisibleMethodSourceOfficialWechat),
+		VisibleMethodQQPayEnabled:  &qqpayEnabled,
+		VisibleMethodQQPaySource:   paymentConfigStrPtr(VisibleMethodSourceEasyPayQQPay),
 	})
 	if err != nil {
 		t.Fatalf("UpdatePaymentConfig returned error: %v", err)
@@ -446,6 +505,12 @@ func TestUpdatePaymentConfig_PersistsVisibleMethodRouting(t *testing.T) {
 	}
 	if repo.values[SettingPaymentVisibleMethodWxpaySource] != VisibleMethodSourceOfficialWechat {
 		t.Fatalf("wxpay source = %q, want %q", repo.values[SettingPaymentVisibleMethodWxpaySource], VisibleMethodSourceOfficialWechat)
+	}
+	if repo.values[SettingPaymentVisibleMethodQQPayEnabled] != "true" {
+		t.Fatalf("qqpay enabled = %q, want true", repo.values[SettingPaymentVisibleMethodQQPayEnabled])
+	}
+	if repo.values[SettingPaymentVisibleMethodQQPaySource] != VisibleMethodSourceEasyPayQQPay {
+		t.Fatalf("qqpay source = %q, want %q", repo.values[SettingPaymentVisibleMethodQQPaySource], VisibleMethodSourceEasyPayQQPay)
 	}
 }
 

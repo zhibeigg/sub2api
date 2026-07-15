@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  EASYPAY_PROTOCOL_V1,
+  EASYPAY_PROTOCOL_V2,
   PAYMENT_CURRENCY_OPTIONS,
   PROVIDER_CONFIG_FIELDS,
+  getEasyPayProtocolVersion,
+  getProviderConfigFields,
+  getProviderSupportedTypes,
   isBuiltInAlipayMethod,
+  isBuiltInQqpayMethod,
   isBuiltInWxpayMethod,
   parseEasyPayCustomMethods,
   serializeEasyPayCustomMethods,
@@ -58,6 +64,31 @@ describe('PROVIDER_CONFIG_FIELDS.stripe', () => {
   })
 })
 
+describe('EasyPay protocol config', () => {
+  it('treats historical config without protocolVersion as V1', () => {
+    expect(getEasyPayProtocolVersion({ pid: '1001' })).toBe(EASYPAY_PROTOCOL_V1)
+  })
+
+  it('uses V2 credentials and QQ Wallet as a built-in method', () => {
+    const fields = getProviderConfigFields('easypay', EASYPAY_PROTOCOL_V2)
+
+    expect(fields.some(field => field.key === 'merchantPrivateKey')).toBe(true)
+    expect(fields.some(field => field.key === 'platformPublicKey')).toBe(true)
+    expect(fields.some(field => field.key === 'pkey')).toBe(false)
+    expect(getProviderSupportedTypes('easypay', EASYPAY_PROTOCOL_V2)).toEqual(['alipay', 'wxpay', 'qqpay'])
+  })
+
+  it('keeps V1 pkey and channel IDs without adding QQ Wallet as built-in', () => {
+    const fields = getProviderConfigFields('easypay', EASYPAY_PROTOCOL_V1)
+
+    expect(fields.some(field => field.key === 'pkey')).toBe(true)
+    expect(fields.some(field => field.key === 'cidAlipay')).toBe(true)
+    expect(fields.some(field => field.key === 'cidWxpay')).toBe(true)
+    expect(fields.some(field => field.key === 'merchantPrivateKey')).toBe(false)
+    expect(getProviderSupportedTypes('easypay', EASYPAY_PROTOCOL_V1)).toEqual(['alipay', 'wxpay'])
+  })
+})
+
 describe('EasyPay custom methods config', () => {
   it('parses customMethods from the JSON string stored in provider config', () => {
     expect(parseEasyPayCustomMethods(
@@ -91,5 +122,8 @@ describe('built-in payment method helpers', () => {
     expect(isBuiltInWxpayMethod('wxpay')).toBe(true)
     expect(isBuiltInWxpayMethod('wxpay_direct')).toBe(true)
     expect(isBuiltInWxpayMethod('card_wxpay')).toBe(false)
+
+    expect(isBuiltInQqpayMethod('qqpay')).toBe(true)
+    expect(isBuiltInQqpayMethod('easypay_qqpay')).toBe(false)
   })
 })

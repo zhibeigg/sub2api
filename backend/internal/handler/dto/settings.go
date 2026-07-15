@@ -211,8 +211,10 @@ type SystemSettings struct {
 	// Payment visible method routing
 	PaymentVisibleMethodAlipaySource  string `json:"payment_visible_method_alipay_source"`
 	PaymentVisibleMethodWxpaySource   string `json:"payment_visible_method_wxpay_source"`
+	PaymentVisibleMethodQQPaySource   string `json:"payment_visible_method_qqpay_source"`
 	PaymentVisibleMethodAlipayEnabled bool   `json:"payment_visible_method_alipay_enabled"`
 	PaymentVisibleMethodWxpayEnabled  bool   `json:"payment_visible_method_wxpay_enabled"`
+	PaymentVisibleMethodQQPayEnabled  bool   `json:"payment_visible_method_qqpay_enabled"`
 
 	// OpenAI account scheduling
 	OpenAIAdvancedSchedulerEnabled                         bool   `json:"openai_advanced_scheduler_enabled"`

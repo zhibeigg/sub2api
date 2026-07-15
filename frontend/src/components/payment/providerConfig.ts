@@ -27,6 +27,16 @@ export interface EasyPayCustomMethod {
   displayName: string
 }
 
+export type EasyPayProtocolVersion = '1' | '2'
+
+export const EASYPAY_PROTOCOL_V1: EasyPayProtocolVersion = '1'
+export const EASYPAY_PROTOCOL_V2: EasyPayProtocolVersion = '2'
+
+export const EASYPAY_PROTOCOL_OPTIONS: TypeOption[] = [
+  { value: EASYPAY_PROTOCOL_V1, label: 'V1 / MD5' },
+  { value: EASYPAY_PROTOCOL_V2, label: 'V2 / RSA-SHA256' },
+]
+
 /** Callback URL paths for a provider. */
 export interface CallbackPaths {
   notifyUrl?: string
@@ -44,11 +54,13 @@ export const PROVIDER_SUPPORTED_TYPES: Record<string, string[]> = {
   airwallex: ['airwallex'],
 }
 
+export const EASYPAY_V2_SUPPORTED_TYPES = ['alipay', 'wxpay', 'qqpay'] as const
+
 /** Available payment modes for EasyPay providers. */
 export const EASYPAY_PAYMENT_MODES = ['qrcode', 'popup'] as const
 
 /** Fixed display order for user-facing payment methods */
-export const METHOD_ORDER = ['alipay', 'alipay_direct', 'wxpay', 'wxpay_direct', 'stripe', 'airwallex'] as const
+export const METHOD_ORDER = ['alipay', 'alipay_direct', 'wxpay', 'wxpay_direct', 'qqpay', 'stripe', 'airwallex'] as const
 
 export function isBuiltInAlipayMethod(type: string): boolean {
   return type === 'alipay' || type === 'alipay_direct'
@@ -56,6 +68,10 @@ export function isBuiltInAlipayMethod(type: string): boolean {
 
 export function isBuiltInWxpayMethod(type: string): boolean {
   return type === 'wxpay' || type === 'wxpay_direct'
+}
+
+export function isBuiltInQqpayMethod(type: string): boolean {
+  return type === 'qqpay'
 }
 
 /** Payment mode constants */
@@ -126,11 +142,11 @@ export const PROVIDER_CALLBACK_PATHS: Record<string, CallbackPaths> = {
 /** Per-provider config fields (excludes notifyUrl/returnUrl which are handled separately). */
 export const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
   easypay: [
+    { key: 'protocolVersion', label: '', sensitive: false, defaultValue: EASYPAY_PROTOCOL_V2, options: EASYPAY_PROTOCOL_OPTIONS },
     { key: 'pid', label: 'PID', sensitive: false },
-    { key: 'pkey', label: 'PKey', sensitive: true },
     { key: 'apiBase', label: '', sensitive: false },
-    { key: 'cidAlipay', label: '', sensitive: false, optional: true },
-    { key: 'cidWxpay', label: '', sensitive: false, optional: true },
+    { key: 'merchantPrivateKey', label: '', sensitive: true },
+    { key: 'platformPublicKey', label: '', sensitive: true },
   ],
   alipay: [
     { key: 'appId', label: 'App ID', sensitive: false },
@@ -165,6 +181,66 @@ export const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
 
 // --- Helpers ---
 
+export function normalizeEasyPayProtocolVersion(
+  value: unknown,
+  fallback: EasyPayProtocolVersion = EASYPAY_PROTOCOL_V1,
+): EasyPayProtocolVersion {
+  const normalized = String(value ?? '').trim()
+  if (normalized === EASYPAY_PROTOCOL_V1 || normalized === EASYPAY_PROTOCOL_V2) {
+    return normalized
+  }
+  return fallback
+}
+
+export function getEasyPayProtocolVersion(
+  config: Record<string, string> | null | undefined,
+  fallback: EasyPayProtocolVersion = EASYPAY_PROTOCOL_V1,
+): EasyPayProtocolVersion {
+  return normalizeEasyPayProtocolVersion(config?.protocolVersion, fallback)
+}
+
+export function getProviderSupportedTypes(
+  providerKey: string,
+  protocolVersion?: unknown,
+): string[] {
+  if (providerKey === 'easypay') {
+    const version = normalizeEasyPayProtocolVersion(protocolVersion, EASYPAY_PROTOCOL_V1)
+    return version === EASYPAY_PROTOCOL_V2
+      ? [...EASYPAY_V2_SUPPORTED_TYPES]
+      : [...PROVIDER_SUPPORTED_TYPES.easypay]
+  }
+  return [...(PROVIDER_SUPPORTED_TYPES[providerKey] || [])]
+}
+
+export function getProviderConfigFields(
+  providerKey: string,
+  protocolVersion?: unknown,
+): ConfigFieldDef[] {
+  if (providerKey !== 'easypay') {
+    return PROVIDER_CONFIG_FIELDS[providerKey] || []
+  }
+
+  const version = normalizeEasyPayProtocolVersion(protocolVersion, EASYPAY_PROTOCOL_V2)
+  const commonFields: ConfigFieldDef[] = [
+    { key: 'protocolVersion', label: '', sensitive: false, defaultValue: version, options: EASYPAY_PROTOCOL_OPTIONS },
+    { key: 'pid', label: 'PID', sensitive: false },
+    { key: 'apiBase', label: '', sensitive: false },
+  ]
+  if (version === EASYPAY_PROTOCOL_V1) {
+    return [
+      ...commonFields,
+      { key: 'pkey', label: 'PKey', sensitive: true },
+      { key: 'cidAlipay', label: '', sensitive: false, optional: true },
+      { key: 'cidWxpay', label: '', sensitive: false, optional: true },
+    ]
+  }
+  return [
+    ...commonFields,
+    { key: 'merchantPrivateKey', label: '', sensitive: true },
+    { key: 'platformPublicKey', label: '', sensitive: true },
+  ]
+}
+
 /** Resolve type label for display. */
 export function resolveTypeLabel(
   typeVal: string,
@@ -180,8 +256,9 @@ export function getAvailableTypes(
   providerKey: string,
   allTypes: TypeOption[],
   redirectLabel: string,
+  protocolVersion?: unknown,
 ): TypeOption[] {
-  const types = PROVIDER_SUPPORTED_TYPES[providerKey] || []
+  const types = getProviderSupportedTypes(providerKey, protocolVersion)
   return types.map(t => resolveTypeLabel(t, providerKey, allTypes, redirectLabel))
 }
 

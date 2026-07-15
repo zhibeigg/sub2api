@@ -289,6 +289,7 @@ import {
   clearPaymentRecoverySnapshot,
   decidePaymentLaunch,
   getVisibleMethods,
+  isStripeCompatibleVisibleMethod,
   normalizeVisibleMethod,
   readPaymentRecoverySnapshot,
   type PaymentRecoverySnapshot,
@@ -742,6 +743,7 @@ const paymentButtonClass = computed(() => {
   if (!m) return 'btn-primary'
   if (isBuiltInAlipayMethod(m)) return 'btn-alipay'
   if (isBuiltInWxpayMethod(m)) return 'btn-wxpay'
+  if (m === 'qqpay') return 'btn-primary'
   if (m === 'stripe') return 'btn-stripe'
   if (m === 'airwallex') return 'btn-airwallex'
   return 'btn-primary'
@@ -863,10 +865,11 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
     const visibleMethod = normalizeVisibleMethod(requestType) || requestType
     // When user clicks the dedicated Stripe button, leave method blank so the
     // landing page renders Stripe's full Payment Element (card/link/alipay/wxpay).
-    const stripeMethod = visibleMethod === 'stripe'
+    const stripeCompatible = isStripeCompatibleVisibleMethod(visibleMethod)
+    const stripeMethod = !stripeCompatible || visibleMethod === 'stripe'
       ? ''
       : visibleMethod === 'wxpay' ? 'wechat_pay' : 'alipay'
-    const stripeRouteUrl = result.client_secret && visibleMethod !== 'airwallex'
+    const stripeRouteUrl = result.client_secret && stripeCompatible
       ? router.resolve({
         path: '/payment/stripe',
         query: {

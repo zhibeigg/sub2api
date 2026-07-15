@@ -445,6 +445,7 @@ export default {
       easypay: 'EasyPay',
       alipay: 'Alipay',
       wxpay: 'WeChat Pay',
+      qqpay: 'QQ Wallet',
       stripe: 'Stripe',
       airwallex: 'Airwallex',
       card: 'Card',

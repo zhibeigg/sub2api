@@ -222,8 +222,10 @@ type SystemSettings struct {
 	// Payment visible method routing
 	PaymentVisibleMethodAlipaySource  string
 	PaymentVisibleMethodWxpaySource   string
+	PaymentVisibleMethodQQPaySource   string
 	PaymentVisibleMethodAlipayEnabled bool
 	PaymentVisibleMethodWxpayEnabled  bool
+	PaymentVisibleMethodQQPayEnabled  bool
 
 	// OpenAI 账号调度
 	OpenAIAdvancedSchedulerEnabled                         bool

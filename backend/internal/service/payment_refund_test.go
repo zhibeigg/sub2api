@@ -187,6 +187,55 @@ func TestGwRefundRejectsAlipayMerchantIdentitySnapshotMismatch(t *testing.T) {
 	require.ErrorContains(t, err, "alipay app_id mismatch")
 }
 
+func TestGwRefundRejectsEasyPayResponseMetadataMismatch(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	order := createEasyPayRefundOrderForTest(t, ctx, client, "refund-easypay-metadata", OrderStatusRefunding)
+
+	svc := &PaymentService{entClient: client, loadBalancer: newWebhookProviderTestLoadBalancer(client)}
+	restore := replacePaymentProviderFactoryForTest(t, &easyPayRefundProviderTestDouble{
+		refundResponse: &payment.RefundResponse{
+			Status: payment.ProviderStatusSuccess,
+			Metadata: map[string]string{
+				"pid":              "pid-other",
+				"protocol_version": "2",
+			},
+		},
+	})
+	defer restore()
+
+	_, err := svc.gwRefund(ctx, &RefundPlan{
+		OrderID:       order.ID,
+		Order:         order,
+		RefundAmount:  order.Amount,
+		GatewayAmount: order.PayAmount,
+		Reason:        "metadata mismatch",
+	})
+	require.ErrorContains(t, err, "easypay pid mismatch")
+}
+
+func TestQueryAndFinalizeRefundRejectsEasyPayProtocolMismatch(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	order := createEasyPayRefundOrderForTest(t, ctx, client, "query-easypay-protocol", OrderStatusRefundPending)
+
+	svc := &PaymentService{entClient: client, loadBalancer: newWebhookProviderTestLoadBalancer(client)}
+	restore := replacePaymentProviderFactoryForTest(t, &easyPayRefundProviderTestDouble{
+		refundResponse: &payment.RefundResponse{
+			Status: payment.ProviderStatusSuccess,
+			Metadata: map[string]string{
+				"pid":              "pid-expected",
+				"protocol_version": "1",
+			},
+		},
+	})
+	defer restore()
+
+	result, err := svc.QueryAndFinalizeRefund(ctx, order.ID)
+	require.Nil(t, result)
+	require.ErrorContains(t, err, "easypay protocol_version mismatch")
+}
+
 func TestCalculateGatewayRefundAmountUsesCurrencyPrecision(t *testing.T) {
 	require.InDelta(t, 6.173, calculateGatewayRefundAmount(100, 12.345, 50, "KWD"), 1e-12)
 	require.InDelta(t, 12.345, calculateGatewayRefundAmount(100, 12.345, 100, "KWD"), 1e-12)
@@ -470,6 +519,69 @@ func createPendingRefundOrderForTest(t *testing.T, ctx context.Context, client *
 	return order
 }
 
+func createEasyPayRefundOrderForTest(t *testing.T, ctx context.Context, client *dbent.Client, suffix, status string) *dbent.PaymentOrder {
+	t.Helper()
+
+	user, err := client.User.Create().
+		SetEmail(suffix + "@example.com").
+		SetPasswordHash("hash").
+		SetUsername(suffix).
+		Save(ctx)
+	require.NoError(t, err)
+
+	inst, err := client.PaymentProviderInstance.Create().
+		SetProviderKey(payment.TypeEasyPay).
+		SetName(suffix + "-provider").
+		SetConfig(`{"pid":"pid-expected","protocolVersion":"2"}`).
+		SetSupportedTypes("qqpay").
+		SetEnabled(true).
+		SetRefundEnabled(true).
+		Save(ctx)
+	require.NoError(t, err)
+
+	order, err := client.PaymentOrder.Create().
+		SetUserID(user.ID).
+		SetUserEmail(user.Email).
+		SetUserName(user.Username).
+		SetAmount(100).
+		SetPayAmount(100).
+		SetFeeRate(0).
+		SetRechargeCode("REFUND-" + suffix).
+		SetOutTradeNo("sub2_" + suffix).
+		SetPaymentType(payment.TypeQQPay).
+		SetPaymentTradeNo("ep_" + suffix).
+		SetOrderType(payment.OrderTypeBalance).
+		SetStatus(status).
+		SetRefundAmount(100).
+		SetRefundReason("pending refund").
+		SetExpiresAt(time.Now().Add(time.Hour)).
+		SetPaidAt(time.Now()).
+		SetClientIP("127.0.0.1").
+		SetSrcHost("api.example.com").
+		SetProviderKey(payment.TypeEasyPay).
+		SetProviderInstanceID(strconv.FormatInt(inst.ID, 10)).
+		SetProviderSnapshot(map[string]any{
+			"schema_version":   3,
+			"provider_key":     payment.TypeEasyPay,
+			"instance_id":      strconv.FormatInt(inst.ID, 10),
+			"merchant_id":      "pid-expected",
+			"protocol_version": 2,
+		}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	if status == OrderStatusRefundPending {
+		_, err = client.PaymentAuditLog.Create().
+			SetOrderID(strconv.FormatInt(order.ID, 10)).
+			SetAction("REFUND_PENDING").
+			SetOperator("admin").
+			SetDetail(`{"refundID":"rf_easypay","deductionRollbackOK":true}`).
+			Save(ctx)
+		require.NoError(t, err)
+	}
+	return order
+}
+
 func replacePaymentProviderFactoryForTest(t *testing.T, prov payment.Provider) func() {
 	t.Helper()
 	original := createPaymentProviderFromInstance
@@ -507,5 +619,31 @@ type refundQueryProviderTestDouble struct {
 }
 
 func (p *refundQueryProviderTestDouble) QueryRefund(context.Context, payment.RefundQueryRequest) (*payment.RefundResponse, error) {
+	return p.refundResponse, nil
+}
+
+type easyPayRefundProviderTestDouble struct {
+	refundProviderTestDouble
+	refundResponse *payment.RefundResponse
+}
+
+func (*easyPayRefundProviderTestDouble) ProviderKey() string { return payment.TypeEasyPay }
+
+func (*easyPayRefundProviderTestDouble) SupportedTypes() []payment.PaymentType {
+	return []payment.PaymentType{payment.TypeQQPay}
+}
+
+func (*easyPayRefundProviderTestDouble) MerchantIdentityMetadata() map[string]string {
+	return map[string]string{
+		"pid":              "pid-expected",
+		"protocol_version": "2",
+	}
+}
+
+func (p *easyPayRefundProviderTestDouble) Refund(context.Context, payment.RefundRequest) (*payment.RefundResponse, error) {
+	return p.refundResponse, nil
+}
+
+func (p *easyPayRefundProviderTestDouble) QueryRefund(context.Context, payment.RefundQueryRequest) (*payment.RefundResponse, error) {
 	return p.refundResponse, nil
 }

@@ -48,9 +48,13 @@ type easyPayCustomMethod struct {
 // NewEasyPay creates a new EasyPay provider.
 // config keys: pid, pkey, apiBase, notifyUrl, returnUrl, cid, cidAlipay, cidWxpay
 func NewEasyPay(instanceID string, config map[string]string) (*EasyPay, error) {
+	protocolVersion := strings.TrimSpace(config["protocolVersion"])
+	if protocolVersion != "" && protocolVersion != "1" {
+		return nil, newProviderConfigError(payment.TypeEasyPay, "protocolVersion", "must be 1 for the MD5 provider", nil)
+	}
 	for _, k := range []string{"pid", "pkey", "apiBase", "notifyUrl", "returnUrl"} {
 		if strings.TrimSpace(config[k]) == "" {
-			return nil, fmt.Errorf("easypay config missing required key: %s", k)
+			return nil, newProviderConfigError(payment.TypeEasyPay, k, "is required", nil)
 		}
 	}
 	cfg := make(map[string]string, len(config))
@@ -118,7 +122,10 @@ func (e *EasyPay) MerchantIdentityMetadata() map[string]string {
 	if pid == "" {
 		return nil
 	}
-	return map[string]string{"pid": pid}
+	return map[string]string{
+		"pid":              pid,
+		"protocol_version": "1",
+	}
 }
 
 func (e *EasyPay) CreatePayment(ctx context.Context, req payment.CreatePaymentRequest) (*payment.CreatePaymentResponse, error) {
@@ -377,7 +384,11 @@ func (e *EasyPay) Refund(ctx context.Context, req payment.RefundRequest) (*payme
 			}
 			return nil, err
 		}
-		return &payment.RefundResponse{RefundID: attempt.refundID, Status: payment.ProviderStatusSuccess}, nil
+		return &payment.RefundResponse{
+			RefundID: attempt.refundID,
+			Status:   payment.ProviderStatusSuccess,
+			Metadata: e.MerchantIdentityMetadata(),
+		}, nil
 	}
 	return nil, firstErr
 }

@@ -437,11 +437,17 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.PaymentVisibleMethodWxpaySource != after.PaymentVisibleMethodWxpaySource {
 		changed = append(changed, "payment_visible_method_wxpay_source")
 	}
+	if before.PaymentVisibleMethodQQPaySource != after.PaymentVisibleMethodQQPaySource {
+		changed = append(changed, "payment_visible_method_qqpay_source")
+	}
 	if before.PaymentVisibleMethodAlipayEnabled != after.PaymentVisibleMethodAlipayEnabled {
 		changed = append(changed, "payment_visible_method_alipay_enabled")
 	}
 	if before.PaymentVisibleMethodWxpayEnabled != after.PaymentVisibleMethodWxpayEnabled {
 		changed = append(changed, "payment_visible_method_wxpay_enabled")
+	}
+	if before.PaymentVisibleMethodQQPayEnabled != after.PaymentVisibleMethodQQPayEnabled {
+		changed = append(changed, "payment_visible_method_qqpay_enabled")
 	}
 	if before.OpenAIAdvancedSchedulerEnabled != after.OpenAIAdvancedSchedulerEnabled {
 		changed = append(changed, "openai_advanced_scheduler_enabled")

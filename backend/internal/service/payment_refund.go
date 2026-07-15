@@ -356,6 +356,11 @@ func (s *PaymentService) gwRefund(ctx context.Context, p *RefundPlan) (*payment.
 		Reason:  p.Reason,
 	})
 	finishProviderCall()
+	if prov.ProviderKey() == payment.TypeEasyPay && resp != nil {
+		if metadataErr := validateProviderSnapshotMetadata(p.Order, prov.ProviderKey(), resp.Metadata); metadataErr != nil {
+			return nil, metadataErr
+		}
+	}
 	if err != nil {
 		if resp != nil && strings.TrimSpace(resp.Status) == payment.ProviderStatusPending {
 			return resp, nil
@@ -418,6 +423,9 @@ func (s *PaymentService) QueryAndFinalizeRefund(ctx context.Context, oid int64) 
 	if !ok {
 		return nil, infraerrors.BadRequest("REFUND_QUERY_UNSUPPORTED", "this payment provider does not support refund status query; please verify manually")
 	}
+	if err := validateProviderSnapshotMetadata(o, prov.ProviderKey(), providerMerchantIdentityMetadata(prov)); err != nil {
+		return nil, err
+	}
 
 	pendingDetail := s.latestRefundPendingDetail(ctx, oid)
 	finishProviderCall := servertiming.ObserveDependency(ctx, "payment")
@@ -430,6 +438,11 @@ func (s *PaymentService) QueryAndFinalizeRefund(ctx context.Context, oid int64) 
 	finishProviderCall()
 	if err != nil {
 		return nil, fmt.Errorf("query refund: %w", err)
+	}
+	if prov.ProviderKey() == payment.TypeEasyPay && resp != nil {
+		if metadataErr := validateProviderSnapshotMetadata(o, prov.ProviderKey(), resp.Metadata); metadataErr != nil {
+			return nil, metadataErr
+		}
 	}
 	if err := validateRefundProviderResponse(resp); err != nil {
 		return s.finalizeRefundFailed(ctx, o, err)

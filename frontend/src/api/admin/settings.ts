@@ -80,13 +80,14 @@ export type AuthSourceDefaultsState = Record<
   AuthSourceType,
   AuthSourceDefaultsValue
 >;
-export type PaymentVisibleMethod = "alipay" | "wxpay";
+export type PaymentVisibleMethod = "alipay" | "wxpay" | "qqpay";
 export type PaymentVisibleMethodSource =
   | ""
   | "official_alipay"
   | "easypay_alipay"
   | "official_wxpay"
-  | "easypay_wxpay";
+  | "easypay_wxpay"
+  | "easypay_qqpay";
 export type WeChatConnectMode = "open" | "mp" | "mobile";
 
 export interface PaymentVisibleMethodSourceOption {
@@ -142,6 +143,14 @@ const PAYMENT_VISIBLE_METHOD_SOURCE_OPTIONS: Record<
       labelEn: "EasyPay WeChat Pay",
     },
   ],
+  qqpay: [
+    { value: "", labelZh: "未配置", labelEn: "Not configured" },
+    {
+      value: "easypay_qqpay",
+      labelZh: "易支付 QQ 钱包",
+      labelEn: "EasyPay QQ Wallet",
+    },
+  ],
 };
 const PAYMENT_VISIBLE_METHOD_SOURCE_ALIASES: Record<
   PaymentVisibleMethod,
@@ -163,6 +172,11 @@ const PAYMENT_VISIBLE_METHOD_SOURCE_ALIASES: Record<
     official: "official_wxpay",
     easypay_wxpay: "easypay_wxpay",
     easypay: "easypay_wxpay",
+  },
+  qqpay: {
+    qqpay: "easypay_qqpay",
+    easypay_qqpay: "easypay_qqpay",
+    easypay: "easypay_qqpay",
   },
 };
 const WECHAT_CONNECT_MODE_OPTIONS: WeChatConnectModeOption[] = [
@@ -612,8 +626,10 @@ export interface SystemSettings {
   payment_alipay_force_qrcode?: boolean;
   payment_visible_method_alipay_source?: string;
   payment_visible_method_wxpay_source?: string;
+  payment_visible_method_qqpay_source?: string;
   payment_visible_method_alipay_enabled?: boolean;
   payment_visible_method_wxpay_enabled?: boolean;
+  payment_visible_method_qqpay_enabled?: boolean;
   openai_advanced_scheduler_enabled?: boolean;
   openai_advanced_scheduler_sticky_weighted_enabled?: boolean;
   openai_advanced_scheduler_subscription_priority_enabled?: boolean;
@@ -891,8 +907,10 @@ export interface UpdateSettingsRequest {
   payment_alipay_force_qrcode?: boolean;
   payment_visible_method_alipay_source?: string;
   payment_visible_method_wxpay_source?: string;
+  payment_visible_method_qqpay_source?: string;
   payment_visible_method_alipay_enabled?: boolean;
   payment_visible_method_wxpay_enabled?: boolean;
+  payment_visible_method_qqpay_enabled?: boolean;
   openai_advanced_scheduler_enabled?: boolean;
   openai_advanced_scheduler_sticky_weighted_enabled?: boolean;
   openai_advanced_scheduler_subscription_priority_enabled?: boolean;

@@ -56,6 +56,8 @@ type PaymentConfig struct {
 	OrderTimeoutMin           int      `json:"order_timeout_minutes"`
 	MaxPendingOrders          int      `json:"max_pending_orders"`
 	EnabledTypes              []string `json:"enabled_payment_types"`
+	VisibleMethodQQPaySource  string   `json:"payment_visible_method_qqpay_source"`
+	VisibleMethodQQPayEnabled bool     `json:"payment_visible_method_qqpay_enabled"`
 	BalanceDisabled           bool     `json:"balance_disabled"`
 	SubscriptionDisabled      bool     `json:"subscription_disabled"`
 	BalanceRechargeMultiplier float64  `json:"balance_recharge_multiplier"`
@@ -112,8 +114,10 @@ type UpdatePaymentConfigRequest struct {
 
 	VisibleMethodAlipaySource  *string `json:"payment_visible_method_alipay_source"`
 	VisibleMethodWxpaySource   *string `json:"payment_visible_method_wxpay_source"`
+	VisibleMethodQQPaySource   *string `json:"payment_visible_method_qqpay_source"`
 	VisibleMethodAlipayEnabled *bool   `json:"payment_visible_method_alipay_enabled"`
 	VisibleMethodWxpayEnabled  *bool   `json:"payment_visible_method_wxpay_enabled"`
+	VisibleMethodQQPayEnabled  *bool   `json:"payment_visible_method_qqpay_enabled"`
 }
 
 // MethodLimits holds per-payment-type limits.
@@ -233,12 +237,21 @@ func (s *PaymentConfigService) GetPaymentConfig(ctx context.Context) (*PaymentCo
 		SettingAlipayForceQRCode,
 		SettingPaymentVisibleMethodAlipayEnabled, SettingPaymentVisibleMethodAlipaySource,
 		SettingPaymentVisibleMethodWxpayEnabled, SettingPaymentVisibleMethodWxpaySource,
+		SettingPaymentVisibleMethodQQPayEnabled, SettingPaymentVisibleMethodQQPaySource,
 	}
 	vals, err := s.settingRepo.GetMultiple(ctx, keys)
 	if err != nil {
 		return nil, fmt.Errorf("get payment config settings: %w", err)
 	}
 	cfg := s.parsePaymentConfig(vals)
+	if s.entClient != nil {
+		instances, queryErr := s.entClient.PaymentProviderInstance.Query().
+			Where(paymentproviderinstance.EnabledEQ(true)).All(ctx)
+		if queryErr != nil {
+			return nil, fmt.Errorf("query enabled payment providers: %w", queryErr)
+		}
+		cfg.EnabledTypes = applyQQPayVisibleMethodRoutingToEnabledTypes(cfg.EnabledTypes, vals, buildVisibleMethodSourceAvailability(instances))
+	}
 	// Load Stripe publishable key from the first enabled Stripe provider instance
 	cfg.StripePublishableKey = s.getStripePublishableKey(ctx)
 	return cfg, nil
@@ -252,6 +265,8 @@ func (s *PaymentConfigService) parsePaymentConfig(vals map[string]string) *Payme
 		DailyLimit:                pcParseFloat(vals[SettingDailyRechargeLimit], 0),
 		OrderTimeoutMin:           pcParseInt(vals[SettingOrderTimeoutMinutes], defaultOrderTimeoutMin),
 		MaxPendingOrders:          pcParseInt(vals[SettingMaxPendingOrders], defaultMaxPendingOrders),
+		VisibleMethodQQPaySource:  NormalizeVisibleMethodSource(payment.TypeQQPay, vals[SettingPaymentVisibleMethodQQPaySource]),
+		VisibleMethodQQPayEnabled: vals[SettingPaymentVisibleMethodQQPayEnabled] == "true",
 		BalanceDisabled:           vals[SettingBalancePayDisabled] == "true",
 		SubscriptionDisabled:      vals[SettingSubscriptionPayDisabled] == "true",
 		BalanceRechargeMultiplier: normalizeBalanceRechargeMultiplier(pcParseFloat(vals[SettingBalanceRechargeMult], defaultBalanceRechargeMultiplier)),
@@ -312,6 +327,13 @@ func (s *PaymentConfigService) getStripePublishableKey(ctx context.Context) stri
 // nil-check before serialisation — this is inherent to patch-style update patterns
 // and cannot be meaningfully decomposed without introducing unnecessary abstraction.
 func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req UpdatePaymentConfigRequest) error {
+	if req.VisibleMethodQQPaySource != nil {
+		normalized, err := normalizeVisibleMethodSettingSource(payment.TypeQQPay, *req.VisibleMethodQQPaySource, req.VisibleMethodQQPayEnabled != nil && *req.VisibleMethodQQPayEnabled)
+		if err != nil {
+			return err
+		}
+		req.VisibleMethodQQPaySource = &normalized
+	}
 	if req.BalanceRechargeMultiplier != nil {
 		if math.IsNaN(*req.BalanceRechargeMultiplier) || math.IsInf(*req.BalanceRechargeMultiplier, 0) || *req.BalanceRechargeMultiplier <= 0 {
 			return infraerrors.BadRequest("INVALID_BALANCE_RECHARGE_MULTIPLIER", "balance recharge multiplier must be greater than 0")
@@ -358,8 +380,10 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 		SettingAlipayForceQRCode:                 formatBoolOrEmpty(req.AlipayForceQRCode),
 		SettingPaymentVisibleMethodAlipaySource:  derefStr(req.VisibleMethodAlipaySource),
 		SettingPaymentVisibleMethodWxpaySource:   derefStr(req.VisibleMethodWxpaySource),
+		SettingPaymentVisibleMethodQQPaySource:   derefStr(req.VisibleMethodQQPaySource),
 		SettingPaymentVisibleMethodAlipayEnabled: formatBoolOrEmpty(req.VisibleMethodAlipayEnabled),
 		SettingPaymentVisibleMethodWxpayEnabled:  formatBoolOrEmpty(req.VisibleMethodWxpayEnabled),
+		SettingPaymentVisibleMethodQQPayEnabled:  formatBoolOrEmpty(req.VisibleMethodQQPayEnabled),
 	}
 	if req.EnabledTypes != nil {
 		m[SettingEnabledPaymentTypes] = strings.Join(req.EnabledTypes, ",")
@@ -454,7 +478,7 @@ func pcParseInt(s string, defaultVal int) int {
 }
 
 func buildVisibleMethodSourceAvailability(instances []*dbent.PaymentProviderInstance) map[string]bool {
-	available := make(map[string]bool, 4)
+	available := make(map[string]bool, 5)
 	for _, inst := range instances {
 		switch inst.ProviderKey {
 		case payment.TypeAlipay:
@@ -472,6 +496,8 @@ func buildVisibleMethodSourceAvailability(instances []*dbent.PaymentProviderInst
 					available[VisibleMethodSourceEasyPayAlipay] = true
 				case payment.TypeWxpay:
 					available[VisibleMethodSourceEasyPayWechat] = true
+				case payment.TypeQQPay:
+					available[VisibleMethodSourceEasyPayQQPay] = true
 				}
 			}
 		}
@@ -479,10 +505,31 @@ func buildVisibleMethodSourceAvailability(instances []*dbent.PaymentProviderInst
 	return available
 }
 
+func applyQQPayVisibleMethodRoutingToEnabledTypes(base []string, vals map[string]string, available map[string]bool) []string {
+	seen := make(map[string]struct{}, len(base)+1)
+	out := make([]string, 0, len(base)+1)
+	for _, paymentType := range base {
+		normalized := NormalizeVisibleMethod(paymentType)
+		if normalized == "" || normalized == payment.TypeQQPay {
+			continue
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+	if visibleMethodShouldBeExposed(payment.TypeQQPay, vals, available) {
+		out = append(out, payment.TypeQQPay)
+	}
+	return out
+}
+
 func applyVisibleMethodRoutingToEnabledTypes(base []string, vals map[string]string, available map[string]bool) []string {
 	shouldExpose := map[string]bool{
 		payment.TypeAlipay: visibleMethodShouldBeExposed(payment.TypeAlipay, vals, available),
 		payment.TypeWxpay:  visibleMethodShouldBeExposed(payment.TypeWxpay, vals, available),
+		payment.TypeQQPay:  visibleMethodShouldBeExposed(payment.TypeQQPay, vals, available),
 	}
 
 	seen := make(map[string]struct{}, len(base)+2)
@@ -502,7 +549,7 @@ func applyVisibleMethodRoutingToEnabledTypes(base []string, vals map[string]stri
 	for _, paymentType := range base {
 		visibleMethod := NormalizeVisibleMethod(paymentType)
 		switch visibleMethod {
-		case payment.TypeAlipay, payment.TypeWxpay:
+		case payment.TypeAlipay, payment.TypeWxpay, payment.TypeQQPay:
 			if shouldExpose[visibleMethod] {
 				appendType(visibleMethod)
 			}
@@ -511,7 +558,7 @@ func applyVisibleMethodRoutingToEnabledTypes(base []string, vals map[string]stri
 		}
 	}
 
-	for _, visibleMethod := range []string{payment.TypeAlipay, payment.TypeWxpay} {
+	for _, visibleMethod := range []string{payment.TypeAlipay, payment.TypeWxpay, payment.TypeQQPay} {
 		if shouldExpose[visibleMethod] {
 			appendType(visibleMethod)
 		}

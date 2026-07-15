@@ -147,6 +147,19 @@ func TestWebhookConstants(t *testing.T) {
 	})
 }
 
+func TestRedactWebhookBodyForLogMasksSign(t *testing.T) {
+	t.Parallel()
+
+	raw := "pid=1001&out_trade_no=PAY-1&sign=super-secret-signature&sign_type=RSA"
+	redacted := redactWebhookBodyForLog(raw)
+	require.NotContains(t, redacted, "super-secret-signature")
+	require.Contains(t, redacted, "sign=[REDACTED]")
+	require.Contains(t, redacted, "sign_type=RSA")
+
+	encodedKey := redactWebhookBodyForLog("%73ign=encoded-secret&money=1.00")
+	require.NotContains(t, encodedKey, "encoded-secret")
+}
+
 func TestExtractOutTradeNo(t *testing.T) {
 	tests := []struct {
 		name        string

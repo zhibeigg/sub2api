@@ -197,6 +197,8 @@
               v-model="config[field.key]"
               :options="field.options"
               :searchable="field.options.length > 5"
+              :disabled="!!editing && field.key === 'protocolVersion'"
+              @change="field.key === 'protocolVersion' && onEasyPayProtocolChange()"
             />
             <input
               v-else
@@ -315,15 +317,18 @@ import ToggleSwitch from './ToggleSwitch.vue'
 import type { ProviderInstance } from '@/types/payment'
 import type { EasyPayCustomMethod, TypeOption } from './providerConfig'
 import {
-  PROVIDER_CONFIG_FIELDS,
-  PROVIDER_SUPPORTED_TYPES,
   PROVIDER_CALLBACK_PATHS,
+  EASYPAY_PROTOCOL_V1,
+  EASYPAY_PROTOCOL_V2,
   WEBHOOK_PATHS,
   PAYMENT_MODE_QRCODE,
   PAYMENT_MODE_POPUP,
   PAYMENT_MODE_REDIRECT,
   STRIPE_SDK_API_VERSION,
   getAvailableTypes,
+  getProviderConfigFields,
+  getProviderSupportedTypes,
+  normalizeEasyPayProtocolVersion,
   extractBaseUrl,
   parseEasyPayCustomMethods,
   serializeEasyPayCustomMethods,
@@ -449,7 +454,12 @@ const paymentModeOptions = computed(() => {
 })
 
 const availableTypes = computed(() => {
-  const base = getAvailableTypes(form.provider_key, props.allPaymentTypes, props.redirectLabel)
+  const base = getAvailableTypes(
+    form.provider_key,
+    props.allPaymentTypes,
+    props.redirectLabel,
+    config.protocolVersion,
+  )
   if (form.provider_key === 'easypay') {
     for (const method of normalizedEasyPayCustomMethods()) {
       if (!base.some(opt => opt.value === method.type)) {
@@ -469,7 +479,7 @@ const availableTypes = computed(() => {
 })
 
 const resolvedFields = computed(() => {
-  const fields = PROVIDER_CONFIG_FIELDS[form.provider_key] || []
+  const fields = getProviderConfigFields(form.provider_key, config.protocolVersion)
   return fields.map(f => ({
     ...f,
     label: f.label || t(`admin.settings.payment.field_${f.key}`),
@@ -589,9 +599,29 @@ function removeEasyPayCustomMethod(index: number) {
 }
 
 function onKeyChange() {
-  form.supported_types = [...(PROVIDER_SUPPORTED_TYPES[form.provider_key] || [])]
   form.payment_mode = defaultPaymentMode(form.provider_key)
   clearConfig()
+  if (form.provider_key === 'easypay') {
+    config.protocolVersion = EASYPAY_PROTOCOL_V2
+  }
+  form.supported_types = getProviderSupportedTypes(form.provider_key, config.protocolVersion)
+  applyDefaults()
+}
+
+function onEasyPayProtocolChange() {
+  if (form.provider_key !== 'easypay' || props.editing) return
+  const version = normalizeEasyPayProtocolVersion(config.protocolVersion, EASYPAY_PROTOCOL_V2)
+  config.protocolVersion = version
+  delete config.pkey
+  delete config.cidAlipay
+  delete config.cidWxpay
+  delete config.merchantPrivateKey
+  delete config.platformPublicKey
+  const builtInTypes = getProviderSupportedTypes('easypay', version)
+  const customTypes = normalizedEasyPayCustomMethods()
+    .map(method => method.type)
+    .filter(Boolean)
+  form.supported_types = [...new Set([...builtInTypes, ...customTypes])]
   applyDefaults()
 }
 
@@ -606,7 +636,7 @@ function clearConfig() {
 }
 
 function applyDefaults() {
-  for (const f of PROVIDER_CONFIG_FIELDS[form.provider_key] || []) {
+  for (const f of getProviderConfigFields(form.provider_key, config.protocolVersion)) {
     if (f.defaultValue && !config[f.key]) config[f.key] = f.defaultValue
   }
 }
@@ -671,7 +701,7 @@ function handleSave() {
   // Validate required config fields — all non-optional fields must be filled.
   // In edit mode, sensitive fields may be left blank to preserve the stored
   // value (backend merges blanks by preserving the existing secret).
-  for (const f of PROVIDER_CONFIG_FIELDS[form.provider_key] || []) {
+  for (const f of getProviderConfigFields(form.provider_key, config.protocolVersion)) {
     if (f.optional) continue
     if (props.editing && f.sensitive) continue
     const val = (config[f.key] || '').trim()
@@ -683,7 +713,7 @@ function handleSave() {
   }
 
   const clearableConfigKeys = new Set(
-    (PROVIDER_CONFIG_FIELDS[form.provider_key] || [])
+    getProviderConfigFields(form.provider_key, config.protocolVersion)
       .filter(field => field.clearable)
       .map(field => field.key),
   )
@@ -728,7 +758,7 @@ function handleSave() {
 
 function syncEasyPayCustomMethods(): string[] {
   if (form.provider_key !== 'easypay') return []
-  const baseTypes = new Set(PROVIDER_SUPPORTED_TYPES.easypay || [])
+  const baseTypes = new Set(getProviderSupportedTypes('easypay', config.protocolVersion))
   const customTypes: string[] = []
   const seen = new Set<string>()
   for (const method of normalizedEasyPayCustomMethods()) {
@@ -762,7 +792,7 @@ function validateEasyPayCustomMethods(): string | null {
     if (!/^[a-z0-9_-]+$/.test(method.upstreamType)) {
       return t('admin.settings.payment.validationEasyPayCustomMethodUpstreamTypeInvalid')
     }
-    if ((PROVIDER_SUPPORTED_TYPES.easypay || []).includes(method.type)) {
+    if (getProviderSupportedTypes('easypay', config.protocolVersion).includes(method.type)) {
       return t('admin.settings.payment.validationEasyPayCustomMethodReserved')
     }
     if (method.type.startsWith('alipay') || method.type.startsWith('wxpay')) {
@@ -786,12 +816,15 @@ function emitValidationError(msg: string) {
 function reset(defaultKey: string) {
   form.name = ''
   form.provider_key = defaultKey
-  form.supported_types = [...(PROVIDER_SUPPORTED_TYPES[defaultKey] || [])]
   form.enabled = true
   form.payment_mode = defaultPaymentMode(defaultKey)
   form.refund_enabled = false
   form.allow_user_refund = false
   clearConfig()
+  if (defaultKey === 'easypay') {
+    config.protocolVersion = EASYPAY_PROTOCOL_V2
+  }
+  form.supported_types = getProviderSupportedTypes(defaultKey, config.protocolVersion)
   applyDefaults()
 }
 
@@ -811,6 +844,12 @@ function loadProvider(provider: ProviderInstance) {
   form.refund_enabled = provider.refund_enabled
   form.allow_user_refund = provider.allow_user_refund
   clearConfig()
+  if (provider.provider_key === 'easypay') {
+    config.protocolVersion = normalizeEasyPayProtocolVersion(
+      provider.config?.protocolVersion,
+      EASYPAY_PROTOCOL_V1,
+    )
+  }
   // Pre-fill config from API response. Backend omits sensitive fields entirely,
   // so those inputs stay blank — submitting blank preserves the stored secret.
   if (provider.config) {
@@ -821,6 +860,7 @@ function loadProvider(provider: ProviderInstance) {
         easyPayCustomMethods.push(...parseEasyPayCustomMethods(v))
         continue
       }
+      if (k === 'protocolVersion' && provider.provider_key === 'easypay') continue
       config[k] = v
     }
     // Extract base URLs from existing callback URLs

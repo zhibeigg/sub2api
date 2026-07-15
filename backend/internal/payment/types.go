@@ -11,6 +11,7 @@ type PaymentType = string
 const (
 	TypeAlipay       PaymentType = "alipay"
 	TypeWxpay        PaymentType = "wxpay"
+	TypeQQPay        PaymentType = "qqpay"
 	TypeAlipayDirect PaymentType = "alipay_direct"
 	TypeWxpayDirect  PaymentType = "wxpay_direct"
 	TypeStripe       PaymentType = "stripe"
@@ -84,6 +85,8 @@ func GetBasePaymentType(t string) string {
 	switch {
 	case t == TypeEasyPay:
 		return TypeEasyPay
+	case t == TypeQQPay:
+		return TypeQQPay
 	case t == TypeAirwallex:
 		return TypeAirwallex
 	case t == TypeStripe || t == TypeCard || t == TypeLink:
@@ -195,6 +198,7 @@ type RefundQueryRequest struct {
 type RefundResponse struct {
 	RefundID string
 	Status   string // "success", "pending", "failed"
+	Metadata map[string]string
 }
 
 // InstanceSelection holds the selected provider instance and its decrypted config.

@@ -162,13 +162,13 @@ func TestValidateEasyPayCustomMethods(t *testing.T) {
 			name:           "custom type uses alipay prefix",
 			config:         map[string]string{"customMethods": `[{"type":"alipay_hk","upstreamType":"hkpay"}]`},
 			supportedTypes: "alipay,wxpay,alipay_hk",
-			wantErr:        "customMethods type cannot start with alipay or wxpay",
+			wantErr:        "customMethods type conflicts with a built-in EasyPay payment method",
 		},
 		{
 			name:           "custom type uses wxpay prefix",
 			config:         map[string]string{"customMethods": `[{"type":"wxpay_usdt","upstreamType":"usdt"}]`},
 			supportedTypes: "alipay,wxpay,wxpay_usdt",
-			wantErr:        "customMethods type cannot start with alipay or wxpay",
+			wantErr:        "customMethods type conflicts with a built-in EasyPay payment method",
 		},
 		{
 			name:           "supported custom type missing mapping",
@@ -181,6 +181,34 @@ func TestValidateEasyPayCustomMethods(t *testing.T) {
 			config:         map[string]string{"customMethods": `[{"type":"ldc","upstreamType":"epay"}]`},
 			supportedTypes: "alipay,wxpay,LDC",
 			wantErr:        "supported EasyPay custom type LDC may only contain lowercase letters",
+		},
+		{
+			name:           "v1 qqpay remains compatible through custom methods",
+			config:         map[string]string{"customMethods": `[{"type":"qqpay","upstreamType":"qqpay","displayName":"QQ Pay"}]`},
+			supportedTypes: "qqpay",
+		},
+		{
+			name:           "v1 qqpay without custom mapping is rejected",
+			config:         map[string]string{},
+			supportedTypes: "qqpay",
+			wantErr:        "supported EasyPay custom type qqpay has no customMethods mapping",
+		},
+		{
+			name:           "v2 qqpay is built in",
+			config:         map[string]string{"protocolVersion": "2"},
+			supportedTypes: "qqpay",
+		},
+		{
+			name:           "v2 qqpay custom mapping conflicts with builtin",
+			config:         map[string]string{"protocolVersion": "2", "customMethods": `[{"type":"qqpay","upstreamType":"qqpay"}]`},
+			supportedTypes: "qqpay",
+			wantErr:        "customMethods type conflicts with a built-in EasyPay payment method",
+		},
+		{
+			name:           "unsupported protocol version is rejected",
+			config:         map[string]string{"protocolVersion": "3"},
+			supportedTypes: "qqpay",
+			wantErr:        "protocolVersion must be 1 or 2",
 		},
 	}
 
@@ -233,8 +261,11 @@ func TestIsSensitiveProviderConfigField(t *testing.T) {
 
 		// EasyPay
 		{"easypay", "pkey", true},
+		{"easypay", "merchantPrivateKey", true},
+		{"easypay", "platformPublicKey", true},
 		{"easypay", "pid", false},
 		{"easypay", "apiBase", false},
+		{"easypay", "protocolVersion", false},
 
 		// Airwallex
 		{payment.TypeAirwallex, "apiKey", true},
@@ -257,6 +288,32 @@ func TestIsSensitiveProviderConfigField(t *testing.T) {
 			assert.Equal(t, tc.wantSen, got, "isSensitiveProviderConfigField(%q, %q)", tc.providerKey, tc.field)
 		})
 	}
+}
+
+func TestDecryptAndMaskEasyPayV2ConfigOmitsRSAKeys(t *testing.T) {
+	t.Parallel()
+
+	svc := &PaymentConfigService{}
+	masked, err := svc.decryptAndMaskConfig(payment.TypeEasyPay, `{"pid":"10001","apiBase":"https://pay.example.com","protocolVersion":"2","merchantPrivateKey":"private","platformPublicKey":"public"}`)
+	require.NoError(t, err)
+	require.Equal(t, "10001", masked["pid"])
+	require.Equal(t, "2", masked["protocolVersion"])
+	require.NotContains(t, masked, "merchantPrivateKey")
+	require.NotContains(t, masked, "platformPublicKey")
+}
+
+func TestValidateEasyPayProtocolUnchanged(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, validateEasyPayProtocolUnchanged(map[string]string{}, map[string]string{"protocolVersion": "1"}))
+	require.ErrorContains(t, validateEasyPayProtocolUnchanged(
+		map[string]string{"protocolVersion": "1"},
+		map[string]string{"protocolVersion": "2"},
+	), "cannot be changed")
+	require.ErrorContains(t, validateEasyPayProtocolUnchanged(
+		map[string]string{"protocolVersion": "2"},
+		map[string]string{},
+	), "cannot be changed")
 }
 
 func TestJoinTypes(t *testing.T) {
@@ -675,6 +732,139 @@ func TestUpdateProviderInstanceClearsAirwallexAccountID(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, cfg["accountId"])
 	require.Equal(t, "client-id-test", cfg["clientId"])
+}
+
+func TestUpdateProviderInstanceRejectsEasyPayProtocolSwitch(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	svc := &PaymentConfigService{entClient: client}
+	instance, err := svc.CreateProviderInstance(ctx, CreateProviderInstanceRequest{
+		ProviderKey: payment.TypeEasyPay,
+		Name:        "immutable-easypay-v1",
+		Config: map[string]string{
+			"pid": "pid-v1",
+		},
+		SupportedTypes: []string{},
+		Enabled:        false,
+	})
+	require.NoError(t, err)
+
+	_, err = svc.UpdateProviderInstance(ctx, instance.ID, UpdateProviderInstanceRequest{
+		Config: map[string]string{"protocolVersion": "2"},
+	})
+	require.Error(t, err)
+	require.Equal(t, "EASYPAY_PROTOCOL_IMMUTABLE", infraerrors.Reason(err))
+
+	v2Instance, err := svc.CreateProviderInstance(ctx, CreateProviderInstanceRequest{
+		ProviderKey:    payment.TypeEasyPay,
+		Name:           "immutable-easypay-v2",
+		Config:         map[string]string{"pid": "pid-v2", "protocolVersion": "2"},
+		SupportedTypes: []string{payment.TypeQQPay},
+		Enabled:        false,
+	})
+	require.NoError(t, err)
+
+	_, err = svc.UpdateProviderInstance(ctx, v2Instance.ID, UpdateProviderInstanceRequest{
+		Config: map[string]string{"protocolVersion": "1"},
+	})
+	require.Error(t, err)
+	require.Equal(t, "EASYPAY_PROTOCOL_IMMUTABLE", infraerrors.Reason(err))
+}
+
+func TestCreateAndEnableProviderInstanceValidateEasyPayConstructor(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	svc := &PaymentConfigService{entClient: client}
+	invalidConfig := map[string]string{
+		"pid":             "pid-v2",
+		"protocolVersion": "2",
+	}
+
+	created, err := svc.CreateProviderInstance(ctx, CreateProviderInstanceRequest{
+		ProviderKey:    payment.TypeEasyPay,
+		Name:           "invalid-enabled-easypay-v2",
+		Config:         invalidConfig,
+		SupportedTypes: []string{payment.TypeQQPay},
+		Enabled:        true,
+	})
+	require.Nil(t, created)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "apiBase")
+	var appErr *infraerrors.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, int32(400), appErr.Code)
+	require.Equal(t, "INVALID_PAYMENT_PROVIDER_CONFIG", appErr.Reason)
+	require.Equal(t, "apiBase", appErr.Metadata["field"])
+
+	draft, err := svc.CreateProviderInstance(ctx, CreateProviderInstanceRequest{
+		ProviderKey:    payment.TypeEasyPay,
+		Name:           "draft-easypay-v2",
+		Config:         invalidConfig,
+		SupportedTypes: []string{payment.TypeQQPay},
+		Enabled:        false,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, draft)
+
+	updated, err := svc.UpdateProviderInstance(ctx, draft.ID, UpdateProviderInstanceRequest{
+		Enabled: boolPtrValue(true),
+	})
+	require.Nil(t, updated)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "apiBase")
+}
+
+func TestListProviderInstancesWithConfigOmitsEasyPaySecrets(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	svc := &PaymentConfigService{entClient: client}
+	_, err := svc.CreateProviderInstance(ctx, CreateProviderInstanceRequest{
+		ProviderKey: payment.TypeEasyPay,
+		Name:        "masked-easypay-v2",
+		Config: map[string]string{
+			"pid":                "pid-visible",
+			"protocolVersion":    "2",
+			"apiBase":            "https://pay.example.com",
+			"merchantPrivateKey": "private-secret",
+			"platformPublicKey":  "public-secret",
+		},
+		SupportedTypes: []string{payment.TypeQQPay},
+		Enabled:        false,
+	})
+	require.NoError(t, err)
+
+	instances, err := svc.ListProviderInstancesWithConfig(ctx)
+	require.NoError(t, err)
+	require.Len(t, instances, 1)
+	require.Equal(t, "pid-visible", instances[0].Config["pid"])
+	require.Equal(t, "2", instances[0].Config["protocolVersion"])
+	require.NotContains(t, instances[0].Config, "merchantPrivateKey")
+	require.NotContains(t, instances[0].Config, "platformPublicKey")
+	require.NotContains(t, instances[0].Config, "pkey")
+}
+
+func TestHasPendingOrderProtectedEasyPayV2Fields(t *testing.T) {
+	t.Parallel()
+
+	current := map[string]string{
+		"pid": "pid", "apiBase": "https://one.example", "protocolVersion": "2",
+		"merchantPrivateKey": "private", "platformPublicKey": "public",
+	}
+	for _, field := range []string{"pid", "apiBase", "merchantPrivateKey", "platformPublicKey"} {
+		next := make(map[string]string, len(current))
+		for key, value := range current {
+			next[key] = value
+		}
+		next[field] += "-changed"
+		require.True(t, hasPendingOrderProtectedConfigChange(payment.TypeEasyPay, current, next), field)
+	}
+	require.False(t, hasPendingOrderProtectedConfigChange(payment.TypeEasyPay, map[string]string{}, map[string]string{"protocolVersion": "1"}))
 }
 
 func createPendingProviderConfigOrder(t *testing.T, ctx context.Context, client *dbent.Client, instance *dbent.PaymentProviderInstance) {

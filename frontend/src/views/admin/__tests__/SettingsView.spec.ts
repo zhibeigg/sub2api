@@ -157,6 +157,9 @@ vi.mock("vue-i18n", async () => {
     "admin.settings.paymentVisibleMethods.sourceLabel": "支付来源",
     "admin.settings.paymentVisibleMethods.sourceHint": "启用后必须明确选择一个来源；未配置状态不会对外展示该支付方式。",
     "admin.settings.paymentVisibleMethods.sourceRequiredError": "{title} 已启用，请先选择支付来源。",
+    "payment.methods.alipay": "支付宝",
+    "payment.methods.wxpay": "微信支付",
+    "payment.methods.qqpay": "QQ 钱包",
     "admin.settings.payment.configGuide": "查看支付配置说明",
     "admin.settings.payment.findProvider": "查看支持的支付方式",
     "admin.settings.openaiExperimentalScheduler.title": "OpenAI 实验调度策略",
@@ -451,9 +454,11 @@ const baseSettingsResponse = {
   payment_cancel_rate_limit_unit: "day",
   payment_cancel_rate_limit_window_mode: "rolling",
   payment_visible_method_alipay_source: "alipay_direct",
-  payment_visible_method_wxpay_source: "invalid-source",
+  payment_visible_method_wxpay_source: "official_wxpay",
+  payment_visible_method_qqpay_source: "easypay_qqpay",
   payment_visible_method_alipay_enabled: true,
   payment_visible_method_wxpay_enabled: true,
+  payment_visible_method_qqpay_enabled: true,
   openai_advanced_scheduler_enabled: false,
   openai_advanced_scheduler_sticky_weighted_enabled: false,
   openai_advanced_scheduler_subscription_priority_enabled: false,
@@ -662,14 +667,19 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(showError).toHaveBeenCalledWith("启用 Chatwoot 前必须填写有效的 Base URL 和 Website Token。");
   });
 
-  it("does not render legacy visible payment method controls", async () => {
+  it("loads and renders Alipay, WeChat Pay, and QQ Wallet visible method controls", async () => {
     const wrapper = mountView();
 
     await flushPromises();
     await openPaymentTab(wrapper);
 
-    expect(wrapper.text()).not.toContain("可见方式");
-    expect(wrapper.text()).not.toContain("支付来源");
+    expect(wrapper.text()).toContain("支付宝 可见方式");
+    expect(wrapper.text()).toContain("微信支付 可见方式");
+    expect(wrapper.text()).toContain("QQ 钱包 可见方式");
+    expect(wrapper.text()).toContain("支付来源");
+    expect((wrapper.get('[data-testid="payment-visible-method-alipay-enabled"]').element as HTMLInputElement).checked).toBe(true);
+    expect((wrapper.get('[data-testid="payment-visible-method-wxpay-source"]').element as HTMLSelectElement).value).toBe("official_wxpay");
+    expect((wrapper.get('[data-testid="payment-visible-method-qqpay-source"]').element as HTMLSelectElement).value).toBe("easypay_qqpay");
   });
 
   it("links payment guidance to README sections instead of removed payment docs", async () => {
@@ -696,7 +706,7 @@ describe("admin SettingsView payment visible method controls", () => {
     }
   });
 
-  it("does not submit legacy visible payment method settings", async () => {
+  it("saves all three visible payment method sources and enabled flags", async () => {
     const wrapper = mountView();
 
     await flushPromises();
@@ -705,11 +715,31 @@ describe("admin SettingsView payment visible method controls", () => {
     await flushPromises();
 
     expect(updateSettings).toHaveBeenCalledTimes(1);
-    const payload = updateSettings.mock.calls[0]?.[0];
-    expect(payload).not.toHaveProperty("payment_visible_method_alipay_source");
-    expect(payload).not.toHaveProperty("payment_visible_method_wxpay_source");
-    expect(payload).not.toHaveProperty("payment_visible_method_alipay_enabled");
-    expect(payload).not.toHaveProperty("payment_visible_method_wxpay_enabled");
+    expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({
+      payment_visible_method_alipay_source: "official_alipay",
+      payment_visible_method_wxpay_source: "official_wxpay",
+      payment_visible_method_qqpay_source: "easypay_qqpay",
+      payment_visible_method_alipay_enabled: true,
+      payment_visible_method_wxpay_enabled: true,
+      payment_visible_method_qqpay_enabled: true,
+    }));
+  });
+
+  it("blocks saving when an enabled visible method has no source", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      payment_visible_method_qqpay_source: "",
+      payment_visible_method_qqpay_enabled: true,
+    });
+    const wrapper = mountView();
+
+    await flushPromises();
+    await openPaymentTab(wrapper);
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalledWith("QQ 钱包 已启用，请先选择支付来源。");
   });
 
   it("loads and saves balance and subscription availability independently", async () => {
@@ -892,6 +922,78 @@ describe("admin SettingsView payment visible method controls", () => {
     expect(getProviders).toHaveBeenCalledTimes(2);
   });
 
+  it("allows multiple EasyPay instances to be enabled for backend load balancing", async () => {
+    const v1Provider = {
+      id: 11,
+      provider_key: "easypay",
+      name: "EasyPay V1",
+      config: { protocolVersion: "1" },
+      supported_types: ["alipay", "wxpay"],
+      enabled: true,
+      payment_mode: "qrcode",
+      refund_enabled: false,
+      allow_user_refund: false,
+      limits: "",
+      sort_order: 0,
+    };
+    const v2Provider = {
+      ...v1Provider,
+      id: 12,
+      name: "EasyPay V2",
+      config: { protocolVersion: "2" },
+      supported_types: ["alipay", "wxpay", "qqpay"],
+      enabled: false,
+      sort_order: 1,
+    };
+    getProviders.mockReset();
+    getProviders
+      .mockResolvedValueOnce({ data: [v1Provider, v2Provider] })
+      .mockResolvedValueOnce({ data: [v1Provider, { ...v2Provider, enabled: true }] });
+    updateProvider.mockResolvedValue({ data: { ...v2Provider, enabled: true } });
+
+    const PaymentProviderListStub = defineComponent({
+      emits: ["toggleField"],
+      setup(_, { emit }) {
+        return () =>
+          h(
+            "button",
+            {
+              class: "enable-second-easypay",
+              onClick: () => emit("toggleField", v2Provider, "enabled"),
+            },
+            "enable second EasyPay",
+          );
+      },
+    });
+
+    const wrapper = mount(SettingsView, {
+      global: {
+        stubs: {
+          AppLayout: AppLayoutStub,
+          Select: SelectStub,
+          Toggle: ToggleStub,
+          Icon: true,
+          ConfirmDialog: true,
+          PaymentProviderList: PaymentProviderListStub,
+          PaymentProviderDialog: true,
+          GroupBadge: true,
+          GroupOptionItem: true,
+          ProxySelector: true,
+          ImageUpload: ImageUploadStub,
+          BackupSettings: true,
+        },
+      },
+    });
+
+    await flushPromises();
+    await openPaymentTab(wrapper);
+    await wrapper.get(".enable-second-easypay").trigger("click");
+    await flushPromises();
+
+    expect(updateProvider).toHaveBeenCalledWith(12, { enabled: true });
+    expect(getProviders).toHaveBeenCalledTimes(2);
+  });
+
   it("renders advanced scheduler copy as local experimental gateway policy", async () => {
     const wrapper = mountView();
 
@@ -944,15 +1046,21 @@ describe("admin SettingsView payment visible method controls", () => {
     getProviders.mockResolvedValue({ data: [providerWithNullTypes] });
 
     let receivedProviders: Array<Record<string, unknown>> = [];
+    let receivedPaymentTypes: Array<Record<string, unknown>> = [];
     const PaymentProviderListCapture = defineComponent({
       props: {
         providers: {
           type: Array,
           default: () => [],
         },
+        allPaymentTypes: {
+          type: Array,
+          default: () => [],
+        },
       },
       setup(props) {
         receivedProviders = props.providers as Array<Record<string, unknown>>;
+        receivedPaymentTypes = props.allPaymentTypes as Array<Record<string, unknown>>;
         return () => h("div", { class: "provider-list-capture" });
       },
     });
@@ -984,6 +1092,7 @@ describe("admin SettingsView payment visible method controls", () => {
     // supported_types should be normalized to an empty array, not null
     expect(Array.isArray(receivedProviders[0].supported_types)).toBe(true);
     expect(receivedProviders[0].supported_types).toEqual([]);
+    expect(receivedPaymentTypes.some((type) => type.value === "qqpay")).toBe(true);
   });
 });
 

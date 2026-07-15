@@ -18,6 +18,7 @@ type paymentOrderProviderSnapshot struct {
 	MerchantAppID      string
 	MerchantID         string
 	Currency           string
+	ProtocolVersion    int
 }
 
 func psOrderProviderSnapshot(order *dbent.PaymentOrder) *paymentOrderProviderSnapshot {
@@ -33,6 +34,7 @@ func psOrderProviderSnapshot(order *dbent.PaymentOrder) *paymentOrderProviderSna
 		MerchantAppID:      psSnapshotStringValue(order.ProviderSnapshot["merchant_app_id"]),
 		MerchantID:         psSnapshotStringValue(order.ProviderSnapshot["merchant_id"]),
 		Currency:           psSnapshotStringValue(order.ProviderSnapshot["currency"]),
+		ProtocolVersion:    psSnapshotIntValue(order.ProviderSnapshot["protocol_version"]),
 	}
 	if snapshot.SchemaVersion == 0 &&
 		snapshot.ProviderInstanceID == "" &&
@@ -40,7 +42,8 @@ func psOrderProviderSnapshot(order *dbent.PaymentOrder) *paymentOrderProviderSna
 		snapshot.PaymentMode == "" &&
 		snapshot.MerchantAppID == "" &&
 		snapshot.MerchantID == "" &&
-		snapshot.Currency == "" {
+		snapshot.Currency == "" &&
+		snapshot.ProtocolVersion == 0 {
 		return nil
 	}
 	return snapshot
@@ -127,7 +130,7 @@ func expectedNotificationProviderKeyForOrder(registry *payment.Registry, order *
 }
 
 func validateProviderSnapshotMetadata(order *dbent.PaymentOrder, providerKey string, metadata map[string]string) error {
-	if order == nil || len(metadata) == 0 {
+	if order == nil {
 		return nil
 	}
 
@@ -188,6 +191,17 @@ func validateProviderSnapshotMetadata(order *dbent.PaymentOrder, providerKey str
 				return fmt.Errorf("easypay pid mismatch: expected %s, got %s", expected, actual)
 			}
 		}
+		expectedProtocol := snapshot.ProtocolVersion
+		if expectedProtocol == 0 {
+			expectedProtocol = easyPayProtocolV1
+		}
+		actualProtocol, err := easyPayMetadataProtocolVersion(metadata)
+		if err != nil {
+			return err
+		}
+		if actualProtocol != expectedProtocol {
+			return fmt.Errorf("easypay protocol_version mismatch: expected %d, got %d", expectedProtocol, actualProtocol)
+		}
 	case payment.TypeStripe:
 		if expected := strings.TrimSpace(snapshot.Currency); expected != "" {
 			actual := strings.ToUpper(strings.TrimSpace(metadata["currency"]))
@@ -223,6 +237,18 @@ func validateProviderSnapshotMetadata(order *dbent.PaymentOrder, providerKey str
 	}
 
 	return nil
+}
+
+func easyPayMetadataProtocolVersion(metadata map[string]string) (int, error) {
+	raw := strings.TrimSpace(metadata["protocol_version"])
+	if raw == "" {
+		return easyPayProtocolV1, nil
+	}
+	version, err := strconv.Atoi(raw)
+	if err != nil || (version != easyPayProtocolV1 && version != easyPayProtocolV2) {
+		return 0, fmt.Errorf("easypay protocol_version is invalid: %s", raw)
+	}
+	return version, nil
 }
 
 func providerMerchantIdentityMetadata(prov payment.Provider) map[string]string {

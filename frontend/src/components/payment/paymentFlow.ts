@@ -14,11 +14,12 @@ const VISIBLE_METHOD_ALIASES = {
   alipay_direct: 'alipay',
   wxpay: 'wxpay',
   wxpay_direct: 'wxpay',
+  qqpay: 'qqpay',
   stripe: 'stripe',
   airwallex: 'airwallex',
 } as const
 
-export type VisiblePaymentMethod = 'alipay' | 'wxpay' | 'stripe' | 'airwallex'
+export type VisiblePaymentMethod = 'alipay' | 'wxpay' | 'qqpay' | 'stripe' | 'airwallex'
 export type StripeVisibleMethod = 'alipay' | 'wechat_pay'
 export type PaymentLaunchKind =
   | 'qr_waiting'
@@ -93,6 +94,11 @@ type StorageWriter = Pick<Storage, 'removeItem' | 'setItem'>
 export function normalizeVisibleMethod(method: string): VisiblePaymentMethod | '' {
   const normalized = VISIBLE_METHOD_ALIASES[method.trim() as keyof typeof VISIBLE_METHOD_ALIASES]
   return normalized ?? ''
+}
+
+export function isStripeCompatibleVisibleMethod(method: string): boolean {
+  const normalized = normalizeVisibleMethod(method) || method.trim()
+  return normalized === 'stripe' || normalized === 'alipay' || normalized === 'wxpay'
 }
 
 export function getVisibleMethods(methods: Record<string, MethodLimit>): Record<string, MethodLimit> {
@@ -172,7 +178,7 @@ export function decidePaymentLaunch(
     return { kind: 'airwallex_route', paymentState, recovery: paymentState }
   }
 
-  if (baseState.clientSecret) {
+  if (baseState.clientSecret && isStripeCompatibleVisibleMethod(visibleMethod)) {
     // visibleMethod === 'stripe' means the user clicked the dedicated Stripe button
     // and should land on the full Payment Element to choose a sub-method themselves.
     const isStripeButton = visibleMethod === 'stripe'
@@ -189,12 +195,12 @@ export function decidePaymentLaunch(
     return { kind, paymentState, recovery: paymentState, stripeMethod }
   }
 
-  if (result.result_type === 'oauth_required' && result.oauth?.authorize_url) {
+  if (visibleMethod === 'wxpay' && result.result_type === 'oauth_required' && result.oauth?.authorize_url) {
     return { kind: 'wechat_oauth', paymentState: baseState, recovery: baseState, oauth: result.oauth }
   }
 
   const jsapiPayload = result.jsapi ?? result.jsapi_payload
-  if (result.result_type === 'jsapi_ready' && jsapiPayload) {
+  if (visibleMethod === 'wxpay' && result.result_type === 'jsapi_ready' && jsapiPayload) {
     return { kind: 'wechat_jsapi', paymentState: baseState, recovery: baseState, jsapi: jsapiPayload }
   }
 

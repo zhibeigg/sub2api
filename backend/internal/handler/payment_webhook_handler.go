@@ -105,7 +105,7 @@ func (h *PaymentWebhookHandler) handleNotify(c *gin.Context, providerKey string)
 
 	resolvedProviderKey, notification, err := verifyNotificationWithProviders(c.Request.Context(), providers, rawBody, headers)
 	if err != nil {
-		truncatedBody := rawBody
+		truncatedBody := redactWebhookBodyForLog(rawBody)
 		if len(truncatedBody) > webhookLogTruncateLen {
 			truncatedBody = truncatedBody[:webhookLogTruncateLen] + "...(truncated)"
 		}
@@ -146,6 +146,19 @@ func (h *PaymentWebhookHandler) handleNotify(c *gin.Context, providerKey string)
 
 // extractOutTradeNo parses the webhook body to find the out_trade_no.
 // This allows looking up the correct provider instance before verification.
+func redactWebhookBodyForLog(rawBody string) string {
+	parts := strings.Split(rawBody, "&")
+	for i, part := range parts {
+		keyValue := strings.SplitN(part, "=", 2)
+		decodedKey, err := url.QueryUnescape(keyValue[0])
+		if err != nil || !strings.EqualFold(strings.TrimSpace(decodedKey), "sign") {
+			continue
+		}
+		parts[i] = keyValue[0] + "=[REDACTED]"
+	}
+	return strings.Join(parts, "&")
+}
+
 func extractOutTradeNo(rawBody, providerKey string) string {
 	switch providerKey {
 	case payment.TypeEasyPay, payment.TypeAlipay:

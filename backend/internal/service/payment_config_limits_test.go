@@ -482,6 +482,38 @@ func TestGetAvailableMethodLimitsUsesConfiguredVisibleMethodSource(t *testing.T)
 	}
 }
 
+func TestGetAvailableMethodLimitsQQPayRequiresEnabledEasyPaySource(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	_, err := client.PaymentProviderInstance.Create().
+		SetProviderKey(payment.TypeEasyPay).
+		SetName("EasyPay QQPay").
+		SetConfig(`{"protocolVersion":"2"}`).
+		SetSupportedTypes(payment.TypeQQPay).
+		SetLimits(`{"qqpay":{"singleMin":5,"singleMax":500,"dailyLimit":1000}}`).
+		SetEnabled(true).
+		Save(ctx)
+	require.NoError(t, err)
+
+	repo := &paymentConfigSettingRepoStub{values: map[string]string{
+		SettingPaymentVisibleMethodQQPaySource:  VisibleMethodSourceEasyPayQQPay,
+		SettingPaymentVisibleMethodQQPayEnabled: "false",
+	}}
+	svc := &PaymentConfigService{entClient: client, settingRepo: repo}
+	resp, err := svc.GetAvailableMethodLimits(ctx)
+	require.NoError(t, err)
+	require.NotContains(t, resp.Methods, payment.TypeQQPay)
+
+	repo.values[SettingPaymentVisibleMethodQQPayEnabled] = "true"
+	resp, err = svc.GetAvailableMethodLimits(ctx)
+	require.NoError(t, err)
+	limits, ok := resp.Methods[payment.TypeQQPay]
+	require.True(t, ok)
+	require.Equal(t, float64(5), limits.SingleMin)
+	require.Equal(t, float64(500), limits.SingleMax)
+	require.Equal(t, float64(1000), limits.DailyLimit)
+}
+
 func TestGetAvailableMethodLimitsPreservesLegacyCrossProviderBehaviorWhenVisibleMethodSourceMissing(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentConfigServiceTestClient(t)

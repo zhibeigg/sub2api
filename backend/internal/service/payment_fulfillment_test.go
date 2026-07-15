@@ -579,6 +579,88 @@ func TestValidateProviderNotificationMetadataRejectsStripeCurrencyMismatch(t *te
 	assert.ErrorContains(t, err, "stripe currency mismatch")
 }
 
+func TestHandlePaymentNotificationEasyPayDuplicateCallbackIsIdempotent(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	ensurePaymentAuditOrderActionUniqueIndex(t, ctx, client)
+
+	user, err := client.User.Create().
+		SetEmail("duplicate-easypay@example.com").
+		SetPasswordHash("hash").
+		SetUsername("duplicate-easypay-user").
+		Save(ctx)
+	require.NoError(t, err)
+
+	order, err := client.PaymentOrder.Create().
+		SetUserID(user.ID).
+		SetUserEmail(user.Email).
+		SetUserName(user.Username).
+		SetAmount(88).
+		SetPayAmount(88).
+		SetFeeRate(0).
+		SetRechargeCode("DUPLICATE-EASYPAY").
+		SetOutTradeNo("sub2_duplicate_easypay").
+		SetPaymentType(payment.TypeQQPay).
+		SetPaymentTradeNo("trade-duplicate-easypay").
+		SetOrderType(payment.OrderTypeBalance).
+		SetStatus(OrderStatusCompleted).
+		SetExpiresAt(time.Now().Add(time.Hour)).
+		SetPaidAt(time.Now()).
+		SetCompletedAt(time.Now()).
+		SetClientIP("127.0.0.1").
+		SetSrcHost("api.example.com").
+		SetProviderKey(payment.TypeEasyPay).
+		SetProviderSnapshot(map[string]any{
+			"schema_version":   3,
+			"provider_key":     payment.TypeEasyPay,
+			"merchant_id":      "pid-duplicate",
+			"protocol_version": 2,
+		}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = client.PaymentAuditLog.Create().
+		SetOrderID(strconv.FormatInt(order.ID, 10)).
+		SetAction("ORDER_PAID").
+		SetDetail(`{"tradeNo":"trade-duplicate-easypay","paidAmount":88}`).
+		SetOperator(payment.TypeEasyPay).
+		Save(ctx)
+	require.NoError(t, err)
+	_, err = client.PaymentAuditLog.Create().
+		SetOrderID(strconv.FormatInt(order.ID, 10)).
+		SetAction("RECHARGE_SUCCESS").
+		SetDetail(`{"rechargeCode":"DUPLICATE-EASYPAY"}`).
+		SetOperator("system").
+		Save(ctx)
+	require.NoError(t, err)
+
+	notification := &payment.PaymentNotification{
+		OrderID: order.OutTradeNo,
+		TradeNo: order.PaymentTradeNo,
+		Amount:  order.PayAmount,
+		Status:  payment.NotificationStatusSuccess,
+		Metadata: map[string]string{
+			"pid":              "pid-duplicate",
+			"protocol_version": "2",
+		},
+	}
+	svc := &PaymentService{entClient: client}
+	require.NoError(t, svc.HandlePaymentNotification(ctx, notification, payment.TypeEasyPay))
+	require.NoError(t, svc.HandlePaymentNotification(ctx, notification, payment.TypeEasyPay))
+
+	reloaded, err := client.PaymentOrder.Get(ctx, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusCompleted, reloaded.Status)
+	for _, action := range []string{"ORDER_PAID", "RECHARGE_SUCCESS"} {
+		count, countErr := client.PaymentAuditLog.Query().Where(
+			paymentauditlog.OrderIDEQ(strconv.FormatInt(order.ID, 10)),
+			paymentauditlog.ActionEQ(action),
+		).Count(ctx)
+		require.NoError(t, countErr)
+		require.Equal(t, 1, count, action)
+	}
+}
+
 func TestPaymentAmountToleranceForThreeDecimalCurrency(t *testing.T) {
 	t.Parallel()
 

@@ -5,6 +5,9 @@
 # 复制此文件到 /etc/sub2api/config.yaml 并根据需要修改
 #
 # Documentation / 文档: https://github.com/Wei-Shaw/sub2api
+# Payment provider credentials and protocol-specific settings are configured in
+# the Admin Dashboard and stored in the database; do not add them to this YAML.
+# 支付服务商凭证及协议相关设置请在管理后台配置并保存到数据库，不要写入此 YAML。
 
 # =============================================================================
 # Server Configuration

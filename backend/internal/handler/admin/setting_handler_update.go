@@ -245,8 +245,10 @@ type UpdateSettingsRequest struct {
 	// Payment visible method routing
 	PaymentVisibleMethodAlipaySource  *string `json:"payment_visible_method_alipay_source"`
 	PaymentVisibleMethodWxpaySource   *string `json:"payment_visible_method_wxpay_source"`
+	PaymentVisibleMethodQQPaySource   *string `json:"payment_visible_method_qqpay_source"`
 	PaymentVisibleMethodAlipayEnabled *bool   `json:"payment_visible_method_alipay_enabled"`
 	PaymentVisibleMethodWxpayEnabled  *bool   `json:"payment_visible_method_wxpay_enabled"`
+	PaymentVisibleMethodQQPayEnabled  *bool   `json:"payment_visible_method_qqpay_enabled"`
 
 	// OpenAI account scheduling
 	OpenAIAdvancedSchedulerEnabled                     *bool   `json:"openai_advanced_scheduler_enabled"`
@@ -1450,6 +1452,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.PaymentVisibleMethodWxpaySource
 		}(),
+		PaymentVisibleMethodQQPaySource: func() string {
+			if req.PaymentVisibleMethodQQPaySource != nil {
+				return strings.TrimSpace(*req.PaymentVisibleMethodQQPaySource)
+			}
+			return previousSettings.PaymentVisibleMethodQQPaySource
+		}(),
 		PaymentVisibleMethodAlipayEnabled: func() bool {
 			if req.PaymentVisibleMethodAlipayEnabled != nil {
 				return *req.PaymentVisibleMethodAlipayEnabled
@@ -1461,6 +1469,12 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 				return *req.PaymentVisibleMethodWxpayEnabled
 			}
 			return previousSettings.PaymentVisibleMethodWxpayEnabled
+		}(),
+		PaymentVisibleMethodQQPayEnabled: func() bool {
+			if req.PaymentVisibleMethodQQPayEnabled != nil {
+				return *req.PaymentVisibleMethodQQPayEnabled
+			}
+			return previousSettings.PaymentVisibleMethodQQPayEnabled
 		}(),
 		OpenAIAdvancedSchedulerEnabled: func() bool {
 			if req.OpenAIAdvancedSchedulerEnabled != nil {
@@ -1868,8 +1882,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		CodexCLIOnlyEngineFingerprintSignals:                   updatedSettings.CodexCLIOnlyEngineFingerprintSignals,
 		PaymentVisibleMethodAlipaySource:                       updatedSettings.PaymentVisibleMethodAlipaySource,
 		PaymentVisibleMethodWxpaySource:                        updatedSettings.PaymentVisibleMethodWxpaySource,
+		PaymentVisibleMethodQQPaySource:                        updatedSettings.PaymentVisibleMethodQQPaySource,
 		PaymentVisibleMethodAlipayEnabled:                      updatedSettings.PaymentVisibleMethodAlipayEnabled,
 		PaymentVisibleMethodWxpayEnabled:                       updatedSettings.PaymentVisibleMethodWxpayEnabled,
+		PaymentVisibleMethodQQPayEnabled:                       updatedSettings.PaymentVisibleMethodQQPayEnabled,
 		OpenAIAdvancedSchedulerEnabled:                         updatedSettings.OpenAIAdvancedSchedulerEnabled,
 		OpenAIAdvancedSchedulerStickyWeightedEnabled:           updatedSettings.OpenAIAdvancedSchedulerStickyWeightedEnabled,
 		OpenAIAdvancedSchedulerSubscriptionPriorityEnabled:     updatedSettings.OpenAIAdvancedSchedulerSubscriptionPriorityEnabled,

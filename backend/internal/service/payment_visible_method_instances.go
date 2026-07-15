@@ -51,7 +51,7 @@ func enabledVisibleMethodsForProvider(providerKey, supportedTypes string) []stri
 	}
 
 	methods := make([]string, 0, len(methodSet))
-	for _, method := range []string{payment.TypeAlipay, payment.TypeWxpay} {
+	for _, method := range []string{payment.TypeAlipay, payment.TypeWxpay, payment.TypeQQPay} {
 		if _, ok := methodSet[method]; ok {
 			methods = append(methods, method)
 			delete(methodSet, method)
@@ -189,6 +189,21 @@ func (s *PaymentConfigService) resolveVisibleMethodProviderKey(
 	method string,
 	matching []*dbent.PaymentProviderInstance,
 ) (string, error) {
+	method = NormalizeVisibleMethod(method)
+	if method == payment.TypeQQPay {
+		providerKey, err := s.resolveVisibleMethodSourceProviderKey(ctx, method)
+		if err != nil || providerKey == "" {
+			return providerKey, err
+		}
+		selected := selectVisibleMethodInstanceByProviderKey(matching, providerKey)
+		if selected == nil {
+			return "", infraerrors.BadRequest(
+				"INVALID_PAYMENT_VISIBLE_METHOD_SOURCE",
+				fmt.Sprintf("%s source has no enabled provider instance", method),
+			)
+		}
+		return strings.TrimSpace(selected.ProviderKey), nil
+	}
 	switch providerKeys := distinctVisibleMethodProviderKeys(matching); len(providerKeys) {
 	case 0:
 		return "", nil
@@ -224,6 +239,15 @@ func (s *PaymentConfigService) resolveEnabledVisibleMethodInstance(
 	method = NormalizeVisibleMethod(method)
 	if method == "" {
 		return nil, nil
+	}
+	if method == payment.TypeQQPay && s.settingRepo != nil {
+		enabled, err := s.settingRepo.GetValue(ctx, SettingPaymentVisibleMethodQQPayEnabled)
+		if err != nil && !errors.Is(err, ErrSettingNotFound) {
+			return nil, fmt.Errorf("get %s: %w", SettingPaymentVisibleMethodQQPayEnabled, err)
+		}
+		if enabled != "true" {
+			return nil, nil
+		}
 	}
 
 	instances, err := s.entClient.PaymentProviderInstance.Query().
