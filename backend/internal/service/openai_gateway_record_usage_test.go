@@ -2152,6 +2152,7 @@ func TestOpenAIGatewayServiceRecordUsage_HydratesGroupImagePriceWhenAuthSnapshot
 	channelCache.loadedAt = time.Now()
 	channelService.cache.Store(channelCache)
 	svc.channelService = channelService
+	svc.resolver = newOpenAITokenImageChannelPricingResolverForTest(t, groupID, "grok-imagine-image-quality")
 	refreshed := svc.apiKeyWithFreshGroupMediaPricing(context.Background(), &APIKey{GroupID: i64p(groupID), Group: &Group{ID: groupID}})
 	require.NotNil(t, refreshed.Group.ImagePrice2K)
 
@@ -2355,6 +2356,77 @@ func TestOpenAIGatewayServiceRecordUsage_ChannelImageBillingUsesImageCountAndInd
 	require.Equal(t, 3, usageRepo.lastLog.ImageCount)
 	require.NotNil(t, usageRepo.lastLog.BillingMode)
 	require.Equal(t, string(BillingModeImage), *usageRepo.lastLog.BillingMode)
+}
+
+func TestOpenAIGatewayImageBilling_TokenChannelWithGroupPriceUsesImage(t *testing.T) {
+	groupID := int64(140)
+	imagePrice1K := 0.02
+	svc := &OpenAIGatewayService{
+		billingService: NewBillingService(&config.Config{}, nil),
+		resolver:       newOpenAITokenImageChannelPricingResolverForTest(t, groupID, "gpt-image-2"),
+	}
+
+	cost, err := svc.calculateOpenAIRecordUsageCost(
+		context.Background(),
+		&OpenAIForwardResult{Model: "gpt-image-2", ImageCount: 2, ImageSize: ImageBillingSize1K},
+		&APIKey{GroupID: i64p(groupID), Group: &Group{ID: groupID, ImagePrice1K: &imagePrice1K}},
+		[]string{"gpt-image-2"},
+		1, 1, 1, 1,
+		UsageTokens{InputTokens: 100, OutputTokens: 200},
+		"",
+		false,
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, string(BillingModeImage), cost.BillingMode)
+	require.InDelta(t, 0.04, cost.TotalCost, 1e-12)
+}
+
+func TestOpenAIGatewayImageBilling_TokenChannelWithoutGroupPriceUsesToken(t *testing.T) {
+	groupID := int64(141)
+	svc := &OpenAIGatewayService{
+		billingService: NewBillingService(&config.Config{}, nil),
+		resolver:       newOpenAITokenImageChannelPricingResolverForTest(t, groupID, "gpt-image-2"),
+	}
+
+	cost, err := svc.calculateOpenAIRecordUsageCost(
+		context.Background(),
+		&OpenAIForwardResult{Model: "gpt-image-2", ImageCount: 1, ImageSize: ImageBillingSize1K},
+		&APIKey{GroupID: i64p(groupID), Group: &Group{ID: groupID}},
+		[]string{"gpt-image-2"},
+		1, 1, 1, 1,
+		UsageTokens{InputTokens: 100, OutputTokens: 200},
+		"",
+		false,
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, string(BillingModeToken), cost.BillingMode)
+	require.Greater(t, cost.TotalCost, 0.0)
+}
+
+func TestOpenAIGatewayImageBilling_PartialGroupPriceUsesDefaultForOtherTier(t *testing.T) {
+	groupID := int64(142)
+	imagePrice1K := 0.02
+	svc := &OpenAIGatewayService{
+		billingService: NewBillingService(&config.Config{}, nil),
+		resolver:       newOpenAITokenImageChannelPricingResolverForTest(t, groupID, "gpt-image-2"),
+	}
+
+	cost, err := svc.calculateOpenAIRecordUsageCost(
+		context.Background(),
+		&OpenAIForwardResult{Model: "gpt-image-2", ImageCount: 1, ImageSize: ImageBillingSize4K},
+		&APIKey{GroupID: i64p(groupID), Group: &Group{ID: groupID, ImagePrice1K: &imagePrice1K}},
+		[]string{"gpt-image-2"},
+		1, 1, 1, 1,
+		UsageTokens{InputTokens: 100, OutputTokens: 200},
+		"",
+		false,
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, string(BillingModeImage), cost.BillingMode)
+	require.InDelta(t, defaultImageGenerationPrice*2, cost.TotalCost, 1e-12)
 }
 
 func newOpenAIImageChannelPricingResolverForTest(t *testing.T, groupID int64, model string, price float64) *ModelPricingResolver {

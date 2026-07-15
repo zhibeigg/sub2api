@@ -298,15 +298,30 @@ func hasAnyModelPrefix(model string, prefixes ...string) bool {
 	return false
 }
 
-func playgroundModelCapabilities(group *Group, model string) []string {
-	platform := NormalizePlatform(group.Platform)
+// ModelMediaType 根据模型名识别图片或视频生成模型；普通模型返回空字符串。
+func ModelMediaType(model string) string {
 	modelLower := strings.ToLower(strings.TrimSpace(model))
 	if modelLower == "" {
+		return ""
+	}
+	if firefly.IsVideoAlias(modelLower) || strings.Contains(modelLower, "video") || strings.HasPrefix(modelLower, "veo") || strings.HasPrefix(modelLower, "sora") || strings.Contains(modelLower, "seedance") {
+		return PlaygroundCapabilityVideo
+	}
+	if firefly.IsImageAlias(modelLower) || strings.HasPrefix(modelLower, "gpt-image-") || strings.Contains(modelLower, "imagine-image") || strings.HasSuffix(modelLower, "-image") || strings.Contains(modelLower, "image-preview") || strings.Contains(modelLower, "imagine-edit") || modelLower == "grok-imagine" {
+		return PlaygroundCapabilityImage
+	}
+	return ""
+}
+
+func playgroundModelCapabilities(group *Group, model string) []string {
+	platform := NormalizePlatform(group.Platform)
+	mediaType := ModelMediaType(model)
+	if strings.TrimSpace(model) == "" {
 		return nil
 	}
 
-	isVideo := firefly.IsVideoAlias(modelLower) || strings.Contains(modelLower, "video") || strings.HasPrefix(modelLower, "veo") || strings.HasPrefix(modelLower, "sora") || strings.Contains(modelLower, "seedance")
-	isImage := firefly.IsImageAlias(modelLower) || strings.HasPrefix(modelLower, "gpt-image-") || strings.Contains(modelLower, "imagine-image") || strings.HasSuffix(modelLower, "-image") || strings.Contains(modelLower, "image-preview") || strings.Contains(modelLower, "imagine-edit") || modelLower == "grok-imagine"
+	isVideo := mediaType == PlaygroundCapabilityVideo
+	isImage := mediaType == PlaygroundCapabilityImage
 
 	switch platform {
 	case PlatformAdobe:

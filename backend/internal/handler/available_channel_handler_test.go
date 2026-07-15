@@ -29,8 +29,9 @@ func TestUserAvailableChannel_Unauthenticated401(t *testing.T) {
 
 func TestFilterUserVisibleGroups_IntersectionOnly(t *testing.T) {
 	// 渠道挂在 {g1, g2, g3}，用户只允许 {g1, g3} —— 响应必须仅含 g1/g3。
+	imagePrice1K := 0.12
 	groups := []service.AvailableGroupRef{
-		{ID: 1, Name: "g1", Platform: "anthropic"},
+		{ID: 1, Name: "g1", Platform: "anthropic", AllowImageGeneration: true, ImageBillingEnabled: true, ImageRateIndependent: true, ImageRateMultiplier: 0.8, ImagePrice1K: &imagePrice1K},
 		{ID: 2, Name: "g2", Platform: "anthropic"},
 		{ID: 3, Name: "g3", Platform: "openai"},
 	}
@@ -40,6 +41,11 @@ func TestFilterUserVisibleGroups_IntersectionOnly(t *testing.T) {
 	require.Len(t, visible, 2)
 	ids := []int64{visible[0].ID, visible[1].ID}
 	require.ElementsMatch(t, []int64{1, 3}, ids)
+	require.True(t, visible[0].AllowImageGeneration)
+	require.True(t, visible[0].ImageBillingEnabled)
+	require.True(t, visible[0].ImageRateIndependent)
+	require.InDelta(t, 0.8, visible[0].ImageRateMultiplier, 1e-12)
+	require.Same(t, &imagePrice1K, visible[0].ImagePrice1K)
 }
 
 func TestToUserSupportedModels_FiltersByAllowedPlatforms(t *testing.T) {
@@ -52,6 +58,21 @@ func TestToUserSupportedModels_FiltersByAllowedPlatforms(t *testing.T) {
 	out := toUserSupportedModels(src, allowed)
 	require.Len(t, out, 1)
 	require.Equal(t, "claude-sonnet-4-6", out[0].Name)
+	require.Empty(t, out[0].MediaType)
+}
+
+func TestToUserSupportedModels_MapsMediaType(t *testing.T) {
+	src := []service.SupportedModel{
+		{Name: "gpt-image-2", Platform: service.PlatformOpenAI},
+		{Name: "grok-imagine-video-1.5", Platform: service.PlatformGrok},
+		{Name: "gpt-5.4", Platform: service.PlatformOpenAI},
+	}
+
+	out := toUserSupportedModels(src, nil)
+	require.Len(t, out, 3)
+	require.Equal(t, "image", out[0].MediaType)
+	require.Equal(t, "video", out[1].MediaType)
+	require.Empty(t, out[2].MediaType)
 }
 
 func TestToUserSupportedModels_NilAllowedPlatformsKeepsAll(t *testing.T) {
@@ -66,14 +87,22 @@ func TestToUserSupportedModels_NilAllowedPlatformsKeepsAll(t *testing.T) {
 func TestUserAvailableChannel_FieldWhitelist(t *testing.T) {
 	// 通过序列化 userAvailableChannel 结构体验证响应形状：
 	// 只有 name / description / platforms；不含管理端字段。
+	imagePrice2K := 0.23
 	row := userAvailableChannel{
 		Name:        "ch",
 		Description: "d",
 		Platforms: []userChannelPlatformSection{
 			{
-				Platform:        "anthropic",
-				Groups:          []userAvailableGroup{{ID: 1, Name: "g1", Platform: "anthropic"}},
-				SupportedModels: []userSupportedModel{},
+				Platform: "anthropic",
+				Groups: []userAvailableGroup{{
+					ID: 1, Name: "g1", Platform: "anthropic",
+					AllowImageGeneration: true,
+					ImageBillingEnabled:  true,
+					ImageRateIndependent: true,
+					ImageRateMultiplier:  0.75,
+					ImagePrice2K:         &imagePrice2K,
+				}},
+				SupportedModels: []userSupportedModel{{Name: "claude-sonnet-4-6", Platform: "anthropic"}},
 			},
 		},
 	}
@@ -107,9 +136,23 @@ func TestUserAvailableChannel_FieldWhitelist(t *testing.T) {
 	require.NoError(t, err)
 	var groupDecoded map[string]any
 	require.NoError(t, json.Unmarshal(rawGroup, &groupDecoded))
-	for _, key := range []string{"id", "name", "platform", "subscription_type", "rate_multiplier", "peak_rate_enabled", "peak_start", "peak_end", "peak_rate_multiplier", "is_exclusive"} {
+	for _, key := range []string{
+		"id", "name", "platform", "subscription_type", "rate_multiplier",
+		"peak_rate_enabled", "peak_start", "peak_end", "peak_rate_multiplier", "is_exclusive",
+		"allow_image_generation", "image_billing_enabled", "image_rate_independent",
+		"image_rate_multiplier", "image_price_1k", "image_price_2k", "image_price_4k",
+	} {
 		_, exists := groupDecoded[key]
 		require.Truef(t, exists, "group DTO must expose %q", key)
+	}
+
+	rawModel, err := json.Marshal(row.Platforms[0].SupportedModels[0])
+	require.NoError(t, err)
+	var modelDecoded map[string]any
+	require.NoError(t, json.Unmarshal(rawModel, &modelDecoded))
+	for _, key := range []string{"name", "platform", "media_type", "pricing"} {
+		_, exists := modelDecoded[key]
+		require.Truef(t, exists, "supported model DTO must expose %q", key)
 	}
 
 	// pricing interval 白名单：不应暴露 id / sort_order。

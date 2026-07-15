@@ -253,6 +253,11 @@ func (g *Group) HasMonthlyLimit() bool {
 	return g.MonthlyLimitUSD != nil && *g.MonthlyLimitUSD > 0
 }
 
+// HasImageBillingPrice 返回分组是否显式配置了任一图片按张价格。
+func (g *Group) HasImageBillingPrice() bool {
+	return g != nil && (g.ImagePrice1K != nil || g.ImagePrice2K != nil || g.ImagePrice4K != nil)
+}
+
 // GetImagePrice 根据 image_size 返回对应的图片生成价格
 // 如果分组未配置价格，返回 nil（调用方应使用默认值）
 func (g *Group) GetImagePrice(imageSize string) *float64 {

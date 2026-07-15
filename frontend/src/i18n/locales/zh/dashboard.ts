@@ -549,7 +549,8 @@ export default {
       perSecondPrice: '每秒价格',
       intervals: '阶梯定价',
       unitPerMillion: '/ 1M token',
-      unitPerRequest: '/ 次'
+      unitPerRequest: '/ 次',
+      unitPerImage: '/ 张'
     }
   },
 

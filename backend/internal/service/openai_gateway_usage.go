@@ -115,6 +115,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	user := input.User
 	account := input.Account
 	subscription := input.Subscription
+	if result.ImageCount > 0 || isVideoUsageResult(result) {
+		apiKey = s.apiKeyWithFreshGroupMediaPricing(ctx, apiKey)
+	}
 	if !isVideoUsageResult(result) {
 		ApplyOpenAIImageBillingResolution(result)
 	}
@@ -406,7 +409,10 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(
 		}
 	}
 	if result != nil && result.ImageCount > 0 {
-		// 渠道定价为 token 计费时走 token 路径，否则走图片计费
+		// 分组显式配置任一图片按张价格时统一走图片计费；否则渠道 token 定价保持 token 计费。
+		if apiKeyHasImageBillingPrice(apiKey) {
+			return s.calculateOpenAIImageCost(ctx, billingModel, apiKey, result, imageMultiplier), nil
+		}
 		if resolved := s.resolveOpenAIChannelPricing(ctx, billingModel, apiKey); resolved == nil || resolved.Mode != BillingModeToken {
 			return s.calculateOpenAIImageCost(ctx, billingModel, apiKey, result, imageMultiplier), nil
 		}
@@ -496,13 +502,13 @@ func (s *OpenAIGatewayService) calculateOpenAIImageCost(
 ) *CostBreakdown {
 	sizeTier := NormalizeImageBillingTierOrDefault(result.ImageSize)
 	groupConfig := imagePriceConfigFromAPIKey(apiKey)
-	if apiKeyHasConfiguredImagePrice(apiKey, sizeTier) {
+	if apiKeyHasImageBillingPrice(apiKey) {
 		return s.billingService.CalculateImageCost(billingModel, sizeTier, result.ImageCount, groupConfig, multiplier)
 	}
 	if refreshed := s.apiKeyWithFreshGroupMediaPricing(ctx, apiKey); refreshed != apiKey {
 		apiKey = refreshed
 		groupConfig = imagePriceConfigFromAPIKey(apiKey)
-		if apiKeyHasConfiguredImagePrice(apiKey, sizeTier) {
+		if apiKeyHasImageBillingPrice(apiKey) {
 			return s.billingService.CalculateImageCost(billingModel, sizeTier, result.ImageCount, groupConfig, multiplier)
 		}
 	}
@@ -577,40 +583,10 @@ func (s *OpenAIGatewayService) calculateOpenAIVideoCost(
 }
 
 func (s *OpenAIGatewayService) apiKeyWithFreshGroupMediaPricing(ctx context.Context, apiKey *APIKey) *APIKey {
-	if apiKey == nil || apiKey.GroupID == nil || *apiKey.GroupID <= 0 {
+	if s == nil || s.channelService == nil {
 		return apiKey
 	}
-	if !groupMediaPricingLooksIncomplete(apiKey.Group) {
-		return apiKey
-	}
-	if s == nil || s.channelService == nil || s.channelService.groupRepo == nil {
-		return apiKey
-	}
-	group, err := s.channelService.groupRepo.GetByIDLite(ctx, *apiKey.GroupID)
-	if err != nil || group == nil {
-		return apiKey
-	}
-	clone := *apiKey
-	clone.Group = group
-	return &clone
-}
-
-// groupMediaPricingLooksIncomplete 判断分组对象是否可能缺失媒体计费字段（例如由不含
-// 这些字段的旧快照或手工构造的上下文对象生成）。image/video 独立倍率在数据库中的
-// 默认值均为 1.0，正常加载的分组不可能两个倍率同时为 0 且未开启独立倍率、全部媒体
-// 价为 nil——只有这种情况才回源查库，避免对未配置覆盖价的分组每条媒体用量都多打一次 DB 查询。
-func groupMediaPricingLooksIncomplete(group *Group) bool {
-	if group == nil {
-		return true
-	}
-	if group.ImageRateIndependent || group.VideoRateIndependent {
-		return false
-	}
-	if group.ImageRateMultiplier != 0 || group.VideoRateMultiplier != 0 {
-		return false
-	}
-	return group.ImagePrice1K == nil && group.ImagePrice2K == nil && group.ImagePrice4K == nil &&
-		group.VideoPrice480P == nil && group.VideoPrice720P == nil && group.VideoPrice1080P == nil
+	return refreshAPIKeyGroupMediaPricing(ctx, apiKey, s.channelService.groupRepo)
 }
 
 func (s *OpenAIGatewayService) resolveOpenAIChannelPricing(ctx context.Context, billingModel string, apiKey *APIKey) *ResolvedPricing {

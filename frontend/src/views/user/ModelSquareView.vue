@@ -233,11 +233,41 @@
 
               <!-- Pricing -->
               <div class="space-y-1.5 border-t border-gray-100 pt-4 text-sm dark:border-dark-700">
-                <template v-if="!model.pricing">
+                <template v-if="!model.pricing && model.imageTiers.length === 0">
                   <p class="text-xs text-gray-400 dark:text-gray-500">{{ t('modelSquare.noPricing') }}</p>
                 </template>
 
-                <template v-else-if="model.billingMode === 'token'">
+                <template v-else-if="model.billingMode === 'image'">
+                  <div
+                    v-if="model.imageTiers.length > 0"
+                    class="flex flex-wrap items-baseline gap-x-3 gap-y-1"
+                  >
+                    <span
+                      v-for="tier in model.imageTiers"
+                      :key="`${model.key}-${tier.tier}`"
+                      class="inline-flex items-baseline gap-1"
+                    >
+                      <span class="text-[11px] font-medium uppercase text-gray-400 dark:text-gray-500">
+                        {{ tier.tier }}
+                      </span>
+                      <span class="font-semibold tabular-nums text-rose-600 dark:text-rose-400">
+                        {{ formatImagePriceRange(tier) }}
+                      </span>
+                    </span>
+                    <span class="text-xs text-gray-400 dark:text-gray-500">
+                      {{ t('availableChannels.pricing.unitPerImage') }}
+                    </span>
+                  </div>
+                  <div v-else-if="model.pricing && mediaPrice(model.pricing) != null" class="flex justify-between">
+                    <span class="text-gray-500 dark:text-gray-400">{{ t('availableChannels.pricing.imageOutputPrice') }}</span>
+                    <span class="font-medium text-gray-900 dark:text-gray-100">
+                      {{ formatScaled(mediaPrice(model.pricing), 1) }}
+                      <span class="text-xs font-normal text-gray-400">{{ t('availableChannels.pricing.unitPerImage') }}</span>
+                    </span>
+                  </div>
+                </template>
+
+                <template v-else-if="model.billingMode === 'token' && model.pricing">
                   <div v-if="model.pricing.input_price != null" class="flex justify-between">
                     <span class="text-gray-500 dark:text-gray-400">{{ t('availableChannels.pricing.inputPrice') }}</span>
                     <span class="font-medium text-gray-900 dark:text-gray-100">
@@ -268,7 +298,7 @@
                   </div>
                 </template>
 
-                <template v-else-if="model.billingMode === 'per_request'">
+                <template v-else-if="model.billingMode === 'per_request' && model.pricing">
                   <div class="flex justify-between">
                     <span class="text-gray-500 dark:text-gray-400">{{ t('availableChannels.pricing.perRequestPrice') }}</span>
                     <span class="font-medium text-gray-900 dark:text-gray-100">
@@ -278,58 +308,87 @@
                   </div>
                 </template>
 
-                <template v-else-if="model.billingMode === 'image' || model.billingMode === 'video'">
+                <template v-else-if="model.billingMode === 'video' && model.pricing">
                   <div v-if="mediaPrice(model.pricing) != null" class="flex justify-between">
-                    <span class="text-gray-500 dark:text-gray-400">{{ model.billingMode === 'video' ? t('availableChannels.pricing.perSecondPrice') : t('availableChannels.pricing.imageOutputPrice') }}</span>
+                    <span class="text-gray-500 dark:text-gray-400">{{ t('availableChannels.pricing.perSecondPrice') }}</span>
                     <span class="font-medium text-gray-900 dark:text-gray-100">
                       {{ formatScaled(mediaPrice(model.pricing), 1) }}
-                      <span class="text-xs font-normal text-gray-400">{{ model.billingMode === 'video' ? '/second' : '/image' }}</span>
+                      <span class="text-xs font-normal text-gray-400">/second</span>
                     </span>
                   </div>
                 </template>
               </div>
 
               <!-- Available groups (name + badge + multiplier) -->
-              <div v-if="model.groups.length > 0" class="mt-auto space-y-1 border-t border-gray-100 pt-3 dark:border-dark-700">
-                <div class="mb-1 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+              <div v-if="model.groups.length > 0" class="mt-auto border-t border-gray-100 pt-3 dark:border-dark-700">
+                <div class="mb-2 text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
                   {{ t('modelSquare.availableGroups') }}
                 </div>
-                <div
-                  v-for="g in model.groups"
-                  :key="`${model.key}-g-${g.id}`"
-                  class="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-xs"
-                  :class="
-                    g.isExclusive
-                      ? 'bg-purple-500/10'
-                      : 'bg-gray-50 dark:bg-dark-700/60'
-                  "
-                >
-                  <span class="flex min-w-0 items-center gap-1.5">
+
+                <div v-if="model.billingMode === 'image'" class="flex flex-wrap gap-2">
+                  <div
+                    v-for="g in model.groups"
+                    :key="`${model.key}-g-${g.id}`"
+                    class="inline-flex max-w-full items-center gap-1.5 rounded-md border px-2 py-1 text-xs"
+                    :class="
+                      g.isExclusive
+                        ? 'border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-950/30 dark:text-purple-200'
+                        : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300'
+                    "
+                  >
                     <ModelIcon
                       :model="groupBrand(g.platform, g.name).keyword"
-                      size="15px"
+                      size="14px"
                       class="flex-shrink-0"
                     />
+                    <span class="max-w-36 truncate font-medium" :title="g.name">{{ g.name }}</span>
                     <span
-                      class="truncate font-medium"
-                      :class="groupBrand(g.platform, g.name).colorClass"
-                      :title="g.name"
+                      class="flex-shrink-0 rounded px-1.5 py-0.5 font-semibold tabular-nums"
+                      :class="multiplierBadgeClass(g.rate)"
                     >
-                      {{ g.name }}
+                      {{ formatMultiplier(g.rate) }}
                     </span>
-                    <span
-                      v-if="g.isExclusive"
-                      class="flex-shrink-0 rounded px-1 text-[9px] font-medium uppercase bg-purple-500/20 text-purple-700 dark:text-purple-200"
-                    >
-                      {{ t('availableChannels.exclusive') }}
-                    </span>
-                  </span>
-                  <span
-                    class="flex-shrink-0 rounded px-1.5 py-0.5 font-semibold tabular-nums"
-                    :class="multiplierBadgeClass(g.rate)"
+                  </div>
+                </div>
+
+                <div v-else class="space-y-1">
+                  <div
+                    v-for="g in model.groups"
+                    :key="`${model.key}-g-${g.id}`"
+                    class="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-xs"
+                    :class="
+                      g.isExclusive
+                        ? 'bg-purple-500/10'
+                        : 'bg-gray-50 dark:bg-dark-700/60'
+                    "
                   >
-                    {{ formatMultiplier(g.rate) }}
-                  </span>
+                    <span class="flex min-w-0 items-center gap-1.5">
+                      <ModelIcon
+                        :model="groupBrand(g.platform, g.name).keyword"
+                        size="15px"
+                        class="flex-shrink-0"
+                      />
+                      <span
+                        class="truncate font-medium"
+                        :class="groupBrand(g.platform, g.name).colorClass"
+                        :title="g.name"
+                      >
+                        {{ g.name }}
+                      </span>
+                      <span
+                        v-if="g.isExclusive"
+                        class="flex-shrink-0 rounded bg-purple-500/20 px-1 text-[9px] font-medium uppercase text-purple-700 dark:text-purple-200"
+                      >
+                        {{ t('availableChannels.exclusive') }}
+                      </span>
+                    </span>
+                    <span
+                      class="flex-shrink-0 rounded px-1.5 py-0.5 font-semibold tabular-nums"
+                      :class="multiplierBadgeClass(g.rate)"
+                    >
+                      {{ formatMultiplier(g.rate) }}
+                    </span>
+                  </div>
                 </div>
               </div>
             </article>
@@ -358,6 +417,13 @@ import { formatScaled } from '@/utils/pricing'
 import { platformBadgeClass, platformLabel } from '@/utils/platformColors'
 import { resolveGroupBrand, BRAND_LABEL } from '@/utils/groupBrand'
 import { useVisibleAutoRefresh } from '@/composables/useVisibleAutoRefresh'
+import {
+  effectiveImageGroupRate,
+  effectiveModelBillingMode,
+  formatImagePriceRange,
+  resolveImageTierPrices,
+  type ModelSquareImageTierPrice
+} from './modelSquarePricing'
 import {
   BILLING_MODE_TOKEN,
   BILLING_MODE_PER_REQUEST,
@@ -401,6 +467,13 @@ interface SquareGroup {
   rate: number
   isExclusive: boolean
   platform: string
+  allowImageGeneration: boolean
+  imageBillingEnabled: boolean
+  imageRateIndependent: boolean
+  imageRateMultiplier: number
+  imagePrice1K: number | null
+  imagePrice2K: number | null
+  imagePrice4K: number | null
 }
 
 interface SquareModel {
@@ -408,8 +481,10 @@ interface SquareModel {
   name: string
   platforms: string[]
   brand: string
+  mediaType: string
   billingMode: BillingMode
   pricing: UserSupportedModelPricing | null
+  imageTiers: ModelSquareImageTierPrice[]
   groups: SquareGroup[]
   groupIds: number[]
   endpoints: string[]
@@ -438,7 +513,24 @@ function isAbortError(error: unknown): boolean {
   return maybeError.name === 'AbortError' || maybeError.name === 'CanceledError' || maybeError.code === 'ERR_CANCELED'
 }
 
-/** Flatten channels → platforms → supported_models into deduped model cards. */
+function shouldPreferPricing(
+  current: UserSupportedModelPricing | null,
+  candidate: UserSupportedModelPricing | null,
+  billingMode: BillingMode
+): boolean {
+  if (!candidate) return false
+  if (!current) return true
+
+  const matches = (pricing: UserSupportedModelPricing): boolean => {
+    if (billingMode === BILLING_MODE_IMAGE) {
+      return pricing.billing_mode === BILLING_MODE_IMAGE || pricing.billing_mode === BILLING_MODE_PER_REQUEST
+    }
+    return pricing.billing_mode === billingMode
+  }
+  return !matches(current) && matches(candidate)
+}
+
+/** Flatten channels → platforms → supported_models into cards split by effective billing mode. */
 const allModels = computed<SquareModel[]>(() => {
   const map = new Map<string, SquareModel>()
   for (const ch of channels.value) {
@@ -448,47 +540,81 @@ const allModels = computed<SquareModel[]>(() => {
         name: g.name,
         rate: userGroupRates.value[g.id] ?? g.rate_multiplier,
         isExclusive: g.is_exclusive,
-        platform: section.platform
+        platform: g.platform || section.platform,
+        allowImageGeneration: g.allow_image_generation ?? false,
+        imageBillingEnabled: g.image_billing_enabled ?? false,
+        imageRateIndependent: g.image_rate_independent ?? false,
+        imageRateMultiplier: g.image_rate_multiplier ?? 1,
+        imagePrice1K: g.image_price_1k ?? null,
+        imagePrice2K: g.image_price_2k ?? null,
+        imagePrice4K: g.image_price_4k ?? null
       }))
+
       for (const m of section.supported_models) {
-        const key = m.name.toLowerCase()
-        let entry = map.get(key)
-        if (!entry) {
-          entry = {
-            key,
-            name: m.name,
-            platforms: [],
-            brand: resolveGroupBrand(m.platform || section.platform, m.name).brand,
-            billingMode: (m.pricing?.billing_mode as BillingMode) || BILLING_MODE_TOKEN,
-            pricing: m.pricing,
-            groups: [],
-            groupIds: [],
-            endpoints: []
+        const mediaType = m.media_type ?? ''
+        const eligibleGroups = mediaType === 'image'
+          ? sectionGroups.filter((group) => group.allowImageGeneration)
+          : sectionGroups
+        if (eligibleGroups.length === 0) continue
+
+        const groupsByMode = new Map<BillingMode, SquareGroup[]>()
+        for (const group of eligibleGroups) {
+          const mode = effectiveModelBillingMode(mediaType, m.pricing, group)
+          const displayGroup = mode === BILLING_MODE_IMAGE
+            ? { ...group, rate: effectiveImageGroupRate(group, group.rate) }
+            : group
+          const bucket = groupsByMode.get(mode) ?? []
+          bucket.push(displayGroup)
+          groupsByMode.set(mode, bucket)
+        }
+
+        for (const [billingMode, modeGroups] of groupsByMode) {
+          const baseKey = m.name.toLowerCase()
+          const key = mediaType ? `${baseKey}::${billingMode}` : baseKey
+          let entry = map.get(key)
+          if (!entry) {
+            entry = {
+              key,
+              name: m.name,
+              platforms: [],
+              brand: resolveGroupBrand(m.platform || section.platform, m.name).brand,
+              mediaType,
+              billingMode,
+              pricing: m.pricing,
+              imageTiers: [],
+              groups: [],
+              groupIds: [],
+              endpoints: []
+            }
+            map.set(key, entry)
+          } else if (shouldPreferPricing(entry.pricing, m.pricing, billingMode)) {
+            entry.pricing = m.pricing
           }
-          map.set(key, entry)
-        }
-        const plat = m.platform || section.platform
-        if (plat && !entry.platforms.includes(plat)) entry.platforms.push(plat)
-        if (plat && ENDPOINT_OF[plat] && !entry.endpoints.includes(ENDPOINT_OF[plat])) {
-          entry.endpoints.push(ENDPOINT_OF[plat])
-        }
-        if (!entry.pricing && m.pricing) {
-          entry.pricing = m.pricing
-          entry.billingMode = (m.pricing.billing_mode as BillingMode) || BILLING_MODE_TOKEN
-        }
-        for (const g of sectionGroups) {
-          if (!entry.groups.some((x) => x.id === g.id)) {
-            entry.groups.push(g)
-            entry.groupIds.push(g.id)
+
+          const platform = m.platform || section.platform
+          if (platform && !entry.platforms.includes(platform)) entry.platforms.push(platform)
+          if (platform && ENDPOINT_OF[platform] && !entry.endpoints.includes(ENDPOINT_OF[platform])) {
+            entry.endpoints.push(ENDPOINT_OF[platform])
+          }
+          for (const group of modeGroups) {
+            if (!entry.groups.some((item) => item.id === group.id)) {
+              entry.groups.push(group)
+              entry.groupIds.push(group.id)
+            }
           }
         }
       }
     }
   }
+
   const list = Array.from(map.values())
-  // Exclusive groups first within each card.
-  for (const m of list) m.groups.sort((a, b) => Number(b.isExclusive) - Number(a.isExclusive))
-  return list.sort((a, b) => a.name.localeCompare(b.name))
+  for (const model of list) {
+    model.groups.sort((a, b) => Number(b.isExclusive) - Number(a.isExclusive))
+    if (model.billingMode === BILLING_MODE_IMAGE) {
+      model.imageTiers = resolveImageTierPrices(model.pricing, model.groups)
+    }
+  }
+  return list.sort((a, b) => a.name.localeCompare(b.name) || a.billingMode.localeCompare(b.billingMode))
 })
 
 const totalModels = computed(() => allModels.value.length)

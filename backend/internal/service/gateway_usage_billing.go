@@ -648,6 +648,9 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	user := input.User
 	account := input.Account
 	subscription := input.Subscription
+	if result.ImageCount > 0 {
+		apiKey = s.apiKeyWithFreshGroupMediaPricing(ctx, apiKey)
+	}
 	ApplyForwardImageBillingResolution(result)
 
 	// 强制缓存计费：将 input_tokens 转为 cache_read_input_tokens
@@ -763,6 +766,13 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	return nil
 }
 
+func (s *GatewayService) apiKeyWithFreshGroupMediaPricing(ctx context.Context, apiKey *APIKey) *APIKey {
+	if s == nil {
+		return apiKey
+	}
+	return refreshAPIKeyGroupMediaPricing(ctx, apiKey, s.groupRepo)
+}
+
 // calculateRecordUsageCost 根据请求类型和选项计算费用。
 func (s *GatewayService) calculateRecordUsageCost(
 	ctx context.Context,
@@ -774,8 +784,11 @@ func (s *GatewayService) calculateRecordUsageCost(
 	imageMultiplier float64,
 	opts *recordUsageOpts,
 ) *CostBreakdown {
-	// 图片生成：渠道定价为 token 计费时走 token 路径，否则走图片计费
+	// 图片生成：分组显式配置任一图片按张价格时统一走图片计费；否则渠道 token 定价保持 token 计费。
 	if result.ImageCount > 0 {
+		if apiKeyHasImageBillingPrice(apiKey) {
+			return s.calculateImageCost(ctx, result, apiKey, billingModel, pricingPlatform, imageMultiplier)
+		}
 		if resolved := s.resolveChannelPricing(ctx, billingModel, pricingPlatform, apiKey); resolved != nil && resolved.Mode == BillingModeToken {
 			return s.calculateTokenCost(ctx, result, apiKey, billingModel, pricingPlatform, multiplier, opts)
 		}
@@ -811,7 +824,7 @@ func (s *GatewayService) calculateImageCost(
 ) *CostBreakdown {
 	sizeTier := NormalizeImageBillingTierOrDefault(result.ImageSize)
 	groupConfig := imagePriceConfigFromAPIKey(apiKey)
-	if apiKeyHasConfiguredImagePrice(apiKey, sizeTier) {
+	if apiKeyHasImageBillingPrice(apiKey) {
 		return s.billingService.CalculateImageCost(billingModel, sizeTier, result.ImageCount, groupConfig, multiplier)
 	}
 	if resolved := s.resolveChannelPricing(ctx, billingModel, pricingPlatform, apiKey); resolved != nil {

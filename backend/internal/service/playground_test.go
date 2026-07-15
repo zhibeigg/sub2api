@@ -148,6 +148,20 @@ func TestPlaygroundServiceGetModelOptionsSkipsGroupsWithoutCurrentAccess(t *test
 	require.Equal(t, []int64{1}, models.calls)
 }
 
+func TestModelMediaType(t *testing.T) {
+	tests := map[string]string{
+		"gpt-image-2":                  PlaygroundCapabilityImage,
+		"grok-imagine-image-quality":   PlaygroundCapabilityImage,
+		"grok-imagine-video-1.5":       PlaygroundCapabilityVideo,
+		"sora-2":                       PlaygroundCapabilityVideo,
+		"claude-sonnet-4-6":            "",
+		"  GEMINI-3-PRO-IMAGE-PREVIEW": PlaygroundCapabilityImage,
+	}
+	for model, want := range tests {
+		require.Equal(t, want, ModelMediaType(model), model)
+	}
+}
+
 func TestPlaygroundModelFeaturesConservativeMatrix(t *testing.T) {
 	tests := []struct {
 		name         string

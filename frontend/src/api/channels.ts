@@ -20,6 +20,16 @@ export interface UserAvailableGroup {
   peak_rate_multiplier: number
   /** true = 专属分组（小范围授权）；false = 公开分组。 */
   is_exclusive: boolean
+  /** 是否允许调用图片生成能力。 */
+  allow_image_generation: boolean
+  /** 是否因分组图片价格覆盖而采用按图片计费。 */
+  image_billing_enabled: boolean
+  /** 图片生成是否使用独立倍率。 */
+  image_rate_independent: boolean
+  image_rate_multiplier: number
+  image_price_1k: number | null
+  image_price_2k: number | null
+  image_price_4k: number | null
 }
 
 export interface UserPricingInterval {
@@ -47,6 +57,8 @@ export interface UserSupportedModelPricing {
 export interface UserSupportedModel {
   name: string
   platform: string
+  /** 后端统一识别的媒体类型；空字符串表示普通文本模型。 */
+  media_type?: '' | 'image' | 'video'
   pricing: UserSupportedModelPricing | null
 }
 

@@ -8,6 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestGroup_HasImageBillingPrice(t *testing.T) {
+	price := 0.10
+	require.False(t, (*Group)(nil).HasImageBillingPrice())
+	require.False(t, (&Group{}).HasImageBillingPrice())
+	require.True(t, (&Group{ImagePrice1K: &price}).HasImageBillingPrice())
+	require.True(t, (&Group{ImagePrice2K: &price}).HasImageBillingPrice())
+	require.True(t, (&Group{ImagePrice4K: &price}).HasImageBillingPrice())
+}
+
 // TestGroup_GetImagePrice_1K 测试 1K 尺寸返回正确价格
 func TestGroup_GetImagePrice_1K(t *testing.T) {
 	price := 0.10

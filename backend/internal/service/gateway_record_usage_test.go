@@ -286,6 +286,111 @@ func TestGatewayServiceRecordUsage_PeakRateAffectsTokenModeImageOutputTokens(t *
 	require.InDelta(t, expectedActual, userRepo.lastAmount, 1e-12)
 }
 
+func TestGatewayImageBilling_TokenChannelWithGroupPriceUsesImage(t *testing.T) {
+	groupID := int64(903)
+	imagePrice1K := 0.03
+	svc := &GatewayService{
+		billingService: NewBillingService(&config.Config{}, nil),
+		resolver:       newOpenAITokenImageChannelPricingResolverForTest(t, groupID, "gemini-image"),
+	}
+
+	cost := svc.calculateRecordUsageCost(
+		context.Background(),
+		&ForwardResult{Model: "gemini-image", ImageCount: 2, ImageSize: ImageBillingSize1K, Usage: ClaudeUsage{InputTokens: 100, OutputTokens: 200}},
+		&APIKey{GroupID: i64p(groupID), Group: &Group{ID: groupID, ImagePrice1K: &imagePrice1K}},
+		"gemini-image",
+		"",
+		1,
+		1,
+		nil,
+	)
+
+	require.Equal(t, string(BillingModeImage), cost.BillingMode)
+	require.InDelta(t, 0.06, cost.TotalCost, 1e-12)
+}
+
+func TestGatewayImageBilling_TokenChannelWithoutGroupPriceUsesToken(t *testing.T) {
+	groupID := int64(904)
+	svc := &GatewayService{
+		billingService: NewBillingService(&config.Config{}, nil),
+		resolver:       newOpenAITokenImageChannelPricingResolverForTest(t, groupID, "gemini-image"),
+	}
+
+	cost := svc.calculateRecordUsageCost(
+		context.Background(),
+		&ForwardResult{Model: "gemini-image", ImageCount: 1, ImageSize: ImageBillingSize1K, Usage: ClaudeUsage{InputTokens: 100, OutputTokens: 200}},
+		&APIKey{GroupID: i64p(groupID), Group: &Group{ID: groupID}},
+		"gemini-image",
+		"",
+		1,
+		1,
+		nil,
+	)
+
+	require.Equal(t, string(BillingModeToken), cost.BillingMode)
+	require.Greater(t, cost.TotalCost, 0.0)
+}
+
+func TestGatewayImageBilling_PartialGroupPriceUsesDefaultForOtherTier(t *testing.T) {
+	groupID := int64(905)
+	imagePrice1K := 0.03
+	svc := &GatewayService{
+		billingService: NewBillingService(&config.Config{}, nil),
+		resolver:       newOpenAITokenImageChannelPricingResolverForTest(t, groupID, "gemini-image"),
+	}
+
+	cost := svc.calculateRecordUsageCost(
+		context.Background(),
+		&ForwardResult{Model: "gemini-image", ImageCount: 1, ImageSize: ImageBillingSize4K, Usage: ClaudeUsage{InputTokens: 100, OutputTokens: 200}},
+		&APIKey{GroupID: i64p(groupID), Group: &Group{ID: groupID, ImagePrice1K: &imagePrice1K}},
+		"gemini-image",
+		"",
+		1,
+		1,
+		nil,
+	)
+
+	require.Equal(t, string(BillingModeImage), cost.BillingMode)
+	require.InDelta(t, defaultImageGenerationPrice*2, cost.TotalCost, 1e-12)
+}
+
+func TestGatewayServiceRecordUsage_HydratesGroupImagePriceBeforeTokenChannelDecision(t *testing.T) {
+	groupID := int64(906)
+	imagePrice2K := 0.04
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	svc := newGatewayRecordUsageServiceForTest(usageRepo, &openAIRecordUsageUserRepoStub{}, &openAIRecordUsageSubRepoStub{})
+	svc.groupRepo = &openAIMediaPriceGroupRepoStub{group: &Group{
+		ID:                  groupID,
+		RateMultiplier:      1,
+		ImageRateMultiplier: 1,
+		VideoRateMultiplier: 1,
+		ImagePrice2K:        &imagePrice2K,
+	}}
+	svc.resolver = newOpenAITokenImageChannelPricingResolverForTest(t, groupID, "gemini-image")
+
+	err := svc.RecordUsage(context.Background(), &RecordUsageInput{
+		Result: &ForwardResult{
+			RequestID:  "gateway_hydrated_image_price",
+			Model:      "gemini-image",
+			ImageCount: 1,
+			ImageSize:  ImageBillingSize2K,
+			Usage:      ClaudeUsage{InputTokens: 100, OutputTokens: 200},
+			Duration:   time.Second,
+		},
+		APIKey: &APIKey{ID: 807, GroupID: i64p(groupID), Group: &Group{ID: groupID, RateMultiplier: 1}},
+		User:   &User{ID: 607},
+		Account: &Account{
+			ID:       707,
+			Platform: PlatformGemini,
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, usageRepo.lastLog)
+	require.Equal(t, string(BillingModeImage), *usageRepo.lastLog.BillingMode)
+	require.InDelta(t, 0.04, usageRepo.lastLog.TotalCost, 1e-12)
+}
+
 func TestGatewayServiceRecordUsage_UsageLogWriteErrorDoesNotSkipBilling(t *testing.T) {
 	usageRepo := &openAIRecordUsageLogRepoStub{inserted: false, err: MarkUsageLogCreateNotPersisted(context.Canceled)}
 	userRepo := &openAIRecordUsageUserRepoStub{}
