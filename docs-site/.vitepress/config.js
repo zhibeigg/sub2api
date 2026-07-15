@@ -2,7 +2,7 @@ import { defineConfig } from "vitepress"
 
 const siteUrl = "https://docs.poke2api.com"
 const siteDescription = "Poke API - AI API 网关，一个 API Key 接入 Claude / OpenAI / Gemini"
-const brandLogo = "/logo.png?v=0.53.54"
+const brandLogo = "/logo.png?v=0.53.55"
 
 function canonicalPath(relativePath) {
   if (relativePath === "index.md") {
@@ -131,9 +131,6 @@ export default defineConfig({
         }
       }
     },
-    socialLinks: [
-      { icon: "github", link: "https://github.com/Wei-Shaw/sub2api" }
-    ],
     footer: {
       message: "PokeAPI · AI API Gateway",
       copyright: "© 2026 PokeAPI · 保留所有权利"

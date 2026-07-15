@@ -213,29 +213,49 @@ body {
   font-size: 11px;
 }
 
-.VPSwitchAppearance,
-.VPSocialLink {
+.VPNavBarAppearance .VPSwitchAppearance {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   border: 1px solid var(--docs-line);
   border-radius: 4px;
+  place-items: center;
   color: var(--docs-ink);
   background: transparent;
   transition: border-color 160ms var(--docs-ease), background-color 160ms var(--docs-ease);
 }
 
-.VPSwitchAppearance:hover,
-.VPSocialLink:hover {
+.VPNavBarAppearance .VPSwitchAppearance:hover {
   border-color: var(--docs-line-strong);
   background: var(--docs-surface-strong);
 }
 
-.VPNavBarAppearance .VPSwitchAppearance {
-  width: 36px;
-  height: 36px;
+.VPNavBarAppearance .VPSwitchAppearance .check {
+  position: relative;
+  top: auto;
+  left: auto;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  box-shadow: none;
+  transform: none !important;
 }
 
-.VPNavBarSocialLinks .VPSocialLink {
-  width: 36px;
-  height: 36px;
+.VPNavBarAppearance .VPSwitchAppearance .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.VPNavBarAppearance .VPSwitchAppearance .icon [class^="vpi-"] {
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+}
+
+.dark .VPNavBarAppearance .VPSwitchAppearance .check {
+  transform: none !important;
 }
 
 .VPNavBarHamburger .container {
