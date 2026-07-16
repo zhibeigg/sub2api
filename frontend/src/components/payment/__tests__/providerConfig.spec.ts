@@ -11,7 +11,9 @@ import {
   isBuiltInQqpayMethod,
   isBuiltInWxpayMethod,
   parseEasyPayCustomMethods,
+  resolveWxpayCapabilities,
   serializeEasyPayCustomMethods,
+  writeWxpayCapabilities,
 } from '@/components/payment/providerConfig'
 
 function findField(providerKey: string, key: string) {
@@ -29,6 +31,57 @@ describe('PROVIDER_CONFIG_FIELDS.wxpay', () => {
     expect(findField('wxpay', 'mpAppId')).toBeUndefined()
     expect(findField('wxpay', 'h5AppName')).toBeUndefined()
     expect(findField('wxpay', 'h5AppUrl')).toBeUndefined()
+  })
+})
+
+describe('wxpay capability config', () => {
+  it('uses backward-compatible inference only when explicit booleans are missing', () => {
+    expect(resolveWxpayCapabilities({})).toEqual({
+      nativeEnabled: true,
+      h5Enabled: false,
+      jsapiEnabled: false,
+    })
+    expect(resolveWxpayCapabilities({
+      h5AppName: 'Sub2API',
+      h5AppUrl: 'https://pay.example.com',
+      mpAppId: 'wx-mp-app',
+    })).toEqual({
+      nativeEnabled: true,
+      h5Enabled: true,
+      jsapiEnabled: true,
+    })
+    expect(resolveWxpayCapabilities({
+      nativeEnabled: 'false',
+      h5Enabled: 'false',
+      jsapiEnabled: 'false',
+      h5AppName: 'Sub2API',
+      h5AppUrl: 'https://pay.example.com',
+      mpAppId: 'wx-mp-app',
+    })).toEqual({
+      nativeEnabled: false,
+      h5Enabled: false,
+      jsapiEnabled: false,
+    })
+  })
+
+  it('writes stable explicit boolean strings without touching sensitive values', () => {
+    const config = {
+      privateKey: 'masked-secret-value',
+      publicKey: 'masked-public-value',
+    }
+    writeWxpayCapabilities(config, {
+      nativeEnabled: true,
+      h5Enabled: false,
+      jsapiEnabled: true,
+    })
+
+    expect(config).toEqual({
+      privateKey: 'masked-secret-value',
+      publicKey: 'masked-public-value',
+      nativeEnabled: 'true',
+      h5Enabled: 'false',
+      jsapiEnabled: 'true',
+    })
   })
 })
 

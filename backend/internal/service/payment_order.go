@@ -13,6 +13,7 @@ import (
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
+	"github.com/Wei-Shaw/sub2api/ent/paymentproviderinstance"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	"github.com/Wei-Shaw/sub2api/internal/payment/provider"
@@ -464,11 +465,18 @@ func (s *PaymentService) prepareCreateOrderSelectionContext(ctx context.Context,
 	if !requestNeedsWeChatJSAPICompatibility(req) {
 		return ctx, nil
 	}
-	if !s.usesOfficialWxpayVisibleMethod(ctx) {
+	capabilities, err := s.officialWxpayVisibleMethodCapabilities(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !capabilities.JSAPIEnabled {
 		return ctx, nil
 	}
 	expectedAppID, _, err := s.getWeChatPaymentOAuthCredential(ctx)
 	if err != nil {
+		if strings.TrimSpace(req.OpenID) == "" && capabilities.NativeEnabled {
+			return payment.WithWxpayNativeRequired(ctx), nil
+		}
 		return nil, err
 	}
 	return payment.WithWxpayJSAPIAppID(ctx, expectedAppID), nil
@@ -495,18 +503,53 @@ func (s *PaymentService) usesOfficialWxpayVisibleMethod(ctx context.Context) boo
 	return inst.ProviderKey == payment.TypeWxpay
 }
 
+func (s *PaymentService) officialWxpayVisibleMethodSupportsJSAPI(ctx context.Context) (bool, error) {
+	capabilities, err := s.officialWxpayVisibleMethodCapabilities(ctx)
+	return capabilities.JSAPIEnabled, err
+}
+
+func (s *PaymentService) officialWxpayVisibleMethodCapabilities(ctx context.Context) (provider.WxpayCapabilityStatus, error) {
+	if s == nil || s.configService == nil || s.configService.entClient == nil || !s.usesOfficialWxpayVisibleMethod(ctx) {
+		return provider.WxpayCapabilityStatus{}, nil
+	}
+	instances, err := s.configService.entClient.PaymentProviderInstance.Query().
+		Where(
+			paymentproviderinstance.EnabledEQ(true),
+			paymentproviderinstance.ProviderKeyEQ(payment.TypeWxpay),
+		).
+		Order(paymentproviderinstance.BySortOrder()).
+		All(ctx)
+	if err != nil {
+		return provider.WxpayCapabilityStatus{}, fmt.Errorf("query official wxpay instances: %w", err)
+	}
+	var aggregate provider.WxpayCapabilityStatus
+	for _, inst := range instances {
+		if !providerSupportsVisibleMethod(inst, payment.TypeWxpay) {
+			continue
+		}
+		config, err := s.configService.decryptConfig(inst.Config)
+		if err != nil {
+			return provider.WxpayCapabilityStatus{}, fmt.Errorf("decrypt wxpay instance %d: %w", inst.ID, err)
+		}
+		capabilities, err := provider.InspectWxpayCapabilities(config)
+		if err != nil {
+			return provider.WxpayCapabilityStatus{}, err
+		}
+		aggregate.NativeEnabled = aggregate.NativeEnabled || capabilities.NativeEnabled
+		aggregate.H5Enabled = aggregate.H5Enabled || capabilities.H5Enabled
+		aggregate.JSAPIEnabled = aggregate.JSAPIEnabled || capabilities.JSAPIEnabled
+	}
+	return aggregate, nil
+}
+
 func (s *PaymentService) invokeProvider(ctx context.Context, order *dbent.PaymentOrder, req CreateOrderRequest, cfg *PaymentConfig, limitAmount float64, payAmountStr string, payAmount float64, plan *dbent.SubscriptionPlan, sel *payment.InstanceSelection) (*CreateOrderResponse, error) {
 	prov, err := provider.CreateProvider(sel.ProviderKey, sel.InstanceID, sel.Config)
 	if err != nil {
 		slog.Error("[PaymentService] CreateProvider failed", "provider", sel.ProviderKey, "instance", sel.InstanceID, "error", err)
-		// If the provider returned a structured ApplicationError (e.g. WXPAY_CONFIG_MISSING_KEY),
-		// pass it through with provider context added to metadata. Otherwise wrap as PAYMENT_PROVIDER_MISCONFIGURED.
+		// Preserve structured provider errors exactly as returned so their reason and
+		// metadata allowlist are not diluted with service-layer context.
 		if appErr := new(infraerrors.ApplicationError); errors.As(err, &appErr) {
-			md := map[string]string{"provider": sel.ProviderKey, "instance_id": sel.InstanceID}
-			for k, v := range appErr.Metadata {
-				md[k] = v
-			}
-			return nil, appErr.WithMetadata(md)
+			return nil, appErr
 		}
 		return nil, infraerrors.ServiceUnavailable("PAYMENT_PROVIDER_MISCONFIGURED", "provider_misconfigured").
 			WithMetadata(map[string]string{"provider": sel.ProviderKey, "instance_id": sel.InstanceID})
@@ -538,11 +581,12 @@ func (s *PaymentService) invokeProvider(ctx context.Context, order *dbent.Paymen
 		return nil, err
 	}
 	providerReq := buildProviderCreatePaymentRequest(CreateOrderRequest{
-		PaymentType: req.PaymentType,
-		OpenID:      req.OpenID,
-		ClientIP:    req.ClientIP,
-		IsMobile:    req.IsMobile,
-		ReturnURL:   providerReturnURL,
+		PaymentType:     req.PaymentType,
+		OpenID:          req.OpenID,
+		ClientIP:        req.ClientIP,
+		IsMobile:        req.IsMobile,
+		IsWeChatBrowser: req.IsWeChatBrowser,
+		ReturnURL:       providerReturnURL,
 	}, sel, outTradeNo, payAmountStr, subject)
 	finishProviderCall := servertiming.ObserveDependency(ctx, "payment")
 	pr, err := prov.CreatePayment(ctx, providerReq)
@@ -608,6 +652,7 @@ func buildProviderCreatePaymentRequest(req CreateOrderRequest, sel *payment.Inst
 		OpenID:             strings.TrimSpace(req.OpenID),
 		ClientIP:           req.ClientIP,
 		IsMobile:           req.IsMobile,
+		IsWeChatBrowser:    req.IsWeChatBrowser,
 		InstanceSubMethods: selectedInstanceSupportedTypes(sel),
 	}
 }
@@ -667,7 +712,25 @@ func (s *PaymentService) maybeBuildWeChatOAuthRequiredResponseForSelection(ctx c
 	if strings.TrimSpace(req.OpenID) != "" || !req.IsWeChatBrowser || payment.GetBasePaymentType(req.PaymentType) != payment.TypeWxpay {
 		return nil, nil
 	}
-	return s.buildWeChatOAuthRequiredResponse(ctx, req, amount, payAmount, feeRate)
+	canFallbackToNative := false
+	if sel != nil && sel.ProviderKey == payment.TypeWxpay {
+		capabilities, err := provider.InspectWxpayCapabilities(sel.Config)
+		if err != nil {
+			return nil, err
+		}
+		if !capabilities.JSAPIEnabled {
+			return nil, nil
+		}
+		canFallbackToNative = capabilities.NativeEnabled
+	}
+	resp, err := s.buildWeChatOAuthRequiredResponse(ctx, req, amount, payAmount, feeRate)
+	if err != nil && canFallbackToNative {
+		switch infraerrors.Reason(err) {
+		case "WECHAT_PAYMENT_MP_NOT_CONFIGURED", "PAYMENT_RESUME_NOT_CONFIGURED":
+			return nil, nil
+		}
+	}
+	return resp, err
 }
 
 func (s *PaymentService) buildWeChatOAuthRequiredResponse(ctx context.Context, req CreateOrderRequest, amount, payAmount, feeRate float64) (*CreateOrderResponse, error) {
@@ -703,8 +766,18 @@ func (s *PaymentService) validateSelectedCreateOrderInstance(ctx context.Context
 	if !requiresWeChatJSAPICompatibleSelection(req, sel) {
 		return nil
 	}
+	capabilities, err := provider.InspectWxpayCapabilities(sel.Config)
+	if err != nil {
+		return err
+	}
+	if !capabilities.JSAPIEnabled {
+		return nil
+	}
 	expectedAppID, _, err := s.getWeChatPaymentOAuthCredential(ctx)
 	if err != nil {
+		if strings.TrimSpace(req.OpenID) == "" && capabilities.NativeEnabled {
+			return nil
+		}
 		return err
 	}
 	selectedAppID := provider.ResolveWxpayJSAPIAppID(sel.Config)
@@ -804,17 +877,8 @@ func classifyCreatePaymentError(req CreateOrderRequest, providerKey string, err 
 	if err == nil {
 		return nil
 	}
-	if providerKey == payment.TypeWxpay &&
-		payment.GetBasePaymentType(req.PaymentType) == payment.TypeWxpay &&
-		strings.Contains(err.Error(), "wxpay h5 payments are not authorized for this merchant") {
-		return infraerrors.ServiceUnavailable(
-			"WECHAT_H5_NOT_AUTHORIZED",
-			"wechat h5 payment is not available for this merchant",
-		).WithMetadata(map[string]string{
-			"action": "open_in_wechat_or_scan_qr",
-		})
-	}
-	return infraerrors.ServiceUnavailable("PAYMENT_GATEWAY_ERROR", fmt.Sprintf("payment gateway error: %s", err.Error()))
+	_, _ = req, providerKey
+	return infraerrors.ServiceUnavailable("PAYMENT_GATEWAY_ERROR", "payment gateway request failed")
 }
 
 func buildCreateOrderResponse(order *dbent.PaymentOrder, req CreateOrderRequest, payAmount float64, sel *payment.InstanceSelection, pr *payment.CreatePaymentResponse, resultType payment.CreatePaymentResultType) *CreateOrderResponse {

@@ -32,6 +32,18 @@ export type EasyPayProtocolVersion = '1' | '2'
 export const EASYPAY_PROTOCOL_V1: EasyPayProtocolVersion = '1'
 export const EASYPAY_PROTOCOL_V2: EasyPayProtocolVersion = '2'
 
+export interface WxpayCapabilityConfig {
+  nativeEnabled: boolean
+  h5Enabled: boolean
+  jsapiEnabled: boolean
+}
+
+export const DEFAULT_WXPAY_CAPABILITIES: WxpayCapabilityConfig = {
+  nativeEnabled: true,
+  h5Enabled: false,
+  jsapiEnabled: false,
+}
+
 export const EASYPAY_PROTOCOL_OPTIONS: TypeOption[] = [
   { value: EASYPAY_PROTOCOL_V1, label: 'V1 / MD5' },
   { value: EASYPAY_PROTOCOL_V2, label: 'V2 / RSA-SHA256' },
@@ -180,6 +192,45 @@ export const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
 }
 
 // --- Helpers ---
+
+function hasOwnConfigValue(config: Record<string, string> | null | undefined, key: string): boolean {
+  return Boolean(config && Object.prototype.hasOwnProperty.call(config, key))
+}
+
+export function normalizeProviderConfigBoolean(value: unknown, fallback: boolean): boolean {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (normalized === 'true') return true
+  if (normalized === 'false') return false
+  return fallback
+}
+
+export function resolveWxpayCapabilities(
+  config: Record<string, string> | null | undefined,
+  defaults: WxpayCapabilityConfig = DEFAULT_WXPAY_CAPABILITIES,
+): WxpayCapabilityConfig {
+  const h5Fallback = Boolean(config?.h5AppName?.trim() && config?.h5AppUrl?.trim())
+  const jsapiFallback = Boolean(config?.mpAppId?.trim())
+  return {
+    nativeEnabled: hasOwnConfigValue(config, 'nativeEnabled')
+      ? normalizeProviderConfigBoolean(config?.nativeEnabled, defaults.nativeEnabled)
+      : defaults.nativeEnabled,
+    h5Enabled: hasOwnConfigValue(config, 'h5Enabled')
+      ? normalizeProviderConfigBoolean(config?.h5Enabled, h5Fallback)
+      : h5Fallback,
+    jsapiEnabled: hasOwnConfigValue(config, 'jsapiEnabled')
+      ? normalizeProviderConfigBoolean(config?.jsapiEnabled, jsapiFallback)
+      : jsapiFallback,
+  }
+}
+
+export function writeWxpayCapabilities(
+  config: Record<string, string>,
+  capabilities: WxpayCapabilityConfig,
+): void {
+  config.nativeEnabled = String(capabilities.nativeEnabled)
+  config.h5Enabled = String(capabilities.h5Enabled)
+  config.jsapiEnabled = String(capabilities.jsapiEnabled)
+}
 
 export function normalizeEasyPayProtocolVersion(
   value: unknown,

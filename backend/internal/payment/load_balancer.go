@@ -47,7 +47,10 @@ type DefaultLoadBalancer struct {
 
 type contextKey string
 
-const wxpayJSAPIAppIDContextKey contextKey = "payment.wxpay.jsapi_app_id"
+const (
+	wxpayJSAPIAppIDContextKey     contextKey = "payment.wxpay.jsapi_app_id"
+	wxpayNativeRequiredContextKey contextKey = "payment.wxpay.native_required"
+)
 
 // NewDefaultLoadBalancer creates a new load balancer.
 func NewDefaultLoadBalancer(db *dbent.Client, encryptionKey []byte) *DefaultLoadBalancer {
@@ -68,6 +71,18 @@ func wxpayJSAPIAppIDFromContext(ctx context.Context) string {
 	}
 	appID, _ := ctx.Value(wxpayJSAPIAppIDContextKey).(string)
 	return strings.TrimSpace(appID)
+}
+
+func WithWxpayNativeRequired(ctx context.Context) context.Context {
+	return context.WithValue(ctx, wxpayNativeRequiredContextKey, true)
+}
+
+func wxpayNativeRequiredFromContext(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	required, _ := ctx.Value(wxpayNativeRequiredContextKey).(bool)
+	return required
 }
 
 // instanceCandidate pairs an instance with its pre-fetched daily usage.
@@ -137,6 +152,7 @@ func (lb *DefaultLoadBalancer) queryEnabledInstances(
 
 	var matched []*dbent.PaymentProviderInstance
 	expectedWxpayJSAPIAppID := wxpayJSAPIAppIDFromContext(ctx)
+	requireWxpayNative := wxpayNativeRequiredFromContext(ctx)
 	for _, inst := range instances {
 		// Stripe: match by provider_key because supported_types lists sub-types (card,link,alipay,wxpay),
 		// not "stripe" itself. The checkout page aggregates all sub-types under "stripe".
@@ -145,13 +161,17 @@ func (lb *DefaultLoadBalancer) queryEnabledInstances(
 				matched = append(matched, inst)
 			}
 		} else if InstanceSupportsType(inst.SupportedTypes, paymentType) {
-			if expectedWxpayJSAPIAppID != "" && normalizeVisibleMethodSupportType(paymentType) == TypeWxpay && inst.ProviderKey == TypeWxpay {
+			isOfficialWxpay := normalizeVisibleMethodSupportType(paymentType) == TypeWxpay && inst.ProviderKey == TypeWxpay
+			if isOfficialWxpay && (expectedWxpayJSAPIAppID != "" || requireWxpayNative) {
 				config, cfgErr := lb.decryptConfig(inst.Config)
 				if cfgErr != nil {
-					slog.Warn("skip wxpay instance with unreadable config during jsapi filtering", "instance_id", inst.ID, "error", cfgErr)
+					slog.Warn("skip wxpay instance with unreadable config during capability filtering", "instance_id", inst.ID, "error", cfgErr)
 					continue
 				}
-				if resolveWxpayJSAPIAppID(config) != expectedWxpayJSAPIAppID {
+				if expectedWxpayJSAPIAppID != "" && (!resolveWxpayJSAPIEnabled(config) || resolveWxpayJSAPIAppID(config) != expectedWxpayJSAPIAppID) {
+					continue
+				}
+				if requireWxpayNative && !resolveWxpayNativeEnabled(config) {
 					continue
 				}
 			}
@@ -410,6 +430,20 @@ func legacyVisibleMethodAlias(paymentType PaymentType) PaymentType {
 	default:
 		return ""
 	}
+}
+
+func resolveWxpayNativeEnabled(config map[string]string) bool {
+	if raw, exists := config["nativeEnabled"]; exists {
+		return strings.EqualFold(strings.TrimSpace(raw), "true")
+	}
+	return true
+}
+
+func resolveWxpayJSAPIEnabled(config map[string]string) bool {
+	if raw, exists := config["jsapiEnabled"]; exists {
+		return strings.EqualFold(strings.TrimSpace(raw), "true")
+	}
+	return strings.TrimSpace(config["mpAppId"]) != ""
 }
 
 func resolveWxpayJSAPIAppID(config map[string]string) string {

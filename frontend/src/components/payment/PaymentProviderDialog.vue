@@ -113,6 +113,42 @@
         </div>
       </div>
 
+      <div v-if="form.provider_key === 'wxpay'" class="space-y-3 rounded-lg border border-gray-100 p-3 dark:border-dark-700">
+        <div>
+          <h5 class="text-sm font-medium text-gray-900 dark:text-white">
+            {{ t('admin.settings.payment.wxpayCapabilities') }}
+          </h5>
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.settings.payment.wxpayCapabilitiesHint') }}
+          </p>
+        </div>
+        <div class="grid gap-3 md:grid-cols-3">
+          <div class="space-y-1">
+            <ToggleSwitch
+              :label="t('admin.settings.payment.wxpayNativeEnabled')"
+              :checked="wxpayCapabilities.nativeEnabled"
+              @toggle="toggleWxpayCapability('nativeEnabled')"
+            />
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.settings.payment.wxpayNativeEnabledHint') }}</p>
+          </div>
+          <div class="space-y-1">
+            <ToggleSwitch
+              :label="t('admin.settings.payment.wxpayH5Enabled')"
+              :checked="wxpayCapabilities.h5Enabled"
+              @toggle="toggleWxpayCapability('h5Enabled')"
+            />
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.settings.payment.wxpayH5EnabledHint') }}</p>
+          </div>
+          <div class="space-y-1">
+            <ToggleSwitch
+              :label="t('admin.settings.payment.wxpayJsapiEnabled')"
+              :checked="wxpayCapabilities.jsapiEnabled"
+              @toggle="toggleWxpayCapability('jsapiEnabled')"
+            />
+            <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.settings.payment.wxpayJsapiEnabledHint') }}</p>
+          </div>
+        </div>
+      </div>
 
       <!-- Config fields -->
       <div class="border-t border-gray-200 pt-4 dark:border-dark-700">
@@ -315,9 +351,10 @@ import Select from '@/components/common/Select.vue'
 import type { SelectOption } from '@/components/common/Select.vue'
 import ToggleSwitch from './ToggleSwitch.vue'
 import type { ProviderInstance } from '@/types/payment'
-import type { EasyPayCustomMethod, TypeOption } from './providerConfig'
+import type { EasyPayCustomMethod, TypeOption, WxpayCapabilityConfig } from './providerConfig'
 import {
   PROVIDER_CALLBACK_PATHS,
+  DEFAULT_WXPAY_CAPABILITIES,
   EASYPAY_PROTOCOL_V1,
   EASYPAY_PROTOCOL_V2,
   WEBHOOK_PATHS,
@@ -329,6 +366,8 @@ import {
   getProviderConfigFields,
   getProviderSupportedTypes,
   normalizeEasyPayProtocolVersion,
+  resolveWxpayCapabilities,
+  writeWxpayCapabilities,
   extractBaseUrl,
   parseEasyPayCustomMethods,
   serializeEasyPayCustomMethods,
@@ -416,6 +455,7 @@ const returnBaseUrl = ref('')
 const limitsExpanded = ref(false)
 const visibleFields = reactive<Record<string, boolean>>({})
 const easyPayCustomMethods = reactive<EasyPayCustomMethod[]>([])
+const wxpayCapabilities = reactive<WxpayCapabilityConfig>({ ...DEFAULT_WXPAY_CAPABILITIES })
 
 // --- Computed ---
 const defaultBaseUrl = typeof window !== 'undefined' ? window.location.origin : ''
@@ -479,7 +519,23 @@ const availableTypes = computed(() => {
 })
 
 const resolvedFields = computed(() => {
-  const fields = getProviderConfigFields(form.provider_key, config.protocolVersion)
+  const fields = [...getProviderConfigFields(form.provider_key, config.protocolVersion)]
+  if (form.provider_key === 'wxpay' && wxpayCapabilities.h5Enabled) {
+    fields.push(
+      { key: 'h5AppName', label: '', sensitive: false, hintKey: 'admin.settings.payment.field_h5AppNameHint' },
+      { key: 'h5AppUrl', label: '', sensitive: false, hintKey: 'admin.settings.payment.field_h5AppUrlHint' },
+    )
+  }
+  if (form.provider_key === 'wxpay' && wxpayCapabilities.jsapiEnabled) {
+    fields.push({
+      key: 'mpAppId',
+      label: '',
+      sensitive: false,
+      optional: true,
+      clearable: true,
+      hintKey: 'admin.settings.payment.field_mpAppIdHint',
+    })
+  }
   return fields.map(f => ({
     ...f,
     label: f.label || t(`admin.settings.payment.field_${f.key}`),
@@ -598,11 +654,30 @@ function removeEasyPayCustomMethod(index: number) {
   easyPayCustomMethods.splice(index, 1)
 }
 
+function syncWxpayCapabilities(): void {
+  if (form.provider_key !== 'wxpay') return
+  writeWxpayCapabilities(config, wxpayCapabilities)
+}
+
+function applyWxpayCapabilities(source: Record<string, string> | null | undefined): void {
+  Object.assign(wxpayCapabilities, resolveWxpayCapabilities(source))
+  syncWxpayCapabilities()
+}
+
+function toggleWxpayCapability(key: keyof WxpayCapabilityConfig): void {
+  wxpayCapabilities[key] = !wxpayCapabilities[key]
+  syncWxpayCapabilities()
+}
+
 function onKeyChange() {
   form.payment_mode = defaultPaymentMode(form.provider_key)
   clearConfig()
   if (form.provider_key === 'easypay') {
     config.protocolVersion = EASYPAY_PROTOCOL_V2
+  }
+  if (form.provider_key === 'wxpay') {
+    Object.assign(wxpayCapabilities, DEFAULT_WXPAY_CAPABILITIES)
+    syncWxpayCapabilities()
   }
   form.supported_types = getProviderSupportedTypes(form.provider_key, config.protocolVersion)
   applyDefaults()
@@ -698,10 +773,13 @@ function handleSave() {
     }
     syncEasyPayCustomMethods()
   }
+  if (form.provider_key === 'wxpay') {
+    syncWxpayCapabilities()
+  }
   // Validate required config fields — all non-optional fields must be filled.
   // In edit mode, sensitive fields may be left blank to preserve the stored
   // value (backend merges blanks by preserving the existing secret).
-  for (const f of getProviderConfigFields(form.provider_key, config.protocolVersion)) {
+  for (const f of resolvedFields.value) {
     if (f.optional) continue
     if (props.editing && f.sensitive) continue
     const val = (config[f.key] || '').trim()
@@ -711,9 +789,18 @@ function handleSave() {
       return
     }
   }
+  if (form.provider_key === 'wxpay' && wxpayCapabilities.h5Enabled) {
+    try {
+      const h5AppUrl = new URL(config.h5AppUrl)
+      if (h5AppUrl.protocol !== 'https:' || !h5AppUrl.host) throw new Error('invalid https url')
+    } catch {
+      emitValidationError(t('admin.settings.payment.validationWxpayH5AppUrl'))
+      return
+    }
+  }
 
   const clearableConfigKeys = new Set(
-    getProviderConfigFields(form.provider_key, config.protocolVersion)
+    resolvedFields.value
       .filter(field => field.clearable)
       .map(field => field.key),
   )
@@ -824,6 +911,10 @@ function reset(defaultKey: string) {
   if (defaultKey === 'easypay') {
     config.protocolVersion = EASYPAY_PROTOCOL_V2
   }
+  if (defaultKey === 'wxpay') {
+    Object.assign(wxpayCapabilities, DEFAULT_WXPAY_CAPABILITIES)
+    syncWxpayCapabilities()
+  }
   form.supported_types = getProviderSupportedTypes(defaultKey, config.protocolVersion)
   applyDefaults()
 }
@@ -871,6 +962,9 @@ function loadProvider(provider: ProviderInstance) {
     if (paths?.returnUrl && provider.config['returnUrl']) {
       returnBaseUrl.value = extractBaseUrl(provider.config['returnUrl'], paths.returnUrl)
     }
+  }
+  if (provider.provider_key === 'wxpay') {
+    applyWxpayCapabilities(provider.config)
   }
   applyDefaults()
   // Parse existing limits

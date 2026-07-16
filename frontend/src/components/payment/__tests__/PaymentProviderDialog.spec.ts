@@ -166,6 +166,71 @@ describe('PaymentProviderDialog payment guide', () => {
     expect(payload.config.accountId).toBe('')
   })
 
+  it('infers historical wxpay capabilities and saves stable explicit booleans', async () => {
+    const provider = providerFactory({
+      provider_key: 'wxpay',
+      name: 'WeChat Pay',
+      config: {
+        appId: 'wx-app',
+        mchId: 'mch-1',
+        publicKeyId: 'PUB_KEY_ID_1',
+        certSerial: 'CERT_1',
+        h5AppName: 'Sub2API',
+        h5AppUrl: 'https://pay.example.com',
+        mpAppId: 'wx-mp-app',
+      },
+      supported_types: ['wxpay'],
+      payment_mode: 'qrcode',
+    })
+    const wrapper = mountDialog({ editing: provider })
+
+    ;(wrapper.vm as unknown as { loadProvider: (provider: ProviderInstance) => void }).loadProvider(provider)
+    await nextTick()
+    await wrapper.find('form').trigger('submit.prevent')
+
+    const payload = wrapper.emitted('save')?.[0]?.[0] as { config: Record<string, string> }
+    expect(payload.config.nativeEnabled).toBe('true')
+    expect(payload.config.h5Enabled).toBe('true')
+    expect(payload.config.jsapiEnabled).toBe('true')
+    expect(payload.config.h5AppName).toBe('Sub2API')
+    expect(payload.config.h5AppUrl).toBe('https://pay.example.com')
+    expect(payload.config.mpAppId).toBe('wx-mp-app')
+    expect(payload.config).not.toHaveProperty('privateKey')
+    expect(payload.config).not.toHaveProperty('publicKey')
+    expect(payload.config).not.toHaveProperty('apiV3Key')
+  })
+
+  it('keeps explicit disabled wxpay capabilities when historical fields remain', async () => {
+    const provider = providerFactory({
+      provider_key: 'wxpay',
+      name: 'WeChat Pay',
+      config: {
+        appId: 'wx-app',
+        mchId: 'mch-1',
+        publicKeyId: 'PUB_KEY_ID_1',
+        certSerial: 'CERT_1',
+        h5AppName: 'Sub2API',
+        h5AppUrl: 'https://pay.example.com',
+        mpAppId: 'wx-mp-app',
+        nativeEnabled: 'true',
+        h5Enabled: 'false',
+        jsapiEnabled: 'false',
+      },
+      supported_types: ['wxpay'],
+      payment_mode: 'qrcode',
+    })
+    const wrapper = mountDialog({ editing: provider })
+
+    ;(wrapper.vm as unknown as { loadProvider: (provider: ProviderInstance) => void }).loadProvider(provider)
+    await nextTick()
+    await wrapper.find('form').trigger('submit.prevent')
+
+    const payload = wrapper.emitted('save')?.[0]?.[0] as { config: Record<string, string> }
+    expect(payload.config.nativeEnabled).toBe('true')
+    expect(payload.config.h5Enabled).toBe('false')
+    expect(payload.config.jsapiEnabled).toBe('false')
+  })
+
   it('defaults new EasyPay providers to V2 with QQ Wallet and V2 key fields', async () => {
     const wrapper = mountDialog()
 

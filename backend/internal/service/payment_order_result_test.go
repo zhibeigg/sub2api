@@ -541,6 +541,60 @@ func TestMaybeBuildWeChatOAuthRequiredResponseFallsBackToConfiguredLegacySigning
 	}
 }
 
+func TestMaybeBuildWeChatOAuthRequiredResponseForSelectionFallsBackToNativeWhenOAuthUnavailable(t *testing.T) {
+	svc := newWeChatPaymentOAuthTestService(nil)
+	sel := &payment.InstanceSelection{
+		ProviderKey: payment.TypeWxpay,
+		Config: map[string]string{
+			"appId":         "wx-pay-app",
+			"nativeEnabled": "true",
+			"h5Enabled":     "false",
+			"jsapiEnabled":  "true",
+		},
+	}
+	req := CreateOrderRequest{
+		Amount:          12.5,
+		PaymentType:     payment.TypeWxpay,
+		IsWeChatBrowser: true,
+		OrderType:       payment.OrderTypeBalance,
+	}
+
+	if err := svc.validateSelectedCreateOrderInstance(context.Background(), req, sel); err != nil {
+		t.Fatalf("expected native fallback to pass selection validation, got %v", err)
+	}
+	resp, err := svc.maybeBuildWeChatOAuthRequiredResponseForSelection(context.Background(), req, 12.5, 12.88, 0.03, sel)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp != nil {
+		t.Fatalf("expected native fallback without oauth, got %+v", resp)
+	}
+}
+
+func TestMaybeBuildWeChatOAuthRequiredResponseForSelectionSkipsOfficialWxpayWhenJSAPIDisabled(t *testing.T) {
+	svc := newWeChatPaymentOAuthTestService(nil)
+
+	resp, err := svc.maybeBuildWeChatOAuthRequiredResponseForSelection(context.Background(), CreateOrderRequest{
+		Amount:          12.5,
+		PaymentType:     payment.TypeWxpay,
+		IsWeChatBrowser: true,
+		OrderType:       payment.OrderTypeBalance,
+	}, 12.5, 12.88, 0.03, &payment.InstanceSelection{
+		ProviderKey: payment.TypeWxpay,
+		Config: map[string]string{
+			"nativeEnabled": "true",
+			"h5Enabled":     "false",
+			"jsapiEnabled":  "false",
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp != nil {
+		t.Fatalf("expected native fallback without oauth, got %+v", resp)
+	}
+}
+
 func TestMaybeBuildWeChatOAuthRequiredResponseForSelectionSkipsEasyPayProvider(t *testing.T) {
 	svc := newWeChatPaymentOAuthTestService(map[string]string{
 		SettingKeyWeChatConnectEnabled:             "true",

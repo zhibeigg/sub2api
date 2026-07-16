@@ -8,12 +8,14 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	"errors"
+	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/payment"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/wechatpay-apiv3/wechatpay-go/core"
 	"github.com/wechatpay-apiv3/wechatpay-go/services/payments"
 	"github.com/wechatpay-apiv3/wechatpay-go/services/payments/h5"
@@ -410,50 +412,74 @@ func TestResolveWxpayCreateMode(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		req      payment.CreatePaymentRequest
-		wantMode string
-		wantErr  string
+		name       string
+		req        payment.CreatePaymentRequest
+		capability WxpayCapabilityStatus
+		wantMode   string
+		wantReason string
 	}{
 		{
-			name:     "desktop uses native",
-			req:      payment.CreatePaymentRequest{},
-			wantMode: wxpayModeNative,
+			name:       "desktop uses native",
+			capability: WxpayCapabilityStatus{NativeEnabled: true},
+			wantMode:   wxpayModeNative,
 		},
 		{
-			name: "mobile uses h5 when client ip is present",
+			name: "mobile prefers h5",
 			req: payment.CreatePaymentRequest{
 				IsMobile: true,
 				ClientIP: "203.0.113.10",
 			},
-			wantMode: wxpayModeH5,
+			capability: WxpayCapabilityStatus{NativeEnabled: true, H5Enabled: true},
+			wantMode:   wxpayModeH5,
 		},
 		{
-			name: "mobile without client ip returns clear error",
-			req: payment.CreatePaymentRequest{
-				IsMobile: true,
-			},
-			wantErr: "requires client IP",
+			name:       "mobile falls back to native when h5 disabled",
+			req:        payment.CreatePaymentRequest{IsMobile: true, ClientIP: "203.0.113.10"},
+			capability: WxpayCapabilityStatus{NativeEnabled: true},
+			wantMode:   wxpayModeNative,
 		},
 		{
-			name: "openid uses jsapi mode",
-			req: payment.CreatePaymentRequest{
-				OpenID: "openid-123",
-			},
-			wantMode: wxpayModeJSAPI,
+			name:       "mobile falls back to native when client ip is unavailable",
+			req:        payment.CreatePaymentRequest{IsMobile: true},
+			capability: WxpayCapabilityStatus{NativeEnabled: true, H5Enabled: true},
+			wantMode:   wxpayModeNative,
+		},
+		{
+			name:       "wechat browser without openid safely uses native",
+			req:        payment.CreatePaymentRequest{IsMobile: true, IsWeChatBrowser: true},
+			capability: WxpayCapabilityStatus{NativeEnabled: true, H5Enabled: true},
+			wantMode:   wxpayModeNative,
+		},
+		{
+			name:       "openid uses jsapi only",
+			req:        payment.CreatePaymentRequest{OpenID: "openid-123"},
+			capability: WxpayCapabilityStatus{NativeEnabled: true, JSAPIEnabled: true},
+			wantMode:   wxpayModeJSAPI,
+		},
+		{
+			name:       "openid never falls back when jsapi disabled",
+			req:        payment.CreatePaymentRequest{OpenID: "openid-123"},
+			capability: WxpayCapabilityStatus{NativeEnabled: true, H5Enabled: true},
+			wantReason: "NO_AVAILABLE_WXPAY_CAPABILITY",
+		},
+		{
+			name:       "all capabilities disabled returns structured error",
+			req:        payment.CreatePaymentRequest{IsMobile: true, ClientIP: "203.0.113.10"},
+			capability: WxpayCapabilityStatus{},
+			wantReason: "NO_AVAILABLE_WXPAY_CAPABILITY",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := resolveWxpayCreateMode(tt.req)
-			if tt.wantErr != "" {
+			got, err := resolveWxpayCreateMode(tt.req, tt.capability)
+			if tt.wantReason != "" {
 				if err == nil {
 					t.Fatal("expected error, got nil")
 				}
-				if !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("error %q should contain %q", err.Error(), tt.wantErr)
+				if reason := infraerrors.Reason(err); reason != tt.wantReason {
+					t.Fatalf("reason = %q, want %q", reason, tt.wantReason)
 				}
 				return
 			}
@@ -508,8 +534,9 @@ func TestCreatePaymentWithOpenIDReturnsJSAPIResult(t *testing.T) {
 
 	provider := &Wxpay{
 		config: map[string]string{
-			"appId": "wx123",
-			"mchId": "mch123",
+			"appId":        "wx123",
+			"mchId":        "mch123",
+			"jsapiEnabled": "true",
 		},
 		coreClient: &core.Client{},
 	}
@@ -643,6 +670,180 @@ func TestCreatePaymentMobileH5IncludesConfiguredSceneInfo(t *testing.T) {
 	}
 }
 
+func TestInspectWxpayCapabilities(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		config     map[string]string
+		want       WxpayCapabilityStatus
+		wantReason string
+	}{
+		{
+			name: "historical minimal config defaults to native only",
+			config: map[string]string{
+				"appId": "wx-app",
+			},
+			want: WxpayCapabilityStatus{NativeEnabled: true},
+		},
+		{
+			name: "historical h5 fields enable h5",
+			config: map[string]string{
+				"appId": "wx-app", "h5AppName": "Sub2API", "h5AppUrl": "https://app.example.com",
+			},
+			want: WxpayCapabilityStatus{NativeEnabled: true, H5Enabled: true},
+		},
+		{
+			name: "historical mp app id enables jsapi",
+			config: map[string]string{
+				"appId": "wx-app", "mpAppId": "wx-mp-app",
+			},
+			want: WxpayCapabilityStatus{NativeEnabled: true, JSAPIEnabled: true},
+		},
+		{
+			name: "explicit values override historical inference",
+			config: map[string]string{
+				"appId": "wx-app", "mpAppId": "wx-mp-app", "h5AppName": "Sub2API", "h5AppUrl": "https://app.example.com",
+				"nativeEnabled": "false", "h5Enabled": "false", "jsapiEnabled": "false",
+			},
+			want: WxpayCapabilityStatus{},
+		},
+		{
+			name: "h5 requires absolute https app url",
+			config: map[string]string{
+				"appId": "wx-app", "h5Enabled": "true", "h5AppName": "Sub2API", "h5AppUrl": "http://app.example.com",
+			},
+			wantReason: "WXPAY_CONFIG_H5_URL_INVALID",
+		},
+		{
+			name: "invalid boolean is rejected",
+			config: map[string]string{
+				"appId": "wx-app", "nativeEnabled": "",
+			},
+			wantReason: "WXPAY_CONFIG_INVALID_BOOLEAN",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := InspectWxpayCapabilities(tt.config)
+			if tt.wantReason != "" {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if reason := infraerrors.Reason(err); reason != tt.wantReason {
+					t.Fatalf("reason = %q, want %q", reason, tt.wantReason)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("capabilities = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMapWxpayPrepayErrorUsesSDKTypesAndSafeMetadata(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		mode       string
+		wechatCode string
+		wantReason string
+	}{
+		{name: "native no auth", mode: wxpayModeNative, wechatCode: "NO_AUTH", wantReason: "WECHAT_NATIVE_NOT_AUTHORIZED"},
+		{name: "h5 no auth", mode: wxpayModeH5, wechatCode: "NO_AUTH", wantReason: "WECHAT_H5_NOT_AUTHORIZED"},
+		{name: "jsapi no auth", mode: wxpayModeJSAPI, wechatCode: "NO_AUTH", wantReason: "WECHAT_JSAPI_NOT_AUTHORIZED"},
+		{name: "appid merchant mismatch", mode: wxpayModeJSAPI, wechatCode: "APPID_MCHID_NOT_MATCH", wantReason: "WECHAT_APPID_MCHID_MISMATCH"},
+		{name: "signature error", mode: wxpayModeNative, wechatCode: "SIGN_ERROR", wantReason: "WECHAT_SIGN_ERROR"},
+		{name: "other api error", mode: wxpayModeNative, wechatCode: "PARAM_ERROR", wantReason: "WECHAT_PAYMENT_API_ERROR"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			header := http.Header{"Request-Id": []string{"wx-request-safe"}, "Authorization": []string{"must-not-leak"}}
+			sdkErr := &core.APIError{
+				StatusCode: http.StatusForbidden,
+				Header:     header,
+				Code:       tt.wechatCode,
+				Message:    "upstream fixture message must not leak",
+				Body:       `{"private_key":"must-not-leak"}`,
+			}
+			result := &core.APIResult{Response: &http.Response{StatusCode: http.StatusForbidden, Header: header}}
+			err := mapWxpayPrepayError(tt.mode, result, fmt.Errorf("wrapped sdk error: %w", sdkErr))
+			appErr := infraerrors.FromError(err)
+			if appErr.Reason != tt.wantReason {
+				t.Fatalf("reason = %q, want %q", appErr.Reason, tt.wantReason)
+			}
+			for key := range appErr.Metadata {
+				switch key {
+				case "mode", "http_status", "wechat_code", "request_id", "action":
+				default:
+					t.Fatalf("unexpected metadata key %q", key)
+				}
+			}
+			if appErr.Metadata["mode"] != tt.mode || appErr.Metadata["http_status"] != "403" || appErr.Metadata["wechat_code"] != tt.wechatCode || appErr.Metadata["request_id"] != "wx-request-safe" {
+				t.Fatalf("unexpected metadata: %+v", appErr.Metadata)
+			}
+			if strings.Contains(appErr.Error(), "must-not-leak") || strings.Contains(appErr.Error(), "fixture message") {
+				t.Fatalf("structured error leaked SDK details: %v", appErr)
+			}
+		})
+	}
+}
+
+func TestCreatePaymentAllCapabilitiesDisabledDoesNotCallWechatAPI(t *testing.T) {
+	origJSAPIPrepay := wxpayJSAPIPrepayWithRequestPayment
+	origNativePrepay := wxpayNativePrepay
+	origH5Prepay := wxpayH5Prepay
+	t.Cleanup(func() {
+		wxpayJSAPIPrepayWithRequestPayment = origJSAPIPrepay
+		wxpayNativePrepay = origNativePrepay
+		wxpayH5Prepay = origH5Prepay
+	})
+
+	calls := 0
+	wxpayJSAPIPrepayWithRequestPayment = func(context.Context, jsapi.JsapiApiService, jsapi.PrepayRequest) (*jsapi.PrepayWithRequestPaymentResponse, *core.APIResult, error) {
+		calls++
+		return nil, nil, nil
+	}
+	wxpayNativePrepay = func(context.Context, native.NativeApiService, native.PrepayRequest) (*native.PrepayResponse, *core.APIResult, error) {
+		calls++
+		return nil, nil, nil
+	}
+	wxpayH5Prepay = func(context.Context, h5.H5ApiService, h5.PrepayRequest) (*h5.PrepayResponse, *core.APIResult, error) {
+		calls++
+		return nil, nil, nil
+	}
+
+	provider := &Wxpay{
+		config: map[string]string{
+			"appId": "wx-app", "mchId": "mch-id",
+			"nativeEnabled": "false", "h5Enabled": "false", "jsapiEnabled": "false",
+		},
+		coreClient: &core.Client{},
+	}
+	resp, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
+		OrderID: "sub2_local_block", Amount: "0.01", NotifyURL: "https://merchant.example/notify",
+		IsMobile: true, ClientIP: "203.0.113.10",
+	})
+	if resp != nil {
+		t.Fatalf("expected nil response, got %+v", resp)
+	}
+	if infraerrors.Reason(err) != "NO_AVAILABLE_WXPAY_CAPABILITY" {
+		t.Fatalf("reason = %q, want NO_AVAILABLE_WXPAY_CAPABILITY", infraerrors.Reason(err))
+	}
+	if calls != 0 {
+		t.Fatalf("wechat api calls = %d, want 0", calls)
+	}
+}
+
 func TestCreatePaymentMobileH5ReturnsNoAuthErrorWithoutNativeFallback(t *testing.T) {
 	origJSAPIPrepay := wxpayJSAPIPrepayWithRequestPayment
 	origNativePrepay := wxpayNativePrepay
@@ -662,7 +863,14 @@ func TestCreatePaymentMobileH5ReturnsNoAuthErrorWithoutNativeFallback(t *testing
 	}
 	wxpayH5Prepay = func(ctx context.Context, svc h5.H5ApiService, req h5.PrepayRequest) (*h5.PrepayResponse, *core.APIResult, error) {
 		h5Calls++
-		return nil, nil, errors.New("NO_AUTH")
+		header := http.Header{"Request-Id": []string{"wx-request-h5-no-auth"}}
+		return nil, &core.APIResult{Response: &http.Response{StatusCode: http.StatusForbidden, Header: header}}, &core.APIError{
+			StatusCode: http.StatusForbidden,
+			Header:     header,
+			Code:       "NO_AUTH",
+			Message:    "fixture message must not be matched",
+			Body:       `{"code":"NO_AUTH","secret":"must-not-leak"}`,
+		}
 	}
 	wxpayNativePrepay = func(ctx context.Context, svc native.NativeApiService, req native.PrepayRequest) (*native.PrepayResponse, *core.APIResult, error) {
 		nativeCalls++
@@ -673,8 +881,12 @@ func TestCreatePaymentMobileH5ReturnsNoAuthErrorWithoutNativeFallback(t *testing
 
 	provider := &Wxpay{
 		config: map[string]string{
-			"appId": "wx123",
-			"mchId": "mch123",
+			"appId":         "wx123",
+			"mchId":         "mch123",
+			"nativeEnabled": "true",
+			"h5Enabled":     "true",
+			"h5AppName":     "Sub2API",
+			"h5AppUrl":      "https://app.example.com",
 		},
 		coreClient: &core.Client{},
 	}
@@ -703,7 +915,14 @@ func TestCreatePaymentMobileH5ReturnsNoAuthErrorWithoutNativeFallback(t *testing
 	if resp != nil {
 		t.Fatalf("expected nil response, got %+v", resp)
 	}
-	if !strings.Contains(err.Error(), "NO_AUTH") {
-		t.Fatalf("error = %v, want NO_AUTH", err)
+	appErr := infraerrors.FromError(err)
+	if appErr.Reason != "WECHAT_H5_NOT_AUTHORIZED" {
+		t.Fatalf("reason = %q, want %q", appErr.Reason, "WECHAT_H5_NOT_AUTHORIZED")
+	}
+	if appErr.Metadata["mode"] != wxpayModeH5 || appErr.Metadata["http_status"] != "403" || appErr.Metadata["wechat_code"] != "NO_AUTH" || appErr.Metadata["request_id"] != "wx-request-h5-no-auth" {
+		t.Fatalf("unexpected metadata: %+v", appErr.Metadata)
+	}
+	if strings.Contains(appErr.Error(), "secret") || strings.Contains(appErr.Error(), "fixture message") {
+		t.Fatalf("structured error leaked upstream body/message: %v", appErr)
 	}
 }

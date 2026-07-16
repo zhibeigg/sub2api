@@ -63,10 +63,48 @@ export function describePaymentScenarioError(
   }
 
   if (method === 'wxpay') {
+    if (code === 'WECHAT_NATIVE_NOT_AUTHORIZED') {
+      return {
+        messageKey: 'payment.errors.wechatNativeNotAuthorized',
+        hintKey: 'payment.errors.wechatContactAdminHint',
+      }
+    }
     if (code === 'WECHAT_H5_NOT_AUTHORIZED') {
       return {
         messageKey: 'payment.errors.wechatH5NotAuthorized',
+        hintKey: context.isMobile
+          ? 'payment.errors.wechatScanOnDesktopHint'
+          : 'payment.errors.wechatContactAdminHint',
+      }
+    }
+    if (code === 'WECHAT_JSAPI_NOT_AUTHORIZED') {
+      return {
+        messageKey: 'payment.errors.wechatJsapiNotAuthorized',
+        hintKey: 'payment.errors.wechatSwitchBrowserHint',
+      }
+    }
+    if (code === 'NO_AVAILABLE_WXPAY_CAPABILITY') {
+      return {
+        messageKey: 'payment.errors.wechatNoAvailableCapability',
         hintKey: defaultWechatHint(context),
+      }
+    }
+    if (code === 'WECHAT_APPID_MCHID_MISMATCH') {
+      return {
+        messageKey: 'payment.errors.wechatAppIdMchIdMismatch',
+        hintKey: 'payment.errors.wechatContactAdminHint',
+      }
+    }
+    if (code === 'WECHAT_SIGN_ERROR') {
+      return {
+        messageKey: 'payment.errors.wechatSignError',
+        hintKey: 'payment.errors.wechatContactAdminHint',
+      }
+    }
+    if (code === 'WECHAT_PAYMENT_API_ERROR') {
+      return {
+        messageKey: 'payment.errors.wechatApiError',
+        hintKey: 'payment.errors.wechatContactAdminHint',
       }
     }
     if (code === 'WECHAT_PAYMENT_MP_NOT_CONFIGURED') {

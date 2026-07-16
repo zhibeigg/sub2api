@@ -3,12 +3,63 @@
 package payment
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 )
+
+func TestWxpayCapabilitySelectionContext(t *testing.T) {
+	t.Parallel()
+
+	ctx := WithWxpayNativeRequired(context.Background())
+	if !wxpayNativeRequiredFromContext(ctx) {
+		t.Fatal("expected native capability requirement in selection context")
+	}
+	if wxpayNativeRequiredFromContext(context.Background()) {
+		t.Fatal("unexpected native capability requirement on plain context")
+	}
+}
+
+func TestResolveWxpayNativeEnabled(t *testing.T) {
+	t.Parallel()
+
+	if !resolveWxpayNativeEnabled(map[string]string{}) {
+		t.Fatal("historical config should default native to enabled")
+	}
+	if resolveWxpayNativeEnabled(map[string]string{"nativeEnabled": "false"}) {
+		t.Fatal("explicit false should disable native")
+	}
+	if !resolveWxpayNativeEnabled(map[string]string{"nativeEnabled": "true"}) {
+		t.Fatal("explicit true should enable native")
+	}
+}
+
+func TestResolveWxpayJSAPIEnabled(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		config map[string]string
+		want   bool
+	}{
+		{name: "historical config without mp app id", config: map[string]string{}, want: false},
+		{name: "historical mp app id", config: map[string]string{"mpAppId": "wx-mp-app"}, want: true},
+		{name: "explicit true", config: map[string]string{"jsapiEnabled": "true"}, want: true},
+		{name: "explicit false overrides mp app id", config: map[string]string{"mpAppId": "wx-mp-app", "jsapiEnabled": "false"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := resolveWxpayJSAPIEnabled(tt.config); got != tt.want {
+				t.Fatalf("resolveWxpayJSAPIEnabled() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
 func TestInstanceSupportsType(t *testing.T) {
 	t.Parallel()

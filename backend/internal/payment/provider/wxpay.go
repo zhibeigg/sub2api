@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -46,6 +47,19 @@ const (
 	wxpayModeJSAPI  = "jsapi"
 )
 
+const (
+	wxpayConfigNativeEnabled = "nativeEnabled"
+	wxpayConfigH5Enabled     = "h5Enabled"
+	wxpayConfigJSAPIEnabled  = "jsapiEnabled"
+)
+
+// WxpayCapabilityStatus is the non-sensitive local capability self-check result.
+type WxpayCapabilityStatus struct {
+	NativeEnabled bool
+	H5Enabled     bool
+	JSAPIEnabled  bool
+}
+
 // WeChat Pay trade states.
 const (
 	wxpayTradeStateSuccess  = "SUCCESS"
@@ -81,6 +95,72 @@ type Wxpay struct {
 
 const wxpayAPIv3KeyLength = 32
 
+// InspectWxpayCapabilities resolves explicit capability switches and applies
+// backward-compatible defaults for historical provider instances.
+func InspectWxpayCapabilities(config map[string]string) (WxpayCapabilityStatus, error) {
+	h5Configured := strings.TrimSpace(config["h5AppName"]) != "" && strings.TrimSpace(config["h5AppUrl"]) != ""
+	jsapiConfigured := strings.TrimSpace(config["mpAppId"]) != ""
+
+	nativeEnabled, err := resolveWxpayCapabilityFlag(config, wxpayConfigNativeEnabled, true)
+	if err != nil {
+		return WxpayCapabilityStatus{}, err
+	}
+	h5Enabled, err := resolveWxpayCapabilityFlag(config, wxpayConfigH5Enabled, h5Configured)
+	if err != nil {
+		return WxpayCapabilityStatus{}, err
+	}
+	jsapiEnabled, err := resolveWxpayCapabilityFlag(config, wxpayConfigJSAPIEnabled, jsapiConfigured)
+	if err != nil {
+		return WxpayCapabilityStatus{}, err
+	}
+
+	status := WxpayCapabilityStatus{
+		NativeEnabled: nativeEnabled,
+		H5Enabled:     h5Enabled,
+		JSAPIEnabled:  jsapiEnabled,
+	}
+	if err := validateWxpayCapabilityConfig(config, status); err != nil {
+		return WxpayCapabilityStatus{}, err
+	}
+	return status, nil
+}
+
+func resolveWxpayCapabilityFlag(config map[string]string, key string, fallback bool) (bool, error) {
+	raw, exists := config[key]
+	if !exists {
+		return fallback, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, infraerrors.BadRequest("WXPAY_CONFIG_INVALID_BOOLEAN", "invalid_boolean").
+			WithMetadata(map[string]string{"action": "set_" + key + "_to_true_or_false"})
+	}
+}
+
+func validateWxpayCapabilityConfig(config map[string]string, status WxpayCapabilityStatus) error {
+	if status.H5Enabled {
+		if strings.TrimSpace(config["h5AppName"]) == "" {
+			return infraerrors.BadRequest("WXPAY_CONFIG_H5_APP_REQUIRED", "h5_app_name_required").
+				WithMetadata(map[string]string{"action": "configure_h5_app_name"})
+		}
+		h5AppURL := strings.TrimSpace(config["h5AppUrl"])
+		parsed, err := url.Parse(h5AppURL)
+		if err != nil || !parsed.IsAbs() || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+			return infraerrors.BadRequest("WXPAY_CONFIG_H5_URL_INVALID", "h5_app_url_must_be_absolute_https").
+				WithMetadata(map[string]string{"action": "configure_absolute_https_h5_app_url"})
+		}
+	}
+	if status.JSAPIEnabled && ResolveWxpayJSAPIAppID(config) == "" {
+		return infraerrors.BadRequest("WXPAY_CONFIG_JSAPI_APPID_REQUIRED", "jsapi_app_id_required").
+			WithMetadata(map[string]string{"action": "configure_jsapi_app_id"})
+	}
+	return nil
+}
+
 func NewWxpay(instanceID string, config map[string]string) (*Wxpay, error) {
 	// All fields are required. Platform-certificate mode is intentionally unsupported —
 	// WeChat has been migrating all merchants to the pubkey verifier since 2024-10,
@@ -89,25 +169,24 @@ func NewWxpay(instanceID string, config map[string]string) (*Wxpay, error) {
 	for _, k := range required {
 		if config[k] == "" {
 			return nil, infraerrors.BadRequest("WXPAY_CONFIG_MISSING_KEY", "missing_required_key").
-				WithMetadata(map[string]string{"key": k})
+				WithMetadata(map[string]string{"action": "configure_required_wxpay_credentials"})
 		}
 	}
 	if len(config["apiV3Key"]) != wxpayAPIv3KeyLength {
 		return nil, infraerrors.BadRequest("WXPAY_CONFIG_INVALID_KEY_LENGTH", "invalid_key_length").
-			WithMetadata(map[string]string{
-				"key":      "apiV3Key",
-				"expected": strconv.Itoa(wxpayAPIv3KeyLength),
-				"actual":   strconv.Itoa(len(config["apiV3Key"])),
-			})
+			WithMetadata(map[string]string{"action": "set_api_v3_key_to_32_bytes"})
 	}
 	// Parse PEMs eagerly so malformed keys surface at save time, not at order creation.
 	if _, err := utils.LoadPrivateKey(formatPEM(config["privateKey"], "PRIVATE KEY")); err != nil {
 		return nil, infraerrors.BadRequest("WXPAY_CONFIG_INVALID_KEY", "invalid_key").
-			WithMetadata(map[string]string{"key": "privateKey"})
+			WithMetadata(map[string]string{"action": "verify_merchant_private_key"})
 	}
 	if _, err := utils.LoadPublicKey(formatPEM(config["publicKey"], "PUBLIC KEY")); err != nil {
 		return nil, infraerrors.BadRequest("WXPAY_CONFIG_INVALID_KEY", "invalid_key").
-			WithMetadata(map[string]string{"key": "publicKey"})
+			WithMetadata(map[string]string{"action": "verify_wechat_pay_public_key"})
+	}
+	if _, err := InspectWxpayCapabilities(config); err != nil {
+		return nil, err
 	}
 	return &Wxpay{instanceID: instanceID, config: config}, nil
 }
@@ -145,12 +224,12 @@ func (w *Wxpay) ensureClient() (*core.Client, error) {
 	privateKey, err := utils.LoadPrivateKey(formatPEM(w.config["privateKey"], "PRIVATE KEY"))
 	if err != nil {
 		return nil, infraerrors.BadRequest("WXPAY_CONFIG_INVALID_KEY", "invalid_key").
-			WithMetadata(map[string]string{"key": "privateKey"})
+			WithMetadata(map[string]string{"action": "verify_merchant_private_key"})
 	}
 	publicKey, err := utils.LoadPublicKey(formatPEM(w.config["publicKey"], "PUBLIC KEY"))
 	if err != nil {
 		return nil, infraerrors.BadRequest("WXPAY_CONFIG_INVALID_KEY", "invalid_key").
-			WithMetadata(map[string]string{"key": "publicKey"})
+			WithMetadata(map[string]string{"action": "verify_wechat_pay_public_key"})
 	}
 	verifier := verifiers.NewSHA256WithRSAPubkeyVerifier(w.config["publicKeyId"], *publicKey)
 	client, err := core.NewClient(context.Background(),
@@ -169,6 +248,14 @@ func (w *Wxpay) ensureClient() (*core.Client, error) {
 }
 
 func (w *Wxpay) CreatePayment(ctx context.Context, req payment.CreatePaymentRequest) (*payment.CreatePaymentResponse, error) {
+	capabilities, err := InspectWxpayCapabilities(w.config)
+	if err != nil {
+		return nil, err
+	}
+	mode, err := resolveWxpayCreateMode(req, capabilities)
+	if err != nil {
+		return nil, err
+	}
 	client, err := w.ensureClient()
 	if err != nil {
 		return nil, err
@@ -186,10 +273,6 @@ func (w *Wxpay) CreatePayment(ctx context.Context, req payment.CreatePaymentRequ
 		return nil, fmt.Errorf("wxpay create payment: %w", err)
 	}
 
-	mode, err := resolveWxpayCreateMode(req)
-	if err != nil {
-		return nil, err
-	}
 	switch mode {
 	case wxpayModeJSAPI:
 		return w.prepayJSAPI(ctx, client, req, notifyURL, totalFen)
@@ -218,9 +301,9 @@ func (w *Wxpay) prepayJSAPI(ctx context.Context, c *core.Client, req payment.Cre
 	if clientIP := strings.TrimSpace(req.ClientIP); clientIP != "" {
 		prepayReq.SceneInfo = &jsapi.SceneInfo{PayerClientIp: core.String(clientIP)}
 	}
-	resp, _, err := wxpayJSAPIPrepayWithRequestPayment(ctx, svc, prepayReq)
+	resp, result, err := wxpayJSAPIPrepayWithRequestPayment(ctx, svc, prepayReq)
 	if err != nil {
-		return nil, fmt.Errorf("wxpay jsapi prepay: %w", err)
+		return nil, mapWxpayPrepayError(wxpayModeJSAPI, result, err)
 	}
 	return &payment.CreatePaymentResponse{
 		TradeNo:    req.OrderID,
@@ -239,14 +322,14 @@ func (w *Wxpay) prepayJSAPI(ctx context.Context, c *core.Client, req payment.Cre
 func (w *Wxpay) prepayNative(ctx context.Context, c *core.Client, req payment.CreatePaymentRequest, notifyURL string, totalFen int64) (*payment.CreatePaymentResponse, error) {
 	svc := native.NativeApiService{Client: c}
 	cur := wxpayCurrency
-	resp, _, err := wxpayNativePrepay(ctx, svc, native.PrepayRequest{
+	resp, result, err := wxpayNativePrepay(ctx, svc, native.PrepayRequest{
 		Appid: core.String(w.config["appId"]), Mchid: core.String(w.config["mchId"]),
 		Description: core.String(req.Subject), OutTradeNo: core.String(req.OrderID),
 		NotifyUrl: core.String(notifyURL),
 		Amount:    &native.Amount{Total: core.Int64(totalFen), Currency: &cur},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("wxpay native prepay: %w", err)
+		return nil, mapWxpayPrepayError(wxpayModeNative, result, err)
 	}
 	codeURL := ""
 	if resp.CodeUrl != nil {
@@ -258,7 +341,7 @@ func (w *Wxpay) prepayNative(ctx context.Context, c *core.Client, req payment.Cr
 func (w *Wxpay) prepayH5(ctx context.Context, c *core.Client, req payment.CreatePaymentRequest, notifyURL string, totalFen int64) (*payment.CreatePaymentResponse, error) {
 	svc := h5.H5ApiService{Client: c}
 	cur := wxpayCurrency
-	resp, _, err := wxpayH5Prepay(ctx, svc, h5.PrepayRequest{
+	resp, result, err := wxpayH5Prepay(ctx, svc, h5.PrepayRequest{
 		Appid: core.String(w.config["appId"]), Mchid: core.String(w.config["mchId"]),
 		Description: core.String(req.Subject), OutTradeNo: core.String(req.OrderID),
 		NotifyUrl: core.String(notifyURL),
@@ -266,7 +349,7 @@ func (w *Wxpay) prepayH5(ctx context.Context, c *core.Client, req payment.Create
 		SceneInfo: &h5.SceneInfo{PayerClientIp: core.String(req.ClientIP), H5Info: buildWxpayH5Info(w.config)},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("wxpay h5 prepay: %w", err)
+		return nil, mapWxpayPrepayError(wxpayModeH5, result, err)
 	}
 	h5URL := ""
 	if resp.H5Url != nil {
@@ -291,17 +374,105 @@ func buildWxpayH5Info(config map[string]string) *h5.H5Info {
 	return info
 }
 
-func resolveWxpayCreateMode(req payment.CreatePaymentRequest) (string, error) {
+func resolveWxpayCreateMode(req payment.CreatePaymentRequest, capabilities WxpayCapabilityStatus) (string, error) {
 	if strings.TrimSpace(req.OpenID) != "" {
-		return wxpayModeJSAPI, nil
+		if capabilities.JSAPIEnabled {
+			return wxpayModeJSAPI, nil
+		}
+		return "", noAvailableWxpayCapabilityError(wxpayModeJSAPI, "enable_jsapi_payment")
+	}
+	if req.IsWeChatBrowser {
+		if capabilities.NativeEnabled {
+			return wxpayModeNative, nil
+		}
+		return "", noAvailableWxpayCapabilityError(wxpayModeNative, "enable_native_payment")
 	}
 	if req.IsMobile {
-		if strings.TrimSpace(req.ClientIP) == "" {
-			return "", fmt.Errorf("wxpay H5 payment requires client IP")
+		if capabilities.H5Enabled && strings.TrimSpace(req.ClientIP) != "" {
+			return wxpayModeH5, nil
 		}
-		return wxpayModeH5, nil
+		if capabilities.NativeEnabled {
+			return wxpayModeNative, nil
+		}
+		action := "enable_h5_or_native_payment"
+		if capabilities.H5Enabled {
+			action = "provide_client_ip_or_enable_native_payment"
+		}
+		return "", noAvailableWxpayCapabilityError(wxpayModeH5, action)
 	}
-	return wxpayModeNative, nil
+	if capabilities.NativeEnabled {
+		return wxpayModeNative, nil
+	}
+	return "", noAvailableWxpayCapabilityError(wxpayModeNative, "enable_native_payment")
+}
+
+func noAvailableWxpayCapabilityError(mode, action string) error {
+	return infraerrors.ServiceUnavailable(
+		"NO_AVAILABLE_WXPAY_CAPABILITY",
+		"no available WeChat Pay capability for the current payment scenario",
+	).WithMetadata(map[string]string{
+		"mode":   mode,
+		"action": action,
+	})
+}
+
+func mapWxpayPrepayError(mode string, result *core.APIResult, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	httpStatus := 0
+	wechatCode := ""
+	requestID := ""
+	var apiErr *core.APIError
+	if errors.As(err, &apiErr) {
+		httpStatus = apiErr.StatusCode
+		wechatCode = strings.TrimSpace(apiErr.Code)
+		requestID = strings.TrimSpace(apiErr.Header.Get("Request-Id"))
+	}
+	if result != nil && result.Response != nil {
+		if httpStatus == 0 {
+			httpStatus = result.Response.StatusCode
+		}
+		if requestID == "" {
+			requestID = strings.TrimSpace(result.Response.Header.Get("Request-Id"))
+		}
+	}
+
+	reason, message, action := classifyWxpayAPIError(mode, wechatCode)
+	metadata := map[string]string{
+		"mode":   mode,
+		"action": action,
+	}
+	if httpStatus > 0 {
+		metadata["http_status"] = strconv.Itoa(httpStatus)
+	}
+	if wechatCode != "" {
+		metadata["wechat_code"] = wechatCode
+	}
+	if requestID != "" {
+		metadata["request_id"] = requestID
+	}
+	return infraerrors.ServiceUnavailable(reason, message).WithMetadata(metadata)
+}
+
+func classifyWxpayAPIError(mode, wechatCode string) (reason, message, action string) {
+	switch strings.ToUpper(strings.TrimSpace(wechatCode)) {
+	case "NO_AUTH":
+		switch mode {
+		case wxpayModeNative:
+			return "WECHAT_NATIVE_NOT_AUTHORIZED", "wechat native payment is not authorized for this merchant", "enable_native_payment"
+		case wxpayModeH5:
+			return "WECHAT_H5_NOT_AUTHORIZED", "wechat h5 payment is not authorized for this merchant", "enable_h5_payment_or_use_native"
+		case wxpayModeJSAPI:
+			return "WECHAT_JSAPI_NOT_AUTHORIZED", "wechat jsapi payment is not authorized for this merchant", "enable_jsapi_and_configure_mp"
+		}
+	case "APPID_MCHID_NOT_MATCH":
+		return "WECHAT_APPID_MCHID_MISMATCH", "wechat app id and merchant id do not match", "verify_appid_mchid_binding"
+	case "SIGN_ERROR":
+		return "WECHAT_SIGN_ERROR", "wechat pay rejected the merchant signature", "verify_merchant_signature_config"
+	}
+	return "WECHAT_PAYMENT_API_ERROR", "wechat payment api request failed", "check_wechat_pay_configuration"
 }
 
 func appendWxpayRedirectURL(h5URL string, req payment.CreatePaymentRequest) (string, error) {

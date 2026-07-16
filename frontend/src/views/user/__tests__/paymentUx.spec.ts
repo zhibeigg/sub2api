@@ -24,7 +24,7 @@ describe('describePaymentScenarioError', () => {
       { paymentMethod: 'wxpay', isMobile: true, isWechatBrowser: false },
     )).toEqual({
       messageKey: 'payment.errors.wechatH5NotAuthorized',
-      hintKey: 'payment.errors.wechatOpenInWeChatHint',
+      hintKey: 'payment.errors.wechatScanOnDesktopHint',
     })
   })
 
@@ -34,8 +34,26 @@ describe('describePaymentScenarioError', () => {
       { paymentMethod: 'wxpay_direct', isMobile: true, isWechatBrowser: false },
     )).toEqual({
       messageKey: 'payment.errors.wechatH5NotAuthorized',
-      hintKey: 'payment.errors.wechatOpenInWeChatHint',
+      hintKey: 'payment.errors.wechatScanOnDesktopHint',
     })
+  })
+
+  it('maps structured WeChat capability and API errors to actionable prompts', () => {
+    const cases = [
+      ['WECHAT_NATIVE_NOT_AUTHORIZED', 'payment.errors.wechatNativeNotAuthorized', 'payment.errors.wechatContactAdminHint'],
+      ['WECHAT_JSAPI_NOT_AUTHORIZED', 'payment.errors.wechatJsapiNotAuthorized', 'payment.errors.wechatSwitchBrowserHint'],
+      ['NO_AVAILABLE_WXPAY_CAPABILITY', 'payment.errors.wechatNoAvailableCapability', 'payment.errors.wechatOpenInWeChatHint'],
+      ['WECHAT_APPID_MCHID_MISMATCH', 'payment.errors.wechatAppIdMchIdMismatch', 'payment.errors.wechatContactAdminHint'],
+      ['WECHAT_SIGN_ERROR', 'payment.errors.wechatSignError', 'payment.errors.wechatContactAdminHint'],
+      ['WECHAT_PAYMENT_API_ERROR', 'payment.errors.wechatApiError', 'payment.errors.wechatContactAdminHint'],
+    ] as const
+
+    for (const [reason, messageKey, hintKey] of cases) {
+      expect(describePaymentScenarioError(
+        { reason },
+        { paymentMethod: 'wxpay', isMobile: true, isWechatBrowser: false },
+      )).toEqual({ messageKey, hintKey })
+    }
   })
 
   it('maps missing WeixinJSBridge to a JSAPI-specific prompt', () => {

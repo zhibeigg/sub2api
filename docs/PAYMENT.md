@@ -170,6 +170,23 @@ Direct integration with WeChat Pay APIv3. Supports Native QR code payment, H5 pa
 | **WeChat Pay Public Key ID** | WeChat Pay public key ID | Yes |
 | **Certificate Serial Number** | Merchant certificate serial number | Yes |
 
+Capability switches and scenario configuration:
+
+| Config key | Description | Default / compatibility behavior |
+|------------|-------------|----------------------------------|
+| `nativeEnabled` | Allow Native QR payment | Defaults to `true` when absent from historical config |
+| `h5Enabled` | Allow H5 payment | When absent, inferred as `true` only if both `h5AppName` and `h5AppUrl` are complete |
+| `jsapiEnabled` | Allow MP/JSAPI payment | When absent, inferred as `true` only if `mpAppId` is non-empty |
+| `h5AppName` | H5 application name registered in WeChat Pay Merchant Platform | Required when `h5Enabled=true` |
+| `h5AppUrl` | H5 application site URL | Must be an absolute HTTPS URL when `h5Enabled=true` |
+| `mpAppId` | Official Account AppID | Optional; JSAPI falls back to the payment `appId`, but the resolved JSAPI AppID must be non-empty |
+
+Explicit booleans always override historical inference. Enable only capabilities actually authorized in WeChat Pay Merchant Platform; disabled modes are blocked locally and their WeChat APIs are never called.
+
+Mode selection is deterministic: an OpenID permits JSAPI only; when JSAPI is disabled, an in-WeChat request does not start OAuth and safely returns a Native QR code if Native is enabled; ordinary mobile browsers prefer H5 and fall back to Native when H5 is disabled or the client IP is unavailable; desktop uses Native. If no capability is available for the scenario, the API returns `NO_AVAILABLE_WXPAY_CAPABILITY`.
+
+WeChat API failures are mapped to structured reasons including `WECHAT_NATIVE_NOT_AUTHORIZED`, `WECHAT_H5_NOT_AUTHORIZED`, `WECHAT_JSAPI_NOT_AUTHORIZED`, `WECHAT_APPID_MCHID_MISMATCH`, `WECHAT_SIGN_ERROR`, and `WECHAT_PAYMENT_API_ERROR`. Error metadata contains only necessary fields from `mode`, `http_status`, `wechat_code`, `request_id`, and `action`; request bodies and credentials are never included.
+
 ### Stripe
 
 International payment platform supporting multiple payment methods and currencies.

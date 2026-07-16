@@ -966,6 +966,26 @@ func validAirwallexProviderConfig(t *testing.T) map[string]string {
 	}
 }
 
+func TestValidateProviderConfigChecksWxpayCapabilityConfiguration(t *testing.T) {
+	t.Parallel()
+
+	svc := &PaymentConfigService{}
+	config := validWxpayProviderConfig(t)
+	config["nativeEnabled"] = "true"
+	config["h5Enabled"] = "true"
+	config["jsapiEnabled"] = "false"
+	config["h5AppName"] = "Sub2API"
+	config["h5AppUrl"] = "http://pay.example.com"
+
+	err := svc.validateProviderConfig(payment.TypeWxpay, config)
+	require.Error(t, err)
+	appErr := infraerrors.FromError(err)
+	require.Equal(t, "WXPAY_CONFIG_H5_URL_INVALID", appErr.Reason)
+	for key := range appErr.Metadata {
+		require.Contains(t, []string{"mode", "http_status", "wechat_code", "request_id", "action"}, key)
+	}
+}
+
 func validWxpayProviderConfig(t *testing.T) map[string]string {
 	t.Helper()
 

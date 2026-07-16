@@ -170,6 +170,23 @@ EasyPay V1 支持 `alipay`、`wxpay`；V2 支持 `alipay`、`wxpay`、`qqpay`。
 | **微信支付公钥 ID** | 微信支付公钥 ID | 是 |
 | **商户证书序列号** | 商户证书序列号 | 是 |
 
+能力开关与场景配置：
+
+| 配置键 | 说明 | 默认/兼容行为 |
+|--------|------|---------------|
+| `nativeEnabled` | 是否允许 Native 扫码支付 | 历史配置缺失时为 `true` |
+| `h5Enabled` | 是否允许 H5 支付 | 历史配置缺失时，仅当 `h5AppName` 与 `h5AppUrl` 均完整时为 `true` |
+| `jsapiEnabled` | 是否允许公众号/JSAPI 支付 | 历史配置缺失时，仅当 `mpAppId` 非空时为 `true` |
+| `h5AppName` | 微信商户平台登记的 H5 应用名称 | `h5Enabled=true` 时必填 |
+| `h5AppUrl` | H5 应用站点地址 | `h5Enabled=true` 时必须为绝对 HTTPS URL |
+| `mpAppId` | 公众号 AppID | 可选；留空时 JSAPI 使用支付 `appId`，但解析后的 JSAPI AppID 必须非空 |
+
+显式布尔值始终优先于历史推导。只应启用微信商户平台已经实际开通的能力；关闭的模式会在本地阻断，不会调用对应微信接口。
+
+模式选择规则：有 OpenID 时只允许 JSAPI；微信内但未启用 JSAPI 时不启动 OAuth，并在 Native 已启用时安全返回二维码；普通移动端优先 H5，未启用或缺少客户端 IP 时回退 Native；桌面端使用 Native。当前场景没有可用能力时返回 `NO_AVAILABLE_WXPAY_CAPABILITY`。
+
+微信 API 错误会映射为结构化原因码，包括 `WECHAT_NATIVE_NOT_AUTHORIZED`、`WECHAT_H5_NOT_AUTHORIZED`、`WECHAT_JSAPI_NOT_AUTHORIZED`、`WECHAT_APPID_MCHID_MISMATCH`、`WECHAT_SIGN_ERROR` 与 `WECHAT_PAYMENT_API_ERROR`。错误 metadata 仅包含 `mode`、`http_status`、`wechat_code`、`request_id`、`action` 中的必要字段，不包含请求体或凭据。
+
 ### Stripe
 
 国际支付平台，支持多种支付方式和币种。

@@ -64,6 +64,38 @@ EasyPay 协议约定：
 - 协议版本创建后不可切换；协议升级、PID 变更或密钥轮换必须新建实例，不要直接覆盖仍有关联订单的实例配置。
 - `GET` 响应不会回传私钥等敏感配置；`PUT` 可只提交需要变更的 `config` 字段，未提交的敏感字段保持原值。不要把真实凭证写入文档、日志或示例。
 
+微信官方支付能力约定：
+- `config.nativeEnabled`、`config.h5Enabled`、`config.jsapiEnabled` 是字符串布尔值（`"true"` / `"false"`），显式值优先。
+- 历史兼容：`nativeEnabled` 缺失时为 `true`；`h5Enabled` 缺失时仅在 `h5AppName` 和 `h5AppUrl` 完整时推导为 `true`；`jsapiEnabled` 缺失时仅在 `mpAppId` 非空时推导为 `true`。
+- `h5Enabled="true"` 时，`h5AppName` 必填，`h5AppUrl` 必须是绝对 HTTPS URL。
+- `jsapiEnabled="true"` 时，解析后的 JSAPI AppID 必须非空；`mpAppId` 非空时优先使用，否则使用 `appId`。
+- 有 OpenID 时只允许 JSAPI；普通移动端优先 H5、回退 Native；桌面端使用 Native；微信内 JSAPI 关闭时不启动 OAuth，并可回退 Native 二维码。未启用的模式不会调用微信 API。
+- 创建订单的结构化原因码包括 `NO_AVAILABLE_WXPAY_CAPABILITY`、`WECHAT_NATIVE_NOT_AUTHORIZED`、`WECHAT_H5_NOT_AUTHORIZED`、`WECHAT_JSAPI_NOT_AUTHORIZED`、`WECHAT_APPID_MCHID_MISMATCH`、`WECHAT_SIGN_ERROR`、`WECHAT_PAYMENT_API_ERROR`。
+- 微信错误 metadata 只会使用 `mode`、`http_status`、`wechat_code`、`request_id`、`action`，不会返回凭据、请求体或其他敏感值。
+
+微信能力配置示例（凭据仅为占位符）：
+```json
+{
+  "provider_key": "wxpay",
+  "name": "WeChat Pay",
+  "config": {
+    "appId": "<wechat-app-id>",
+    "mchId": "<merchant-id>",
+    "privateKey": "<merchant-private-key-pem>",
+    "apiV3Key": "<32-byte-api-v3-key>",
+    "publicKey": "<wechat-pay-public-key-pem>",
+    "publicKeyId": "<wechat-pay-public-key-id>",
+    "certSerial": "<merchant-certificate-serial>",
+    "nativeEnabled": "true",
+    "h5Enabled": "false",
+    "jsapiEnabled": "false"
+  },
+  "supported_types": ["wxpay"],
+  "enabled": true,
+  "payment_mode": "qrcode"
+}
+```
+
 V2 请求结构示例（仅占位符，不是可用密钥）：
 ```json
 {
@@ -341,6 +373,38 @@ EasyPay protocol contract:
 - Retries of the same refund must reuse a stable `out_refund_no`.
 - The protocol version is immutable after creation. Use a new instance for protocol upgrades, PID changes, or key rotation instead of overwriting an instance that still has associated orders.
 - `GET` responses omit private keys and other sensitive config. A `PUT` may submit only changed `config` fields; omitted sensitive fields retain their stored values. Never place real credentials in documentation, logs, or examples.
+
+Direct WeChat Pay capability contract:
+- `config.nativeEnabled`, `config.h5Enabled`, and `config.jsapiEnabled` are string booleans (`"true"` / `"false"`); explicit values take precedence.
+- Historical compatibility: absent `nativeEnabled` means `true`; absent `h5Enabled` is inferred as `true` only when both `h5AppName` and `h5AppUrl` are complete; absent `jsapiEnabled` is inferred as `true` only when `mpAppId` is non-empty.
+- When `h5Enabled="true"`, `h5AppName` is required and `h5AppUrl` must be an absolute HTTPS URL.
+- When `jsapiEnabled="true"`, the resolved JSAPI AppID must be non-empty. A non-empty `mpAppId` takes precedence; otherwise `appId` is used.
+- An OpenID permits JSAPI only; ordinary mobile browsers prefer H5 and fall back to Native; desktop uses Native. If JSAPI is disabled, an in-WeChat request does not start OAuth and may fall back to a Native QR code. Disabled modes never call their WeChat APIs.
+- Structured order-creation reasons include `NO_AVAILABLE_WXPAY_CAPABILITY`, `WECHAT_NATIVE_NOT_AUTHORIZED`, `WECHAT_H5_NOT_AUTHORIZED`, `WECHAT_JSAPI_NOT_AUTHORIZED`, `WECHAT_APPID_MCHID_MISMATCH`, `WECHAT_SIGN_ERROR`, and `WECHAT_PAYMENT_API_ERROR`.
+- WeChat error metadata uses only `mode`, `http_status`, `wechat_code`, `request_id`, and `action`; credentials, request bodies, and other sensitive values are never returned.
+
+WeChat capability request example using placeholders only:
+```json
+{
+  "provider_key": "wxpay",
+  "name": "WeChat Pay",
+  "config": {
+    "appId": "<wechat-app-id>",
+    "mchId": "<merchant-id>",
+    "privateKey": "<merchant-private-key-pem>",
+    "apiV3Key": "<32-byte-api-v3-key>",
+    "publicKey": "<wechat-pay-public-key-pem>",
+    "publicKeyId": "<wechat-pay-public-key-id>",
+    "certSerial": "<merchant-certificate-serial>",
+    "nativeEnabled": "true",
+    "h5Enabled": "false",
+    "jsapiEnabled": "false"
+  },
+  "supported_types": ["wxpay"],
+  "enabled": true,
+  "payment_mode": "qrcode"
+}
+```
 
 V2 request shape using placeholders only:
 ```json

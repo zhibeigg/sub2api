@@ -111,6 +111,7 @@ type CreatePaymentRequest struct {
 	OpenID             string // WeChat JSAPI payer OpenID when available
 	ClientIP           string // Payer's IP address
 	IsMobile           bool   // Whether the request comes from a mobile device
+	IsWeChatBrowser    bool   // Whether the request comes from the built-in WeChat browser
 	InstanceSubMethods string // Comma-separated sub-methods from instance supported_types (for Stripe)
 }
 
