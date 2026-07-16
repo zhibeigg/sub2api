@@ -144,7 +144,7 @@ export const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
   easypay: [
     { key: 'protocolVersion', label: '', sensitive: false, defaultValue: EASYPAY_PROTOCOL_V2, options: EASYPAY_PROTOCOL_OPTIONS },
     { key: 'pid', label: 'PID', sensitive: false },
-    { key: 'apiBase', label: '', sensitive: false },
+    { key: 'apiBase', label: '', sensitive: false, hintKey: 'admin.settings.payment.field_easypayApiBaseHint' },
     { key: 'merchantPrivateKey', label: '', sensitive: true },
     { key: 'platformPublicKey', label: '', sensitive: true },
   ],
@@ -224,7 +224,7 @@ export function getProviderConfigFields(
   const commonFields: ConfigFieldDef[] = [
     { key: 'protocolVersion', label: '', sensitive: false, defaultValue: version, options: EASYPAY_PROTOCOL_OPTIONS },
     { key: 'pid', label: 'PID', sensitive: false },
-    { key: 'apiBase', label: '', sensitive: false },
+    { key: 'apiBase', label: '', sensitive: false, hintKey: 'admin.settings.payment.field_easypayApiBaseHint' },
   ]
   if (version === EASYPAY_PROTOCOL_V1) {
     return [

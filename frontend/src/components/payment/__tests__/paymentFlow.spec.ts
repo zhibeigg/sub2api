@@ -222,6 +222,36 @@ describe('decidePaymentLaunch', () => {
     expect(decision.paymentState.qrCode).toBe('https://pay.example.com/qr/session')
   })
 
+  it.each(['wxpay', 'qqpay'])('launches hosted qrcode %s as desktop QR and mobile redirect', (visibleMethod) => {
+    const hostedUrl = `https://pay.example.com/api/pay/submit?type=${visibleMethod}&signed=1`
+    const result = createOrderResult({
+      payment_type: visibleMethod,
+      payment_mode: 'qrcode',
+      result_type: 'order_created',
+      pay_url: hostedUrl,
+      qr_code: hostedUrl,
+      out_trade_no: `sub2_${visibleMethod}_hosted`,
+    })
+
+    const desktop = decidePaymentLaunch(result, {
+      visibleMethod,
+      orderType: 'balance',
+      isMobile: false,
+    })
+    expect(desktop.kind).toBe('qr_waiting')
+    expect(desktop.paymentState.qrCode).toBe(hostedUrl)
+    expect(desktop.paymentState.payUrl).toBe(hostedUrl)
+
+    const mobile = decidePaymentLaunch(result, {
+      visibleMethod,
+      orderType: 'balance',
+      isMobile: true,
+    })
+    expect(mobile.kind).toBe('redirect_waiting')
+    expect(mobile.paymentState.payUrl).toBe(hostedUrl)
+    expect(mobile.paymentState.qrCode).toBe(hostedUrl)
+  })
+
   it('returns wechat oauth launch when backend requires in-app authorization', () => {
     const decision = decidePaymentLaunch(createOrderResult({
       result_type: 'oauth_required',

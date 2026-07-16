@@ -58,8 +58,8 @@ EasyPay 协议约定：
 - `config.protocolVersion="1"` 使用 V1 MD5；历史 `config` 缺少该字段时也按 V1。
 - `config.protocolVersion="2"` 使用彩虹易支付 2.0 RSA-SHA256，配置 `pid`、`apiBase`、`merchantPrivateKey`、`platformPublicKey`、`notifyUrl`、`returnUrl`。
 - V1 的 `supported_types` 支持 `alipay`、`wxpay`；V2 支持 `alipay`、`wxpay`、`qqpay`，QQ 支付是否可用取决于上游通道。
-- V1/V2 共用 `/api/v1/payment/webhook/easypay`。V2 调用 `/api/pay/create`、`/api/pay/query`、`/api/pay/refund`、`/api/pay/refundquery`，允许 300 秒时钟偏差；回调需完成 RSA 验签及金额、PID、订单号校验后才返回 `success`。
-- 查询、退款和退款查询的已签名响应还会与原请求的订单号、退款单号、金额和状态交叉校验；字段缺失或不一致时安全失败。
+- V1/V2 共用 `/api/v1/payment/webhook/easypay`。V2 创建阶段按官方 SDK 规则在本地签名并生成固定路径 `/api/pay/submit` 的托管收银台 URL，不调用或信任可能返回未签名字段的 `/api/pay/create`；初始 `payment_trade_no` 允许为空。
+- V2 查单、退款和退款查询继续调用 `/api/pay/query`、`/api/pay/refund`、`/api/pay/refundquery`，允许 300 秒时钟偏差；这些响应及回调仍需完成 RSA、PID、时间戳、金额和订单号校验，字段缺失或不一致时安全失败。
 - 同一退款重试必须复用稳定的 `out_refund_no`。
 - 协议版本创建后不可切换；协议升级、PID 变更或密钥轮换必须新建实例，不要直接覆盖仍有关联订单的实例配置。
 - `GET` 响应不会回传私钥等敏感配置；`PUT` 可只提交需要变更的 `config` 字段，未提交的敏感字段保持原值。不要把真实凭证写入文档、日志或示例。
@@ -336,8 +336,8 @@ EasyPay protocol contract:
 - `config.protocolVersion="1"` selects V1 MD5. A historical config without this field is also treated as V1.
 - `config.protocolVersion="2"` selects Rainbow EasyPay 2.0 RSA-SHA256 with `pid`, `apiBase`, `merchantPrivateKey`, `platformPublicKey`, `notifyUrl`, and `returnUrl`.
 - V1 `supported_types` supports `alipay` and `wxpay`; V2 supports `alipay`, `wxpay`, and `qqpay`. QQ Pay availability depends on the upstream channel.
-- V1 and V2 share `/api/v1/payment/webhook/easypay`. V2 calls `/api/pay/create`, `/api/pay/query`, `/api/pay/refund`, and `/api/pay/refundquery`, allows 300 seconds of clock skew, and returns `success` only after RSA verification plus amount, PID, and merchant-order validation.
-- Signed query, refund, and refund-query responses are cross-checked against the original order number, refund number, amount, and status; missing or inconsistent fields fail safely.
+- V1 and V2 share `/api/v1/payment/webhook/easypay`. V2 creation follows the official SDK flow: it signs locally and builds a hosted checkout URL at the fixed `/api/pay/submit` path instead of calling or trusting potentially unsigned `/api/pay/create` result fields. The initial `payment_trade_no` may be empty.
+- V2 query, refund, and refund-query continue to call `/api/pay/query`, `/api/pay/refund`, and `/api/pay/refundquery`, with 300 seconds of allowed clock skew. These responses and callbacks still require RSA, PID, timestamp, amount, and order-number validation; missing or inconsistent fields fail safely.
 - Retries of the same refund must reuse a stable `out_refund_no`.
 - The protocol version is immutable after creation. Use a new instance for protocol upgrades, PID changes, or key rotation instead of overwriting an instance that still has associated orders.
 - `GET` responses omit private keys and other sensitive config. A `PUT` may submit only changed `config` fields; omitted sensitive fields retain their stored values. Never place real credentials in documentation, logs, or examples.

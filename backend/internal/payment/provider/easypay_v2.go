@@ -30,7 +30,7 @@ const (
 	easyPayV2SignType              = "RSA"
 	easyPayV2TimestampWindow       = 300 * time.Second
 	easyPayV2MillisecondsThreshold = int64(1_000_000_000_000)
-	easyPayV2CreatePath            = "/api/pay/create"
+	easyPayV2SubmitPath            = "/api/pay/submit"
 	easyPayV2QueryPath             = "/api/pay/query"
 	easyPayV2RefundPath            = "/api/pay/refund"
 	easyPayV2RefundQueryPath       = "/api/pay/refundquery"
@@ -142,7 +142,7 @@ func (e *EasyPayV2) MerchantIdentityMetadata() map[string]string {
 	}
 }
 
-func (e *EasyPayV2) CreatePayment(ctx context.Context, req payment.CreatePaymentRequest) (*payment.CreatePaymentResponse, error) {
+func (e *EasyPayV2) CreatePayment(_ context.Context, req payment.CreatePaymentRequest) (*payment.CreatePaymentResponse, error) {
 	paymentType, ok := e.resolvePaymentType(req.PaymentType)
 	if !ok {
 		return nil, fmt.Errorf("easypay v2 unsupported payment type: %s", strings.TrimSpace(req.PaymentType))
@@ -152,11 +152,18 @@ func (e *EasyPayV2) CreatePayment(ctx context.Context, req payment.CreatePayment
 		return nil, err
 	}
 	notifyURL, returnURL := e.resolveURLs(req)
+	if err := validateEasyPayV2CallbackURL(notifyURL); err != nil {
+		return nil, fmt.Errorf("easypay v2 invalid notify URL: %w", err)
+	}
+	if err := validateEasyPayV2CallbackURL(returnURL); err != nil {
+		return nil, fmt.Errorf("easypay v2 invalid return URL: %w", err)
+	}
+
 	device := easyPayV2DevicePC
 	if method == easyPayV2MethodJump && req.IsMobile {
 		device = easyPayV2DeviceMobile
 	}
-	params := map[string]string{
+	payURL, err := e.buildHostedPaymentURL(map[string]string{
 		"method":       method,
 		"device":       device,
 		"type":         paymentType,
@@ -166,78 +173,45 @@ func (e *EasyPayV2) CreatePayment(ctx context.Context, req payment.CreatePayment
 		"name":         req.Subject,
 		"money":        req.Amount,
 		"clientip":     req.ClientIP,
-	}
-	response, err := e.execute(ctx, easyPayV2CreatePath, params, easyPayV2PIDOptional)
+	})
 	if err != nil {
-		return nil, fmt.Errorf("easypay v2 create: %w", err)
+		return nil, fmt.Errorf("easypay v2 build hosted payment URL: %w", err)
 	}
 
-	result, err := mapEasyPayV2CreateResult(response, paymentType)
-	if err != nil {
-		return nil, fmt.Errorf("easypay v2 create response: %w", err)
+	result := &payment.CreatePaymentResponse{
+		PayURL:     payURL,
+		ResultType: payment.CreatePaymentResultOrderCreated,
+	}
+	if method == easyPayV2MethodWeb {
+		result.QRCode = payURL
 	}
 	return result, nil
 }
 
-func mapEasyPayV2CreateResult(response map[string]string, paymentType string) (*payment.CreatePaymentResponse, error) {
-	tradeNo := strings.TrimSpace(response["trade_no"])
-	if tradeNo == "" {
-		return nil, fmt.Errorf("missing trade_no")
+func (e *EasyPayV2) buildHostedPaymentURL(params map[string]string) (string, error) {
+	signedParams, err := e.buildRequestParams(params)
+	if err != nil {
+		return "", err
+	}
+	apiBase, err := url.Parse(e.config["apiBase"])
+	if err != nil {
+		return "", fmt.Errorf("parse api base: %w", err)
 	}
 
-	result := &payment.CreatePaymentResponse{TradeNo: tradeNo}
-	legacyPayTypeRaw, hasLegacyPayType := response["pay_type"]
-	legacyPayInfoRaw, hasLegacyPayInfo := response["pay_info"]
-	legacyPayType := strings.TrimSpace(legacyPayTypeRaw)
-	legacyPayInfo := strings.TrimSpace(legacyPayInfoRaw)
-	if hasLegacyPayType || hasLegacyPayInfo {
-		if legacyPayType == "" {
-			return nil, fmt.Errorf("missing pay_type")
-		}
-		if legacyPayInfo == "" {
-			return nil, fmt.Errorf("missing pay_info")
-		}
-		switch legacyPayType {
-		case "qrcode":
-			result.QRCode = legacyPayInfo
-		case "jump":
-			if err := validateEasyPayV2JumpURL(legacyPayInfo); err != nil {
-				return nil, fmt.Errorf("unsafe jump pay_info: %w", err)
-			}
-			result.PayURL = legacyPayInfo
-		case "urlscheme":
-			if err := validateEasyPayV2URLScheme(legacyPayInfo); err != nil {
-				return nil, fmt.Errorf("unsafe urlscheme pay_info: %w", err)
-			}
-			result.PayURL = legacyPayInfo
-		default:
-			return nil, fmt.Errorf("unsupported pay_type: %s", legacyPayType)
-		}
+	query := make(url.Values, len(signedParams))
+	for key, value := range signedParams {
+		query.Set(key, value)
 	}
-
-	aliasQRCode := strings.TrimSpace(response["qr_code"])
-	if aliasQRCode != "" {
-		if result.QRCode != "" && result.QRCode != aliasQRCode {
-			return nil, fmt.Errorf("conflicting qrcode result fields")
-		}
-		result.QRCode = aliasQRCode
+	hostedURL := &url.URL{
+		Scheme:   apiBase.Scheme,
+		Host:     apiBase.Host,
+		Path:     easyPayV2SubmitPath,
+		RawQuery: query.Encode(),
 	}
-
-	aliasPayURL := strings.TrimSpace(response["pay_url"])
-	if aliasPayURL != "" {
-		if err := validateEasyPayV2AliasPayURL(aliasPayURL, paymentType); err != nil {
-			return nil, fmt.Errorf("unsafe pay_url: %w", err)
-		}
-		if result.PayURL != "" && result.PayURL != aliasPayURL {
-			return nil, fmt.Errorf("conflicting pay URL result fields")
-		}
-		result.PayURL = aliasPayURL
+	if err := validateEasyPayV2HostedPaymentURL(apiBase, hostedURL); err != nil {
+		return "", err
 	}
-
-	if result.QRCode == "" && result.PayURL == "" {
-		return nil, fmt.Errorf("missing payment result")
-	}
-	return result, nil
+	return hostedURL.String(), nil
 }
 
 func (e *EasyPayV2) QueryOrder(ctx context.Context, outTradeNo string) (*payment.QueryOrderResponse, error) {
@@ -501,11 +475,6 @@ func (e *EasyPayV2) execute(ctx context.Context, path string, params map[string]
 	if err := e.verifySignedParams(response, pidPolicy); err != nil {
 		return nil, fmt.Errorf("response verification failed: %w", err)
 	}
-	if path == easyPayV2CreatePath {
-		if _, exists := rawResponse["data"]; exists {
-			return nil, fmt.Errorf("nested create response data is not supported")
-		}
-	}
 	return response, nil
 }
 
@@ -643,14 +612,21 @@ func normalizeEasyPayV2APIBase(raw string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.Opaque != "" {
 		return "", fmt.Errorf("unsupported URL")
 	}
 	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return "", fmt.Errorf("URL must not contain user info, query, or fragment")
 	}
-	parsed.Path = strings.TrimRight(parsed.Path, "/")
-	parsed.RawPath = strings.TrimRight(parsed.RawPath, "/")
+	if parsed.Path != "" && parsed.Path != "/" {
+		return "", fmt.Errorf("URL must not contain a path")
+	}
+	if parsed.RawPath != "" && parsed.RawPath != "/" {
+		return "", fmt.Errorf("URL must not contain an escaped path")
+	}
+	parsed.Path = ""
+	parsed.RawPath = ""
 	return strings.TrimRight(parsed.String(), "/"), nil
 }
 
@@ -659,50 +635,31 @@ func validateEasyPayV2CallbackURL(raw string) error {
 	if err != nil {
 		return err
 	}
-	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
+	scheme := strings.ToLower(parsed.Scheme)
+	if (scheme != "http" && scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.Opaque != "" {
 		return fmt.Errorf("unsupported URL")
 	}
-	return nil
-}
-
-func validateEasyPayV2JumpURL(raw string) error {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return err
-	}
-	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
-		return fmt.Errorf("jump URL must use HTTP(S)")
+	if parsed.Fragment != "" {
+		return fmt.Errorf("URL must not contain a fragment")
 	}
 	return nil
 }
 
-func validateEasyPayV2AliasPayURL(raw string, paymentType string) error {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return err
+func validateEasyPayV2HostedPaymentURL(apiBase, hostedURL *url.URL) error {
+	if apiBase == nil || hostedURL == nil {
+		return fmt.Errorf("payment URL is missing")
 	}
-	scheme := strings.ToLower(parsed.Scheme)
-	if scheme == "http" || scheme == "https" {
-		return validateEasyPayV2JumpURL(raw)
+	if hostedURL.User != nil || hostedURL.Opaque != "" {
+		return fmt.Errorf("payment URL must not contain user info")
 	}
-	if paymentType != payment.TypeQQPay {
-		return fmt.Errorf("pay URL must use HTTP(S)")
+	if !strings.EqualFold(hostedURL.Scheme, apiBase.Scheme) || !strings.EqualFold(hostedURL.Host, apiBase.Host) {
+		return fmt.Errorf("payment URL origin mismatch")
 	}
-	return validateEasyPayV2URLScheme(raw)
-}
-
-func validateEasyPayV2URLScheme(raw string) error {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return err
+	if hostedURL.Path != easyPayV2SubmitPath || hostedURL.RawPath != "" {
+		return fmt.Errorf("payment URL path mismatch")
 	}
-	scheme := strings.ToLower(parsed.Scheme)
-	if scheme == "" {
-		return fmt.Errorf("URL scheme is required")
-	}
-	switch scheme {
-	case "javascript", "data", "file", "vbscript", "about", "blob":
-		return fmt.Errorf("disallowed URL scheme")
+	if hostedURL.Fragment != "" {
+		return fmt.Errorf("payment URL must not contain a fragment")
 	}
 	return nil
 }

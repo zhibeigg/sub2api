@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
@@ -27,6 +28,7 @@ type paymentOrderLifecycleQueryProvider struct {
 	cancelCalls       int
 	responses         []*payment.QueryOrderResponse
 	resp              *payment.QueryOrderResponse
+	queryErr          error
 }
 
 type paymentOrderLifecycleRedeemRepo struct {
@@ -59,6 +61,9 @@ func (p *paymentOrderLifecycleQueryProvider) CreatePayment(context.Context, paym
 func (p *paymentOrderLifecycleQueryProvider) QueryOrder(_ context.Context, tradeNo string) (*payment.QueryOrderResponse, error) {
 	p.lastQueryTradeNo = tradeNo
 	p.queryCalls++
+	if p.queryErr != nil {
+		return nil, p.queryErr
+	}
 	if len(p.responses) > 0 {
 		resp := p.responses[0]
 		if len(p.responses) > 1 {
@@ -508,6 +513,61 @@ func TestVerifyOrderByOutTradeNoDoesNotCancelUnpaidUpstreamOrder(t *testing.T) {
 	reloaded, err := client.PaymentOrder.Get(ctx, order.ID)
 	require.NoError(t, err)
 	require.Equal(t, OrderStatusPending, reloaded.Status)
+}
+
+func TestVerifyOrderByOutTradeNoKeepsPendingWhenUpstreamOrderIsNotCreatedYet(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentOrderLifecycleTestClient(t)
+
+	user, err := client.User.Create().
+		SetEmail("hosted-not-found@example.com").
+		SetPasswordHash("hash").
+		SetUsername("hosted-not-found-user").
+		Save(ctx)
+	require.NoError(t, err)
+
+	order, err := client.PaymentOrder.Create().
+		SetUserID(user.ID).
+		SetUserEmail(user.Email).
+		SetUserName(user.Username).
+		SetAmount(1).
+		SetPayAmount(1).
+		SetFeeRate(0).
+		SetRechargeCode("HOSTED-NOT-FOUND").
+		SetOutTradeNo("sub2_hosted_not_found").
+		SetPaymentType(payment.TypeEasyPay).
+		SetPaymentTradeNo("").
+		SetOrderType(payment.OrderTypeBalance).
+		SetStatus(OrderStatusPending).
+		SetExpiresAt(time.Now().Add(time.Hour)).
+		SetClientIP("127.0.0.1").
+		SetSrcHost("api.example.com").
+		Save(ctx)
+	require.NoError(t, err)
+
+	registry := payment.NewRegistry()
+	provider := &paymentOrderLifecycleQueryProvider{
+		key:      payment.TypeEasyPay,
+		queryErr: errors.New("easypay v2 query: upstream error: order not found"),
+	}
+	registry.Register(provider)
+	svc := &PaymentService{
+		entClient:       client,
+		registry:        registry,
+		providersLoaded: true,
+	}
+
+	got, err := svc.VerifyOrderByOutTradeNo(ctx, order.OutTradeNo, user.ID)
+	require.NoError(t, err)
+	require.Equal(t, order.OutTradeNo, provider.lastQueryTradeNo)
+	require.Equal(t, 1, provider.queryCalls)
+	require.Equal(t, OrderStatusPending, got.Status)
+	require.Empty(t, got.PaymentTradeNo)
+
+	reloaded, err := client.PaymentOrder.Get(ctx, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusPending, reloaded.Status)
+	require.Empty(t, reloaded.PaymentTradeNo)
 }
 
 func TestCancelOrderStillClosesUnpaidUpstreamOrder(t *testing.T) {

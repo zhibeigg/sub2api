@@ -615,6 +615,7 @@ export default {
         validationEasyPayCustomMethodDuplicate: '易支付自定义支付方式不能重复',
         field_protocolVersion: '协议版本',
         field_apiBase: 'API 基础地址',
+        field_easypayApiBaseHint: '填写不带路径、查询参数或用户信息的上游站点根地址。EasyPay V2 会在本地签名后生成 /api/pay/submit 托管收银台 URL。',
         field_notifyUrl: '异步通知地址',
         field_returnUrl: '同步跳转地址',
         callbackBaseUrl: '回调基础地址',

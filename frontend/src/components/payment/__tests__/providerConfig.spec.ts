@@ -72,6 +72,7 @@ describe('EasyPay protocol config', () => {
   it('uses V2 credentials and QQ Wallet as a built-in method', () => {
     const fields = getProviderConfigFields('easypay', EASYPAY_PROTOCOL_V2)
 
+    expect(fields.find(field => field.key === 'apiBase')?.hintKey).toBe('admin.settings.payment.field_easypayApiBaseHint')
     expect(fields.some(field => field.key === 'merchantPrivateKey')).toBe(true)
     expect(fields.some(field => field.key === 'platformPublicKey')).toBe(true)
     expect(fields.some(field => field.key === 'pkey')).toBe(false)

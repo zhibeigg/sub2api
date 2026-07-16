@@ -138,7 +138,7 @@ Sub2API 内置支付系统，支持用户自助充值，无需部署独立的支
 |---|---|---|
 | `protocolVersion` | 固定为 `2` | 是 |
 | `pid` | 彩虹易支付 2.0 商户 PID | 是 |
-| `apiBase` | 上游 API 基础地址 | 是 |
+| `apiBase` | 上游站点根地址，不得包含路径、查询参数或用户信息 | 是 |
 | `merchantPrivateKey` | 商户 RSA 私钥，仅保存真实生产凭证 | 是 |
 | `platformPublicKey` | 平台 RSA 公钥，用于验签 | 是 |
 | `notifyUrl` | 异步通知地址，使用本站 EasyPay Webhook | 是 |
@@ -226,8 +226,9 @@ EasyPay V1 支持 `alipay`、`wxpay`；V2 支持 `alipay`、`wxpay`、`qqpay`。
 
 ### EasyPay V2 接口与安全要求
 
-- 上游接口为 `POST /api/pay/create`、`POST /api/pay/query`、`POST /api/pay/refund`、`POST /api/pay/refundquery`。
-- 请求、响应与回调使用 RSA-SHA256 签名；回调必须先验签，再校验金额、PID 与商户订单号，任一不一致都不得入账。
+- 创建阶段不调用返回字段可能未签名的 `/api/pay/create`。Sub2API 按官方 SDK 规则在本地对支付参数进行 RSA-SHA256 签名，并生成同源、固定路径的 `GET /api/pay/submit` 托管收银台 URL；二维码模式同时返回相同的 `pay_url` 与 `qr_code`，初始上游 `trade_no` 可以为空。
+- API 查单、退款和退款查询仍使用 `POST /api/pay/query`、`POST /api/pay/refund`、`POST /api/pay/refundquery`，响应必须通过 RSA、PID 与时间戳校验；不得接受未签名的创建响应或 `pay_info`。
+- 回调必须先完成 RSA-SHA256 验签，再校验金额、PID 与商户订单号，任一不一致都不得入账。
 - 查询、退款和退款查询响应会继续校验原订单号、退款单号、金额与状态，缺失或不一致时安全失败。
 - 时间戳允许的最大时钟偏差为 300 秒；部署主机必须保持可靠的时间同步。
 - 验证并处理成功后向上游返回纯文本 `success`，避免重复通知。

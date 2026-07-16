@@ -17,45 +17,31 @@ import (
 
 var easyPayV2FixedTime = time.Unix(1721050000, 0)
 
-func TestEasyPayV2CreatePaymentContractAndResultMapping(t *testing.T) {
+func TestEasyPayV2CreatePaymentBuildsSignedHostedURL(t *testing.T) {
 	tests := []struct {
-		name            string
-		paymentMode     string
-		paymentType     string
-		isMobile        bool
-		responsePayType string
-		responsePayInfo string
-		wantMethod      string
-		wantDevice      string
-		wantPayURL      string
-		wantQRCode      string
+		name        string
+		paymentMode string
+		paymentType string
+		isMobile    bool
+		wantMethod  string
+		wantDevice  string
+		wantQRCode  bool
 	}{
-		{name: "qqpay qrcode without response sign type", paymentMode: "qrcode", paymentType: payment.TypeQQPay, responsePayType: "qrcode", responsePayInfo: "https://qr.example/qqpay", wantMethod: "web", wantDevice: "pc", wantQRCode: "https://qr.example/qqpay"},
-		{name: "wxpay popup without response sign type", paymentMode: "popup", paymentType: payment.TypeWxpay, isMobile: true, responsePayType: "jump", responsePayInfo: "https://cashier.example/wxpay", wantMethod: "jump", wantDevice: "mobile", wantPayURL: "https://cashier.example/wxpay"},
-		{name: "qqpay urlscheme on mobile still requests desktop QR", paymentMode: "qrcode", paymentType: payment.TypeQQPay, isMobile: true, responsePayType: "urlscheme", responsePayInfo: "mqqapi://wallet/pay?token=abc", wantMethod: "web", wantDevice: "pc", wantPayURL: "mqqapi://wallet/pay?token=abc"},
+		{name: "wxpay qrcode desktop", paymentMode: "qrcode", paymentType: payment.TypeWxpay, wantMethod: easyPayV2MethodWeb, wantDevice: easyPayV2DevicePC, wantQRCode: true},
+		{name: "qqpay qrcode mobile still uses pc", paymentMode: "qrcode", paymentType: payment.TypeQQPay, isMobile: true, wantMethod: easyPayV2MethodWeb, wantDevice: easyPayV2DevicePC, wantQRCode: true},
+		{name: "wxpay popup desktop", paymentMode: "popup", paymentType: payment.TypeWxpay, wantMethod: easyPayV2MethodJump, wantDevice: easyPayV2DevicePC},
+		{name: "qqpay popup mobile", paymentMode: "popup", paymentType: payment.TypeQQPay, isMobile: true, wantMethod: easyPayV2MethodJump, wantDevice: easyPayV2DeviceMobile},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			merchantKey := mustGenerateEasyPayV2RSAKey(t)
 			platformKey := mustGenerateEasyPayV2RSAKey(t)
-			var requestForm url.Values
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method != http.MethodPost || r.URL.Path != easyPayV2CreatePath {
-					t.Errorf("request = %s %s", r.Method, r.URL.Path)
-				}
-				if err := r.ParseForm(); err != nil {
-					t.Errorf("ParseForm: %v", err)
-					return
-				}
-				requestForm = r.PostForm
-				if err := easyPayV2RSAVerify(formToEasyPayV2Map(r.PostForm), r.PostForm.Get("sign"), &merchantKey.PublicKey); err != nil {
-					t.Errorf("request signature: %v", err)
-				}
-				writeEasyPayV2SignedJSON(t, w, platformKey, map[string]string{
-					"code": "0", "msg": "success",
-					"timestamp": "1721050000",
-					"trade_no":  "gateway-123", "pay_type": test.responsePayType, "pay_info": test.responsePayInfo,
+			var networkCalls int
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				networkCalls++
+				writeEasyPayV2JSON(t, w, map[string]string{
+					"code": "0", "trade_no": "unsigned-trade", "pay_type": "qrcode", "pay_info": "unsigned-pay-info",
 				})
 			}))
 			defer server.Close()
@@ -70,165 +56,99 @@ func TestEasyPayV2CreatePaymentContractAndResultMapping(t *testing.T) {
 
 			response, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
 				OrderID: "order-123", Amount: "12.34", PaymentType: test.paymentType,
-				Subject: "测试 & 商品", ClientIP: "203.0.113.10", IsMobile: test.isMobile,
+				Subject: "测试 & 商品 + 规格=大", ClientIP: "203.0.113.10", IsMobile: test.isMobile,
+				NotifyURL: "https://merchant.example/notify?source=a&next=b", ReturnURL: "https://merchant.example/result?order=1+2",
 			})
 			if err != nil {
 				t.Fatalf("CreatePayment: %v", err)
 			}
-			if response.TradeNo != "gateway-123" || response.PayURL != test.wantPayURL || response.QRCode != test.wantQRCode {
-				t.Fatalf("response = %+v", response)
+			if networkCalls != 0 {
+				t.Fatalf("CreatePayment unexpectedly called upstream %d times", networkCalls)
+			}
+			if response.TradeNo != "" {
+				t.Fatalf("trade no = %q, want empty", response.TradeNo)
+			}
+			if response.ResultType != payment.CreatePaymentResultOrderCreated {
+				t.Fatalf("result type = %q", response.ResultType)
+			}
+			if response.PayURL == "" {
+				t.Fatal("hosted pay URL is empty")
+			}
+			if test.wantQRCode {
+				if response.QRCode != response.PayURL {
+					t.Fatalf("qrcode = %q, pay URL = %q", response.QRCode, response.PayURL)
+				}
+			} else if response.QRCode != "" {
+				t.Fatalf("popup qrcode = %q, want empty", response.QRCode)
+			}
+
+			hostedURL, err := url.Parse(response.PayURL)
+			if err != nil {
+				t.Fatalf("parse hosted URL: %v", err)
+			}
+			apiBase, err := url.Parse(config["apiBase"])
+			if err != nil {
+				t.Fatalf("parse api base: %v", err)
+			}
+			if hostedURL.Scheme != apiBase.Scheme || hostedURL.Host != apiBase.Host || hostedURL.User != nil || hostedURL.Path != easyPayV2SubmitPath {
+				t.Fatalf("hosted URL origin/path = %s://%s%s user=%v", hostedURL.Scheme, hostedURL.Host, hostedURL.Path, hostedURL.User)
+			}
+			values := hostedURL.Query()
+			if len(values) != 13 {
+				t.Fatalf("query key count = %d, want 13", len(values))
 			}
 			for key, want := range map[string]string{
-				"pid": "pid-v2", "sign_type": "RSA", "timestamp": "1721050000",
+				"pid": "pid-v2", "sign_type": easyPayV2SignType, "timestamp": "1721050000",
 				"method": test.wantMethod, "device": test.wantDevice, "type": test.paymentType,
-				"out_trade_no": "order-123", "notify_url": config["notifyUrl"], "return_url": config["returnUrl"],
-				"name": "测试 & 商品", "money": "12.34", "clientip": "203.0.113.10",
+				"out_trade_no": "order-123", "notify_url": "https://merchant.example/notify?source=a&next=b",
+				"return_url": "https://merchant.example/result?order=1+2", "name": "测试 & 商品 + 规格=大",
+				"money": "12.34", "clientip": "203.0.113.10",
 			} {
-				if got := requestForm.Get(key); got != want {
-					t.Fatalf("form[%s] = %q, want %q (form=%v)", key, got, want, requestForm)
+				if got := values.Get(key); got != want {
+					t.Fatalf("query[%s] = %q, want %q", key, got, want)
+				}
+				if len(values[key]) != 1 {
+					t.Fatalf("query[%s] has %d values", key, len(values[key]))
 				}
 			}
-		})
-	}
-}
-
-func TestEasyPayV2CreatePaymentAcceptsLegacyAndCurrentResultContracts(t *testing.T) {
-	tests := []struct {
-		name        string
-		paymentType string
-		fields      map[string]string
-		wantPayURL  string
-		wantQRCode  string
-	}{
-		{
-			name: "wxpay legacy qrcode", paymentType: payment.TypeWxpay,
-			fields:     map[string]string{"pay_type": "qrcode", "pay_info": "weixin://wxpay/bizpayurl?pr=legacy"},
-			wantQRCode: "weixin://wxpay/bizpayurl?pr=legacy",
-		},
-		{
-			name: "wxpay current qr code", paymentType: payment.TypeWxpay,
-			fields:     map[string]string{"qr_code": "weixin://wxpay/bizpayurl?pr=current"},
-			wantQRCode: "weixin://wxpay/bizpayurl?pr=current",
-		},
-		{
-			name: "wxpay current pay URL", paymentType: payment.TypeWxpay,
-			fields:     map[string]string{"pay_url": "https://cashier.example/wxpay/current"},
-			wantPayURL: "https://cashier.example/wxpay/current",
-		},
-		{
-			name: "qqpay legacy urlscheme", paymentType: payment.TypeQQPay,
-			fields:     map[string]string{"pay_type": "urlscheme", "pay_info": "mqqapi://wallet/pay?token=legacy"},
-			wantPayURL: "mqqapi://wallet/pay?token=legacy",
-		},
-		{
-			name: "qqpay current qr code", paymentType: payment.TypeQQPay,
-			fields:     map[string]string{"qr_code": "https://qr.example/qqpay/current"},
-			wantQRCode: "https://qr.example/qqpay/current",
-		},
-		{
-			name: "qqpay current pay URL", paymentType: payment.TypeQQPay,
-			fields:     map[string]string{"pay_url": "https://cashier.example/qqpay/current"},
-			wantPayURL: "https://cashier.example/qqpay/current",
-		},
-		{
-			name: "qqpay current safe scheme", paymentType: payment.TypeQQPay,
-			fields:     map[string]string{"pay_url": "mqqapi://wallet/pay?token=current"},
-			wantPayURL: "mqqapi://wallet/pay?token=current",
-		},
-		{
-			name: "matching legacy and alias fields", paymentType: payment.TypeWxpay,
-			fields: map[string]string{
-				"pay_type": "qrcode", "pay_info": "matching-qr", "qr_code": "matching-qr",
-				"pay_url": "https://cashier.example/wxpay/optional",
-			},
-			wantQRCode: "matching-qr", wantPayURL: "https://cashier.example/wxpay/optional",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			merchantKey := mustGenerateEasyPayV2RSAKey(t)
-			platformKey := mustGenerateEasyPayV2RSAKey(t)
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				values := map[string]string{
-					"code": "0", "pid": "pid-v2", "timestamp": "1721050000", "trade_no": "gateway-contract",
-				}
-				for key, value := range test.fields {
-					values[key] = value
-				}
-				writeEasyPayV2SignedJSON(t, w, platformKey, values)
-			}))
-			defer server.Close()
-
-			provider := newEasyPayV2TestProvider(t, server.URL, merchantKey, &platformKey.PublicKey)
-			response, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
-				OrderID: "order-contract", Amount: "1.00", PaymentType: test.paymentType, Subject: "test",
-			})
-			if err != nil {
-				t.Fatalf("CreatePayment: %v", err)
+			if len(values["sign"]) != 1 || values.Get("sign") == "" {
+				t.Fatalf("signature values = %#v", values["sign"])
 			}
-			if response.TradeNo != "gateway-contract" || response.PayURL != test.wantPayURL || response.QRCode != test.wantQRCode {
-				t.Fatalf("response = %+v", response)
+			if values.Has("next") || values.Has("source") || values.Has("order") {
+				t.Fatalf("encoded callback fields escaped into top-level query: %v", values)
+			}
+			if err := easyPayV2RSAVerify(formToEasyPayV2Map(values), values.Get("sign"), &merchantKey.PublicKey); err != nil {
+				t.Fatalf("verify hosted URL signature: %v", err)
 			}
 		})
-	}
-}
-
-func TestEasyPayV2CreatePaymentIgnoresResponseSignTypeLabel(t *testing.T) {
-	merchantKey := mustGenerateEasyPayV2RSAKey(t)
-	platformKey := mustGenerateEasyPayV2RSAKey(t)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		writeEasyPayV2SignedJSON(t, w, platformKey, map[string]string{
-			"code": "0", "timestamp": "1721050000", "sign_type": "UNTRUSTED-FUTURE-LABEL",
-			"trade_no": "gateway-fixed-rsa", "pay_type": "qrcode", "pay_info": "https://qr.example/wxpay",
-		})
-	}))
-	defer server.Close()
-
-	provider := newEasyPayV2TestProvider(t, server.URL, merchantKey, &platformKey.PublicKey)
-	response, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
-		OrderID: "order-fixed-rsa", Amount: "1.00", PaymentType: payment.TypeWxpay, Subject: "test",
-	})
-	if err != nil {
-		t.Fatalf("CreatePayment: %v", err)
-	}
-	if response.TradeNo != "gateway-fixed-rsa" || response.QRCode != "https://qr.example/wxpay" {
-		t.Fatalf("response = %+v", response)
 	}
 }
 
 func TestEasyPayV2CreatePaymentUsesCustomMethodAndRequestURLs(t *testing.T) {
 	merchantKey := mustGenerateEasyPayV2RSAKey(t)
 	platformKey := mustGenerateEasyPayV2RSAKey(t)
-	var requestForm url.Values
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
-			t.Errorf("ParseForm: %v", err)
-		}
-		requestForm = r.PostForm
-		writeEasyPayV2SignedJSON(t, w, platformKey, map[string]string{
-			"code": "0", "pid": "pid-v2", "timestamp": "1721050000",
-			"trade_no": "custom-trade", "pay_type": "qrcode", "pay_info": "custom-qr",
-		})
-	}))
-	defer server.Close()
-
-	config := easyPayV2TestConfig(t, server.URL, merchantKey, &platformKey.PublicKey)
+	config := easyPayV2TestConfig(t, "https://pay.example.com", merchantKey, &platformKey.PublicKey)
 	config["customMethods"] = `[{"type":"usdt_trc20","upstreamType":"usdt","displayName":"USDT"}]`
 	provider, err := NewEasyPayV2("instance-v2", config)
 	if err != nil {
 		t.Fatalf("NewEasyPayV2: %v", err)
 	}
 	provider.now = func() time.Time { return easyPayV2FixedTime }
-	_, err = provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
+
+	response, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
 		OrderID: "custom-order", Amount: "1.00", PaymentType: "usdt_trc20", Subject: "USDT",
 		NotifyURL: "https://override.example/notify", ReturnURL: "https://override.example/return",
 	})
 	if err != nil {
 		t.Fatalf("CreatePayment: %v", err)
 	}
-	if requestForm.Get("type") != "usdt" || requestForm.Get("notify_url") != "https://override.example/notify" || requestForm.Get("return_url") != "https://override.example/return" {
-		t.Fatalf("form = %v", requestForm)
+	hostedURL, err := url.Parse(response.PayURL)
+	if err != nil {
+		t.Fatalf("parse hosted URL: %v", err)
+	}
+	values := hostedURL.Query()
+	if values.Get("type") != "usdt" || values.Get("notify_url") != "https://override.example/notify" || values.Get("return_url") != "https://override.example/return" {
+		t.Fatalf("query = %v", values)
 	}
 
 	_, err = provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{PaymentType: "unsupported"})
@@ -237,145 +157,62 @@ func TestEasyPayV2CreatePaymentUsesCustomMethodAndRequestURLs(t *testing.T) {
 	}
 }
 
-func TestEasyPayV2CreateRejectsUnsupportedOrUnsafePayType(t *testing.T) {
-	tests := []struct {
-		name     string
-		payType  string
-		payInfo  string
-		wantText string
-	}{
-		{name: "html", payType: "html", payInfo: "<form>unsafe</form>", wantText: "unsupported pay_type"},
-		{name: "jsapi", payType: "jsapi", payInfo: "{}", wantText: "unsupported pay_type"},
-		{name: "missing pay info", payType: "qrcode", payInfo: "", wantText: "missing pay_info"},
-		{name: "unsafe jump", payType: "jump", payInfo: "javascript:alert(1)", wantText: "unsafe jump"},
-		{name: "unsafe scheme", payType: "urlscheme", payInfo: "data:text/html,bad", wantText: "unsafe urlscheme"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			merchantKey := mustGenerateEasyPayV2RSAKey(t)
-			platformKey := mustGenerateEasyPayV2RSAKey(t)
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				writeEasyPayV2SignedJSON(t, w, platformKey, map[string]string{
-					"code": "0", "pid": "pid-v2", "timestamp": "1721050000",
-					"trade_no": "trade", "pay_type": test.payType, "pay_info": test.payInfo,
-				})
-			}))
-			defer server.Close()
-			provider := newEasyPayV2TestProvider(t, server.URL, merchantKey, &platformKey.PublicKey)
-			_, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
-				OrderID: "order", Amount: "1.00", PaymentType: payment.TypeAlipay, Subject: "test",
-			})
-			if err == nil || !strings.Contains(err.Error(), test.wantText) {
-				t.Fatalf("error = %v, want %q", err, test.wantText)
-			}
-		})
-	}
-}
-
-func TestEasyPayV2CreateRejectsConflictingOrUnsafeAliasResults(t *testing.T) {
-	tests := []struct {
-		name        string
-		paymentType string
-		fields      map[string]string
-		wantText    string
-	}{
-		{
-			name: "conflicting QR fields", paymentType: payment.TypeWxpay,
-			fields:   map[string]string{"pay_type": "qrcode", "pay_info": "legacy-qr", "qr_code": "current-qr"},
-			wantText: "conflicting qrcode",
-		},
-		{
-			name: "conflicting pay URL fields", paymentType: payment.TypeQQPay,
-			fields:   map[string]string{"pay_type": "jump", "pay_info": "https://legacy.example/pay", "pay_url": "https://current.example/pay"},
-			wantText: "conflicting pay URL",
-		},
-		{
-			name: "unknown legacy pay type is not bypassed by alias", paymentType: payment.TypeWxpay,
-			fields:   map[string]string{"pay_type": "html", "pay_info": "ignored", "qr_code": "safe-qr"},
-			wantText: "unsupported pay_type",
-		},
-		{
-			name: "empty result", paymentType: payment.TypeWxpay,
-			fields: map[string]string{}, wantText: "missing payment result",
-		},
-		{
-			name: "dangerous wxpay alias URL", paymentType: payment.TypeWxpay,
-			fields: map[string]string{"pay_url": "javascript:alert(1)"}, wantText: "unsafe pay_url",
-		},
-		{
-			name: "dangerous qqpay alias URL", paymentType: payment.TypeQQPay,
-			fields: map[string]string{"pay_url": "data:text/html,bad"}, wantText: "unsafe pay_url",
-		},
-		{
-			name: "wxpay cannot use QQ scheme alias", paymentType: payment.TypeWxpay,
-			fields: map[string]string{"pay_url": "mqqapi://wallet/pay?token=wrong-method"}, wantText: "must use HTTP(S)",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			merchantKey := mustGenerateEasyPayV2RSAKey(t)
-			platformKey := mustGenerateEasyPayV2RSAKey(t)
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				values := map[string]string{
-					"code": "0", "pid": "pid-v2", "timestamp": "1721050000", "trade_no": "gateway-reject",
-				}
-				for key, value := range test.fields {
-					values[key] = value
-				}
-				writeEasyPayV2SignedJSON(t, w, platformKey, values)
-			}))
-			defer server.Close()
-
-			provider := newEasyPayV2TestProvider(t, server.URL, merchantKey, &platformKey.PublicKey)
-			_, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
-				OrderID: "order-reject", Amount: "1.00", PaymentType: test.paymentType, Subject: "test",
-			})
-			if err == nil || !strings.Contains(err.Error(), test.wantText) {
-				t.Fatalf("error = %v, want %q", err, test.wantText)
-			}
-		})
-	}
-}
-
-func TestEasyPayV2CreateRejectsNestedDataEvenWithValidRootResult(t *testing.T) {
+func TestEasyPayV2CreatePaymentRejectsUnsafeBaseAndCallbackURLs(t *testing.T) {
 	merchantKey := mustGenerateEasyPayV2RSAKey(t)
 	platformKey := mustGenerateEasyPayV2RSAKey(t)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		values := map[string]string{
-			"code": "0", "pid": "pid-v2", "timestamp": "1721050000", "trade_no": "gateway-root", "qr_code": "root-qr",
-		}
-		writeEasyPayV2SignedJSONWithRawFields(t, w, platformKey, values, map[string]any{
-			"data": map[string]any{"trade_no": "unsigned-nested", "qr_code": "unsigned-qr"},
+	for _, test := range []struct {
+		name    string
+		apiBase string
+	}{
+		{name: "base path", apiBase: "https://pay.example.com/tenant"},
+		{name: "userinfo", apiBase: "https://merchant@pay.example.com"},
+		{name: "query", apiBase: "https://pay.example.com?next=https://evil.example"},
+		{name: "fragment", apiBase: "https://pay.example.com#evil"},
+		{name: "non http", apiBase: "javascript://pay.example.com"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config := easyPayV2TestConfig(t, test.apiBase, merchantKey, &platformKey.PublicKey)
+			if _, err := NewEasyPayV2("instance-v2", config); err == nil {
+				t.Fatal("unsafe apiBase unexpectedly accepted")
+			}
 		})
-	}))
-	defer server.Close()
+	}
 
-	provider := newEasyPayV2TestProvider(t, server.URL, merchantKey, &platformKey.PublicKey)
-	_, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
-		OrderID: "order-root", Amount: "1.00", PaymentType: payment.TypeWxpay, Subject: "test",
-	})
-	if err == nil || !strings.Contains(err.Error(), "nested create response data") {
-		t.Fatalf("error = %v", err)
+	provider := newEasyPayV2TestProvider(t, "https://pay.example.com", merchantKey, &platformKey.PublicKey)
+	for _, test := range []struct {
+		name      string
+		notifyURL string
+		returnURL string
+	}{
+		{name: "relative notify", notifyURL: "/notify", returnURL: "https://merchant.example/result"},
+		{name: "notify userinfo", notifyURL: "https://user@merchant.example/notify", returnURL: "https://merchant.example/result"},
+		{name: "return fragment", notifyURL: "https://merchant.example/notify", returnURL: "https://merchant.example/result#https://evil.example"},
+		{name: "non http return", notifyURL: "https://merchant.example/notify", returnURL: "javascript:alert(1)"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
+				OrderID: "unsafe-order", Amount: "1.00", PaymentType: payment.TypeWxpay, Subject: "test",
+				NotifyURL: test.notifyURL, ReturnURL: test.returnURL,
+			})
+			if err == nil {
+				t.Fatal("unsafe callback unexpectedly accepted")
+			}
+		})
 	}
 }
 
-func TestEasyPayV2ResponseTimestampCompatibility(t *testing.T) {
-	rfc3339 := easyPayV2FixedTime.In(time.FixedZone("UTC+8", 8*60*60)).Format(time.RFC3339)
-	rfc3339Nano := easyPayV2FixedTime.Add(123456789 * time.Nanosecond).UTC().Format(time.RFC3339Nano)
-	unixSeconds := strconv.FormatInt(easyPayV2FixedTime.Unix(), 10)
-	unixMilliseconds := strconv.FormatInt(easyPayV2FixedTime.UnixMilli(), 10)
+func TestEasyPayV2QueryResponseTimestampCompatibility(t *testing.T) {
 	tests := []struct {
 		name      string
 		timestamp string
 		rawValue  any
 	}{
-		{name: "RFC3339 with timezone", timestamp: rfc3339},
-		{name: "RFC3339Nano", timestamp: rfc3339Nano},
-		{name: "Unix seconds string", timestamp: unixSeconds},
-		{name: "Unix milliseconds string", timestamp: unixMilliseconds},
-		{name: "Unix milliseconds JSON number", timestamp: unixMilliseconds, rawValue: json.Number(unixMilliseconds)},
-		{name: "signed whitespace is preserved", timestamp: "  " + unixSeconds + "\t"},
+		{name: "RFC3339 with timezone", timestamp: easyPayV2FixedTime.In(time.FixedZone("UTC+8", 8*60*60)).Format(time.RFC3339)},
+		{name: "RFC3339Nano", timestamp: easyPayV2FixedTime.Add(123456789 * time.Nanosecond).UTC().Format(time.RFC3339Nano)},
+		{name: "Unix seconds string", timestamp: strconv.FormatInt(easyPayV2FixedTime.Unix(), 10)},
+		{name: "Unix milliseconds string", timestamp: strconv.FormatInt(easyPayV2FixedTime.UnixMilli(), 10)},
+		{name: "Unix milliseconds JSON number", timestamp: strconv.FormatInt(easyPayV2FixedTime.UnixMilli(), 10), rawValue: json.Number(strconv.FormatInt(easyPayV2FixedTime.UnixMilli(), 10))},
+		{name: "signed whitespace is preserved", timestamp: "  " + strconv.FormatInt(easyPayV2FixedTime.Unix(), 10) + "\t"},
 	}
 
 	for _, test := range tests {
@@ -385,7 +222,7 @@ func TestEasyPayV2ResponseTimestampCompatibility(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				values := map[string]string{
 					"code": "0", "pid": "pid-v2", "timestamp": test.timestamp,
-					"trade_no": "gateway-time", "pay_type": "qrcode", "pay_info": "qr",
+					"status": "0", "trade_no": "gateway-time", "out_trade_no": "order-time", "money": "1.00",
 				}
 				rawFields := map[string]any(nil)
 				if test.rawValue != nil {
@@ -396,111 +233,12 @@ func TestEasyPayV2ResponseTimestampCompatibility(t *testing.T) {
 			defer server.Close()
 
 			provider := newEasyPayV2TestProvider(t, server.URL, merchantKey, &platformKey.PublicKey)
-			response, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
-				OrderID: "order-time", Amount: "1.00", PaymentType: payment.TypeWxpay, Subject: "test",
-			})
+			response, err := provider.QueryOrder(context.Background(), "order-time")
 			if err != nil {
-				t.Fatalf("CreatePayment: %v", err)
+				t.Fatalf("QueryOrder: %v", err)
 			}
-			if response.TradeNo != "gateway-time" || response.QRCode != "qr" {
+			if response.Status != payment.ProviderStatusPending || response.TradeNo != "gateway-time" {
 				t.Fatalf("response = %+v", response)
-			}
-		})
-	}
-}
-
-func TestEasyPayV2ResponseTimestampRejectsInvalidValues(t *testing.T) {
-	tests := []struct {
-		name      string
-		timestamp string
-		omit      bool
-		rawValue  any
-		wantText  string
-	}{
-		{name: "expired", timestamp: "1721049699", wantText: "outside 300 second"},
-		{name: "future", timestamp: "1721050301", wantText: "outside 300 second"},
-		{name: "missing", omit: true, wantText: "missing timestamp"},
-		{name: "non numeric", timestamp: "not-a-time", wantText: "invalid timestamp"},
-		{name: "floating JSON number", timestamp: "1721050000.0", rawValue: json.Number("1721050000.0"), wantText: "invalid timestamp"},
-		{name: "scientific JSON number", timestamp: "1.72105e9", rawValue: json.Number("1.72105e9"), wantText: "invalid timestamp"},
-		{name: "overflow", timestamp: "9223372036854775808", rawValue: json.Number("9223372036854775808"), wantText: "invalid timestamp"},
-		{name: "zero", timestamp: "0", rawValue: json.Number("0"), wantText: "must be positive"},
-		{name: "negative", timestamp: "-1721050000", rawValue: json.Number("-1721050000"), wantText: "invalid timestamp"},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			merchantKey := mustGenerateEasyPayV2RSAKey(t)
-			platformKey := mustGenerateEasyPayV2RSAKey(t)
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				values := map[string]string{
-					"code": "0", "pid": "pid-v2", "trade_no": "gateway-time-reject", "pay_type": "qrcode", "pay_info": "qr",
-				}
-				if !test.omit {
-					values["timestamp"] = test.timestamp
-				}
-				rawFields := map[string]any(nil)
-				if test.rawValue != nil {
-					rawFields = map[string]any{"timestamp": test.rawValue}
-				}
-				writeEasyPayV2SignedJSONWithRawFields(t, w, platformKey, values, rawFields)
-			}))
-			defer server.Close()
-
-			provider := newEasyPayV2TestProvider(t, server.URL, merchantKey, &platformKey.PublicKey)
-			_, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
-				OrderID: "order-time-reject", Amount: "1.00", PaymentType: payment.TypeWxpay, Subject: "test",
-			})
-			if err == nil || !strings.Contains(err.Error(), test.wantText) {
-				t.Fatalf("error = %v, want %q", err, test.wantText)
-			}
-		})
-	}
-}
-
-func TestEasyPayV2ResponseVerification(t *testing.T) {
-	tests := []struct {
-		name          string
-		mutate        func(map[string]string)
-		signingKey    func(platformKey *rsa.PrivateKey) *rsa.PrivateKey
-		omitSignature bool
-		wantText      string
-	}{
-		{name: "invalid signature", signingKey: func(_ *rsa.PrivateKey) *rsa.PrivateKey { return mustGenerateEasyPayV2RSAKey(t) }, wantText: "invalid signature"},
-		{name: "missing signature", omitSignature: true, wantText: "missing sign"},
-		{name: "pid mismatch", mutate: func(values map[string]string) { values["pid"] = "other" }, wantText: "pid mismatch"},
-		{name: "expired timestamp", mutate: func(values map[string]string) { values["timestamp"] = "1721049699" }, wantText: "outside 300 second"},
-		{name: "future timestamp", mutate: func(values map[string]string) { values["timestamp"] = "1721050301" }, wantText: "outside 300 second"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			merchantKey := mustGenerateEasyPayV2RSAKey(t)
-			platformKey := mustGenerateEasyPayV2RSAKey(t)
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				values := map[string]string{
-					"code": "0", "pid": "pid-v2", "timestamp": "1721050000", "sign_type": "RSA",
-					"trade_no": "trade", "pay_type": "qrcode", "pay_info": "qr",
-				}
-				if test.mutate != nil {
-					test.mutate(values)
-				}
-				if test.omitSignature {
-					writeEasyPayV2JSON(t, w, values)
-					return
-				}
-				key := platformKey
-				if test.signingKey != nil {
-					key = test.signingKey(platformKey)
-				}
-				writeEasyPayV2SignedJSON(t, w, key, values)
-			}))
-			defer server.Close()
-			provider := newEasyPayV2TestProvider(t, server.URL, merchantKey, &platformKey.PublicKey)
-			_, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
-				OrderID: "order", Amount: "1.00", PaymentType: payment.TypeAlipay, Subject: "test",
-			})
-			if err == nil || !strings.Contains(err.Error(), test.wantText) {
-				t.Fatalf("error = %v, want %q", err, test.wantText)
 			}
 		})
 	}

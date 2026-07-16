@@ -2,6 +2,11 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/base64"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -47,6 +52,81 @@ func TestBuildCreateOrderResponseDefaultsToOrderCreated(t *testing.T) {
 	}
 	if !resp.ExpiresAt.Equal(expiresAt) {
 		t.Fatalf("expires_at = %v, want %v", resp.ExpiresAt, expiresAt)
+	}
+}
+
+func TestInvokeProviderPersistsHostedURLWithEmptyTradeNo(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	user, err := client.User.Create().
+		SetEmail("hosted-easypay@example.com").
+		SetPasswordHash("hash").
+		SetUsername("hosted-easypay-user").
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	order, err := client.PaymentOrder.Create().
+		SetUserID(user.ID).
+		SetUserEmail(user.Email).
+		SetUserName(user.Username).
+		SetAmount(12.34).
+		SetPayAmount(12.34).
+		SetFeeRate(0).
+		SetRechargeCode("HOSTED-EASYPAY-ORDER").
+		SetOutTradeNo("sub2_hosted_easypay_order").
+		SetPaymentType(payment.TypeWxpay).
+		SetPaymentTradeNo("").
+		SetOrderType(payment.OrderTypeBalance).
+		SetStatus(OrderStatusPending).
+		SetExpiresAt(time.Now().Add(time.Hour)).
+		SetClientIP("203.0.113.10").
+		SetSrcHost("merchant.example").
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create order: %v", err)
+	}
+
+	sel := &payment.InstanceSelection{
+		InstanceID:  "easypay-v2-hosted",
+		ProviderKey: payment.TypeEasyPay,
+		PaymentMode: "qrcode",
+		Config:      easyPayV2ServiceTestConfig(t),
+	}
+	svc := &PaymentService{entClient: client}
+	resp, err := svc.invokeProvider(ctx, order, CreateOrderRequest{
+		UserID:      user.ID,
+		Amount:      12.34,
+		PaymentType: payment.TypeWxpay,
+		ClientIP:    "203.0.113.10",
+		OrderType:   payment.OrderTypeBalance,
+	}, &PaymentConfig{}, 12.34, "12.34", 12.34, nil, sel)
+	if err != nil {
+		t.Fatalf("invokeProvider: %v", err)
+	}
+	if resp.Status != OrderStatusPending || resp.ResultType != payment.CreatePaymentResultOrderCreated {
+		t.Fatalf("response status/result = %q/%q", resp.Status, resp.ResultType)
+	}
+	if resp.PayURL == "" || resp.QRCode == "" || resp.PayURL != resp.QRCode {
+		t.Fatalf("response payment details = pay:%q qr:%q", resp.PayURL, resp.QRCode)
+	}
+	hostedURL, err := url.Parse(resp.PayURL)
+	if err != nil {
+		t.Fatalf("parse hosted URL: %v", err)
+	}
+	if hostedURL.Host != "pay.example.com" || hostedURL.Path != "/api/pay/submit" {
+		t.Fatalf("hosted URL origin/path = %s%s", hostedURL.Host, hostedURL.Path)
+	}
+
+	reloaded, err := client.PaymentOrder.Get(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("reload order: %v", err)
+	}
+	if reloaded.Status != OrderStatusPending || reloaded.PaymentTradeNo != "" {
+		t.Fatalf("persisted status/trade no = %q/%q", reloaded.Status, reloaded.PaymentTradeNo)
+	}
+	if reloaded.PayURL == nil || reloaded.QrCode == nil || *reloaded.PayURL != resp.PayURL || *reloaded.QrCode != resp.QRCode {
+		t.Fatalf("persisted payment details = pay:%v qr:%v", reloaded.PayURL, reloaded.QrCode)
 	}
 }
 
@@ -494,5 +574,31 @@ func newWeChatPaymentOAuthTestService(values map[string]string) *PaymentService 
 			settingRepo:   &paymentConfigSettingRepoStub{values: values},
 			encryptionKey: []byte("0123456789abcdef0123456789abcdef"),
 		},
+	}
+}
+
+func easyPayV2ServiceTestConfig(t *testing.T) map[string]string {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		t.Fatalf("generate RSA key: %v", err)
+	}
+	privateDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatalf("marshal private key: %v", err)
+	}
+	publicDER, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		t.Fatalf("marshal public key: %v", err)
+	}
+	return map[string]string{
+		"protocolVersion":    "2",
+		"pid":                "pid-service-test",
+		"apiBase":            "https://pay.example.com",
+		"merchantPrivateKey": base64.StdEncoding.EncodeToString(privateDER),
+		"platformPublicKey":  base64.StdEncoding.EncodeToString(publicDER),
+		"notifyUrl":          "https://merchant.example/notify",
+		"returnUrl":          "https://merchant.example/result",
+		"paymentMode":        "qrcode",
 	}
 }

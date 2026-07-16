@@ -138,7 +138,7 @@ Existing instances without `protocolVersion` are treated as V1 for backward comp
 |---|---|---|
 | `protocolVersion` | Must be `2` | Yes |
 | `pid` | Rainbow EasyPay 2.0 merchant PID | Yes |
-| `apiBase` | Upstream API base URL | Yes |
+| `apiBase` | Upstream site origin without a path, query, or user info | Yes |
 | `merchantPrivateKey` | Merchant RSA private key; store only the real production credential | Yes |
 | `platformPublicKey` | Platform RSA public key used for verification | Yes |
 | `notifyUrl` | Asynchronous notification URL using the Sub2API EasyPay webhook | Yes |
@@ -226,8 +226,9 @@ When adding a provider, the system auto-generates callback URLs from your site d
 
 ### EasyPay V2 endpoints and security requirements
 
-- The upstream endpoints are `POST /api/pay/create`, `POST /api/pay/query`, `POST /api/pay/refund`, and `POST /api/pay/refundquery`.
-- Requests, responses, and callbacks use RSA-SHA256. Verify the callback signature first, then validate the amount, PID, and merchant order number before crediting an order.
+- Creation does not call `/api/pay/create`, whose result fields may be unsigned. Sub2API follows the official SDK flow, signs payment parameters locally with RSA-SHA256, and returns a same-origin hosted checkout URL at the fixed `GET /api/pay/submit` path. QR mode returns the same URL as both `pay_url` and `qr_code`; the initial upstream `trade_no` may be empty.
+- API query, refund, and refund-query still use `POST /api/pay/query`, `POST /api/pay/refund`, and `POST /api/pay/refundquery`; responses must pass RSA, PID, and timestamp verification. Unsigned create responses and `pay_info` are never trusted.
+- Verify callback RSA-SHA256 signatures first, then validate the amount, PID, and merchant order number before crediting an order.
 - Query, refund, and refund-query responses are also checked against the original order number, refund number, amount, and status; missing or inconsistent fields fail safely.
 - The allowed timestamp clock skew is 300 seconds; keep the deployment host synchronized to a reliable time source.
 - Return plain-text `success` only after the notification has been verified and processed successfully.

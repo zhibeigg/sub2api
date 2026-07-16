@@ -510,6 +510,74 @@ describe('PaymentView payment recovery', () => {
     expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toContain('"paymentType":"qqpay"')
   })
 
+  it.each(['wxpay', 'qqpay'])('creates one %s order and opens the hosted URL on mobile', async (paymentType) => {
+    getCheckoutInfo.mockResolvedValue(checkoutInfoFixture({
+      methods: {
+        [paymentType]: checkoutInfoFixture().data.methods.wxpay,
+      },
+    }))
+    const hostedUrl = `https://pay.example.com/api/pay/submit?type=${paymentType}&signed=1`
+    createOrder.mockResolvedValue({
+      order_id: paymentType === 'wxpay' ? 890 : 891,
+      amount: 66,
+      pay_amount: 66,
+      fee_rate: 0,
+      expires_at: '2099-01-01T00:10:00.000Z',
+      payment_type: paymentType,
+      payment_mode: 'qrcode',
+      result_type: 'order_created',
+      pay_url: hostedUrl,
+      qr_code: hostedUrl,
+      out_trade_no: `sub2_${paymentType}_hosted`,
+    })
+
+    const originalLocation = window.location
+    const locationState = {
+      href: 'http://localhost/purchase',
+      origin: 'http://localhost',
+    }
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: locationState,
+    })
+
+    const wrapper = shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          AmountInput: {
+            template: '<button data-test="set-amount" @click="$emit(\'update:modelValue\', 66)" />',
+          },
+          Teleport: true,
+          Transition: false,
+        },
+      },
+    })
+    await flushPromises()
+    await wrapper.get('[data-test="set-amount"]').trigger('click')
+    await flushPromises()
+
+    const submitButton = wrapper.findAll('button')
+      .find(button => button.text().includes('payment.createOrder'))
+    if (!submitButton) throw new Error('payment submit button not found')
+    await submitButton.trigger('click')
+    await flushPromises()
+
+    expect(createOrder).toHaveBeenCalledTimes(1)
+    expect(createOrder).toHaveBeenCalledWith(expect.objectContaining({
+      payment_type: paymentType,
+      is_mobile: true,
+    }))
+    expect(locationState.href).toBe(hostedUrl)
+    expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toContain(hostedUrl)
+
+    wrapper.unmount()
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: originalLocation,
+    })
+  })
+
   it('does not create a second order for ordinary WeChat or Alipay gateway errors', async () => {
     for (const paymentType of ['wxpay', 'alipay']) {
       createOrder.mockReset().mockRejectedValue({ reason: 'PAYMENT_GATEWAY_ERROR' })

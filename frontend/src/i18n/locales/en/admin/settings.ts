@@ -619,6 +619,7 @@ export default {
         validationEasyPayCustomMethodDuplicate: 'Custom EasyPay payment types must be unique',
         field_protocolVersion: 'Protocol Version',
         field_apiBase: 'API Base URL',
+        field_easypayApiBaseHint: 'Use the upstream site origin without a path, query, or user info. EasyPay V2 signs locally and builds the hosted /api/pay/submit checkout URL.',
         field_notifyUrl: 'Notify URL',
         field_returnUrl: 'Return URL',
         callbackBaseUrl: 'Callback Base URL',
