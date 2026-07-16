@@ -26,18 +26,18 @@ import (
 )
 
 const (
-	easyPayV2ProtocolVersion = "2"
-	easyPayV2SignType        = "RSA"
-	easyPayV2TimestampDigits = 10
-	easyPayV2TimestampWindow = 300 * time.Second
-	easyPayV2CreatePath      = "/api/pay/create"
-	easyPayV2QueryPath       = "/api/pay/query"
-	easyPayV2RefundPath      = "/api/pay/refund"
-	easyPayV2RefundQueryPath = "/api/pay/refundquery"
-	easyPayV2MethodJump      = "jump"
-	easyPayV2MethodWeb       = "web"
-	easyPayV2DevicePC        = "pc"
-	easyPayV2DeviceMobile    = "mobile"
+	easyPayV2ProtocolVersion       = "2"
+	easyPayV2SignType              = "RSA"
+	easyPayV2TimestampWindow       = 300 * time.Second
+	easyPayV2MillisecondsThreshold = int64(1_000_000_000_000)
+	easyPayV2CreatePath            = "/api/pay/create"
+	easyPayV2QueryPath             = "/api/pay/query"
+	easyPayV2RefundPath            = "/api/pay/refund"
+	easyPayV2RefundQueryPath       = "/api/pay/refundquery"
+	easyPayV2MethodJump            = "jump"
+	easyPayV2MethodWeb             = "web"
+	easyPayV2DevicePC              = "pc"
+	easyPayV2DeviceMobile          = "mobile"
 )
 
 var _ payment.RefundQueryProvider = (*EasyPayV2)(nil)
@@ -153,7 +153,7 @@ func (e *EasyPayV2) CreatePayment(ctx context.Context, req payment.CreatePayment
 	}
 	notifyURL, returnURL := e.resolveURLs(req)
 	device := easyPayV2DevicePC
-	if req.IsMobile {
+	if method == easyPayV2MethodJump && req.IsMobile {
 		device = easyPayV2DeviceMobile
 	}
 	params := map[string]string{
@@ -172,32 +172,70 @@ func (e *EasyPayV2) CreatePayment(ctx context.Context, req payment.CreatePayment
 		return nil, fmt.Errorf("easypay v2 create: %w", err)
 	}
 
-	tradeNo := strings.TrimSpace(response["trade_no"])
-	payType := strings.TrimSpace(response["pay_type"])
-	payInfo := strings.TrimSpace(response["pay_info"])
-	if tradeNo == "" {
-		return nil, fmt.Errorf("easypay v2 create response missing trade_no")
+	result, err := mapEasyPayV2CreateResult(response, paymentType)
+	if err != nil {
+		return nil, fmt.Errorf("easypay v2 create response: %w", err)
 	}
-	if payInfo == "" {
-		return nil, fmt.Errorf("easypay v2 create response missing pay_info")
+	return result, nil
+}
+
+func mapEasyPayV2CreateResult(response map[string]string, paymentType string) (*payment.CreatePaymentResponse, error) {
+	tradeNo := strings.TrimSpace(response["trade_no"])
+	if tradeNo == "" {
+		return nil, fmt.Errorf("missing trade_no")
 	}
 
 	result := &payment.CreatePaymentResponse{TradeNo: tradeNo}
-	switch payType {
-	case "qrcode":
-		result.QRCode = payInfo
-	case "jump":
-		if err := validateEasyPayV2JumpURL(payInfo); err != nil {
-			return nil, fmt.Errorf("easypay v2 unsafe jump pay_info: %w", err)
+	legacyPayTypeRaw, hasLegacyPayType := response["pay_type"]
+	legacyPayInfoRaw, hasLegacyPayInfo := response["pay_info"]
+	legacyPayType := strings.TrimSpace(legacyPayTypeRaw)
+	legacyPayInfo := strings.TrimSpace(legacyPayInfoRaw)
+	if hasLegacyPayType || hasLegacyPayInfo {
+		if legacyPayType == "" {
+			return nil, fmt.Errorf("missing pay_type")
 		}
-		result.PayURL = payInfo
-	case "urlscheme":
-		if err := validateEasyPayV2URLScheme(payInfo); err != nil {
-			return nil, fmt.Errorf("easypay v2 unsafe urlscheme pay_info: %w", err)
+		if legacyPayInfo == "" {
+			return nil, fmt.Errorf("missing pay_info")
 		}
-		result.PayURL = payInfo
-	default:
-		return nil, fmt.Errorf("easypay v2 unsupported pay_type: %s", payType)
+		switch legacyPayType {
+		case "qrcode":
+			result.QRCode = legacyPayInfo
+		case "jump":
+			if err := validateEasyPayV2JumpURL(legacyPayInfo); err != nil {
+				return nil, fmt.Errorf("unsafe jump pay_info: %w", err)
+			}
+			result.PayURL = legacyPayInfo
+		case "urlscheme":
+			if err := validateEasyPayV2URLScheme(legacyPayInfo); err != nil {
+				return nil, fmt.Errorf("unsafe urlscheme pay_info: %w", err)
+			}
+			result.PayURL = legacyPayInfo
+		default:
+			return nil, fmt.Errorf("unsupported pay_type: %s", legacyPayType)
+		}
+	}
+
+	aliasQRCode := strings.TrimSpace(response["qr_code"])
+	if aliasQRCode != "" {
+		if result.QRCode != "" && result.QRCode != aliasQRCode {
+			return nil, fmt.Errorf("conflicting qrcode result fields")
+		}
+		result.QRCode = aliasQRCode
+	}
+
+	aliasPayURL := strings.TrimSpace(response["pay_url"])
+	if aliasPayURL != "" {
+		if err := validateEasyPayV2AliasPayURL(aliasPayURL, paymentType); err != nil {
+			return nil, fmt.Errorf("unsafe pay_url: %w", err)
+		}
+		if result.PayURL != "" && result.PayURL != aliasPayURL {
+			return nil, fmt.Errorf("conflicting pay URL result fields")
+		}
+		result.PayURL = aliasPayURL
+	}
+
+	if result.QRCode == "" && result.PayURL == "" {
+		return nil, fmt.Errorf("missing payment result")
 	}
 	return result, nil
 }
@@ -463,6 +501,11 @@ func (e *EasyPayV2) execute(ctx context.Context, path string, params map[string]
 	if err := e.verifySignedParams(response, pidPolicy); err != nil {
 		return nil, fmt.Errorf("response verification failed: %w", err)
 	}
+	if path == easyPayV2CreatePath {
+		if _, exists := rawResponse["data"]; exists {
+			return nil, fmt.Errorf("nested create response data is not supported")
+		}
+	}
 	return response, nil
 }
 
@@ -492,18 +535,20 @@ func (e *EasyPayV2) verifySignedParams(params map[string]string, pidPolicy easyP
 		return fmt.Errorf("pid mismatch")
 	}
 	timestamp := params["timestamp"]
-	if len(timestamp) != easyPayV2TimestampDigits || !isEasyPayV2DecimalDigits(timestamp) {
-		return fmt.Errorf("invalid timestamp")
+	if strings.TrimSpace(timestamp) == "" {
+		return fmt.Errorf("missing timestamp")
 	}
-	timestampSeconds, err := strconv.ParseInt(timestamp, 10, 64)
+	parsedTimestamp, err := parseEasyPayV2Timestamp(timestamp)
 	if err != nil {
 		return fmt.Errorf("invalid timestamp: %w", err)
 	}
-	delta := e.currentTime().Unix() - timestampSeconds
-	if delta < 0 {
-		delta = -delta
-	}
-	if delta > int64(easyPayV2TimestampWindow/time.Second) {
+	// Only the parsed instant is used for replay-window enforcement. The original
+	// timestamp string remains untouched in params and is therefore included
+	// verbatim in RSA-SHA256 verification. This supports both legacy SDK Unix
+	// timestamps and the current RFC3339/Unix-millisecond protocol forms without
+	// normalizing signed response data.
+	delta := parsedTimestamp.Sub(e.currentTime())
+	if delta < -easyPayV2TimestampWindow || delta > easyPayV2TimestampWindow {
 		return fmt.Errorf("timestamp outside 300 second window")
 	}
 	signature := strings.TrimSpace(params["sign"])
@@ -629,6 +674,21 @@ func validateEasyPayV2JumpURL(raw string) error {
 		return fmt.Errorf("jump URL must use HTTP(S)")
 	}
 	return nil
+}
+
+func validateEasyPayV2AliasPayURL(raw string, paymentType string) error {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return err
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme == "http" || scheme == "https" {
+		return validateEasyPayV2JumpURL(raw)
+	}
+	if paymentType != payment.TypeQQPay {
+		return fmt.Errorf("pay URL must use HTTP(S)")
+	}
+	return validateEasyPayV2URLScheme(raw)
 }
 
 func validateEasyPayV2URLScheme(raw string) error {
@@ -877,6 +937,37 @@ func easyPayV2StableRefundNo(orderID, tradeNo, money string) string {
 	}
 	digest := sha256.Sum256([]byte(identifier + "\n" + strings.TrimSpace(money)))
 	return "sub2api_" + hex.EncodeToString(digest[:16])
+}
+
+func parseEasyPayV2Timestamp(raw string) (time.Time, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return time.Time{}, fmt.Errorf("timestamp is empty")
+	}
+	if isEasyPayV2DecimalDigits(trimmed) {
+		value, err := strconv.ParseInt(trimmed, 10, 64)
+		if err != nil {
+			return time.Time{}, err
+		}
+		if value <= 0 {
+			return time.Time{}, fmt.Errorf("timestamp must be positive")
+		}
+		if len(trimmed) == 13 || value >= easyPayV2MillisecondsThreshold {
+			seconds := value / int64(time.Second/time.Millisecond)
+			nanoseconds := (value % int64(time.Second/time.Millisecond)) * int64(time.Millisecond)
+			return time.Unix(seconds, nanoseconds), nil
+		}
+		return time.Unix(value, 0), nil
+	}
+
+	parsed, err := time.Parse(time.RFC3339Nano, trimmed)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if parsed.Unix() <= 0 {
+		return time.Time{}, fmt.Errorf("timestamp must be positive")
+	}
+	return parsed, nil
 }
 
 func isEasyPayV2DecimalDigits(value string) bool {

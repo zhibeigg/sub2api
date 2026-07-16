@@ -614,6 +614,7 @@ export default {
     errors: {
       tooManyPending: '待支付订单过多（最多 {max} 个），请先完成或取消现有订单',
       cancelRateLimited: '取消订单过于频繁，请稍后再试',
+      gatewayResponseInvalid: '支付通道响应异常，请稍后重试，请勿重复创建订单。',
       wechatH5NotAuthorized: '当前商户未开通微信 H5 支付，请在微信中打开当前页面继续支付。',
       wechatPaymentMpNotConfigured: '当前站点未完成公众号/JSAPI 支付配置，暂时无法在微信内直接拉起支付。',
       wechatJsapiUnavailable: '当前环境未能拉起微信支付，请确认正在微信内打开本页后重试。',

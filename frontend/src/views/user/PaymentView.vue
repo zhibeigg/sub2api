@@ -1045,14 +1045,8 @@ function shouldFallbackToDesktopQr(err: unknown, paymentMethod: string, attempte
     return reason === 'WECHAT_H5_NOT_AUTHORIZED'
       || reason === 'WECHAT_PAYMENT_MP_NOT_CONFIGURED'
       || reason === 'WECHAT_JSAPI_FAILED'
-      || reason === 'PAYMENT_GATEWAY_ERROR'
-      || reason === 'UNHANDLED_PAYMENT_SCENARIO'
       || normalizedMessage.includes('weixinjsbridge is unavailable')
       || normalizedMessage.includes('wechat_jsapi_unavailable')
-  }
-
-  if (normalizedMethod === 'alipay') {
-    return reason === 'PAYMENT_GATEWAY_ERROR' || reason === 'UNHANDLED_PAYMENT_SCENARIO'
   }
 
   return false

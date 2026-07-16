@@ -590,6 +590,7 @@ export default {
     errors: {
       tooManyPending: 'Too many pending orders (max {max}). Please complete or cancel existing orders first.',
       cancelRateLimited: 'Too many cancellations. Please try again later.',
+      gatewayResponseInvalid: 'The payment channel returned an invalid response. Please try again later and do not create duplicate orders.',
       wechatH5NotAuthorized: 'This merchant has not enabled WeChat H5 payment. Open this page in WeChat to continue.',
       wechatPaymentMpNotConfigured: 'This site has not completed WeChat MP/JSAPI payment setup, so in-app WeChat payment is unavailable right now.',
       wechatJsapiUnavailable: 'WeChat payment could not be invoked in the current environment. Reopen this page inside WeChat and try again.',

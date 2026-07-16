@@ -509,6 +509,50 @@ describe('PaymentView payment recovery', () => {
     expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toContain('https://pay.example.com/qq/qr-889')
     expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toContain('"paymentType":"qqpay"')
   })
+
+  it('does not create a second order for ordinary WeChat or Alipay gateway errors', async () => {
+    for (const paymentType of ['wxpay', 'alipay']) {
+      createOrder.mockReset().mockRejectedValue({ reason: 'PAYMENT_GATEWAY_ERROR' })
+      showError.mockReset()
+      showWarning.mockReset()
+      getCheckoutInfo.mockReset().mockResolvedValue(checkoutInfoFixture({
+        methods: {
+          [paymentType]: checkoutInfoFixture().data.methods.wxpay,
+        },
+      }))
+
+      const wrapper = shallowMount(PaymentView, {
+        global: {
+          stubs: {
+            AppLayout: { template: '<div><slot /></div>' },
+            AmountInput: {
+              template: '<button data-test="set-amount" @click="$emit(\'update:modelValue\', 66)" />',
+            },
+            Teleport: true,
+            Transition: false,
+          },
+        },
+      })
+      await flushPromises()
+      await wrapper.get('[data-test="set-amount"]').trigger('click')
+      await flushPromises()
+
+      const submitButton = wrapper.findAll('button')
+        .find(button => button.text().includes('payment.createOrder'))
+      if (!submitButton) throw new Error('payment submit button not found')
+      await submitButton.trigger('click')
+      await flushPromises()
+      await flushPromises()
+
+      expect(createOrder).toHaveBeenCalledTimes(1)
+      expect(createOrder).toHaveBeenCalledWith(expect.objectContaining({
+        payment_type: paymentType,
+        is_mobile: true,
+      }))
+      expect(showWarning).not.toHaveBeenCalled()
+      wrapper.unmount()
+    }
+  })
 })
 
 describe('PaymentView WeChat JSAPI flow', () => {

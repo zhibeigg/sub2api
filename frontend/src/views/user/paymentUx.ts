@@ -56,6 +56,12 @@ export function describePaymentScenarioError(
       : String(error || ''))
   const normalizedMessage = message.toLowerCase()
 
+  if (code === 'PAYMENT_GATEWAY_ERROR' && (method === 'wxpay' || method === 'qqpay')) {
+    return {
+      messageKey: 'payment.errors.gatewayResponseInvalid',
+    }
+  }
+
   if (method === 'wxpay') {
     if (code === 'WECHAT_H5_NOT_AUTHORIZED') {
       return {
@@ -92,7 +98,7 @@ export function describePaymentScenarioError(
         hintKey: 'payment.errors.wechatOpenInWeChatHint',
       }
     }
-    if (code === 'PAYMENT_GATEWAY_ERROR' || code === 'UNHANDLED_PAYMENT_SCENARIO') {
+    if (code === 'UNHANDLED_PAYMENT_SCENARIO') {
       return {
         messageKey: 'payment.errors.wechatUnavailable',
         hintKey: defaultWechatHint(context),

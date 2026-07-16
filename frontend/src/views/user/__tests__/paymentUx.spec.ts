@@ -58,6 +58,17 @@ describe('describePaymentScenarioError', () => {
     })
   })
 
+  it('maps ordinary WeChat and QQ gateway failures to the same non-retry guidance', () => {
+    for (const paymentMethod of ['wxpay', 'qqpay']) {
+      expect(describePaymentScenarioError(
+        { reason: 'PAYMENT_GATEWAY_ERROR' },
+        { paymentMethod, isMobile: true, isWechatBrowser: false },
+      )).toEqual({
+        messageKey: 'payment.errors.gatewayResponseInvalid',
+      })
+    }
+  })
+
   it('maps generic desktop Alipay failures to QR guidance', () => {
     expect(describePaymentScenarioError(
       { reason: 'PAYMENT_GATEWAY_ERROR' },
