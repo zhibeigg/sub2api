@@ -27,9 +27,14 @@ var openAIImagesCatalogDefaults = []string{
 	"dall-e-3",
 }
 
-func isOpenAIPlatformImageModel(model string) bool {
+// IsOpenAIPlatformImageModel reports whether model belongs to the public OpenAI Images catalog.
+func IsOpenAIPlatformImageModel(model string) bool {
 	model = strings.ToLower(strings.TrimSpace(model))
 	return strings.HasPrefix(model, "gpt-image-") || model == "dall-e-2" || model == "dall-e-3"
+}
+
+func isOpenAIPlatformImageModel(model string) bool {
+	return IsOpenAIPlatformImageModel(model)
 }
 
 func openAIImageModelSupportsEndpoint(model, endpoint string) bool {

@@ -42,6 +42,22 @@ func (s *gatewayModelsAccountRepoStub) ListSchedulableByGroupID(ctx context.Cont
 	return out, nil
 }
 
+func (s *gatewayModelsAccountRepoStub) ListSchedulableByGroupIDAndPlatforms(_ context.Context, groupID int64, platforms []string) ([]service.Account, error) {
+	allowedPlatforms := make(map[string]struct{}, len(platforms))
+	for _, platform := range platforms {
+		allowedPlatforms[platform] = struct{}{}
+	}
+	accounts := s.byGroup[groupID]
+	out := make([]service.Account, 0, len(accounts))
+	for _, account := range accounts {
+		if _, ok := allowedPlatforms[account.Platform]; !ok || !account.IsSchedulable() {
+			continue
+		}
+		out = append(out, account)
+	}
+	return out, nil
+}
+
 func newGatewayModelsHandlerForTest(repo service.AccountRepository) *GatewayHandler {
 	return &GatewayHandler{
 		gatewayService: service.NewGatewayService(
@@ -719,6 +735,173 @@ func TestGatewayModels_ExplicitGroupSelectionDoesNotAggregateOtherBindings(t *te
 	var got gatewayModelsResponseForTest
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
 	require.Equal(t, []string{"gpt-5.4"}, modelIDsForTest(got.Data))
+}
+
+func TestGatewayModels_MultiGroupHidesDisabledOpenAIImageModels(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	anthropicGroup := &service.Group{ID: 38, Platform: service.PlatformAnthropic, Status: service.StatusActive}
+	openAIGroup := &service.Group{ID: 39, Platform: service.PlatformOpenAI, Status: service.StatusActive, AllowImageGeneration: false}
+	h := newGatewayModelsHandlerForTest(&gatewayModelsAccountRepoStub{byGroup: map[int64][]service.Account{
+		anthropicGroup.ID: {
+			{ID: 1, Platform: service.PlatformAnthropic, Credentials: map[string]any{
+				"model_mapping": map[string]any{"claude-sonnet-4-6": "claude-sonnet-4-6"},
+			}},
+		},
+		openAIGroup.ID: {
+			{ID: 2, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Status: service.StatusActive, Schedulable: true, Credentials: map[string]any{
+				"model_mapping": map[string]any{"gpt-5.4": "gpt-5.4", "gpt-image-2": "gpt-image-2"},
+			}},
+		},
+	}})
+
+	got := requestGatewayModelsForTest(t, h, &service.APIKey{
+		GroupID: &anthropicGroup.ID,
+		Group:   anthropicGroup,
+		GroupBindings: []service.APIKeyGroupBinding{
+			{GroupID: anthropicGroup.ID, Priority: 0, Group: anthropicGroup},
+			{GroupID: openAIGroup.ID, Priority: 1, Group: openAIGroup},
+		},
+	})
+	ids := modelIDsForTest(got.Data)
+	require.Contains(t, ids, "claude-sonnet-4-6")
+	require.Contains(t, ids, "gpt-5.4")
+	require.NotContains(t, ids, "gpt-image-2")
+}
+
+func TestGatewayModels_MultiGroupNonOpenAIGroupCannotContributeOpenAIImageModels(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	anthropicGroup := &service.Group{ID: 40, Platform: service.PlatformAnthropic, Status: service.StatusActive}
+	grokGroup := &service.Group{ID: 41, Platform: service.PlatformGrok, Status: service.StatusActive, AllowImageGeneration: true}
+	h := newGatewayModelsHandlerForTest(&gatewayModelsAccountRepoStub{byGroup: map[int64][]service.Account{
+		anthropicGroup.ID: {
+			{ID: 1, Platform: service.PlatformAnthropic, Credentials: map[string]any{
+				"model_mapping": map[string]any{"claude-sonnet-4-6": "claude-sonnet-4-6"},
+			}},
+		},
+		grokGroup.ID: {
+			{ID: 2, Platform: service.PlatformGrok, Credentials: map[string]any{
+				"model_mapping": map[string]any{"gpt-image-2": "gpt-image-2", "grok-imagine": "grok-imagine"},
+			}},
+		},
+	}})
+
+	got := requestGatewayModelsForTest(t, h, &service.APIKey{
+		GroupID: &anthropicGroup.ID,
+		Group:   anthropicGroup,
+		GroupBindings: []service.APIKeyGroupBinding{
+			{GroupID: anthropicGroup.ID, Priority: 0, Group: anthropicGroup},
+			{GroupID: grokGroup.ID, Priority: 1, Group: grokGroup},
+		},
+	})
+	ids := modelIDsForTest(got.Data)
+	require.Contains(t, ids, "grok-imagine")
+	require.NotContains(t, ids, "gpt-image-2")
+}
+
+func TestGatewayModels_MultiGroupKeepsRoutableOpenAIImageModels(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	anthropicGroup := &service.Group{ID: 42, Platform: service.PlatformAnthropic, Status: service.StatusActive}
+	openAIGroup := &service.Group{ID: 43, Platform: service.PlatformOpenAI, Status: service.StatusActive, AllowImageGeneration: true}
+	h := newGatewayModelsHandlerForTest(&gatewayModelsAccountRepoStub{byGroup: map[int64][]service.Account{
+		anthropicGroup.ID: {
+			{ID: 1, Platform: service.PlatformAnthropic, Credentials: map[string]any{
+				"model_mapping": map[string]any{"claude-sonnet-4-6": "claude-sonnet-4-6"},
+			}},
+		},
+		openAIGroup.ID: {
+			{ID: 2, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Status: service.StatusActive, Schedulable: true, Credentials: map[string]any{
+				"model_mapping": map[string]any{"gpt-5.4": "gpt-5.4", "gpt-image-2": "gpt-image-2"},
+			}},
+		},
+	}})
+
+	got := requestGatewayModelsForTest(t, h, &service.APIKey{
+		GroupID: &anthropicGroup.ID,
+		Group:   anthropicGroup,
+		GroupBindings: []service.APIKeyGroupBinding{
+			{GroupID: anthropicGroup.ID, Priority: 0, Group: anthropicGroup},
+			{GroupID: openAIGroup.ID, Priority: 1, Group: openAIGroup},
+		},
+	})
+	ids := modelIDsForTest(got.Data)
+	require.Contains(t, ids, "gpt-5.4")
+	require.Contains(t, ids, "gpt-image-2")
+}
+
+func TestGatewayModels_ExplicitGroupFiltersCustomOpenAIImageModels(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	group := &service.Group{
+		ID:                   44,
+		Platform:             service.PlatformOpenAI,
+		Status:               service.StatusActive,
+		AllowImageGeneration: false,
+		ModelsListConfig: service.GroupModelsListConfig{
+			Enabled: true,
+			Models:  []string{"gpt-image-2", "gpt-5.4"},
+		},
+	}
+	h := newGatewayModelsHandlerForTest(&gatewayModelsAccountRepoStub{byGroup: map[int64][]service.Account{
+		group.ID: {
+			{ID: 1, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Status: service.StatusActive, Schedulable: true, Credentials: map[string]any{
+				"model_mapping": map[string]any{"gpt-5.4": "gpt-5.4", "gpt-image-2": "gpt-image-2"},
+			}},
+		},
+	}})
+
+	got := requestGatewayModelsForTest(t, h, &service.APIKey{
+		GroupID:                &group.ID,
+		Group:                  group,
+		ExplicitGroupSelection: true,
+	})
+	require.Equal(t, []string{"gpt-5.4"}, modelIDsForTest(got.Data))
+}
+
+func TestGatewayModels_ExplicitGroupFiltersDefaultOpenAIImageFallback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	group := &service.Group{
+		ID:                   45,
+		Platform:             service.PlatformOpenAI,
+		Status:               service.StatusActive,
+		AllowImageGeneration: false,
+	}
+	h := newGatewayModelsHandlerForTest(&gatewayModelsAccountRepoStub{byGroup: map[int64][]service.Account{
+		group.ID: {
+			{ID: 1, Platform: service.PlatformOpenAI, Type: service.AccountTypeAPIKey, Status: service.StatusActive, Schedulable: true},
+		},
+	}})
+
+	got := requestGatewayModelsForTest(t, h, &service.APIKey{
+		GroupID:                &group.ID,
+		Group:                  group,
+		ExplicitGroupSelection: true,
+	})
+	ids := modelIDsForTest(got.Data)
+	require.Contains(t, ids, "gpt-5.4")
+	require.NotContains(t, ids, "gpt-image-1")
+	require.NotContains(t, ids, "gpt-image-1.5")
+	require.NotContains(t, ids, "gpt-image-2")
+	require.NotContains(t, ids, "dall-e-2")
+	require.NotContains(t, ids, "dall-e-3")
+}
+
+func requestGatewayModelsForTest(t *testing.T, h *GatewayHandler, apiKey *service.APIKey) gatewayModelsResponseForTest {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+	c.Set(string(middleware2.ContextKeyAPIKey), apiKey)
+
+	h.Models(c)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	var got gatewayModelsResponseForTest
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	return got
 }
 
 func modelIDsForTest(models []gatewayModelItemForTest) []string {

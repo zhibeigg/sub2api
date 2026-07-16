@@ -1037,25 +1037,26 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 	if apiKey != nil && apiKey.Group != nil && apiKey.Group.CustomModelsListEnabled() {
 		fallbackModels := defaultModelIDsForPlatform(platform)
 		availableModels = filterModelsByCustomList(customModelsListSource(platform, availableModels, fallbackModels), fallbackModels, apiKey.Group.ModelsListConfig.Models)
+		availableModels = h.filterGatewayModelsByImageRouting(c.Request.Context(), apiKey.Group, availableModels)
 		writeCustomModelsList(c, platform, availableModels)
 		return
 	}
 
 	if len(availableModels) > 0 {
+		availableModels = h.filterGatewayModelsByImageRouting(c.Request.Context(), apiKeyGroup(apiKey), availableModels)
 		writeModelsList(c, availableModels)
 		return
 	}
 
-	// Fallback to default models
+	// Fallback to default models. Apply image routing after fallback expansion so
+	// the default OpenAI catalog cannot reintroduce unroutable Images models.
+	fallbackModels := h.filterGatewayModelsByImageRouting(c.Request.Context(), apiKeyGroup(apiKey), publicGatewayFallbackModelIDs(platform))
 	if platform == service.PlatformOpenAI {
-		c.JSON(http.StatusOK, gin.H{
-			"object": "list",
-			"data":   openai.DefaultModels,
-		})
+		writeOpenAIModelsList(c, fallbackModels)
 		return
 	}
 
-	if platform == service.PlatformGemini {
+	if platform == service.PlatformGemini && len(fallbackModels) == len(geminicli.DefaultModels) {
 		c.JSON(http.StatusOK, gin.H{
 			"object": "list",
 			"data":   geminicli.DefaultModels,
@@ -1063,10 +1064,15 @@ func (h *GatewayHandler) Models(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"object": "list",
-		"data":   claude.DefaultModels,
-	})
+	if platform != service.PlatformGemini && len(fallbackModels) == len(claude.DefaultModels) {
+		c.JSON(http.StatusOK, gin.H{
+			"object": "list",
+			"data":   claude.DefaultModels,
+		})
+		return
+	}
+
+	writeModelsList(c, fallbackModels)
 }
 
 func (h *GatewayHandler) availableModelsForAPIKeyBindings(ctx context.Context, apiKey *service.APIKey, forcedPlatform string) ([]string, bool) {
@@ -1090,9 +1096,56 @@ func (h *GatewayHandler) availableModelsForAPIKeyBindings(ctx context.Context, a
 		handled = true
 		groupID := group.ID
 		available := h.gatewayService.GetAvailableModels(ctx, &groupID, groupPlatform)
-		aggregated = mergeModelIDs(aggregated, modelsForGatewayGroup(group, available))
+		groupModels := modelsForGatewayGroup(group, available)
+		groupModels = h.filterGatewayModelsByImageRouting(ctx, group, groupModels)
+		aggregated = mergeModelIDs(aggregated, groupModels)
 	}
 	return aggregated, handled
+}
+
+func apiKeyGroup(apiKey *service.APIKey) *service.Group {
+	if apiKey == nil {
+		return nil
+	}
+	return apiKey.Group
+}
+
+func (h *GatewayHandler) filterGatewayModelsByImageRouting(ctx context.Context, group *service.Group, models []string) []string {
+	hasOpenAIImageModel := false
+	for _, model := range models {
+		if service.IsOpenAIPlatformImageModel(model) {
+			hasOpenAIImageModel = true
+			break
+		}
+	}
+	if !hasOpenAIImageModel {
+		return models
+	}
+
+	routableImages := make(map[string]struct{})
+	if group != nil && group.ID > 0 && group.IsActive() &&
+		service.NormalizePlatform(group.Platform) == service.PlatformOpenAI && group.AllowImageGeneration {
+		groupID := group.ID
+		if routableModels, routable := h.gatewayService.GetAvailablePlaygroundModels(ctx, &groupID, service.PlatformOpenAI); routable {
+			for _, model := range routableModels {
+				model = strings.TrimSpace(model)
+				if service.IsOpenAIPlatformImageModel(model) {
+					routableImages[model] = struct{}{}
+				}
+			}
+		}
+	}
+
+	filtered := make([]string, 0, len(models))
+	for _, model := range models {
+		if service.IsOpenAIPlatformImageModel(model) {
+			if _, ok := routableImages[strings.TrimSpace(model)]; !ok {
+				continue
+			}
+		}
+		filtered = append(filtered, model)
+	}
+	return filtered
 }
 
 func modelsForGatewayGroup(group *service.Group, available []string) []string {
@@ -1221,6 +1274,25 @@ func customModelsListAllowsModel(availablePatterns []string, model string) bool 
 		}
 	}
 	return false
+}
+
+func publicGatewayFallbackModelIDs(platform string) []string {
+	switch platform {
+	case service.PlatformOpenAI:
+		return openai.DefaultModelIDs()
+	case service.PlatformGemini:
+		ids := make([]string, 0, len(geminicli.DefaultModels))
+		for _, model := range geminicli.DefaultModels {
+			ids = append(ids, model.ID)
+		}
+		return ids
+	default:
+		ids := make([]string, 0, len(claude.DefaultModels))
+		for _, model := range claude.DefaultModels {
+			ids = append(ids, model.ID)
+		}
+		return ids
+	}
 }
 
 func defaultModelIDsForPlatform(platform string) []string {
