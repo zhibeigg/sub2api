@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -16,6 +18,66 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
+
+func (h *OpenAIGatewayHandler) resolveAndApplyImageGroup(c *gin.Context, apiKey *service.APIKey, model, endpoint string, capability service.OpenAIImagesCapability) (*service.APIKey, bool) {
+	if apiKey == nil || len(apiKey.GroupBindings) == 0 || apiKey.ExplicitGroupSelection {
+		return apiKey, true
+	}
+	group := h.gatewayService.ResolveEffectiveImageGroupBinding(c.Request.Context(), apiKey, model, endpoint, capability)
+	if group == nil {
+		return apiKey, true
+	}
+	selected := cloneAPIKeyWithGroup(apiKey, group)
+	middleware2.SetOpsFallbackAPIKey(c, selected)
+	c.Set(string(middleware2.ContextKeyAPIKey), selected)
+	ctx := context.WithValue(c.Request.Context(), ctxkey.Group, group)
+	c.Request = c.Request.WithContext(ctx)
+
+	if h.cfg != nil && h.cfg.RunMode == config.RunModeSimple {
+		c.Set(string(middleware2.ContextKeySubscription), nil)
+		return selected, true
+	}
+	if h.subscriptionService == nil || selected.User == nil {
+		// Production wiring always supplies the service. Preserve lightweight
+		// handler tests that intentionally omit repository-backed dependencies.
+		if apiKey.GroupID != nil && selected.GroupID != nil && *apiKey.GroupID != *selected.GroupID {
+			c.Set(string(middleware2.ContextKeySubscription), nil)
+		}
+		return selected, true
+	}
+
+	subscription, err := h.subscriptionService.GetActiveSubscription(c.Request.Context(), selected.User.ID, group.ID)
+	if err != nil {
+		c.Set(string(middleware2.ContextKeySubscription), nil)
+		if group.IsSubscriptionType() {
+			h.errorResponse(c, http.StatusForbidden, "SUBSCRIPTION_NOT_FOUND", "No active subscription found for this group")
+			return selected, false
+		}
+		return selected, true
+	}
+	needsMaintenance, validateErr := h.subscriptionService.ValidateAndCheckLimits(subscription, group)
+	if needsMaintenance {
+		refreshed, maintenanceErr := h.subscriptionService.EnsureWindowMaintenance(c.Request.Context(), subscription)
+		if maintenanceErr != nil {
+			h.errorResponse(c, http.StatusInternalServerError, "SUBSCRIPTION_MAINTENANCE_FAILED", "Failed to maintain subscription usage windows")
+			return selected, false
+		}
+		subscription = refreshed
+		_, validateErr = h.subscriptionService.ValidateAndCheckLimits(subscription, group)
+	}
+	if validateErr != nil {
+		status := http.StatusForbidden
+		code := "SUBSCRIPTION_INVALID"
+		if errors.Is(validateErr, service.ErrDailyLimitExceeded) || errors.Is(validateErr, service.ErrWeeklyLimitExceeded) || errors.Is(validateErr, service.ErrMonthlyLimitExceeded) {
+			status = http.StatusTooManyRequests
+			code = "USAGE_LIMIT_EXCEEDED"
+		}
+		h.errorResponse(c, status, code, validateErr.Error())
+		return selected, false
+	}
+	c.Set(string(middleware2.ContextKeySubscription), subscription)
+	return selected, true
+}
 
 // Images handles OpenAI Images API requests.
 // POST /v1/images/generations
@@ -48,28 +110,37 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		return
 	}
 
-	body, err := pkghttputil.ReadRequestBodyWithPrealloc(c.Request)
+	setOpsRequestContext(c, "", false)
+	var body []byte
+	var parsed *service.OpenAIImagesRequest
+	var err error
+	if isMultipartImagesContentType(c.GetHeader("Content-Type")) {
+		tempService := h.imageUploadTempService
+		if tempService == nil {
+			tempService = service.NewOpenAIImageUploadTempService(h.cfg)
+		}
+		parsed, err = tempService.ParseRequest(c)
+		if err == nil {
+			defer parsed.Cleanup()
+		}
+	} else {
+		body, err = pkghttputil.ReadRequestBodyWithPrealloc(c.Request)
+		if err == nil && len(body) == 0 {
+			err = errors.New("request body is empty")
+		}
+		if err == nil {
+			parsed, err = h.gatewayService.ParseOpenAIImagesRequest(c, body)
+		}
+	}
 	if err != nil {
+		if service.IsOpenAIImageUploadLimitError(err) {
+			h.errorResponse(c, http.StatusRequestEntityTooLarge, "invalid_request_error", err.Error())
+			return
+		}
 		if maxErr, ok := extractMaxBytesError(err); ok {
 			h.errorResponse(c, http.StatusRequestEntityTooLarge, "invalid_request_error", buildBodyTooLargeMessage(maxErr.Limit))
 			return
 		}
-		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Failed to read request body")
-		return
-	}
-	if len(body) == 0 {
-		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "Request body is empty")
-		return
-	}
-
-	if isMultipartImagesContentType(c.GetHeader("Content-Type")) {
-		setOpsRequestContext(c, "", false)
-	} else {
-		setOpsRequestContext(c, "", false)
-	}
-
-	parsed, err := h.gatewayService.ParseOpenAIImagesRequest(c, body)
-	if err != nil {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", err.Error())
 		return
 	}
@@ -81,7 +152,10 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		zap.Bool("multipart", parsed.Multipart),
 		zap.String("capability", string(parsed.RequiredCapability)),
 	)
-	apiKey = h.resolveMultiGroupAPIKey(c.Request.Context(), apiKey, requestModel)
+	apiKey, ok = h.resolveAndApplyImageGroup(c, apiKey, requestModel, parsed.Endpoint, parsed.RequiredCapability)
+	if !ok {
+		return
+	}
 
 	if !service.GroupAllowsImageGeneration(apiKey.Group) {
 		h.errorResponse(c, http.StatusForbidden, "permission_error", service.ImageGenerationPermissionMessage())
@@ -156,6 +230,7 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 			requestModel,
 			failedAccountIDs,
 			parsed.RequiredCapability,
+			parsed.Endpoint,
 		)
 		if err != nil {
 			reqLog.Warn("openai.images.account_select_failed",

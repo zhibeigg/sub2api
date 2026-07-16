@@ -15,13 +15,20 @@ import (
 )
 
 func newGatewayRoutesTestRouter(platform ...string) *gin.Engine {
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-
 	groupPlatform := service.PlatformOpenAI
 	if len(platform) > 0 && platform[0] != "" {
 		groupPlatform = platform[0]
 	}
+	groupID := int64(1)
+	return newGatewayRoutesTestRouterWithAPIKey(&service.APIKey{
+		GroupID: &groupID,
+		Group:   &service.Group{ID: groupID, Platform: groupPlatform, Status: service.StatusActive},
+	})
+}
+
+func newGatewayRoutesTestRouterWithAPIKey(apiKey *service.APIKey) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
 
 	RegisterGatewayRoutes(
 		router,
@@ -30,11 +37,7 @@ func newGatewayRoutesTestRouter(platform ...string) *gin.Engine {
 			OpenAIGateway: &handler.OpenAIGatewayHandler{},
 		},
 		servermiddleware.APIKeyAuthMiddleware(func(c *gin.Context) {
-			groupID := int64(1)
-			c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{
-				GroupID: &groupID,
-				Group:   &service.Group{Platform: groupPlatform},
-			})
+			c.Set(string(servermiddleware.ContextKeyAPIKey), apiKey)
 			c.Next()
 		}),
 		nil,
@@ -111,6 +114,51 @@ func TestGatewayRoutesOpenAIImagesPathsAreRegistered(t *testing.T) {
 		router.ServeHTTP(w, req)
 		require.NotEqual(t, http.StatusNotFound, w.Code, "path=%s should hit OpenAI images handler", path)
 	}
+}
+
+func TestGatewayRoutesAggregateKeyCanReachOpenAIImagesFromNonImageDefaultGroup(t *testing.T) {
+	legacyGroup := &service.Group{ID: 1, Platform: service.PlatformAnthropic, Status: service.StatusActive}
+	imageGroup := &service.Group{ID: 2, Platform: service.PlatformOpenAI, Status: service.StatusActive, AllowImageGeneration: true}
+	legacyGroupID := legacyGroup.ID
+	router := newGatewayRoutesTestRouterWithAPIKey(&service.APIKey{
+		GroupID: &legacyGroupID,
+		Group:   legacyGroup,
+		GroupBindings: []service.APIKeyGroupBinding{
+			{GroupID: legacyGroup.ID, Priority: 0, Group: legacyGroup},
+			{GroupID: imageGroup.ID, Priority: 1, Group: imageGroup},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", strings.NewReader(`{"model":"gpt-image-2","prompt":"draw a cat"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.NotEqual(t, http.StatusNotFound, w.Code)
+	require.NotContains(t, w.Body.String(), "Images API is not supported for this platform")
+}
+
+func TestGatewayRoutesExplicitNonImageGroupDoesNotAutoSwitchForImages(t *testing.T) {
+	legacyGroup := &service.Group{ID: 1, Platform: service.PlatformAnthropic, Status: service.StatusActive}
+	imageGroup := &service.Group{ID: 2, Platform: service.PlatformOpenAI, Status: service.StatusActive, AllowImageGeneration: true}
+	legacyGroupID := legacyGroup.ID
+	router := newGatewayRoutesTestRouterWithAPIKey(&service.APIKey{
+		GroupID:                &legacyGroupID,
+		Group:                  legacyGroup,
+		ExplicitGroupSelection: true,
+		GroupBindings: []service.APIKeyGroupBinding{
+			{GroupID: legacyGroup.ID, Priority: 0, Group: legacyGroup},
+			{GroupID: imageGroup.ID, Priority: 1, Group: imageGroup},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", strings.NewReader(`{"model":"gpt-image-2","prompt":"draw a cat"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+	require.Contains(t, w.Body.String(), "Images API is not supported for this platform")
 }
 
 func TestGatewayRoutesGrokImagesAndVideosPathsAreRegistered(t *testing.T) {

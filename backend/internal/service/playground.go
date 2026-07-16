@@ -209,7 +209,7 @@ func mergePlaygroundModelIDs(primary, secondary []string) []string {
 func playgroundDefaultModelIDs(platform string) []string {
 	switch NormalizePlatform(platform) {
 	case PlatformOpenAI:
-		return openai.DefaultModelIDs()
+		return mergePlaygroundModelIDs(openai.DefaultModelIDs(), []string{"dall-e-2", "dall-e-3"})
 	case PlatformGemini:
 		ids := make([]string, 0, len(geminicli.DefaultModels))
 		for _, model := range geminicli.DefaultModels {
@@ -307,7 +307,7 @@ func ModelMediaType(model string) string {
 	if firefly.IsVideoAlias(modelLower) || strings.Contains(modelLower, "video") || strings.HasPrefix(modelLower, "veo") || strings.HasPrefix(modelLower, "sora") || strings.Contains(modelLower, "seedance") {
 		return PlaygroundCapabilityVideo
 	}
-	if firefly.IsImageAlias(modelLower) || strings.HasPrefix(modelLower, "gpt-image-") || strings.Contains(modelLower, "imagine-image") || strings.HasSuffix(modelLower, "-image") || strings.Contains(modelLower, "image-preview") || strings.Contains(modelLower, "imagine-edit") || modelLower == "grok-imagine" {
+	if firefly.IsImageAlias(modelLower) || isOpenAIPlatformImageModel(modelLower) || strings.Contains(modelLower, "imagine-image") || strings.HasSuffix(modelLower, "-image") || strings.Contains(modelLower, "image-preview") || strings.Contains(modelLower, "imagine-edit") || modelLower == "grok-imagine" {
 		return PlaygroundCapabilityImage
 	}
 	return ""

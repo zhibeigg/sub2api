@@ -266,7 +266,8 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	userMsgQueueCache := repository.NewUserMsgQueueCache(redisClient)
 	userMessageQueueService := service.ProvideUserMessageQueueService(userMsgQueueCache, rpmCache, configConfig)
 	gatewayHandler := handler.NewGatewayHandler(gatewayService, geminiMessagesCompatService, antigravityGatewayService, cursorGatewayService, kiroGatewayService, userService, concurrencyService, billingCacheService, usageService, apiKeyService, usageRecordWorkerPool, errorPassthroughService, contentModerationService, userMessageQueueService, configConfig, settingService)
-	openAIGatewayHandler := handler.NewOpenAIGatewayHandler(openAIGatewayService, concurrencyService, billingCacheService, apiKeyService, usageRecordWorkerPool, errorPassthroughService, contentModerationService, opsService, configConfig)
+	openAIImageUploadTempService := service.ProvideOpenAIImageUploadTempService(configConfig)
+	openAIGatewayHandler := handler.NewOpenAIGatewayHandler(openAIGatewayService, concurrencyService, billingCacheService, apiKeyService, subscriptionService, openAIImageUploadTempService, usageRecordWorkerPool, errorPassthroughService, contentModerationService, opsService, configConfig)
 	adobeVideoTaskStore := service.ProvideAdobeVideoTaskStore(redisClient, configConfig)
 	adobeFireflyClientFactory := service.NewAdobeFireflyClientFactory(configConfig)
 	adobeFireflyAdapter := service.NewAdobeFireflyAdapter(adobeFireflyClientFactory, adobeTokenProvider)
@@ -309,7 +310,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	paymentOrderExpiryService := service.ProvidePaymentOrderExpiryService(paymentService, leaderLockCache, db)
 	channelMonitorRunner := service.ProvideChannelMonitorRunner(channelMonitorService, settingService)
 	userPlatformQuotaUsageFlusher := service.ProvideUserPlatformQuotaUsageFlusher(configConfig, billingCache, serviceUserPlatformQuotaRepository, timingWheelService)
-	v := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, schedulerSnapshotService, tokenRefreshService, cursorDashboardMaintenanceService, accountExpiryService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, batchImageCleanupService, batchImageWorkerRuntime, announcementEmailDispatchRuntime, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, userPlatformQuotaUsageFlusher)
+	v := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, schedulerSnapshotService, tokenRefreshService, cursorDashboardMaintenanceService, accountExpiryService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, batchImageCleanupService, openAIImageUploadTempService, batchImageWorkerRuntime, announcementEmailDispatchRuntime, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, userPlatformQuotaUsageFlusher)
 	application := &Application{
 		Server:  httpServer,
 		Cleanup: v,
@@ -353,6 +354,7 @@ func provideCleanup(
 	usageCleanup *service.UsageCleanupService,
 	idempotencyCleanup *service.IdempotencyCleanupService,
 	batchImageCleanup *service.BatchImageCleanupService,
+	openAIImageUploadTemp *service.OpenAIImageUploadTempService,
 	batchImageWorker *service.BatchImageWorkerRuntime,
 	announcementEmailRuntime *service.AnnouncementEmailDispatchRuntime,
 	pricing *service.PricingService,
@@ -439,6 +441,12 @@ func provideCleanup(
 			{"BatchImageCleanupService", func() error {
 				if batchImageCleanup != nil {
 					batchImageCleanup.Stop()
+				}
+				return nil
+			}},
+			{"OpenAIImageUploadTempService", func() error {
+				if openAIImageUploadTemp != nil {
+					openAIImageUploadTemp.Stop()
 				}
 				return nil
 			}},

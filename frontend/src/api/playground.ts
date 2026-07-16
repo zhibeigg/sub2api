@@ -3,6 +3,7 @@ import { apiClient } from './client'
 import { buildGatewayUrl } from './url'
 import type {
   PlaygroundContentPart,
+  PlaygroundImageQuality,
   PlaygroundModelOption,
   PlaygroundTokenUsage,
   PlaygroundToolActivity
@@ -68,8 +69,9 @@ export interface ImageGenerationOptions {
   model: string
   prompt: string
   size?: string
-  quality?: string
+  quality?: PlaygroundImageQuality
   n?: number
+  images?: File[]
   signal?: AbortSignal
 }
 
@@ -449,16 +451,57 @@ export async function streamResponses(opts: ResponsesStreamOptions): Promise<voi
   })
 }
 
-/** Generate images via the OpenAI-compatible images endpoint. */
+export function imageQualityOptions(model: string): PlaygroundImageQuality[] {
+  const normalized = model.trim().toLowerCase()
+  if (normalized.includes('gpt-image')) return ['auto', 'low', 'medium', 'high']
+  if (/dall[-_.\s]?e/.test(normalized)) return ['standard', 'hd']
+  return []
+}
+
+export function normalizeImageQuality(
+  model: string,
+  quality: PlaygroundImageQuality | undefined
+): PlaygroundImageQuality | undefined {
+  if (!quality) return undefined
+  return imageQualityOptions(model).includes(quality) ? quality : undefined
+}
+
+/** Generate or edit images via the OpenAI-compatible images endpoints. */
 export async function generateImage(opts: ImageGenerationOptions): Promise<GeneratedImage[]> {
-  const res = await fetch(buildGatewayUrl('/v1/images/generations'), {
-    method: 'POST', headers: gatewayHeaders(opts.apiKey, opts.groupId, true),
-    body: JSON.stringify({
-      model: opts.model, prompt: opts.prompt,
+  const images = (opts.images ?? []).filter((image) => image instanceof File)
+  const quality = normalizeImageQuality(opts.model, opts.quality)
+  const count = opts.n && opts.n > 0 ? opts.n : 1
+  const headers = gatewayHeaders(opts.apiKey, opts.groupId, images.length === 0)
+  let body: BodyInit
+  let endpoint = '/v1/images/generations'
+
+  if (images.length > 0) {
+    endpoint = '/v1/images/edits'
+    const form = new FormData()
+    form.append('model', opts.model)
+    form.append('prompt', opts.prompt)
+    form.append('n', String(count))
+    form.append('response_format', 'b64_json')
+    if (opts.size) form.append('size', opts.size)
+    if (quality) form.append('quality', quality)
+    for (const image of images) form.append('image[]', image, image.name)
+    body = form
+  } else {
+    body = JSON.stringify({
+      model: opts.model,
+      prompt: opts.prompt,
       ...(opts.size ? { size: opts.size } : {}),
-      ...(opts.quality ? { quality: opts.quality } : {}),
-      n: opts.n && opts.n > 0 ? opts.n : 1
-    }), signal: opts.signal
+      ...(quality ? { quality } : {}),
+      n: count,
+      response_format: 'b64_json'
+    })
+  }
+
+  const res = await fetch(buildGatewayUrl(endpoint), {
+    method: 'POST',
+    headers,
+    body,
+    signal: opts.signal
   })
   if (!res.ok) throw new Error(await extractError(res))
   const json = await res.json()

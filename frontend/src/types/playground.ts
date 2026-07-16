@@ -30,6 +30,47 @@ export interface PlaygroundModelOption {
   features?: PlaygroundFeatures
 }
 
+export type PlaygroundImageQuality = '' | 'auto' | 'low' | 'medium' | 'high' | 'standard' | 'hd'
+export type PlaygroundImageBatchStatus = 'generating' | 'completed' | 'error'
+export type PlaygroundImageStage = 'preparing' | 'requesting' | 'decoding'
+
+export interface PlaygroundImageReference {
+  id: string
+  name: string
+  size: number
+  mimeType: string
+  file: File
+  previewUrl: string
+  status: 'ready' | 'error'
+  error?: string
+}
+
+export interface PlaygroundImageResult {
+  id: string
+  url: string
+  mimeType: string
+  revisedPrompt?: string
+  revokeOnRelease: boolean
+}
+
+export interface PlaygroundImageBatch {
+  id: string
+  status: PlaygroundImageBatchStatus
+  stage?: PlaygroundImageStage
+  prompt: string
+  option: PlaygroundModelOption
+  model: string
+  size: string
+  quality: PlaygroundImageQuality
+  count: number
+  referenceCount: number
+  createdAt: number
+  completedAt?: number
+  elapsedMs?: number
+  results: PlaygroundImageResult[]
+  error?: string
+}
+
 export type PlaygroundAttachmentKind = 'image' | 'text'
 export type PlaygroundAttachmentEncoding = 'data-url' | 'text'
 

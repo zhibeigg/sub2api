@@ -70,6 +70,7 @@ type OpenAIAccountScheduleRequest struct {
 	RequiredTransport       OpenAIUpstreamTransport
 	RequiredCapability      OpenAIEndpointCapability
 	RequiredImageCapability OpenAIImagesCapability
+	ImageEndpoint           string
 	RequireCompact          bool
 	ExcludedIDs             map[int64]struct{}
 }
@@ -1392,7 +1393,7 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatible(ctx context.C
 		s.service.isUpstreamModelRestrictedByChannel(ctx, *req.GroupID, account, req.RequestedModel, req.RequireCompact) {
 		return false
 	}
-	return accountSupportsOpenAICapabilities(account, req.RequiredCapability, req.RequiredImageCapability)
+	return accountSupportsOpenAICapabilities(account, req.RequiredCapability, req.RequiredImageCapability, req.RequestedModel, req.ImageEndpoint)
 }
 
 func (s *defaultOpenAIAccountScheduler) ReportResult(accountID int64, success bool, firstTokenMs *int) {
@@ -1677,7 +1678,11 @@ func (s *OpenAIGatewayService) SelectAccountWithSchedulerForImages(
 	requestedModel string,
 	excludedIDs map[int64]struct{},
 	requiredCapability OpenAIImagesCapability,
+	endpoint ...string,
 ) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
+	if len(endpoint) > 0 {
+		ctx = withOpenAIImageEndpoint(ctx, endpoint[0])
+	}
 	selection, decision, err := s.selectAccountWithScheduler(ctx, groupID, "", sessionHash, requestedModel, excludedIDs, OpenAIUpstreamTransportHTTPSSE, "", requiredCapability, false, PlatformOpenAI, false)
 	if err == nil && selection != nil && selection.Account != nil {
 		return selection, decision, nil
@@ -1719,7 +1724,7 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 				if selection == nil || selection.Account == nil {
 					return selection, decision, nil
 				}
-				if accountSupportsOpenAICapabilities(selection.Account, requiredCapability, requiredImageCapability) {
+				if accountSupportsOpenAICapabilities(selection.Account, requiredCapability, requiredImageCapability, requestedModel, openAIImageEndpointFromContext(ctx)) {
 					return selection, decision, nil
 				}
 				if selection.ReleaseFunc != nil {
@@ -1745,7 +1750,7 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 				return selection, decision, nil
 			}
 			if s.isOpenAIAccountTransportCompatible(selection.Account, requiredTransport) &&
-				accountSupportsOpenAICapabilities(selection.Account, requiredCapability, requiredImageCapability) {
+				accountSupportsOpenAICapabilities(selection.Account, requiredCapability, requiredImageCapability, requestedModel, openAIImageEndpointFromContext(ctx)) {
 				return selection, decision, nil
 			}
 			if selection.ReleaseFunc != nil {
@@ -1795,17 +1800,20 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 		RequiredTransport:       requiredTransport,
 		RequiredCapability:      requiredCapability,
 		RequiredImageCapability: requiredImageCapability,
+		ImageEndpoint:           openAIImageEndpointFromContext(ctx),
 		RequireCompact:          requireCompact,
 		ExcludedIDs:             excludedIDs,
 	})
 }
 
-func accountSupportsOpenAICapabilities(account *Account, requiredCapability OpenAIEndpointCapability, requiredImageCapability OpenAIImagesCapability) bool {
-	if account == nil {
+func accountSupportsOpenAICapabilities(account *Account, requiredCapability OpenAIEndpointCapability, requiredImageCapability OpenAIImagesCapability, requestedModel, imageEndpoint string) bool {
+	if account == nil || !account.SupportsOpenAIEndpointCapability(requiredCapability) {
 		return false
 	}
-	return account.SupportsOpenAIEndpointCapability(requiredCapability) &&
-		account.SupportsOpenAIImageCapability(requiredImageCapability)
+	if requiredImageCapability == "" {
+		return true
+	}
+	return account.SupportsOpenAIImageRequest(requestedModel, imageEndpoint, requiredImageCapability)
 }
 
 func cloneExcludedAccountIDs(excludedIDs map[int64]struct{}) map[int64]struct{} {

@@ -12,9 +12,9 @@
           <KeyModelPicker
             v-model:key-id="col.keyId"
             v-model:option="col.option"
+            v-model:resolved-key="col.resolvedKey"
             capability="chat"
             class="min-w-0 flex-1"
-            @resolved-key="(k) => (col.resolvedKey = k)"
           />
           <button
             v-if="columns.length > 1"

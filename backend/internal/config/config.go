@@ -930,6 +930,18 @@ type GatewayConfig struct {
 	ImageStreamKeepaliveInterval int `mapstructure:"image_stream_keepalive_interval"`
 	// ImageNonstreamKeepaliveInterval: 图片非流式 JSON keepalive 间隔（秒），0表示禁用
 	ImageNonstreamKeepaliveInterval int `mapstructure:"image_nonstream_keepalive_interval"`
+	// ImageUploadMaxFiles: /v1/images/edits multipart 单请求最大文件 part 数。
+	ImageUploadMaxFiles int `mapstructure:"image_upload_max_files"`
+	// ImageUploadMaxFileBytes: 单个图片文件最大字节数。
+	ImageUploadMaxFileBytes int64 `mapstructure:"image_upload_max_file_bytes"`
+	// ImageUploadMaxTotalBytes: multipart 所有 part 内容累计最大字节数。
+	ImageUploadMaxTotalBytes int64 `mapstructure:"image_upload_max_total_bytes"`
+	// ImageUploadMaxTextFieldBytes: 单个文本字段最大字节数。
+	ImageUploadMaxTextFieldBytes int64 `mapstructure:"image_upload_max_text_field_bytes"`
+	// ImageUploadTempTTLHours: 请求级图片临时目录遗留 TTL（小时）。
+	ImageUploadTempTTLHours int `mapstructure:"image_upload_temp_ttl_hours"`
+	// ImageUploadCleanupIntervalMinutes: 图片临时目录清扫间隔（分钟）。
+	ImageUploadCleanupIntervalMinutes int `mapstructure:"image_upload_cleanup_interval_minutes"`
 	// MaxLineSize: 上游 SSE 单行最大字节数（0使用默认值）
 	MaxLineSize int `mapstructure:"max_line_size"`
 
@@ -2215,6 +2227,12 @@ func setDefaults() {
 	viper.SetDefault("gateway.image_stream_data_interval_timeout", 900)
 	viper.SetDefault("gateway.image_stream_keepalive_interval", 10)
 	viper.SetDefault("gateway.image_nonstream_keepalive_interval", 0)
+	viper.SetDefault("gateway.image_upload_max_files", 4)
+	viper.SetDefault("gateway.image_upload_max_file_bytes", int64(20*1024*1024))
+	viper.SetDefault("gateway.image_upload_max_total_bytes", int64(80*1024*1024))
+	viper.SetDefault("gateway.image_upload_max_text_field_bytes", int64(64*1024))
+	viper.SetDefault("gateway.image_upload_temp_ttl_hours", 6)
+	viper.SetDefault("gateway.image_upload_cleanup_interval_minutes", 30)
 	viper.SetDefault("gateway.max_line_size", 500*1024*1024)
 	viper.SetDefault("gateway.scheduling.sticky_session_max_waiting", 3)
 	viper.SetDefault("gateway.scheduling.sticky_session_wait_timeout", 120*time.Second)
@@ -2935,6 +2953,39 @@ func (c *Config) Validate() error {
 	if c.Gateway.ImageNonstreamKeepaliveInterval != 0 &&
 		(c.Gateway.ImageNonstreamKeepaliveInterval < 5 || c.Gateway.ImageNonstreamKeepaliveInterval > 60) {
 		return fmt.Errorf("gateway.image_nonstream_keepalive_interval must be 0 or between 5-60 seconds")
+	}
+	if c.Gateway.ImageUploadMaxFiles == 0 {
+		c.Gateway.ImageUploadMaxFiles = 4
+	} else if c.Gateway.ImageUploadMaxFiles < 0 {
+		return fmt.Errorf("gateway.image_upload_max_files must be positive")
+	}
+	if c.Gateway.ImageUploadMaxFileBytes == 0 {
+		c.Gateway.ImageUploadMaxFileBytes = 20 * 1024 * 1024
+	} else if c.Gateway.ImageUploadMaxFileBytes < 0 {
+		return fmt.Errorf("gateway.image_upload_max_file_bytes must be positive")
+	}
+	if c.Gateway.ImageUploadMaxTotalBytes == 0 {
+		c.Gateway.ImageUploadMaxTotalBytes = 80 * 1024 * 1024
+	} else if c.Gateway.ImageUploadMaxTotalBytes < 0 {
+		return fmt.Errorf("gateway.image_upload_max_total_bytes must be positive")
+	}
+	if c.Gateway.ImageUploadMaxTotalBytes < c.Gateway.ImageUploadMaxFileBytes {
+		return fmt.Errorf("gateway.image_upload_max_total_bytes must be at least image_upload_max_file_bytes")
+	}
+	if c.Gateway.ImageUploadMaxTextFieldBytes == 0 {
+		c.Gateway.ImageUploadMaxTextFieldBytes = 64 * 1024
+	} else if c.Gateway.ImageUploadMaxTextFieldBytes < 0 || c.Gateway.ImageUploadMaxTextFieldBytes > c.Gateway.ImageUploadMaxTotalBytes {
+		return fmt.Errorf("gateway.image_upload_max_text_field_bytes must be positive and no greater than image_upload_max_total_bytes")
+	}
+	if c.Gateway.ImageUploadTempTTLHours == 0 {
+		c.Gateway.ImageUploadTempTTLHours = 6
+	} else if c.Gateway.ImageUploadTempTTLHours < 0 {
+		return fmt.Errorf("gateway.image_upload_temp_ttl_hours must be positive")
+	}
+	if c.Gateway.ImageUploadCleanupIntervalMinutes == 0 {
+		c.Gateway.ImageUploadCleanupIntervalMinutes = 30
+	} else if c.Gateway.ImageUploadCleanupIntervalMinutes < 0 {
+		return fmt.Errorf("gateway.image_upload_cleanup_interval_minutes must be positive")
 	}
 	// 兼容旧键 sticky_previous_response_ttl_seconds
 	if c.Gateway.OpenAIWS.StickyResponseIDTTLSeconds <= 0 && c.Gateway.OpenAIWS.StickyPreviousResponseTTLSeconds > 0 {

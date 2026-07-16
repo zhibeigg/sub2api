@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
+  <div :class="containerClass">
     <div class="min-w-0 flex-1">
       <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">
         {{ t('playground.apiKey') }}
@@ -37,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import keysAPI from '@/api/keys'
@@ -51,15 +51,21 @@ import {
   type PlaygroundModelOption
 } from '@/types/playground'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   keyId: number | null
   option: PlaygroundModelOption | null
   capability: PlaygroundCapability
-}>()
+  resolvedKey?: string
+  layout?: 'responsive' | 'stacked'
+}>(), {
+  resolvedKey: '',
+  layout: 'responsive'
+})
 
 const emit = defineEmits<{
   (event: 'update:keyId', value: number | null): void
   (event: 'update:option', value: PlaygroundModelOption | null): void
+  (event: 'update:resolvedKey', value: string): void
   (event: 'resolved-key', value: string): void
 }>()
 
@@ -71,12 +77,21 @@ const optionCache = new Map<number, PlaygroundModelOption[]>()
 let requestVersion = 0
 let optionsController: AbortController | null = null
 
+const containerClass = computed(() => props.layout === 'stacked'
+  ? 'flex flex-col gap-3'
+  : 'flex flex-col gap-3 sm:flex-row sm:items-end')
 const compatibleOptions = computed(() =>
   options.value.filter((item) => item.capabilities.includes(props.capability))
 )
 
 function resolvedKeyValue(keyId = props.keyId): string {
   return keys.value.find((key) => key.id === keyId)?.key ?? ''
+}
+
+function syncResolvedKey(): void {
+  const value = resolvedKeyValue()
+  if (value !== props.resolvedKey) emit('update:resolvedKey', value)
+  emit('resolved-key', value)
 }
 
 function onKeyChange(raw: string): void {
@@ -104,8 +119,10 @@ async function loadKeys(): Promise<void> {
     } while (page <= pages)
     keys.value = loaded
     if (props.keyId == null && keys.value.length > 0) emit('update:keyId', keys.value[0].id)
+    syncResolvedKey()
   } catch {
     keys.value = []
+    syncResolvedKey()
   }
 }
 
@@ -122,7 +139,7 @@ function ensureOptionSelected(): void {
 async function loadOptions(): Promise<void> {
   const keyId = props.keyId
   const apiKey = resolvedKeyValue(keyId)
-  emit('resolved-key', apiKey)
+  syncResolvedKey()
   optionsController?.abort()
   const version = ++requestVersion
 
@@ -163,12 +180,19 @@ async function loadOptions(): Promise<void> {
   }
 }
 
-watch(() => props.keyId, loadOptions)
-watch(() => props.capability, ensureOptionSelected)
+watch(() => props.keyId, () => {
+  syncResolvedKey()
+  void loadOptions()
+})
+watch(() => props.capability, () => {
+  syncResolvedKey()
+  ensureOptionSelected()
+})
 
 onMounted(async () => {
   await loadKeys()
-  await loadOptions()
+  await nextTick()
+  if (requestVersion === 0) await loadOptions()
 })
 
 onBeforeUnmount(() => optionsController?.abort())

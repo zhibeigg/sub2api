@@ -33,11 +33,11 @@
         </div>
 
         <KeyModelPicker
-          v-if="mode !== 'compare'"
+          v-if="mode !== 'compare' && mode !== 'image'"
           v-model:key-id="settings.keyId.value"
+          v-model:resolved-key="resolvedKey"
           v-model:option="currentOption"
           :capability="mode"
-          @resolved-key="(key) => (resolvedKey = key)"
         />
 
         <PlaygroundParametersPanel
@@ -56,7 +56,12 @@
           :option="currentOption"
           :parameters="parameters"
         />
-        <ImagePanel v-else-if="mode === 'image'" :resolved-key="resolvedKey" :option="currentOption" />
+        <ImagePanel
+          v-else-if="mode === 'image'"
+          v-model:key-id="settings.keyId.value"
+          v-model:resolved-key="resolvedKey"
+          v-model:option="currentOption"
+        />
         <VideoPanel v-else-if="mode === 'video'" :resolved-key="resolvedKey" :option="currentOption" />
         <ComparePanel v-else :parameters="parameters" />
       </div>
@@ -145,7 +150,6 @@ function supportsFeature(option: PlaygroundModelOption | null, feature: 'web_sea
 }
 
 watch(mode, () => {
-  resolvedKey.value = ''
   if (mode.value === 'image' || mode.value === 'video') showParams.value = false
 })
 watch(currentOption, (option) => {

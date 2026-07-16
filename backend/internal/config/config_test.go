@@ -381,6 +381,38 @@ func TestLoadWeChatConnectConfigFromLegacyEnv(t *testing.T) {
 	require.Equal(t, "/auth/wechat/legacy-callback", cfg.WeChat.FrontendRedirectURL)
 }
 
+func TestLoadDefaultImageUploadLimits(t *testing.T) {
+	resetViperWithJWTSecret(t)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, 4, cfg.Gateway.ImageUploadMaxFiles)
+	require.Equal(t, int64(20*1024*1024), cfg.Gateway.ImageUploadMaxFileBytes)
+	require.Equal(t, int64(80*1024*1024), cfg.Gateway.ImageUploadMaxTotalBytes)
+	require.Equal(t, int64(64*1024), cfg.Gateway.ImageUploadMaxTextFieldBytes)
+	require.Equal(t, 6, cfg.Gateway.ImageUploadTempTTLHours)
+	require.Equal(t, 30, cfg.Gateway.ImageUploadCleanupIntervalMinutes)
+}
+
+func TestLoadImageUploadLimitsFromEnv(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("GATEWAY_IMAGE_UPLOAD_MAX_FILES", "2")
+	t.Setenv("GATEWAY_IMAGE_UPLOAD_MAX_FILE_BYTES", "1024")
+	t.Setenv("GATEWAY_IMAGE_UPLOAD_MAX_TOTAL_BYTES", "4096")
+	t.Setenv("GATEWAY_IMAGE_UPLOAD_MAX_TEXT_FIELD_BYTES", "512")
+	t.Setenv("GATEWAY_IMAGE_UPLOAD_TEMP_TTL_HOURS", "3")
+	t.Setenv("GATEWAY_IMAGE_UPLOAD_CLEANUP_INTERVAL_MINUTES", "15")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, 2, cfg.Gateway.ImageUploadMaxFiles)
+	require.Equal(t, int64(1024), cfg.Gateway.ImageUploadMaxFileBytes)
+	require.Equal(t, int64(4096), cfg.Gateway.ImageUploadMaxTotalBytes)
+	require.Equal(t, int64(512), cfg.Gateway.ImageUploadMaxTextFieldBytes)
+	require.Equal(t, 3, cfg.Gateway.ImageUploadTempTTLHours)
+	require.Equal(t, 15, cfg.Gateway.ImageUploadCleanupIntervalMinutes)
+}
+
 func TestLoadDefaultOIDCSecurityDefaults(t *testing.T) {
 	resetViperWithJWTSecret(t)
 

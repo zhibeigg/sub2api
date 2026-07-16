@@ -67,6 +67,7 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 		&service.UsageCleanupService{},
 		idempotencyCleanupSvc,
 		&service.BatchImageCleanupService{},
+		nil, // openAIImageUploadTemp
 		nil, // batchImageWorker
 		nil, // announcementEmailDispatch
 		pricingSvc,

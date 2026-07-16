@@ -132,7 +132,11 @@ func replaceGroupBindings(ctx context.Context, client *dbent.Client, apiKeyID in
 func (r *apiKeyRepository) GetByID(ctx context.Context, id int64) (*service.APIKey, error) {
 	m, err := withAPIKeyGroupBindings(r.activeQuery()).
 		Where(apikey.IDEQ(id)).
-		WithUser().
+		WithUser(func(q *dbent.UserQuery) {
+			q.WithAllowedGroups(func(gq *dbent.GroupQuery) {
+				gq.Select(group.FieldID)
+			})
+		}).
 		WithGroup().
 		Only(ctx)
 	if err != nil {
@@ -164,7 +168,7 @@ func (r *apiKeyRepository) GetKeyAndOwnerID(ctx context.Context, id int64) (stri
 }
 
 func (r *apiKeyRepository) GetByKey(ctx context.Context, key string) (*service.APIKey, error) {
-	m, err := r.activeQuery().
+	m, err := withAPIKeyGroupBindings(r.activeQuery()).
 		Where(apikey.KeyEQ(key)).
 		WithUser(func(q *dbent.UserQuery) {
 			q.WithAllowedGroups(func(gq *dbent.GroupQuery) {

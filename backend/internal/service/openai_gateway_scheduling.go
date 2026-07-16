@@ -1320,3 +1320,47 @@ func (s *OpenAIGatewayService) ResolveEffectiveGroupBinding(ctx context.Context,
 	}
 	return firstGroup
 }
+
+// ResolveEffectiveImageGroupBinding applies the same binding priority semantics
+// as ResolveEffectiveGroupBinding, but only selects groups that are active,
+// enable image generation, and contain an account that can execute the exact
+// image model/endpoint combination.
+func (s *OpenAIGatewayService) ResolveEffectiveImageGroupBinding(ctx context.Context, apiKey *APIKey, requestedModel, endpoint string, capability OpenAIImagesCapability) *Group {
+	if apiKey != nil && apiKey.ExplicitGroupSelection {
+		return apiKey.Group
+	}
+	if apiKey == nil || len(apiKey.GroupBindings) == 0 {
+		return nil
+	}
+	var firstGroup *Group
+	for i := range apiKey.GroupBindings {
+		binding := apiKey.GroupBindings[i]
+		group := binding.Group
+		if group == nil {
+			continue
+		}
+		if firstGroup == nil {
+			firstGroup = group
+		}
+		if !group.IsActive() || NormalizePlatform(group.Platform) != PlatformOpenAI || !GroupAllowsImageGeneration(group) {
+			continue
+		}
+		groupID := binding.GroupID
+		accounts, err := s.listSchedulableAccounts(ctx, &groupID, PlatformOpenAI)
+		if err != nil {
+			continue
+		}
+		parentLookup := s.parentAccountLookup(ctx)
+		for accountIndex := range accounts {
+			account := &accounts[accountIndex]
+			if !isOpenAICompatibleAccountEligibleForRequest(ctx, account, PlatformOpenAI, requestedModel, false, "") ||
+				!account.SupportsOpenAIImageRequest(requestedModel, endpoint, capability) ||
+				!parentHealthyForShadow(account, parentLookup) ||
+				s.isOpenAIAccountRuntimeBlocked(account) {
+				continue
+			}
+			return group
+		}
+	}
+	return firstGroup
+}

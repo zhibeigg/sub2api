@@ -49,7 +49,15 @@ func RegisterGatewayRoutes(
 		h.AdobeMedia.Unsupported(c)
 	}
 	imagesHandler := func(c *gin.Context) {
-		switch getGroupPlatform(c) {
+		platform := getGroupPlatform(c)
+		if platform != service.PlatformOpenAI && aggregateKeyHasOpenAIImageBinding(c) {
+			apiKey, _ := middleware.GetAPIKeyFromContext(c)
+			if platform != service.PlatformGrok && platform != service.PlatformAdobe || apiKey == nil || !service.GroupAllowsImageGeneration(apiKey.Group) {
+				h.OpenAIGateway.Images(c)
+				return
+			}
+		}
+		switch platform {
 		case service.PlatformOpenAI:
 			h.OpenAIGateway.Images(c)
 		case service.PlatformGrok:
@@ -412,4 +420,23 @@ func getGroupPlatform(c *gin.Context) string {
 		return ""
 	}
 	return apiKey.Group.Platform
+}
+
+// aggregateKeyHasOpenAIImageBinding lets a multi-group key reach the OpenAI
+// Images handler even when its compatibility/default group belongs to a
+// different platform. The handler performs the model-, endpoint-, account-,
+// subscription-, and billing-aware final group selection.
+func aggregateKeyHasOpenAIImageBinding(c *gin.Context) bool {
+	apiKey, ok := middleware.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.ExplicitGroupSelection || len(apiKey.GroupBindings) == 0 {
+		return false
+	}
+	for _, binding := range apiKey.GroupBindings {
+		group := binding.Group
+		if group == nil || !group.IsActive() || group.Platform != service.PlatformOpenAI || !service.GroupAllowsImageGeneration(group) {
+			continue
+		}
+		return true
+	}
+	return false
 }

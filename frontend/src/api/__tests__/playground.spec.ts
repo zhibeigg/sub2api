@@ -84,6 +84,94 @@ describe('playground API group routing', () => {
   })
 })
 
+describe('playground image requests', () => {
+  beforeEach(() => vi.restoreAllMocks())
+
+  it('uses JSON generations with b64_json and the selected group', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: [{ b64_json: 'aW1hZ2U=' }] }), { status: 200 })
+    )
+
+    await playgroundAPI.generateImage({
+      apiKey: 'image-key',
+      groupId: 7,
+      model: 'gpt-image-1',
+      prompt: 'sharp editorial poster',
+      size: '1024x1536',
+      quality: 'high',
+      n: 2
+    })
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(String(url)).toContain('/v1/images/generations')
+    const headers = new Headers((init as RequestInit).headers)
+    expect(headers.get('Authorization')).toBe('Bearer image-key')
+    expect(headers.get('X-Sub2API-Group-ID')).toBe('7')
+    expect(headers.get('Content-Type')).toBe('application/json')
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({
+      model: 'gpt-image-1',
+      prompt: 'sharp editorial poster',
+      size: '1024x1536',
+      quality: 'high',
+      n: 2,
+      response_format: 'b64_json'
+    })
+  })
+
+  it('uses multipart edits for reference images without overriding the boundary header', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: [{ b64_json: 'aW1hZ2U=' }] }), { status: 200 })
+    )
+    const first = new File(['one'], 'one.png', { type: 'image/png' })
+    const second = new File(['two'], 'two.webp', { type: 'image/webp' })
+
+    await playgroundAPI.generateImage({
+      apiKey: 'edit-key',
+      groupId: 9,
+      model: 'dall-e-3',
+      prompt: 'edit this',
+      size: '1024x1024',
+      quality: 'hd',
+      n: 1,
+      images: [first, second]
+    })
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(String(url)).toContain('/v1/images/edits')
+    const headers = new Headers((init as RequestInit).headers)
+    expect(headers.get('Authorization')).toBe('Bearer edit-key')
+    expect(headers.get('X-Sub2API-Group-ID')).toBe('9')
+    expect(headers.get('Content-Type')).toBeNull()
+    const body = (init as RequestInit).body as FormData
+    expect(body).toBeInstanceOf(FormData)
+    expect(body.get('model')).toBe('dall-e-3')
+    expect(body.get('prompt')).toBe('edit this')
+    expect(body.get('size')).toBe('1024x1024')
+    expect(body.get('quality')).toBe('hd')
+    expect(body.get('n')).toBe('1')
+    expect(body.get('response_format')).toBe('b64_json')
+    expect(body.getAll('image[]')).toEqual([first, second])
+  })
+
+  it('omits unsupported quality values from the payload', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: [] }), { status: 200 })
+    )
+
+    await playgroundAPI.generateImage({
+      apiKey: 'key',
+      groupId: 1,
+      model: 'custom-image-model',
+      prompt: 'draw',
+      quality: 'high'
+    })
+
+    const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))
+    expect(body).not.toHaveProperty('quality')
+    expect(body.response_format).toBe('b64_json')
+  })
+})
+
 describe('playground SSE parsing', () => {
   beforeEach(() => vi.restoreAllMocks())
 

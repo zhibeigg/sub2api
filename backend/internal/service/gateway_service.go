@@ -1174,25 +1174,67 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 // result with an empty model slice means routable accounts exist without an
 // explicit mapping, so the caller may use the platform's default catalog.
 func (s *GatewayService) GetAvailablePlaygroundModels(ctx context.Context, groupID *int64, platform string) ([]string, bool) {
+	platform = NormalizePlatform(platform)
 	accounts, useMixed, err := s.listSchedulableAccounts(ctx, groupID, platform, false)
 	if err != nil || len(accounts) == 0 {
 		return nil, false
 	}
 
-	modelSet := make(map[string]struct{})
-	hasRoutableAccount := false
+	routableAccounts := make([]Account, 0, len(accounts))
+	candidates := make([]string, 0, 32)
+	hasEmptyMapping := false
+	hasWildcardMapping := false
 	for i := range accounts {
 		account := &accounts[i]
 		if !s.isAccountAllowedForPlatform(account, platform, useMixed) {
 			continue
 		}
-		hasRoutableAccount = true
-		for model := range account.GetModelMapping() {
-			modelSet[model] = struct{}{}
+		routableAccounts = append(routableAccounts, *account)
+		mapping := account.GetModelMapping()
+		if len(mapping) == 0 {
+			hasEmptyMapping = true
+		}
+		for model := range mapping {
+			model = strings.TrimSpace(model)
+			if model == "" {
+				continue
+			}
+			if strings.Contains(model, "*") {
+				hasWildcardMapping = true
+				continue
+			}
+			candidates = append(candidates, model)
 		}
 	}
-	if !hasRoutableAccount {
+	if len(routableAccounts) == 0 {
 		return nil, false
+	}
+
+	// Expand platform defaults when an unrestricted account exists or mappings
+	// contain wildcards. OpenAI always includes its image catalog candidates so
+	// API-key and OAuth accounts can be filtered by their real execution path.
+	if hasEmptyMapping || hasWildcardMapping || platform == PlatformOpenAI {
+		candidates = append(candidates, playgroundDefaultModelIDs(platform)...)
+	}
+	if platform == PlatformOpenAI {
+		candidates = append(candidates, openAIPlaygroundCatalogCandidates(routableAccounts)...)
+	}
+
+	modelSet := make(map[string]struct{})
+	for _, model := range normalizePlaygroundModels(candidates) {
+		for i := range routableAccounts {
+			account := &routableAccounts[i]
+			if platform == PlatformOpenAI {
+				mappedModel := account.GetMappedModel(model)
+				if isOpenAIPlatformImageModel(mappedModel) && !isOpenAIPlatformImageModel(model) {
+					continue
+				}
+			}
+			if accountCanRoutePlaygroundModel(account, platform, model) {
+				modelSet[model] = struct{}{}
+				break
+			}
+		}
 	}
 
 	models := make([]string, 0, len(modelSet))

@@ -308,6 +308,8 @@ body = {
     "model": "gpt-image-2",
     "prompt": "一只在星空下奔跑的皮卡丘，赛博朋克风格",
     "size": "1024x1024",
+    "quality": "high",
+    "response_format": "b64_json",
 }
 
 request = urllib.request.Request(
@@ -327,9 +329,24 @@ print("已保存 output.png")
 
 ## 图片编辑（gpt-image-2）
 
-`POST /v1/images/edits` —— 上传图片并按提示修改。请求使用 `multipart/form-data`，字段包含 `model`、`prompt` 与 `image`（原始图片文件），返回结构与图片生成一致（`data[0].b64_json`）。
+`POST /v1/images/edits` —— 上传参考图片并按提示修改。请求使用 `multipart/form-data`，字段包含 `model`、`prompt`、`image`（可重复）及可选的 `size`、`quality`、`n`、`response_format`。
+
+```bash
+curl --fail-with-body https://www.poke2api.com/v1/images/edits \
+  -H 'Authorization: Bearer YOUR_API_KEY' \
+  -H 'X-Sub2API-Group-ID: YOUR_BOUND_GROUP_ID' \
+  -F 'model=gpt-image-2' \
+  -F 'prompt=保留主体，把背景改为克制的黑白编辑风格，并加入少量深蓝信号色' \
+  -F 'size=1024x1024' \
+  -F 'quality=high' \
+  -F 'response_format=b64_json' \
+  -F 'image=@reference.png;type=image/png'
+```
+
+参考图只在当前请求中使用：服务器将文件写入隔离的请求级临时目录，并在成功、失败、拒绝、超时或连接中断后清理；启动和周期清扫会回收进程异常退出遗留的过期目录。默认最多 4 张，支持 PNG、JPEG、WebP，单张不超过 20 MiB、总计不超过 80 MiB；超限返回 `413`，不会静默截断。
 
 ::: tip
-- 上述示例默认使用流式（SSE）返回，若不需要流式可去掉 `stream` 字段。
-- 模型名（如 `gpt-5.5`、`claude-sonnet-4-6`、`gemini-3-pro-preview`、`gpt-image-2`）仅为示例，请以控制台实际可用的模型列表为准。
+- 多分组 API Key 应携带 `X-Sub2API-Group-ID`，该 ID 必须属于当前 Key；练习场会自动发送所选模型对应的分组。
+- `gpt-image-*` 的质量值通常为 `auto`、`low`、`medium`、`high`；DALL-E 使用 `standard`、`hd`。不支持的参数应省略。
+- 上述图片示例使用非流式 JSON 返回；模型名仅为示例，请以控制台实际可用且具备图片能力的模型列表为准。
 :::

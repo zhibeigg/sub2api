@@ -318,14 +318,15 @@ func openAIImageOutputMIMEType(outputFormat string) string {
 }
 
 func openAIImageUploadToDataURL(upload OpenAIImagesUpload) (string, error) {
-	if len(upload.Data) == 0 {
-		return "", fmt.Errorf("upload %q is empty", strings.TrimSpace(upload.FileName))
+	data, err := upload.readData()
+	if err != nil || len(data) == 0 {
+		return "", fmt.Errorf("image upload is empty")
 	}
 	contentType := strings.TrimSpace(upload.ContentType)
 	if contentType == "" {
-		contentType = http.DetectContentType(upload.Data)
+		contentType = http.DetectContentType(data)
 	}
-	return "data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(upload.Data), nil
+	return "data:" + contentType + ";base64," + base64.StdEncoding.EncodeToString(data), nil
 }
 
 func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel string) ([]byte, error) {
@@ -1510,6 +1511,10 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 	if requestModel == "" {
 		requestModel = "gpt-image-2"
 	}
+	if err := validateOpenAIImagesModel(requestModel); err != nil {
+		return nil, err
+	}
+	requestModel = strings.TrimSpace(account.GetMappedModel(requestModel))
 	if err := validateOpenAIImagesModel(requestModel); err != nil {
 		return nil, err
 	}

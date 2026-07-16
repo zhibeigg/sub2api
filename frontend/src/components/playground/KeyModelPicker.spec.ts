@@ -26,6 +26,9 @@ const firstOption = {
 const secondOption = {
   group_id: 2, group_name: 'second', group_priority: 0, model: 'second-model', platform: 'anthropic', capabilities: ['chat'] as const
 }
+const imageOption = {
+  group_id: 1, group_name: 'first', group_priority: 0, model: 'gpt-image-1', platform: 'openai', capabilities: ['image'] as const
+}
 
 describe('KeyModelPicker model loading race', () => {
   beforeEach(() => {
@@ -34,6 +37,25 @@ describe('KeyModelPicker model loading race', () => {
       { id: 1, name: 'one', key: 'secret-one' },
       { id: 2, name: 'two', key: 'secret-two' }
     ] })
+  })
+
+  it('re-synchronizes the resolved key when capability changes', async () => {
+    listModelOptions.mockResolvedValue([firstOption, imageOption])
+    const wrapper = mount(KeyModelPicker, {
+      props: { keyId: 1, resolvedKey: '', option: firstOption as any, capability: 'chat' },
+      global: {
+        stubs: { Icon: true },
+        mocks: { $t: (key: string) => key }
+      }
+    })
+    await flushPromises()
+
+    await wrapper.setProps({ capability: 'image' })
+    await flushPromises()
+
+    expect(wrapper.emitted('update:resolvedKey')?.at(-1)?.[0]).toBe('secret-one')
+    expect(wrapper.emitted('resolved-key')?.at(-1)?.[0]).toBe('secret-one')
+    expect(wrapper.emitted('update:option')?.at(-1)?.[0]).toEqual(imageOption)
   })
 
   it('ignores a stale response after the selected key changes', async () => {
