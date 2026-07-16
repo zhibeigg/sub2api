@@ -480,9 +480,10 @@ func (e *EasyPayV2) buildRequestParams(params map[string]string) (map[string]str
 }
 
 func (e *EasyPayV2) verifySignedParams(params map[string]string, pidPolicy easyPayV2PIDPolicy) error {
-	if params["sign_type"] != easyPayV2SignType {
-		return fmt.Errorf("invalid sign_type")
-	}
+	// EasyPay V2 response authentication is fixed to RSA PKCS#1 v1.5 with
+	// SHA-256. sign_type is request metadata excluded from the signed content,
+	// so an absent or attacker-controlled response label must never select,
+	// downgrade, or otherwise affect the cryptographic verification algorithm.
 	responsePID := strings.TrimSpace(params["pid"])
 	if pidPolicy == easyPayV2PIDRequired && responsePID == "" {
 		return fmt.Errorf("missing pid")

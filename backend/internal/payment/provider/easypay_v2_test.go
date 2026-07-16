@@ -30,8 +30,8 @@ func TestEasyPayV2CreatePaymentContractAndResultMapping(t *testing.T) {
 		wantPayURL      string
 		wantQRCode      string
 	}{
-		{name: "alipay qrcode", paymentMode: "qrcode", paymentType: payment.TypeAlipay, responsePayType: "qrcode", responsePayInfo: "https://qr.example/alipay", wantMethod: "web", wantDevice: "pc", wantQRCode: "https://qr.example/alipay"},
-		{name: "wxpay popup", paymentMode: "popup", paymentType: payment.TypeWxpay, isMobile: true, responsePayType: "jump", responsePayInfo: "https://cashier.example/wxpay", wantMethod: "jump", wantDevice: "mobile", wantPayURL: "https://cashier.example/wxpay"},
+		{name: "qqpay qrcode without response sign type", paymentMode: "qrcode", paymentType: payment.TypeQQPay, responsePayType: "qrcode", responsePayInfo: "https://qr.example/qqpay", wantMethod: "web", wantDevice: "pc", wantQRCode: "https://qr.example/qqpay"},
+		{name: "wxpay popup without response sign type", paymentMode: "popup", paymentType: payment.TypeWxpay, isMobile: true, responsePayType: "jump", responsePayInfo: "https://cashier.example/wxpay", wantMethod: "jump", wantDevice: "mobile", wantPayURL: "https://cashier.example/wxpay"},
 		{name: "qqpay urlscheme", paymentMode: "qrcode", paymentType: payment.TypeQQPay, isMobile: true, responsePayType: "urlscheme", responsePayInfo: "mqqapi://wallet/pay?token=abc", wantMethod: "web", wantDevice: "mobile", wantPayURL: "mqqapi://wallet/pay?token=abc"},
 	}
 
@@ -92,6 +92,29 @@ func TestEasyPayV2CreatePaymentContractAndResultMapping(t *testing.T) {
 	}
 }
 
+func TestEasyPayV2CreatePaymentIgnoresResponseSignTypeLabel(t *testing.T) {
+	merchantKey := mustGenerateEasyPayV2RSAKey(t)
+	platformKey := mustGenerateEasyPayV2RSAKey(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeEasyPayV2SignedJSON(t, w, platformKey, map[string]string{
+			"code": "0", "timestamp": "1721050000", "sign_type": "UNTRUSTED-FUTURE-LABEL",
+			"trade_no": "gateway-fixed-rsa", "pay_type": "qrcode", "pay_info": "https://qr.example/wxpay",
+		})
+	}))
+	defer server.Close()
+
+	provider := newEasyPayV2TestProvider(t, server.URL, merchantKey, &platformKey.PublicKey)
+	response, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
+		OrderID: "order-fixed-rsa", Amount: "1.00", PaymentType: payment.TypeWxpay, Subject: "test",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+	if response.TradeNo != "gateway-fixed-rsa" || response.QRCode != "https://qr.example/wxpay" {
+		t.Fatalf("response = %+v", response)
+	}
+}
+
 func TestEasyPayV2CreatePaymentUsesCustomMethodAndRequestURLs(t *testing.T) {
 	merchantKey := mustGenerateEasyPayV2RSAKey(t)
 	platformKey := mustGenerateEasyPayV2RSAKey(t)
@@ -141,6 +164,7 @@ func TestEasyPayV2CreateRejectsUnsupportedOrUnsafePayType(t *testing.T) {
 	}{
 		{name: "html", payType: "html", payInfo: "<form>unsafe</form>", wantText: "unsupported pay_type"},
 		{name: "jsapi", payType: "jsapi", payInfo: "{}", wantText: "unsupported pay_type"},
+		{name: "missing pay info", payType: "qrcode", payInfo: "", wantText: "missing pay_info"},
 		{name: "unsafe jump", payType: "jump", payInfo: "javascript:alert(1)", wantText: "unsafe jump"},
 		{name: "unsafe scheme", payType: "urlscheme", payInfo: "data:text/html,bad", wantText: "unsafe urlscheme"},
 	}
@@ -168,14 +192,15 @@ func TestEasyPayV2CreateRejectsUnsupportedOrUnsafePayType(t *testing.T) {
 
 func TestEasyPayV2ResponseVerification(t *testing.T) {
 	tests := []struct {
-		name       string
-		mutate     func(map[string]string)
-		signingKey func(platformKey *rsa.PrivateKey) *rsa.PrivateKey
-		wantText   string
+		name          string
+		mutate        func(map[string]string)
+		signingKey    func(platformKey *rsa.PrivateKey) *rsa.PrivateKey
+		omitSignature bool
+		wantText      string
 	}{
 		{name: "invalid signature", signingKey: func(_ *rsa.PrivateKey) *rsa.PrivateKey { return mustGenerateEasyPayV2RSAKey(t) }, wantText: "invalid signature"},
+		{name: "missing signature", omitSignature: true, wantText: "missing sign"},
 		{name: "pid mismatch", mutate: func(values map[string]string) { values["pid"] = "other" }, wantText: "pid mismatch"},
-		{name: "wrong sign type", mutate: func(values map[string]string) { values["sign_type"] = "MD5" }, wantText: "invalid sign_type"},
 		{name: "expired timestamp", mutate: func(values map[string]string) { values["timestamp"] = "1721049699" }, wantText: "outside 300 second"},
 		{name: "future timestamp", mutate: func(values map[string]string) { values["timestamp"] = "1721050301" }, wantText: "outside 300 second"},
 	}
@@ -190,6 +215,10 @@ func TestEasyPayV2ResponseVerification(t *testing.T) {
 				}
 				if test.mutate != nil {
 					test.mutate(values)
+				}
+				if test.omitSignature {
+					writeEasyPayV2JSON(t, w, values)
+					return
 				}
 				key := platformKey
 				if test.signingKey != nil {
@@ -642,38 +671,56 @@ func TestEasyPayV2VerifyNotification(t *testing.T) {
 	merchantKey := mustGenerateEasyPayV2RSAKey(t)
 	platformKey := mustGenerateEasyPayV2RSAKey(t)
 	provider := newEasyPayV2TestProvider(t, "https://pay.example.com", merchantKey, &platformKey.PublicKey)
-	params := map[string]string{
+	baseParams := map[string]string{
 		"pid": "pid-v2", "timestamp": "1721050000", "trade_status": tradeStatusSuccess,
 		"trade_no": "gateway-notify", "out_trade_no": "out-notify", "money": "9.99", "type": "qqpay",
 		"future_extension": "signed extension & value",
 	}
-	signature, err := easyPayV2RSASign(params, platformKey)
+	signature, err := easyPayV2RSASign(baseParams, platformKey)
 	if err != nil {
 		t.Fatalf("sign callback: %v", err)
 	}
-	params["sign"] = signature
-	params["sign_type"] = easyPayV2SignType
-	rawBody := easyPayV2MapToForm(params).Encode()
 
-	for _, callbackMethod := range []string{"GET", "POST"} {
-		t.Run(callbackMethod, func(t *testing.T) {
-			notification, err := provider.VerifyNotification(context.Background(), rawBody, map[string]string{"x-callback-method": callbackMethod})
-			if err != nil {
-				t.Fatalf("VerifyNotification: %v", err)
+	var rawBodyWithoutSignType string
+	for _, signType := range []struct {
+		name  string
+		value string
+	}{
+		{name: "missing sign type"},
+		{name: "arbitrary sign type label", value: "UNTRUSTED-FUTURE-LABEL"},
+	} {
+		t.Run(signType.name, func(t *testing.T) {
+			params := cloneStringMap(baseParams)
+			params["sign"] = signature
+			if signType.value != "" {
+				params["sign_type"] = signType.value
 			}
-			if notification.OrderID != "out-notify" || notification.TradeNo != "gateway-notify" || notification.Amount != 9.99 || notification.Status != payment.NotificationStatusSuccess {
-				t.Fatalf("notification = %+v", notification)
+			rawBody := easyPayV2MapToForm(params).Encode()
+			if signType.value == "" {
+				rawBodyWithoutSignType = rawBody
 			}
-			if notification.Metadata["pid"] != "pid-v2" || notification.Metadata["protocol_version"] != "2" {
-				t.Fatalf("metadata = %#v", notification.Metadata)
+
+			for _, callbackMethod := range []string{"GET", "POST"} {
+				t.Run(callbackMethod, func(t *testing.T) {
+					notification, err := provider.VerifyNotification(context.Background(), rawBody, map[string]string{"x-callback-method": callbackMethod})
+					if err != nil {
+						t.Fatalf("VerifyNotification: %v", err)
+					}
+					if notification.OrderID != "out-notify" || notification.TradeNo != "gateway-notify" || notification.Amount != 9.99 || notification.Status != payment.NotificationStatusSuccess {
+						t.Fatalf("notification = %+v", notification)
+					}
+					if notification.Metadata["pid"] != "pid-v2" || notification.Metadata["protocol_version"] != "2" {
+						t.Fatalf("metadata = %#v", notification.Metadata)
+					}
+				})
 			}
 		})
 	}
 
-	if _, err := provider.VerifyNotification(context.Background(), rawBody+"&money=10.00", nil); err == nil || !strings.Contains(err.Error(), "duplicate parameter") {
+	if _, err := provider.VerifyNotification(context.Background(), rawBodyWithoutSignType+"&money=10.00", nil); err == nil || !strings.Contains(err.Error(), "duplicate parameter") {
 		t.Fatalf("duplicate callback error = %v", err)
 	}
-	tampered := strings.Replace(rawBody, url.QueryEscape("signed extension & value"), url.QueryEscape("tampered"), 1)
+	tampered := strings.Replace(rawBodyWithoutSignType, url.QueryEscape("signed extension & value"), url.QueryEscape("tampered"), 1)
 	if _, err := provider.VerifyNotification(context.Background(), tampered, nil); err == nil || !strings.Contains(err.Error(), "invalid signature") {
 		t.Fatalf("tampered extension error = %v", err)
 	}
@@ -684,13 +731,14 @@ func TestEasyPayV2VerifyNotificationRejectsInvalidSecurityFields(t *testing.T) {
 	platformKey := mustGenerateEasyPayV2RSAKey(t)
 	provider := newEasyPayV2TestProvider(t, "https://pay.example.com", merchantKey, &platformKey.PublicKey)
 	tests := []struct {
-		name     string
-		mutate   func(map[string]string)
-		wantText string
+		name        string
+		mutate      func(map[string]string)
+		skipSigning bool
+		wantText    string
 	}{
 		{name: "missing pid", mutate: func(params map[string]string) { delete(params, "pid") }, wantText: "missing pid"},
 		{name: "wrong pid", mutate: func(params map[string]string) { params["pid"] = "other" }, wantText: "pid mismatch"},
-		{name: "wrong sign type", mutate: func(params map[string]string) { params["sign_type"] = "MD5" }, wantText: "invalid sign_type"},
+		{name: "missing sign", skipSigning: true, wantText: "missing sign"},
 		{name: "expired", mutate: func(params map[string]string) { params["timestamp"] = "1721049699" }, wantText: "outside 300 second"},
 		{name: "future", mutate: func(params map[string]string) { params["timestamp"] = "1721050301" }, wantText: "outside 300 second"},
 		{name: "invalid base64", mutate: func(params map[string]string) { params["sign"] = "%%%" }, wantText: "invalid base64"},
@@ -704,8 +752,10 @@ func TestEasyPayV2VerifyNotificationRejectsInvalidSecurityFields(t *testing.T) {
 				"pid": "pid-v2", "timestamp": "1721050000", "sign_type": "RSA",
 				"trade_status": tradeStatusSuccess, "trade_no": "trade", "out_trade_no": "order", "money": "1.00",
 			}
-			test.mutate(params)
-			if params["sign"] == "" {
+			if test.mutate != nil {
+				test.mutate(params)
+			}
+			if !test.skipSigning && params["sign"] == "" {
 				signature, err := easyPayV2RSASign(params, platformKey)
 				if err != nil {
 					t.Fatalf("sign: %v", err)
@@ -767,16 +817,18 @@ func newEasyPayV2TestProvider(t *testing.T, apiBase string, merchantKey *rsa.Pri
 func writeEasyPayV2SignedJSON(t *testing.T, w http.ResponseWriter, privateKey *rsa.PrivateKey, values map[string]string) {
 	t.Helper()
 	params := cloneStringMap(values)
-	if params["sign_type"] == "" {
-		params["sign_type"] = easyPayV2SignType
-	}
 	signature, err := easyPayV2RSASign(params, privateKey)
 	if err != nil {
 		t.Fatalf("sign response: %v", err)
 	}
 	params["sign"] = signature
+	writeEasyPayV2JSON(t, w, params)
+}
+
+func writeEasyPayV2JSON(t *testing.T, w http.ResponseWriter, values map[string]string) {
+	t.Helper()
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(params); err != nil {
+	if err := json.NewEncoder(w).Encode(values); err != nil {
 		t.Fatalf("encode response: %v", err)
 	}
 }
@@ -784,9 +836,6 @@ func writeEasyPayV2SignedJSON(t *testing.T, w http.ResponseWriter, privateKey *r
 func writeEasyPayV2SignedJSONWithNumericStatus(t *testing.T, w http.ResponseWriter, privateKey *rsa.PrivateKey, values map[string]string) {
 	t.Helper()
 	params := cloneStringMap(values)
-	if params["sign_type"] == "" {
-		params["sign_type"] = easyPayV2SignType
-	}
 	signature, err := easyPayV2RSASign(params, privateKey)
 	if err != nil {
 		t.Fatalf("sign response: %v", err)
