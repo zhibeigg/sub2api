@@ -214,10 +214,12 @@ func TestSettingHandler_UpdateSettings_PersistsPaymentVisibleMethodsAndAdvancedS
 		},
 	}
 	svc := service.NewSettingService(repo, &config.Config{Default: config.DefaultConfig{UserConcurrency: 5}})
-	handler := NewSettingHandler(svc, nil, nil, nil, nil, nil, nil)
+	paymentConfigSvc := service.NewPaymentConfigService(nil, repo, nil)
+	handler := NewSettingHandler(svc, nil, nil, nil, paymentConfigSvc, nil, nil)
 
 	body := map[string]any{
 		"promo_code_enabled":                                      true,
+		"payment_enabled":                                         true,
 		"payment_visible_method_alipay_source":                    "easypay",
 		"payment_visible_method_wxpay_source":                     "wxpay",
 		"payment_visible_method_qqpay_source":                     "easypay",
