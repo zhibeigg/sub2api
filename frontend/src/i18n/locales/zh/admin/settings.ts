@@ -633,7 +633,7 @@ export default {
         field_h5AppUrl: 'H5 应用地址',
         field_h5AppNameHint: '必须与微信商户平台登记的 H5 应用名称一致。',
         field_h5AppUrlHint: '必须填写完整的 HTTPS 站点地址，例如 https://pay.example.com。',
-        field_mpAppIdHint: '可选；公众号 App ID 与商户 App ID 不同时填写。留空时使用上方 App ID。',
+        field_mpAppIdHint: '公众号 JSAPI 专用，必须为 wx 开头的 AppID；当上方使用 ww 企业微信 CorpID 时，启用 JSAPI 必须单独填写。',
         wxpayCapabilities: '已开通的微信支付能力',
         wxpayCapabilitiesHint: '只启用已在微信商户平台实际开通的能力。系统会在本地阻断未启用模式，不会调用对应微信接口。',
         wxpayNativeEnabled: 'Native 扫码支付',

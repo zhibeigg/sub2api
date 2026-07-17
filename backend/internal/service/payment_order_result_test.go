@@ -546,7 +546,7 @@ func TestMaybeBuildWeChatOAuthRequiredResponseForSelectionFallsBackToNativeWhenO
 	sel := &payment.InstanceSelection{
 		ProviderKey: payment.TypeWxpay,
 		Config: map[string]string{
-			"appId":         "wx-pay-app",
+			"appId":         "wx1234567890abcdef",
 			"nativeEnabled": "true",
 			"h5Enabled":     "false",
 			"jsapiEnabled":  "true",

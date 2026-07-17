@@ -38,7 +38,7 @@ func TestPrepareCreateOrderSelectionContextAllowsNativeFallbackWithoutOAuthCrede
 	_, err := client.PaymentProviderInstance.Create().
 		SetProviderKey(payment.TypeWxpay).
 		SetName("Official WeChat").
-		SetConfig(`{"appId":"wx-pay-app","nativeEnabled":"true","h5Enabled":"false","jsapiEnabled":"true"}`).
+		SetConfig(`{"appId":"wx1234567890abcdef","nativeEnabled":"true","h5Enabled":"false","jsapiEnabled":"true"}`).
 		SetSupportedTypes("wxpay").
 		SetEnabled(true).
 		SetSortOrder(1).
@@ -75,8 +75,8 @@ func TestOfficialWxpayVisibleMethodSupportsJSAPIUsesInstanceCapabilities(t *test
 		want   bool
 	}{
 		{name: "explicitly disabled", config: `{"nativeEnabled":"true","h5Enabled":"false","jsapiEnabled":"false"}`, want: false},
-		{name: "historical mp app id infers enabled", config: `{"mpAppId":"wx-mp-app"}`, want: true},
-		{name: "explicit false overrides historical mp app id", config: `{"mpAppId":"wx-mp-app","jsapiEnabled":"false"}`, want: false},
+		{name: "historical mp app id infers enabled", config: `{"mpAppId":"wxabcdef1234567890"}`, want: true},
+		{name: "explicit false overrides historical mp app id", config: `{"mpAppId":"wxabcdef1234567890","jsapiEnabled":"false"}`, want: false},
 	}
 
 	for _, tt := range tests {

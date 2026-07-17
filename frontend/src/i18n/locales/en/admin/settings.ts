@@ -637,7 +637,7 @@ export default {
         field_h5AppUrl: 'H5 App URL',
         field_h5AppNameHint: 'Must match the H5 application name registered in WeChat Pay Merchant Platform.',
         field_h5AppUrlHint: 'Enter an absolute HTTPS site URL, for example https://pay.example.com.',
-        field_mpAppIdHint: 'Optional. Set this when the Official Account App ID differs from the merchant App ID; otherwise the App ID above is used.',
+        field_mpAppIdHint: 'JSAPI requires a wx-prefixed Official Account AppID. Set it explicitly when the base payment account uses a ww-prefixed WeCom CorpID.',
         wxpayCapabilities: 'Enabled WeChat Pay capabilities',
         wxpayCapabilitiesHint: 'Enable only capabilities actually authorized in WeChat Pay Merchant Platform. Disabled modes are blocked locally and their WeChat APIs are not called.',
         wxpayNativeEnabled: 'Native QR payment',
