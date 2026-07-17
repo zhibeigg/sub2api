@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
@@ -11,7 +12,10 @@ import (
 	"html"
 	"log/slog"
 	"math/big"
+	"mime"
+	"mime/quotedprintable"
 	"net"
+	"net/mail"
 	"net/smtp"
 	"net/textproto"
 	"net/url"
@@ -239,6 +243,75 @@ func smtpDeadline(ctx context.Context) time.Time {
 	return deadline
 }
 
+type emailMessage struct {
+	data         []byte
+	envelopeFrom string
+	envelopeTo   string
+}
+
+func parseEmailMailbox(raw, field string) (*mail.Address, error) {
+	parsed, err := mail.ParseAddress(strings.TrimSpace(sanitizeEmailHeader(raw)))
+	if err != nil || parsed == nil || strings.TrimSpace(parsed.Address) == "" {
+		return nil, fmt.Errorf("invalid %s email address", field)
+	}
+	parsed.Address = strings.TrimSpace(parsed.Address)
+	parsed.Name = sanitizeEmailHeader(parsed.Name)
+	return parsed, nil
+}
+
+func generateEmailMessageID(from string, now time.Time) (string, error) {
+	at := strings.LastIndex(from, "@")
+	if at < 0 || at == len(from)-1 {
+		return "", errors.New("invalid sender domain")
+	}
+	var entropy [12]byte
+	if _, err := rand.Read(entropy[:]); err != nil {
+		return "", fmt.Errorf("generate message id: %w", err)
+	}
+	return fmt.Sprintf("<%d.%s@%s>", now.UTC().UnixNano(), hex.EncodeToString(entropy[:]), strings.ToLower(from[at+1:])), nil
+}
+
+func buildEmailMessage(config *SMTPConfig, to, subject, body string, now time.Time) (emailMessage, error) {
+	if config == nil {
+		return emailMessage{}, errors.New("nil smtp config")
+	}
+	fromAddress, err := parseEmailMailbox(config.From, "sender")
+	if err != nil {
+		return emailMessage{}, err
+	}
+	toAddress, err := parseEmailMailbox(to, "recipient")
+	if err != nil {
+		return emailMessage{}, err
+	}
+	if fromName := strings.TrimSpace(sanitizeEmailHeader(config.FromName)); fromName != "" {
+		fromAddress.Name = fromName
+	}
+	messageID, err := generateEmailMessageID(fromAddress.Address, now)
+	if err != nil {
+		return emailMessage{}, err
+	}
+
+	var message bytes.Buffer
+	_, _ = fmt.Fprintf(&message, "From: %s\r\n", fromAddress.String())
+	_, _ = fmt.Fprintf(&message, "To: %s\r\n", toAddress.String())
+	_, _ = fmt.Fprintf(&message, "Subject: %s\r\n", mime.BEncoding.Encode("UTF-8", sanitizeEmailHeader(subject)))
+	_, _ = fmt.Fprintf(&message, "Date: %s\r\n", now.UTC().Format(time.RFC1123Z))
+	_, _ = fmt.Fprintf(&message, "Message-ID: %s\r\n", messageID)
+	_, _ = message.WriteString("MIME-Version: 1.0\r\n")
+	_, _ = message.WriteString("Content-Type: text/html; charset=UTF-8\r\n")
+	_, _ = message.WriteString("Content-Transfer-Encoding: quoted-printable\r\n")
+	_, _ = message.WriteString("Auto-Submitted: auto-generated\r\n\r\n")
+
+	encodedBody := quotedprintable.NewWriter(&message)
+	if _, err := encodedBody.Write([]byte(body)); err != nil {
+		return emailMessage{}, fmt.Errorf("encode email body: %w", err)
+	}
+	if err := encodedBody.Close(); err != nil {
+		return emailMessage{}, fmt.Errorf("close email body encoder: %w", err)
+	}
+	return emailMessage{data: message.Bytes(), envelopeFrom: fromAddress.Address, envelopeTo: toAddress.Address}, nil
+}
+
 // SendEmailWithConfig 使用指定配置发送邮件
 func (s *EmailService) SendEmailWithConfig(config *SMTPConfig, to, subject, body string) error {
 	return s.SendEmailWithConfigContext(context.Background(), config, to, subject, body)
@@ -248,29 +321,19 @@ func (s *EmailService) SendEmailWithConfigContext(ctx context.Context, config *S
 	if err := ctx.Err(); err != nil {
 		return wrapSMTPError(SMTPErrorTemporary, err)
 	}
-	if config == nil {
-		return wrapSMTPError(SMTPErrorPermanent, errors.New("nil smtp config"))
+	message, err := buildEmailMessage(config, to, subject, body, time.Now())
+	if err != nil {
+		return wrapSMTPError(SMTPErrorPermanent, err)
 	}
-	// Sanitize all SMTP header fields to prevent header injection (CR/LF removal).
-	to = sanitizeEmailHeader(to)
-	subject = sanitizeEmailHeader(subject)
-
-	from := sanitizeEmailHeader(config.From)
-	if config.FromName != "" {
-		from = fmt.Sprintf("%s <%s>", sanitizeEmailHeader(config.FromName), sanitizeEmailHeader(config.From))
-	}
-
-	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n%s",
-		from, to, subject, body)
 
 	addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
 	auth := smtp.PlainAuth("", config.Username, config.Password, config.Host)
 
 	if config.UseTLS {
-		return s.sendMailTLS(ctx, addr, auth, config.From, to, []byte(msg), config.Host)
+		return s.sendMailTLS(ctx, addr, auth, message.envelopeFrom, message.envelopeTo, message.data, config.Host)
 	}
 
-	return s.sendMailPlain(ctx, addr, auth, config.From, to, []byte(msg), config.Host)
+	return s.sendMailPlain(ctx, addr, auth, message.envelopeFrom, message.envelopeTo, message.data, config.Host)
 }
 
 // sendMailPlain sends mail without TLS using a dialer with timeout.

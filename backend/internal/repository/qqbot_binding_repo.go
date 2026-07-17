@@ -28,6 +28,26 @@ type qqBotRowScanner interface {
 	Scan(dest ...any) error
 }
 
+const (
+	qqBotUpdateEmailDeliveryStatusSQL = `
+UPDATE qqbot_binding_challenges
+SET email_status = $1::varchar,
+    status = CASE WHEN $1::varchar = 'failed' AND status = 'pending' THEN 'failed' ELSE status END,
+    failure_code = CASE WHEN $1::varchar = 'failed' AND $2::varchar <> '' THEN $2::varchar ELSE failure_code END,
+    updated_at = NOW()
+WHERE id = $3::bigint`
+
+	qqBotUpdateNotificationDeliveryStatusSQL = `
+UPDATE qqbot_binding_challenges
+SET notification_status = $1::varchar,
+    updated_at = NOW()
+WHERE id = $2::bigint`
+
+	qqBotInsertDeliveryAuditSQL = `
+INSERT INTO qqbot_binding_audit_logs (challenge_id, action, status, actor_type, reason, metadata)
+VALUES ($1::bigint, $2::varchar, $3::varchar, 'system', $4::text, $5::jsonb)`
+)
+
 func (r *qqBotBindingRepository) CreateChallenge(ctx context.Context, input service.QQBotChallengeCreateInput) (service.QQBotBindingRecord, bool, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -133,25 +153,17 @@ func (r *qqBotBindingRepository) updateDeliveryStatus(ctx context.Context, id in
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var query string
 	if column == "email_status" {
-		query = `
-UPDATE qqbot_binding_challenges
-SET email_status = $1,
-    status = CASE WHEN $1 = 'failed' AND status = 'pending' THEN 'failed' ELSE status END,
-    failure_code = CASE WHEN $1 = 'failed' AND $2 <> '' THEN $2 ELSE failure_code END,
-    updated_at = NOW()
-WHERE id = $3`
+		if _, err := tx.ExecContext(ctx, qqBotUpdateEmailDeliveryStatusSQL, status, failureCode, id); err != nil {
+			return err
+		}
 	} else {
-		query = `UPDATE qqbot_binding_challenges SET notification_status = $1, updated_at = NOW() WHERE id = $3`
-	}
-	if _, err := tx.ExecContext(ctx, query, status, failureCode, id); err != nil {
-		return err
+		if _, err := tx.ExecContext(ctx, qqBotUpdateNotificationDeliveryStatusSQL, status, id); err != nil {
+			return err
+		}
 	}
 	metadata, _ := json.Marshal(map[string]string{"delivery_status": status, "failure_code": failureCode})
-	if _, err := tx.ExecContext(ctx, `
-INSERT INTO qqbot_binding_audit_logs (challenge_id, action, status, actor_type, reason, metadata)
-VALUES ($1, $2, $3, 'system', $4, $5::jsonb)`, id, action, status, failureCode, string(metadata)); err != nil {
+	if _, err := tx.ExecContext(ctx, qqBotInsertDeliveryAuditSQL, id, action, status, failureCode, string(metadata)); err != nil {
 		return err
 	}
 	return tx.Commit()

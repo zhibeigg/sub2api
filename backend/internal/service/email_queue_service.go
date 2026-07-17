@@ -36,6 +36,10 @@ type EmailQueueService struct {
 	workers      int
 }
 
+func emailQueueRecipientHash(email string) string {
+	return notificationEmailHash(email)
+}
+
 // NewEmailQueueService 创建邮件队列服务
 func NewEmailQueueService(emailService *EmailService, workers int) *EmailQueueService {
 	if workers <= 0 {
@@ -87,15 +91,15 @@ func (s *EmailQueueService) processTask(workerID int, task EmailTask) {
 	switch task.TaskType {
 	case TaskTypeVerifyCode:
 		if err := s.emailService.SendVerifyCode(ctx, task.Email, task.SiteName, task.Locale); err != nil {
-			logger.LegacyPrintf("service.email_queue", "[EmailQueue] Worker %d failed to send verify code to %s: %v", workerID, task.Email, err)
+			logger.LegacyPrintf("service.email_queue", "[EmailQueue] Worker %d failed to send verify code recipient_hash=%s: %v", workerID, emailQueueRecipientHash(task.Email), err)
 		} else {
-			logger.LegacyPrintf("service.email_queue", "[EmailQueue] Worker %d sent verify code to %s", workerID, task.Email)
+			logger.LegacyPrintf("service.email_queue", "[EmailQueue] Worker %d sent verify code recipient_hash=%s", workerID, emailQueueRecipientHash(task.Email))
 		}
 	case TaskTypePasswordReset:
 		if err := s.emailService.SendPasswordResetEmailWithCooldown(ctx, task.Email, task.SiteName, task.ResetURL, task.Locale); err != nil {
-			logger.LegacyPrintf("service.email_queue", "[EmailQueue] Worker %d failed to send password reset to %s: %v", workerID, task.Email, err)
+			logger.LegacyPrintf("service.email_queue", "[EmailQueue] Worker %d failed to send password reset recipient_hash=%s: %v", workerID, emailQueueRecipientHash(task.Email), err)
 		} else {
-			logger.LegacyPrintf("service.email_queue", "[EmailQueue] Worker %d sent password reset to %s", workerID, task.Email)
+			logger.LegacyPrintf("service.email_queue", "[EmailQueue] Worker %d sent password reset recipient_hash=%s", workerID, emailQueueRecipientHash(task.Email))
 		}
 	case TaskTypeNotificationMail:
 		var err error
@@ -105,9 +109,9 @@ func (s *EmailQueueService) processTask(workerID int, task EmailTask) {
 			err = s.emailService.notificationEmailService.Send(ctx, *task.NotificationInput)
 		}
 		if err != nil {
-			logger.LegacyPrintf("service.email_queue", "[EmailQueue] Worker %d failed to send notification email to %s: %v", workerID, task.Email, err)
+			logger.LegacyPrintf("service.email_queue", "[EmailQueue] Worker %d failed to send notification email recipient_hash=%s: %v", workerID, emailQueueRecipientHash(task.Email), err)
 		} else {
-			logger.LegacyPrintf("service.email_queue", "[EmailQueue] Worker %d sent notification email to %s", workerID, task.Email)
+			logger.LegacyPrintf("service.email_queue", "[EmailQueue] Worker %d sent notification email recipient_hash=%s", workerID, emailQueueRecipientHash(task.Email))
 		}
 		if task.OnDone != nil {
 			task.OnDone(err)
@@ -128,7 +132,7 @@ func (s *EmailQueueService) EnqueueVerifyCode(email, siteName string, locale ...
 
 	select {
 	case s.taskChan <- task:
-		logger.LegacyPrintf("service.email_queue", "[EmailQueue] Enqueued verify code task for %s", email)
+		logger.LegacyPrintf("service.email_queue", "[EmailQueue] Enqueued verify code task recipient_hash=%s", emailQueueRecipientHash(email))
 		return nil
 	default:
 		return fmt.Errorf("email queue is full")
@@ -147,7 +151,7 @@ func (s *EmailQueueService) EnqueuePasswordReset(email, siteName, resetURL strin
 
 	select {
 	case s.taskChan <- task:
-		logger.LegacyPrintf("service.email_queue", "[EmailQueue] Enqueued password reset task for %s", email)
+		logger.LegacyPrintf("service.email_queue", "[EmailQueue] Enqueued password reset task recipient_hash=%s", emailQueueRecipientHash(email))
 		return nil
 	default:
 		return fmt.Errorf("email queue is full")
@@ -168,7 +172,7 @@ func (s *EmailQueueService) EnqueueNotification(input NotificationEmailSendInput
 	}
 	select {
 	case s.taskChan <- task:
-		logger.LegacyPrintf("service.email_queue", "[EmailQueue] Enqueued notification email task for %s", input.RecipientEmail)
+		logger.LegacyPrintf("service.email_queue", "[EmailQueue] Enqueued notification email task recipient_hash=%s", emailQueueRecipientHash(input.RecipientEmail))
 		return nil
 	default:
 		return fmt.Errorf("email queue is full")
