@@ -162,7 +162,7 @@ EasyPay V1 支持 `alipay`、`wxpay`；V2 支持 `alipay`、`wxpay`、`qqpay`。
 
 | 参数 | 说明 | 必填 |
 |------|------|------|
-| **AppID** | 微信支付 AppID | 是 |
+| **AppID** | 商户平台已关联的微信 AppID（`wx`）或企业微信 CorpID（`ww`） | 是 |
 | **商户号（MchID）** | 微信支付商户号 | 是 |
 | **商户 API 私钥** | 商户 API 私钥（PEM 格式） | 是 |
 | **APIv3 密钥** | 32 位 APIv3 密钥 | 是 |
@@ -170,7 +170,7 @@ EasyPay V1 支持 `alipay`、`wxpay`；V2 支持 `alipay`、`wxpay`、`qqpay`。
 | **微信支付公钥 ID** | 微信支付公钥 ID | 是 |
 | **商户证书序列号** | 商户证书序列号 | 是 |
 
-支付 `appId` 与公众号 `mpAppId` 必须遵循微信 AppID 格式：以小写 `wx` 开头，后接 16 或 18 位字母数字字符。启用中的实例会在保存时校验；历史实例仍可加载，但下单前会按实际模式再次校验，格式错误时在本地阻断且不会调用微信接口。
+基础支付 `appId` 可以是商户平台已关联的微信 AppID（小写 `wx` 前缀）或企业微信 CorpID（小写 `ww` 前缀）；公众号 `mpAppId` 仍必须是 `wx` 前缀。启用中的实例会在保存时校验；历史实例仍可加载，但下单前会按实际模式再次校验，格式错误时在本地阻断且不会调用微信接口。企业微信 CorpID 可用于基础支付账号关联，但当前公众号 OAuth/JSAPI 流程不使用企业微信身份；以 `ww` 作为基础账号时，启用 JSAPI 必须另填公众号 `mpAppId`。
 
 能力开关与场景配置：
 
@@ -181,7 +181,7 @@ EasyPay V1 支持 `alipay`、`wxpay`；V2 支持 `alipay`、`wxpay`、`qqpay`。
 | `jsapiEnabled` | 是否允许公众号/JSAPI 支付 | 历史配置缺失时，仅当 `mpAppId` 非空时为 `true` |
 | `h5AppName` | 微信商户平台登记的 H5 应用名称 | `h5Enabled=true` 时必填 |
 | `h5AppUrl` | H5 应用站点地址 | `h5Enabled=true` 时必须为绝对 HTTPS URL |
-| `mpAppId` | 公众号 AppID | 可选；留空时 JSAPI 使用支付 `appId`，但解析后的 JSAPI AppID 必须非空 |
+| `mpAppId` | 公众号 AppID（仅 `wx` 前缀） | 基础 `appId` 为 `ww` 企业微信 CorpID 且启用 JSAPI 时必填；否则可留空回退基础 `appId` |
 
 显式布尔值始终优先于历史推导。只应启用微信商户平台已经实际开通的能力；关闭的模式会在本地阻断，不会调用对应微信接口。
 

@@ -966,6 +966,16 @@ func validAirwallexProviderConfig(t *testing.T) map[string]string {
 	}
 }
 
+func TestValidateProviderConfigAcceptsWeComCorpID(t *testing.T) {
+	t.Parallel()
+
+	svc := &PaymentConfigService{}
+	config := validWxpayProviderConfig(t)
+	config["appId"] = "ww1234567890abcdef"
+
+	require.NoError(t, svc.validateProviderConfig(payment.TypeWxpay, config))
+}
+
 func TestValidateProviderConfigRejectsInvalidWxpayAppIDs(t *testing.T) {
 	t.Parallel()
 
@@ -982,9 +992,9 @@ func TestValidateProviderConfigRejectsInvalidWxpayAppIDs(t *testing.T) {
 			wantReason: "WXPAY_CONFIG_APPID_INVALID",
 		},
 		{
-			name: "invalid mp app id",
+			name: "enterprise wechat corp id is invalid as mp app id",
 			mutate: func(config map[string]string) {
-				config["mpAppId"] = "mp1234567890abcdef"
+				config["mpAppId"] = "ww1234567890abcdef"
 			},
 			wantReason: "WXPAY_CONFIG_JSAPI_APPID_INVALID",
 		},

@@ -642,7 +642,7 @@ export default {
       WXPAY_CONFIG_MISSING_KEY: 'WeChat Pay configuration is missing required credentials.',
       WXPAY_CONFIG_INVALID_KEY_LENGTH: 'The WeChat Pay API v3 key must be 32 bytes.',
       WXPAY_CONFIG_INVALID_KEY: 'A WeChat Pay key is malformed. Make sure the full PEM content was copied.',
-      WXPAY_CONFIG_APPID_INVALID: 'The WeChat Pay AppID must start with lowercase wx followed by 16 or 18 alphanumeric characters.',
+      WXPAY_CONFIG_APPID_INVALID: 'The WeChat Pay account ID must be a wx-prefixed WeChat AppID or a ww-prefixed WeCom CorpID.',
       WXPAY_CONFIG_JSAPI_APPID_INVALID: 'The WeChat JSAPI Official Account AppID must start with lowercase wx followed by 16 or 18 alphanumeric characters.',
       WXPAY_CONFIG_INVALID_BOOLEAN: 'WeChat Pay capability switches must be true or false.',
       WXPAY_CONFIG_H5_APP_REQUIRED: 'H5 App Name is required when WeChat H5 payment is enabled.',

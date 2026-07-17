@@ -23,7 +23,10 @@ import (
 	"github.com/wechatpay-apiv3/wechatpay-go/services/payments/native"
 )
 
-const wxpayTestAppID = "wx1234567890abcdef"
+const (
+	wxpayTestAppID       = "wx1234567890abcdef"
+	wxpayTestWeComCorpID = "ww1234567890abcdef"
+)
 
 // generateTestKeyPair returns a fresh RSA 2048 key pair as PEM strings.
 // The wechatpay-go SDK expects PKCS8 private keys and PKIX public keys.
@@ -420,9 +423,11 @@ func TestIsValidWxpayAppID(t *testing.T) {
 	}{
 		{name: "standard 18 character app id", appID: "wx1234567890abcdef", want: true},
 		{name: "extended 20 character app id", appID: "wx1234567890abcdefgh", want: true},
+		{name: "enterprise wechat corp id", appID: wxpayTestWeComCorpID, want: true},
 		{name: "surrounding whitespace is normalized", appID: "  wx1234567890abcdef  ", want: true},
 		{name: "wrong prefix", appID: "ab1234567890abcdef", want: false},
-		{name: "uppercase prefix", appID: "WX1234567890abcdef", want: false},
+		{name: "uppercase wechat prefix", appID: "WX1234567890abcdef", want: false},
+		{name: "uppercase enterprise wechat prefix", appID: "WW1234567890abcdef", want: false},
 		{name: "invalid length", appID: "wx1234567890abcde", want: false},
 		{name: "invalid character", appID: "wx1234567890abcde-", want: false},
 	}
@@ -450,6 +455,10 @@ func TestValidateWxpayAppIDConfig(t *testing.T) {
 			config: map[string]string{"appId": wxpayTestAppID},
 		},
 		{
+			name:   "valid enterprise wechat corp id",
+			config: map[string]string{"appId": wxpayTestWeComCorpID},
+		},
+		{
 			name: "valid dedicated mp app id",
 			config: map[string]string{
 				"appId":   wxpayTestAppID,
@@ -462,10 +471,10 @@ func TestValidateWxpayAppIDConfig(t *testing.T) {
 			wantReason: "WXPAY_CONFIG_APPID_INVALID",
 		},
 		{
-			name: "invalid dedicated mp app id",
+			name: "enterprise wechat corp id is invalid as dedicated mp app id",
 			config: map[string]string{
 				"appId":   wxpayTestAppID,
-				"mpAppId": "mp1234567890abcdef",
+				"mpAppId": wxpayTestWeComCorpID,
 			},
 			wantReason: "WXPAY_CONFIG_JSAPI_APPID_INVALID",
 		},
@@ -750,6 +759,45 @@ func TestCreatePaymentMobileH5IncludesConfiguredSceneInfo(t *testing.T) {
 	}
 }
 
+func TestCreatePaymentNativeAcceptsWeComCorpID(t *testing.T) {
+	origNativePrepay := wxpayNativePrepay
+	t.Cleanup(func() {
+		wxpayNativePrepay = origNativePrepay
+	})
+
+	calls := 0
+	wxpayNativePrepay = func(ctx context.Context, svc native.NativeApiService, req native.PrepayRequest) (*native.PrepayResponse, *core.APIResult, error) {
+		calls++
+		if got := wxSV(req.Appid); got != wxpayTestWeComCorpID {
+			t.Fatalf("appid = %q, want enterprise wechat corp id", got)
+		}
+		return &native.PrepayResponse{CodeUrl: core.String("weixin://wxpay/bizpayurl?pr=wecom")}, nil, nil
+	}
+
+	provider := &Wxpay{
+		config: map[string]string{
+			"appId": wxpayTestWeComCorpID,
+			"mchId": "mch123",
+		},
+		coreClient: &core.Client{},
+	}
+	resp, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
+		OrderID:   "sub2_wecom_native",
+		Amount:    "0.01",
+		Subject:   "Balance Recharge",
+		NotifyURL: "https://merchant.example/payment/notify",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("native prepay calls = %d, want 1", calls)
+	}
+	if resp == nil || resp.QRCode == "" {
+		t.Fatalf("expected native QR response, got %+v", resp)
+	}
+}
+
 func TestInspectWxpayCapabilities(t *testing.T) {
 	t.Parallel()
 
@@ -776,9 +824,16 @@ func TestInspectWxpayCapabilities(t *testing.T) {
 		{
 			name: "historical mp app id enables jsapi",
 			config: map[string]string{
-				"appId": "wx-app", "mpAppId": "wx-mp-app",
+				"appId": wxpayTestAppID, "mpAppId": "wxabcdef1234567890",
 			},
 			want: WxpayCapabilityStatus{NativeEnabled: true, JSAPIEnabled: true},
+		},
+		{
+			name: "enterprise wechat base id requires dedicated mp app id for jsapi",
+			config: map[string]string{
+				"appId": wxpayTestWeComCorpID, "jsapiEnabled": "true",
+			},
+			wantReason: "WXPAY_CONFIG_JSAPI_APPID_INVALID",
 		},
 		{
 			name: "explicit values override historical inference",
@@ -925,6 +980,16 @@ func TestCreatePaymentRejectsInvalidAppIDBeforeWechatAPI(t *testing.T) {
 			},
 			req: payment.CreatePaymentRequest{
 				OrderID: "sub2_invalid_jsapi", Amount: "0.01", NotifyURL: "https://merchant.example/notify", OpenID: "test-openid",
+			},
+			wantReason: "WXPAY_CONFIG_JSAPI_APPID_INVALID",
+		},
+		{
+			name: "jsapi rejects enterprise wechat base id fallback",
+			config: map[string]string{
+				"appId": wxpayTestWeComCorpID, "mchId": "mch-id", "jsapiEnabled": "true",
+			},
+			req: payment.CreatePaymentRequest{
+				OrderID: "sub2_wecom_jsapi", Amount: "0.01", NotifyURL: "https://merchant.example/notify", OpenID: "test-openid",
 			},
 			wantReason: "WXPAY_CONFIG_JSAPI_APPID_INVALID",
 		},

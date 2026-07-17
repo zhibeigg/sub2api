@@ -666,7 +666,7 @@ export default {
       WXPAY_CONFIG_MISSING_KEY: '微信支付配置缺少必填凭据',
       WXPAY_CONFIG_INVALID_KEY_LENGTH: '微信支付 API v3 密钥长度错误',
       WXPAY_CONFIG_INVALID_KEY: '微信支付密钥格式错误，请确认复制了完整的 PEM 内容',
-      WXPAY_CONFIG_APPID_INVALID: '微信支付 AppID 格式错误：应以小写 wx 开头，后接 16 或 18 位字母数字字符',
+      WXPAY_CONFIG_APPID_INVALID: '微信支付账号标识格式错误：应为 wx 开头的微信 AppID 或 ww 开头的企业微信 CorpID',
       WXPAY_CONFIG_JSAPI_APPID_INVALID: '微信 JSAPI 公众号 AppID 格式错误：应以小写 wx 开头，后接 16 或 18 位字母数字字符',
       WXPAY_CONFIG_INVALID_BOOLEAN: '微信支付能力开关必须为 true 或 false',
       WXPAY_CONFIG_H5_APP_REQUIRED: '启用微信 H5 支付时必须填写 H5 应用名称',

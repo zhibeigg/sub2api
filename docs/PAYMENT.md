@@ -162,7 +162,7 @@ Direct integration with WeChat Pay APIv3. Supports Native QR code payment, H5 pa
 
 | Parameter | Description | Required |
 |-----------|-------------|----------|
-| **AppID** | WeChat Pay AppID | Yes |
+| **AppID** | WeChat AppID (`wx`) or WeCom CorpID (`ww`) associated in Merchant Platform | Yes |
 | **Merchant ID (MchID)** | WeChat Pay merchant ID | Yes |
 | **Merchant API Private Key** | Merchant API private key (PEM format) | Yes |
 | **APIv3 Key** | 32-byte APIv3 key | Yes |
@@ -170,7 +170,7 @@ Direct integration with WeChat Pay APIv3. Supports Native QR code payment, H5 pa
 | **WeChat Pay Public Key ID** | WeChat Pay public key ID | Yes |
 | **Certificate Serial Number** | Merchant certificate serial number | Yes |
 
-The payment `appId` and Official Account `mpAppId` must follow the WeChat AppID shape: lowercase `wx` followed by 16 or 18 ASCII alphanumeric characters. Enabled instances are validated when saved; historical instances remain loadable, but the selected mode is validated again before prepay, and invalid values are blocked locally without calling WeChat.
+The base payment `appId` may be a Merchant-Platform-associated WeChat AppID (lowercase `wx`) or WeCom CorpID (lowercase `ww`); the Official Account `mpAppId` must still use the `wx` prefix. Enabled instances are validated when saved, while historical instances remain loadable and are checked again for the selected mode before prepay. A WeCom CorpID can identify the base associated payment account, but the current Official Account OAuth/JSAPI flow does not use WeCom identities; when the base account starts with `ww`, enabling JSAPI requires a separate `mpAppId`.
 
 Capability switches and scenario configuration:
 
@@ -181,7 +181,7 @@ Capability switches and scenario configuration:
 | `jsapiEnabled` | Allow MP/JSAPI payment | When absent, inferred as `true` only if `mpAppId` is non-empty |
 | `h5AppName` | H5 application name registered in WeChat Pay Merchant Platform | Required when `h5Enabled=true` |
 | `h5AppUrl` | H5 application site URL | Must be an absolute HTTPS URL when `h5Enabled=true` |
-| `mpAppId` | Official Account AppID | Optional; JSAPI falls back to the payment `appId`, but the resolved JSAPI AppID must be non-empty |
+| `mpAppId` | Official Account AppID (`wx` prefix only) | Required for JSAPI when the base `appId` is a `ww` WeCom CorpID; otherwise JSAPI may fall back to the base `appId` |
 
 Explicit booleans always override historical inference. Enable only capabilities actually authorized in WeChat Pay Merchant Platform; disabled modes are blocked locally and their WeChat APIs are never called.
 

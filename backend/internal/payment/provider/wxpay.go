@@ -94,22 +94,33 @@ type Wxpay struct {
 }
 
 const (
-	wxpayAPIv3KeyLength   = 32
-	wxpayAppIDShortLength = 18
-	wxpayAppIDLongLength  = 20
+	wxpayAPIv3KeyLength    = 32
+	wxpayAppIDShortLength  = 18
+	wxpayAppIDLongLength   = 20
+	wxpayWeChatAppIDPrefix = "wx"
+	wxpayWeComCorpIDPrefix = "ww"
 )
 
-// IsValidWxpayAppID validates the documented WeChat AppID shape: a lowercase
-// "wx" prefix followed by 16 or 18 ASCII alphanumeric characters.
+// IsValidWxpayAppID validates the payment account identifier accepted by the
+// merchant platform: either a WeChat AppID (wx) or a WeCom CorpID (ww).
 func IsValidWxpayAppID(raw string) bool {
+	return isValidWxpayIdentifier(raw, true)
+}
+
+func isValidWxpayJSAPIAppID(raw string) bool {
+	return isValidWxpayIdentifier(raw, false)
+}
+
+func isValidWxpayIdentifier(raw string, allowWeCom bool) bool {
 	appID := strings.TrimSpace(raw)
 	if len(appID) != wxpayAppIDShortLength && len(appID) != wxpayAppIDLongLength {
 		return false
 	}
-	if !strings.HasPrefix(appID, "wx") {
+	prefix := appID[:2]
+	if prefix != wxpayWeChatAppIDPrefix && (!allowWeCom || prefix != wxpayWeComCorpIDPrefix) {
 		return false
 	}
-	for i := len("wx"); i < len(appID); i++ {
+	for i := len(prefix); i < len(appID); i++ {
 		ch := appID[i]
 		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'z') && (ch < 'A' || ch > 'Z') {
 			return false
@@ -126,7 +137,7 @@ func ValidateWxpayAppIDConfig(config map[string]string) error {
 	if appID := strings.TrimSpace(config["appId"]); appID != "" && !IsValidWxpayAppID(appID) {
 		return invalidWxpayBaseAppIDError()
 	}
-	if appID := strings.TrimSpace(config["mpAppId"]); appID != "" && !IsValidWxpayAppID(appID) {
+	if appID := strings.TrimSpace(config["mpAppId"]); appID != "" && !isValidWxpayJSAPIAppID(appID) {
 		return invalidWxpayJSAPIAppIDError()
 	}
 	return nil
@@ -191,9 +202,15 @@ func validateWxpayCapabilityConfig(config map[string]string, status WxpayCapabil
 				WithMetadata(map[string]string{"action": "configure_absolute_https_h5_app_url"})
 		}
 	}
-	if status.JSAPIEnabled && ResolveWxpayJSAPIAppID(config) == "" {
-		return infraerrors.BadRequest("WXPAY_CONFIG_JSAPI_APPID_REQUIRED", "jsapi_app_id_required").
-			WithMetadata(map[string]string{"action": "configure_jsapi_app_id"})
+	if status.JSAPIEnabled {
+		jsapiAppID := ResolveWxpayJSAPIAppID(config)
+		if jsapiAppID == "" {
+			return infraerrors.BadRequest("WXPAY_CONFIG_JSAPI_APPID_REQUIRED", "jsapi_app_id_required").
+				WithMetadata(map[string]string{"action": "configure_jsapi_app_id"})
+		}
+		if !isValidWxpayJSAPIAppID(jsapiAppID) {
+			return invalidWxpayJSAPIAppIDError()
+		}
 	}
 	return nil
 }
@@ -246,7 +263,7 @@ func ResolveWxpayJSAPIAppID(config map[string]string) string {
 
 func validateWxpayAppIDForMode(config map[string]string, mode string) error {
 	if mode == wxpayModeJSAPI {
-		if !IsValidWxpayAppID(ResolveWxpayJSAPIAppID(config)) {
+		if !isValidWxpayJSAPIAppID(ResolveWxpayJSAPIAppID(config)) {
 			return invalidWxpayJSAPIAppIDError()
 		}
 		return nil
