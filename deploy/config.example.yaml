@@ -65,6 +65,24 @@ server:
     max_upload_buffer_per_stream: 524288
 
 # =============================================================================
+# QQBot Private Integration
+# QQBot 私有集成
+# =============================================================================
+# The standalone sub2api-qqbot service calls /api/v1/integrations/qqbot with
+# HMAC-SHA256. Keep this disabled until a shared secret and public binding URL
+# are configured. Prefer environment variables for the secret:
+# QQBOT_INTEGRATION_HMAC_SECRET=<at least 32 random bytes>
+# 独立 QQBot 服务通过 HMAC-SHA256 调用私有 API。配置共享密钥与公共绑定页后再启用；
+# 密钥建议仅通过环境变量注入。
+qqbot_integration:
+  enabled: false
+  key_id: "qqbot-primary"
+  hmac_secret: ""
+  public_base_url: "https://qqbot.example.com"
+  timestamp_tolerance_seconds: 300
+  nonce_ttl_seconds: 600
+
+# =============================================================================
 # Run Mode Configuration
 # 运行模式配置
 # =============================================================================

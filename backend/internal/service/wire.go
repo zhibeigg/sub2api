@@ -745,6 +745,8 @@ var ProviderSet = wire.NewSet(
 	NewEmailService,
 	NewNotificationEmailService,
 	ProvideEmailQueueService,
+	ProvideQQBotUserLookup,
+	NewQQBotService,
 	NewTurnstileService,
 	NewSubscriptionService,
 	wire.Bind(new(DefaultSubscriptionAssigner), new(*SubscriptionService)),

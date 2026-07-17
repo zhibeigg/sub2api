@@ -63,6 +63,7 @@ type Handlers struct {
 	PaymentWebhook   *PaymentWebhookHandler
 	AvailableChannel *AvailableChannelHandler
 	BatchImage       *BatchImageHandler
+	QQBot            *QQBotHandler
 }
 
 // BuildInfo contains build-time information

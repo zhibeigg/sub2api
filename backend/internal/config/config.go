@@ -99,6 +99,7 @@ type Config struct {
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
 	BatchImage              BatchImageConfig              `mapstructure:"batch_image"`
 	AnnouncementEmail       AnnouncementEmailConfig       `mapstructure:"announcement_email"`
+	QQBotIntegration        QQBotIntegrationConfig        `mapstructure:"qqbot_integration"`
 }
 
 type ChatwootConfig struct {
@@ -2304,6 +2305,14 @@ func setDefaults() {
 	viper.SetDefault("subscription_maintenance.worker_count", 2)
 	viper.SetDefault("subscription_maintenance.queue_size", 1024)
 
+	// QQBot private integration API (disabled until HMAC credentials are supplied).
+	viper.SetDefault("qqbot_integration.enabled", false)
+	viper.SetDefault("qqbot_integration.key_id", "qqbot-primary")
+	viper.SetDefault("qqbot_integration.hmac_secret", "")
+	viper.SetDefault("qqbot_integration.public_base_url", "")
+	viper.SetDefault("qqbot_integration.timestamp_tolerance_seconds", defaultQQBotTimestampToleranceSeconds)
+	viper.SetDefault("qqbot_integration.nonce_ttl_seconds", defaultQQBotNonceTTLSeconds)
+
 }
 
 func (c *Config) Validate() error {
@@ -2315,6 +2324,9 @@ func (c *Config) Validate() error {
 	// 选择 bytes 而不是 rune 计数，确保二进制/随机串的长度语义更接近“熵”而非“字符数”。
 	if len([]byte(jwtSecret)) < 32 {
 		return fmt.Errorf("jwt.secret must be at least 32 bytes")
+	}
+	if err := c.QQBotIntegration.normalizeAndValidate(); err != nil {
+		return err
 	}
 	switch c.Log.Level {
 	case "debug", "info", "warn", "error":

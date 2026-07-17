@@ -11,17 +11,20 @@ import (
 
 // Task type constants
 const (
-	TaskTypeVerifyCode    = "verify_code"
-	TaskTypePasswordReset = "password_reset"
+	TaskTypeVerifyCode       = "verify_code"
+	TaskTypePasswordReset    = "password_reset"
+	TaskTypeNotificationMail = "notification_email"
 )
 
 // EmailTask 邮件发送任务
 type EmailTask struct {
-	Email    string
-	SiteName string
-	TaskType string // "verify_code" or "password_reset"
-	ResetURL string // Only used for password_reset task type
-	Locale   string // Optional Accept-Language locale hint
+	Email             string
+	SiteName          string
+	TaskType          string // verify_code, password_reset, or notification_email
+	ResetURL          string // Only used for password_reset task type
+	Locale            string // Optional Accept-Language locale hint
+	NotificationInput *NotificationEmailSendInput
+	OnDone            func(error)
 }
 
 // EmailQueueService 异步邮件队列服务
@@ -94,6 +97,21 @@ func (s *EmailQueueService) processTask(workerID int, task EmailTask) {
 		} else {
 			logger.LegacyPrintf("service.email_queue", "[EmailQueue] Worker %d sent password reset to %s", workerID, task.Email)
 		}
+	case TaskTypeNotificationMail:
+		var err error
+		if task.NotificationInput == nil || s.emailService == nil || s.emailService.notificationEmailService == nil {
+			err = fmt.Errorf("notification email service is not configured")
+		} else {
+			err = s.emailService.notificationEmailService.Send(ctx, *task.NotificationInput)
+		}
+		if err != nil {
+			logger.LegacyPrintf("service.email_queue", "[EmailQueue] Worker %d failed to send notification email to %s: %v", workerID, task.Email, err)
+		} else {
+			logger.LegacyPrintf("service.email_queue", "[EmailQueue] Worker %d sent notification email to %s", workerID, task.Email)
+		}
+		if task.OnDone != nil {
+			task.OnDone(err)
+		}
 	default:
 		logger.LegacyPrintf("service.email_queue", "[EmailQueue] Worker %d unknown task type: %s", workerID, task.TaskType)
 	}
@@ -130,6 +148,27 @@ func (s *EmailQueueService) EnqueuePasswordReset(email, siteName, resetURL strin
 	select {
 	case s.taskChan <- task:
 		logger.LegacyPrintf("service.email_queue", "[EmailQueue] Enqueued password reset task for %s", email)
+		return nil
+	default:
+		return fmt.Errorf("email queue is full")
+	}
+}
+
+// EnqueueNotification schedules a rendered notification email without blocking the HTTP request.
+func (s *EmailQueueService) EnqueueNotification(input NotificationEmailSendInput, onDone func(error)) error {
+	if s == nil {
+		return fmt.Errorf("email queue is not configured")
+	}
+	inputCopy := input
+	task := EmailTask{
+		Email:             input.RecipientEmail,
+		TaskType:          TaskTypeNotificationMail,
+		NotificationInput: &inputCopy,
+		OnDone:            onDone,
+	}
+	select {
+	case s.taskChan <- task:
+		logger.LegacyPrintf("service.email_queue", "[EmailQueue] Enqueued notification email task for %s", input.RecipientEmail)
 		return nil
 	default:
 		return fmt.Errorf("email queue is full")

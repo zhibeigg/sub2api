@@ -940,6 +940,11 @@ func notificationEmailSampleVariables(locale string) map[string]string {
 			"announcement_title":     "服务更新公告",
 			"announcement_content":   "我们已完成服务更新。\n感谢您的支持。",
 			"announcement_starts_at": "2026-05-20 12:00:00",
+			"binding_url":            "https://qqbot.example.com/bind?token=preview",
+			"masked_email":           "u***r@example.com",
+			"bonus_amount":           "5.00",
+			"qq_number":              "123456789",
+			"bound_at":               "2026-05-20 12:00:00",
 		}
 	}
 	return map[string]string{
@@ -989,6 +994,11 @@ func notificationEmailSampleVariables(locale string) map[string]string {
 		"announcement_title":     "Service update",
 		"announcement_content":   "The service update is complete.\nThank you for your support.",
 		"announcement_starts_at": "2026-05-20 12:00:00",
+		"binding_url":            "https://qqbot.example.com/bind?token=preview",
+		"masked_email":           "u***r@example.com",
+		"bonus_amount":           "5.00",
+		"qq_number":              "123456789",
+		"bound_at":               "2026-05-20 12:00:00",
 	}
 }
 
@@ -996,6 +1006,8 @@ var notificationEmailEventOrder = []string{
 	NotificationEmailEventAuthVerifyCode,
 	NotificationEmailEventAuthPasswordReset,
 	NotificationEmailEventNotificationEmailVerifyCode,
+	NotificationEmailEventQQBotBindingLink,
+	NotificationEmailEventQQBotBound,
 	NotificationEmailEventSubscriptionPurchaseSuccess,
 	NotificationEmailEventSubscriptionExpiryReminder,
 	NotificationEmailEventBalanceLow,
@@ -1033,6 +1045,22 @@ var notificationEmailEventDefinitions = map[string]NotificationEmailEventInfo{
 		Category:     "auth",
 		Optional:     false,
 		Placeholders: append(append([]string{}, notificationEmailCommonPlaceholders...), "verification_code", "expires_in_minutes"),
+	},
+	NotificationEmailEventQQBotBindingLink: {
+		Event:        NotificationEmailEventQQBotBindingLink,
+		Label:        "QQBot account verification link",
+		Description:  "Sent after a QQ user requests account binding; possession of the mailbox link verifies account ownership.",
+		Category:     "auth",
+		Optional:     false,
+		Placeholders: append(append([]string{}, notificationEmailCommonPlaceholders...), "binding_url", "expires_in_minutes", "masked_email", "bonus_amount"),
+	},
+	NotificationEmailEventQQBotBound: {
+		Event:        NotificationEmailEventQQBotBound,
+		Label:        "QQBot account bound",
+		Description:  "Sent after a QQ OpenID is atomically bound to an account.",
+		Category:     "auth",
+		Optional:     false,
+		Placeholders: append(append([]string{}, notificationEmailCommonPlaceholders...), "qq_number", "bonus_amount", "current_balance", "bound_at"),
 	},
 	NotificationEmailEventSubscriptionPurchaseSuccess: {
 		Event:        NotificationEmailEventSubscriptionPurchaseSuccess,
@@ -1193,6 +1221,56 @@ var notificationEmailOfficialTemplates = map[string]map[string]notificationEmail
 <p style="font-size: 32px; font-weight: 700; letter-spacing: 8px; text-align: center;">{{verification_code}}</p>
 <p>验证码将在 <strong>{{expires_in_minutes}}</strong> 分钟后失效。</p>
 <p>如果不是您本人操作，请忽略此邮件。</p>`),
+		},
+	},
+	NotificationEmailEventQQBotBindingLink: {
+		notificationEmailDefaultLocale: {
+			Subject: "[{{site_name}}] Verify QQ account binding",
+			HTML: notificationEmailCard("#315f8c", "Verify QQ account binding", `
+<p>Hello {{recipient_name}},</p>
+<p>A QQ user requested to bind this Sub2API account. The requested account is {{masked_email}}.</p>
+<p><a class="button" href="{{binding_url}}">Verify and continue</a></p>
+<p>This one-time link expires in <strong>{{expires_in_minutes}}</strong> minutes.</p>
+<p>After the first successful QQ binding, the account may receive a balance bonus of <strong>${{bonus_amount}}</strong>.</p>
+<p class="muted">The numeric QQ number entered on the page is display-only. The binding identity is the OpenID supplied by Tencent's official event.</p>
+<p class="muted">If the button does not work, copy this URL into your browser:<br>{{binding_url}}</p>
+<p>If you did not request this binding, ignore this email.</p>`),
+		},
+		notificationEmailLocaleChinese: {
+			Subject: "[{{site_name}}] 验证 QQ 账户绑定",
+			HTML: notificationEmailCard("#315f8c", "验证 QQ 账户绑定", `
+<p>{{recipient_name}}，您好：</p>
+<p>有 QQ 用户请求绑定此 Sub2API 账户，目标邮箱为 {{masked_email}}。</p>
+<p><a class="button" href="{{binding_url}}">验证邮箱并继续</a></p>
+<p>此一次性链接将在 <strong>{{expires_in_minutes}}</strong> 分钟后失效。</p>
+<p>首次成功绑定 QQ 后，账户可获得 <strong>${{bonus_amount}}</strong> 余额赠送。</p>
+<p class="muted">页面填写的数字 QQ 号仅用于展示；真实绑定身份始终以腾讯官方事件提供的 OpenID 为准。</p>
+<p class="muted">如果按钮无法点击，请复制以下链接到浏览器中打开：<br>{{binding_url}}</p>
+<p>如果不是您本人操作，请忽略此邮件。</p>`),
+		},
+	},
+	NotificationEmailEventQQBotBound: {
+		notificationEmailDefaultLocale: {
+			Subject: "[{{site_name}}] QQ account binding completed",
+			HTML: notificationEmailCard("#315f8c", "QQ account binding completed", `
+<p>Hello {{recipient_name}},</p>
+<p>Your QQ identity has been bound successfully.</p>
+<p>Declared QQ number: <strong>{{qq_number}}</strong></p>
+<p>First-bind bonus: <strong>${{bonus_amount}}</strong></p>
+<p>Current balance: <strong>${{current_balance}}</strong></p>
+<p>Bound at: {{bound_at}}</p>
+<p class="muted">The declared number is display-only; the authoritative identity is Tencent OpenID.</p>`),
+		},
+		notificationEmailLocaleChinese: {
+			Subject: "[{{site_name}}] QQ 账户绑定成功",
+			HTML: notificationEmailCard("#315f8c", "QQ 账户绑定成功", `
+<p>{{recipient_name}}，您好：</p>
+<p>您的 QQ 身份已成功绑定。</p>
+<p>声明 QQ 号：<strong>{{qq_number}}</strong></p>
+<p>首次绑定赠送：<strong>${{bonus_amount}}</strong></p>
+<p>当前余额：<strong>${{current_balance}}</strong></p>
+<p>绑定时间：{{bound_at}}</p>
+<p class="muted">声明 QQ 号仅用于展示；权威绑定身份为腾讯 OpenID。</p>`),
 		},
 	},
 	NotificationEmailEventSubscriptionPurchaseSuccess: {
