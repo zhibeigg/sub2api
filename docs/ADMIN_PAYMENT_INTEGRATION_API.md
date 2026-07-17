@@ -72,6 +72,8 @@ EasyPay 协议约定：
 - `appId` 与非空 `mpAppId` 必须以小写 `wx` 开头，后接 16 或 18 位字母数字字符；启用实例保存时校验，历史实例在预下单前按模式再次校验。格式错误分别返回 `WXPAY_CONFIG_APPID_INVALID` 或 `WXPAY_CONFIG_JSAPI_APPID_INVALID`，且不会调用微信 API。
 - 有 OpenID 时只允许 JSAPI；普通移动端优先 H5、回退 Native；桌面端使用 Native；微信内 JSAPI 关闭时不启动 OAuth，并可回退 Native 二维码。未启用的模式不会调用微信 API。
 - 创建订单的结构化原因码包括 `NO_AVAILABLE_WXPAY_CAPABILITY`、`WECHAT_NATIVE_NOT_AUTHORIZED`、`WECHAT_H5_NOT_AUTHORIZED`、`WECHAT_JSAPI_NOT_AUTHORIZED`、`WECHAT_APPID_MCHID_MISMATCH`、`WECHAT_SIGN_ERROR`、`WECHAT_PAYMENT_API_ERROR`。
+- API 响应继续由 `publicKeyId` 对应的 `publicKey` 验签；通知使用组合验签，既接受该微信支付公钥 ID，也接受 SDK 自动下载并维护的平台证书序列号。
+- `apiV3Key` 必须与微信支付商户平台当前设置完全一致。该密钥不能通过微信 API 读取；遗失时必须在商户平台重置并同步更新实例，否则真实通知即使签名有效也无法解密。
 - 微信错误 metadata 只会使用 `mode`、`http_status`、`wechat_code`、`request_id`、`action`，不会返回凭据、请求体或其他敏感值。
 
 微信能力配置示例（凭据仅为占位符）：
@@ -383,6 +385,8 @@ Direct WeChat Pay capability contract:
 - `appId` and any non-empty `mpAppId` must start with lowercase `wx` and contain 16 or 18 following ASCII alphanumeric characters. Enabled instances are checked when saved, while historical instances are checked again for the selected mode before prepay. Invalid values return `WXPAY_CONFIG_APPID_INVALID` or `WXPAY_CONFIG_JSAPI_APPID_INVALID` without calling WeChat.
 - An OpenID permits JSAPI only; ordinary mobile browsers prefer H5 and fall back to Native; desktop uses Native. If JSAPI is disabled, an in-WeChat request does not start OAuth and may fall back to a Native QR code. Disabled modes never call their WeChat APIs.
 - Structured order-creation reasons include `NO_AVAILABLE_WXPAY_CAPABILITY`, `WECHAT_NATIVE_NOT_AUTHORIZED`, `WECHAT_H5_NOT_AUTHORIZED`, `WECHAT_JSAPI_NOT_AUTHORIZED`, `WECHAT_APPID_MCHID_MISMATCH`, `WECHAT_SIGN_ERROR`, and `WECHAT_PAYMENT_API_ERROR`.
+- API responses continue to be verified with the `publicKey` identified by `publicKeyId`. Notifications use combined verification, accepting either that WeChat Pay public-key ID or a platform-certificate serial backed by certificates automatically downloaded and maintained by the SDK.
+- `apiV3Key` must exactly match the current WeChat Pay Merchant Platform setting. It cannot be read through WeChat APIs; if lost, reset it in Merchant Platform and update the provider instance, otherwise validly signed real notifications cannot be decrypted.
 - WeChat error metadata uses only `mode`, `http_status`, `wechat_code`, `request_id`, and `action`; credentials, request bodies, and other sensitive values are never returned.
 
 WeChat capability request example using placeholders only:
