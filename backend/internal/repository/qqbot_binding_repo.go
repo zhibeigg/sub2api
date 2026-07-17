@@ -29,6 +29,16 @@ type qqBotRowScanner interface {
 }
 
 const (
+	qqBotFindBoundEmailSQL = `
+SELECT u.email
+FROM auth_identities i
+JOIN users u ON u.id = i.user_id
+WHERE i.provider_type = 'qqbot'
+  AND i.provider_key = $1
+  AND i.provider_subject = $2
+  AND u.deleted_at IS NULL
+LIMIT 1`
+
 	qqBotUpdateEmailDeliveryStatusSQL = `
 UPDATE qqbot_binding_challenges
 SET email_status = $1::varchar,
@@ -47,6 +57,19 @@ WHERE id = $2::bigint`
 INSERT INTO qqbot_binding_audit_logs (challenge_id, action, status, actor_type, reason, metadata)
 VALUES ($1::bigint, $2::varchar, $3::varchar, 'system', $4::text, $5::jsonb)`
 )
+
+func (r *qqBotBindingRepository) FindBoundEmail(ctx context.Context, botAppID, providerSubject string) (string, bool, error) {
+	providerKey := "qqbot:" + strings.TrimSpace(botAppID)
+	providerSubject = strings.TrimSpace(providerSubject)
+	var email string
+	if err := r.db.QueryRowContext(ctx, qqBotFindBoundEmailSQL, providerKey, providerSubject).Scan(&email); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return strings.TrimSpace(email), true, nil
+}
 
 func (r *qqBotBindingRepository) CreateChallenge(ctx context.Context, input service.QQBotChallengeCreateInput) (service.QQBotBindingRecord, bool, error) {
 	tx, err := r.db.BeginTx(ctx, nil)

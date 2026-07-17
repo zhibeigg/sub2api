@@ -1,6 +1,6 @@
 # QQBot 账户绑定集成
 
-Sub2API `0.57.60` 增加供独立 `sub2api-qqbot` 服务使用的 HMAC 私有 API。QQBot 只接收腾讯官方事件、发送消息、代理网页与管理请求，不直接连接 Sub2API 数据库。
+Sub2API `0.57.60` 增加供独立 `sub2api-qqbot` 服务使用的 HMAC 私有 API；`0.57.62` 补充绑定前的现有 QQ 身份检测与统一邮箱脱敏响应。QQBot 只接收腾讯官方事件、发送消息、代理网页与管理请求，不直接连接 Sub2API 数据库。
 
 ## 架构与信任边界
 
@@ -66,7 +66,7 @@ Sub2API 先校验 key、时间窗口和签名，再使用 Redis `SET NX` 写入 
 
 | 方法 | 路径 | 用途 |
 |---|---|---|
-| POST | `/bindings/prepare` | 创建邮箱验证挑战并异步发送邮件 |
+| POST | `/bindings/prepare` | 先检查 QQ 身份是否已绑定；未绑定时创建邮箱验证挑战并异步发送邮件 |
 | POST | `/bindings/inspect` | 检查 token 状态 |
 | POST | `/bindings/complete` | 原子完成绑定和首次赠送 |
 | GET | `/bindings` | 管理端分页记录 |
@@ -85,16 +85,29 @@ Sub2API 先校验 key、时间窗口和签名，再使用 Redis `SET NX` 写入 
 }
 ```
 
+`POST /bindings/prepare` 在腾讯官方身份已经绑定时返回：
+
+```json
+{
+  "accepted": true,
+  "already_bound": true,
+  "masked_email": "7***7@qq.com"
+}
+```
+
+此时不会创建新挑战或重复发送验证邮件。未绑定时 `already_bound` 省略或为 `false`，`masked_email` 仍使用“首字符 + 星号 + 尾字符”的统一格式。
+
 常用错误 reason：`INVALID_BINDING_TOKEN`、`BINDING_EXPIRED`、`BINDING_REVOKED`、`BINDING_DISABLED`、`INVALID_QQ_NUMBER`、`QQ_IDENTITY_CONFLICT`。
 
 ## 邮箱验证与防枚举
 
 1. 用户在 QQ 发送 `/bind name@example.com`。
 2. QQBot 将事件 ID、Bot AppID、场景、官方身份和邮箱发给 Sub2API。
-3. Sub2API 对存在且可用的账户创建一次性挑战，向账户主邮箱发送链接。
-4. 未知或禁用账户仍返回同形 `accepted=true`，但不会发送邮件，避免账户枚举。
-5. 原始 token 只存在于邮件链接；数据库仅保存 SHA-256。
-6. 链接默认 15 分钟过期，完成、过期或撤销后不可再次改变身份或奖励。
+3. Sub2API 先按 `provider_type=qqbot + BotAppID + 官方身份` 查询现有绑定；已绑定时返回真实账户邮箱的脱敏值，不创建挑战、不发送邮件。
+4. 未绑定时，对存在且可用的账户创建一次性挑战，向账户主邮箱发送链接。
+5. 未知或禁用账户仍返回同形 `accepted=true`，但不会发送邮件，避免账户枚举。
+6. 原始 token 只存在于邮件链接；数据库仅保存 SHA-256。
+7. 链接默认 15 分钟过期，完成、过期或撤销后不可再次改变身份或奖励。
 
 ## 原子绑定与首次赠送
 
@@ -140,7 +153,7 @@ Migration `183_qqbot_account_binding.sql`：
 ## 部署顺序
 
 1. 备份 PostgreSQL、Sub2API 配置和镜像。
-2. 部署 Sub2API `0.57.60` 并执行 migration `183`。
+2. 部署 Sub2API `0.57.62`（包含 migration `183`、标准 MIME 邮件修复和已绑定身份检测）。
 3. 配置并启用 `qqbot_integration`，确认 Redis 可用。
 4. 部署 QQBot，先保持 `QQBOT_ENABLED=false`，检查 `/readyz`。
 5. 配置 Nginx、TLS 与腾讯 Webhook。
