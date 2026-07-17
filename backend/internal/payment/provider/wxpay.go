@@ -93,7 +93,44 @@ type Wxpay struct {
 	notifyHandler *notify.Handler
 }
 
-const wxpayAPIv3KeyLength = 32
+const (
+	wxpayAPIv3KeyLength   = 32
+	wxpayAppIDShortLength = 18
+	wxpayAppIDLongLength  = 20
+)
+
+// IsValidWxpayAppID validates the documented WeChat AppID shape: a lowercase
+// "wx" prefix followed by 16 or 18 ASCII alphanumeric characters.
+func IsValidWxpayAppID(raw string) bool {
+	appID := strings.TrimSpace(raw)
+	if len(appID) != wxpayAppIDShortLength && len(appID) != wxpayAppIDLongLength {
+		return false
+	}
+	if !strings.HasPrefix(appID, "wx") {
+		return false
+	}
+	for i := len("wx"); i < len(appID); i++ {
+		ch := appID[i]
+		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'z') && (ch < 'A' || ch > 'Z') {
+			return false
+		}
+	}
+	return true
+}
+
+// ValidateWxpayAppIDConfig is the strict save-time validation used by the admin
+// configuration service. It is intentionally separate from NewWxpay so legacy
+// enabled instances remain loadable after an upgrade and fail locally only when
+// a payment mode would actually use an invalid AppID.
+func ValidateWxpayAppIDConfig(config map[string]string) error {
+	if appID := strings.TrimSpace(config["appId"]); appID != "" && !IsValidWxpayAppID(appID) {
+		return invalidWxpayBaseAppIDError()
+	}
+	if appID := strings.TrimSpace(config["mpAppId"]); appID != "" && !IsValidWxpayAppID(appID) {
+		return invalidWxpayJSAPIAppIDError()
+	}
+	return nil
+}
 
 // InspectWxpayCapabilities resolves explicit capability switches and applies
 // backward-compatible defaults for historical provider instances.
@@ -207,6 +244,29 @@ func ResolveWxpayJSAPIAppID(config map[string]string) string {
 	return strings.TrimSpace(config["appId"])
 }
 
+func validateWxpayAppIDForMode(config map[string]string, mode string) error {
+	if mode == wxpayModeJSAPI {
+		if !IsValidWxpayAppID(ResolveWxpayJSAPIAppID(config)) {
+			return invalidWxpayJSAPIAppIDError()
+		}
+		return nil
+	}
+	if !IsValidWxpayAppID(config["appId"]) {
+		return invalidWxpayBaseAppIDError()
+	}
+	return nil
+}
+
+func invalidWxpayBaseAppIDError() error {
+	return infraerrors.BadRequest("WXPAY_CONFIG_APPID_INVALID", "wechat_app_id_invalid").
+		WithMetadata(map[string]string{"action": "configure_valid_wechat_app_id"})
+}
+
+func invalidWxpayJSAPIAppIDError() error {
+	return infraerrors.BadRequest("WXPAY_CONFIG_JSAPI_APPID_INVALID", "wechat_jsapi_app_id_invalid").
+		WithMetadata(map[string]string{"action": "configure_valid_wechat_mp_app_id"})
+}
+
 func formatPEM(key, keyType string) string {
 	key = strings.TrimSpace(key)
 	if strings.HasPrefix(key, "-----BEGIN") {
@@ -254,6 +314,9 @@ func (w *Wxpay) CreatePayment(ctx context.Context, req payment.CreatePaymentRequ
 	}
 	mode, err := resolveWxpayCreateMode(req, capabilities)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateWxpayAppIDForMode(w.config, mode); err != nil {
 		return nil, err
 	}
 	client, err := w.ensureClient()
@@ -323,7 +386,7 @@ func (w *Wxpay) prepayNative(ctx context.Context, c *core.Client, req payment.Cr
 	svc := native.NativeApiService{Client: c}
 	cur := wxpayCurrency
 	resp, result, err := wxpayNativePrepay(ctx, svc, native.PrepayRequest{
-		Appid: core.String(w.config["appId"]), Mchid: core.String(w.config["mchId"]),
+		Appid: core.String(strings.TrimSpace(w.config["appId"])), Mchid: core.String(w.config["mchId"]),
 		Description: core.String(req.Subject), OutTradeNo: core.String(req.OrderID),
 		NotifyUrl: core.String(notifyURL),
 		Amount:    &native.Amount{Total: core.Int64(totalFen), Currency: &cur},
@@ -342,7 +405,7 @@ func (w *Wxpay) prepayH5(ctx context.Context, c *core.Client, req payment.Create
 	svc := h5.H5ApiService{Client: c}
 	cur := wxpayCurrency
 	resp, result, err := wxpayH5Prepay(ctx, svc, h5.PrepayRequest{
-		Appid: core.String(w.config["appId"]), Mchid: core.String(w.config["mchId"]),
+		Appid: core.String(strings.TrimSpace(w.config["appId"])), Mchid: core.String(w.config["mchId"]),
 		Description: core.String(req.Subject), OutTradeNo: core.String(req.OrderID),
 		NotifyUrl: core.String(notifyURL),
 		Amount:    &h5.Amount{Total: core.Int64(totalFen), Currency: &cur},

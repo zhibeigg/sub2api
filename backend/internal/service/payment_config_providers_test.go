@@ -496,18 +496,18 @@ func TestUpdateProviderInstanceRejectsProtectedConfigChangesWhilePendingOrders(t
 			providerKey:   payment.TypeWxpay,
 			createConfig:  validWxpayProviderConfig,
 			supportedType: []string{payment.TypeWxpay},
-			updateConfig:  map[string]string{"appId": "wx-app-updated"},
+			updateConfig:  map[string]string{"appId": "wxabcdef1234567890"},
 			fieldName:     "appId",
-			wantValue:     "wx-app-test",
+			wantValue:     "wx1234567890abcdef",
 		},
 		{
 			name:          "wxpay mpAppId",
 			providerKey:   payment.TypeWxpay,
 			createConfig:  validWxpayProviderConfigWithJSAPIAppID,
 			supportedType: []string{payment.TypeWxpay},
-			updateConfig:  map[string]string{"mpAppId": "wx-mp-app-updated"},
+			updateConfig:  map[string]string{"mpAppId": "wx0123456789abcdef"},
 			fieldName:     "mpAppId",
-			wantValue:     "wx-mp-app-test",
+			wantValue:     "wxabcdef1234567890",
 		},
 		{
 			name:          "wxpay mchId",
@@ -966,6 +966,46 @@ func validAirwallexProviderConfig(t *testing.T) map[string]string {
 	}
 }
 
+func TestValidateProviderConfigRejectsInvalidWxpayAppIDs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		mutate     func(map[string]string)
+		wantReason string
+	}{
+		{
+			name: "invalid base app id",
+			mutate: func(config map[string]string) {
+				config["appId"] = "ab1234567890abcdef"
+			},
+			wantReason: "WXPAY_CONFIG_APPID_INVALID",
+		},
+		{
+			name: "invalid mp app id",
+			mutate: func(config map[string]string) {
+				config["mpAppId"] = "mp1234567890abcdef"
+			},
+			wantReason: "WXPAY_CONFIG_JSAPI_APPID_INVALID",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			svc := &PaymentConfigService{}
+			config := validWxpayProviderConfig(t)
+			tt.mutate(config)
+
+			err := svc.validateProviderConfig(payment.TypeWxpay, config)
+			require.Error(t, err)
+			appErr := infraerrors.FromError(err)
+			require.Equal(t, tt.wantReason, appErr.Reason)
+			require.NotEmpty(t, appErr.Metadata["action"])
+		})
+	}
+}
+
 func TestValidateProviderConfigChecksWxpayCapabilityConfiguration(t *testing.T) {
 	t.Parallel()
 
@@ -998,7 +1038,7 @@ func validWxpayProviderConfig(t *testing.T) map[string]string {
 	require.NoError(t, err)
 
 	return map[string]string{
-		"appId":       "wx-app-test",
+		"appId":       "wx1234567890abcdef",
 		"mchId":       "mch-test",
 		"privateKey":  string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privDER})),
 		"apiV3Key":    "12345678901234567890123456789012",
@@ -1012,6 +1052,6 @@ func validWxpayProviderConfigWithJSAPIAppID(t *testing.T) map[string]string {
 	t.Helper()
 
 	cfg := validWxpayProviderConfig(t)
-	cfg["mpAppId"] = "wx-mp-app-test"
+	cfg["mpAppId"] = "wxabcdef1234567890"
 	return cfg
 }

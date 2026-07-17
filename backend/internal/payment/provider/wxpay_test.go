@@ -23,6 +23,8 @@ import (
 	"github.com/wechatpay-apiv3/wechatpay-go/services/payments/native"
 )
 
+const wxpayTestAppID = "wx1234567890abcdef"
+
 // generateTestKeyPair returns a fresh RSA 2048 key pair as PEM strings.
 // The wechatpay-go SDK expects PKCS8 private keys and PKIX public keys.
 func generateTestKeyPair(t *testing.T) (privPEM, pubPEM string) {
@@ -212,7 +214,7 @@ func TestNewWxpay(t *testing.T) {
 
 	privPEM, pubPEM := generateTestKeyPair(t)
 	validConfig := map[string]string{
-		"appId":       "wx1234567890",
+		"appId":       wxpayTestAppID,
 		"mchId":       "1234567890",
 		"privateKey":  privPEM,
 		"apiV3Key":    "12345678901234567890123456789012", // exactly 32 bytes
@@ -234,10 +236,10 @@ func TestNewWxpay(t *testing.T) {
 	}
 
 	tests := []struct {
-		name      string
-		config    map[string]string
-		wantErr   bool
-		errSubstr string
+		name       string
+		config     map[string]string
+		wantErr    bool
+		wantReason string
 	}{
 		{
 			name:    "valid config succeeds",
@@ -245,70 +247,70 @@ func TestNewWxpay(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:      "missing appId",
-			config:    withOverride(map[string]string{"appId": ""}),
-			wantErr:   true,
-			errSubstr: "appId",
+			name:       "missing appId",
+			config:     withOverride(map[string]string{"appId": ""}),
+			wantErr:    true,
+			wantReason: "WXPAY_CONFIG_MISSING_KEY",
 		},
 		{
-			name:      "missing mchId",
-			config:    withOverride(map[string]string{"mchId": ""}),
-			wantErr:   true,
-			errSubstr: "mchId",
+			name:       "missing mchId",
+			config:     withOverride(map[string]string{"mchId": ""}),
+			wantErr:    true,
+			wantReason: "WXPAY_CONFIG_MISSING_KEY",
 		},
 		{
-			name:      "missing privateKey",
-			config:    withOverride(map[string]string{"privateKey": ""}),
-			wantErr:   true,
-			errSubstr: "privateKey",
+			name:       "missing privateKey",
+			config:     withOverride(map[string]string{"privateKey": ""}),
+			wantErr:    true,
+			wantReason: "WXPAY_CONFIG_MISSING_KEY",
 		},
 		{
-			name:      "missing apiV3Key",
-			config:    withOverride(map[string]string{"apiV3Key": ""}),
-			wantErr:   true,
-			errSubstr: "apiV3Key",
+			name:       "missing apiV3Key",
+			config:     withOverride(map[string]string{"apiV3Key": ""}),
+			wantErr:    true,
+			wantReason: "WXPAY_CONFIG_MISSING_KEY",
 		},
 		{
-			name:      "missing certSerial",
-			config:    withOverride(map[string]string{"certSerial": ""}),
-			wantErr:   true,
-			errSubstr: "certSerial",
+			name:       "missing certSerial",
+			config:     withOverride(map[string]string{"certSerial": ""}),
+			wantErr:    true,
+			wantReason: "WXPAY_CONFIG_MISSING_KEY",
 		},
 		{
-			name:      "missing publicKey",
-			config:    withOverride(map[string]string{"publicKey": ""}),
-			wantErr:   true,
-			errSubstr: "publicKey",
+			name:       "missing publicKey",
+			config:     withOverride(map[string]string{"publicKey": ""}),
+			wantErr:    true,
+			wantReason: "WXPAY_CONFIG_MISSING_KEY",
 		},
 		{
-			name:      "missing publicKeyId",
-			config:    withOverride(map[string]string{"publicKeyId": ""}),
-			wantErr:   true,
-			errSubstr: "publicKeyId",
+			name:       "missing publicKeyId",
+			config:     withOverride(map[string]string{"publicKeyId": ""}),
+			wantErr:    true,
+			wantReason: "WXPAY_CONFIG_MISSING_KEY",
 		},
 		{
-			name:      "malformed privateKey PEM",
-			config:    withOverride(map[string]string{"privateKey": "not-a-valid-pem"}),
-			wantErr:   true,
-			errSubstr: "WXPAY_CONFIG_INVALID_KEY",
+			name:       "malformed privateKey PEM",
+			config:     withOverride(map[string]string{"privateKey": "not-a-valid-pem"}),
+			wantErr:    true,
+			wantReason: "WXPAY_CONFIG_INVALID_KEY",
 		},
 		{
-			name:      "malformed publicKey PEM",
-			config:    withOverride(map[string]string{"publicKey": "not-a-valid-pem"}),
-			wantErr:   true,
-			errSubstr: "WXPAY_CONFIG_INVALID_KEY",
+			name:       "malformed publicKey PEM",
+			config:     withOverride(map[string]string{"publicKey": "not-a-valid-pem"}),
+			wantErr:    true,
+			wantReason: "WXPAY_CONFIG_INVALID_KEY",
 		},
 		{
-			name:      "apiV3Key too short",
-			config:    withOverride(map[string]string{"apiV3Key": "short"}),
-			wantErr:   true,
-			errSubstr: "WXPAY_CONFIG_INVALID_KEY_LENGTH",
+			name:       "apiV3Key too short",
+			config:     withOverride(map[string]string{"apiV3Key": "short"}),
+			wantErr:    true,
+			wantReason: "WXPAY_CONFIG_INVALID_KEY_LENGTH",
 		},
 		{
-			name:      "apiV3Key too long",
-			config:    withOverride(map[string]string{"apiV3Key": "123456789012345678901234567890123"}), // 33 bytes
-			wantErr:   true,
-			errSubstr: "WXPAY_CONFIG_INVALID_KEY_LENGTH",
+			name:       "apiV3Key too long",
+			config:     withOverride(map[string]string{"apiV3Key": "123456789012345678901234567890123"}), // 33 bytes
+			wantErr:    true,
+			wantReason: "WXPAY_CONFIG_INVALID_KEY_LENGTH",
 		},
 	}
 
@@ -320,8 +322,8 @@ func TestNewWxpay(t *testing.T) {
 				if err == nil {
 					t.Fatal("expected error, got nil")
 				}
-				if tt.errSubstr != "" && !strings.Contains(err.Error(), tt.errSubstr) {
-					t.Errorf("error %q should contain %q", err.Error(), tt.errSubstr)
+				if reason := infraerrors.Reason(err); reason != tt.wantReason {
+					t.Errorf("reason = %q, want %q", reason, tt.wantReason)
 				}
 				return
 			}
@@ -403,6 +405,84 @@ func TestResolveWxpayJSAPIAppID(t *testing.T) {
 			t.Parallel()
 			if got := ResolveWxpayJSAPIAppID(tt.config); got != tt.want {
 				t.Fatalf("ResolveWxpayJSAPIAppID() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsValidWxpayAppID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		appID string
+		want  bool
+	}{
+		{name: "standard 18 character app id", appID: "wx1234567890abcdef", want: true},
+		{name: "extended 20 character app id", appID: "wx1234567890abcdefgh", want: true},
+		{name: "surrounding whitespace is normalized", appID: "  wx1234567890abcdef  ", want: true},
+		{name: "wrong prefix", appID: "ab1234567890abcdef", want: false},
+		{name: "uppercase prefix", appID: "WX1234567890abcdef", want: false},
+		{name: "invalid length", appID: "wx1234567890abcde", want: false},
+		{name: "invalid character", appID: "wx1234567890abcde-", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := IsValidWxpayAppID(tt.appID); got != tt.want {
+				t.Fatalf("IsValidWxpayAppID() = %t, want %t", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateWxpayAppIDConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		config     map[string]string
+		wantReason string
+	}{
+		{
+			name:   "valid base app id",
+			config: map[string]string{"appId": wxpayTestAppID},
+		},
+		{
+			name: "valid dedicated mp app id",
+			config: map[string]string{
+				"appId":   wxpayTestAppID,
+				"mpAppId": "wxabcdef1234567890",
+			},
+		},
+		{
+			name:       "invalid base app id",
+			config:     map[string]string{"appId": "ab1234567890abcdef"},
+			wantReason: "WXPAY_CONFIG_APPID_INVALID",
+		},
+		{
+			name: "invalid dedicated mp app id",
+			config: map[string]string{
+				"appId":   wxpayTestAppID,
+				"mpAppId": "mp1234567890abcdef",
+			},
+			wantReason: "WXPAY_CONFIG_JSAPI_APPID_INVALID",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateWxpayAppIDConfig(tt.config)
+			if tt.wantReason == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if reason := infraerrors.Reason(err); reason != tt.wantReason {
+				t.Fatalf("reason = %q, want %q", reason, tt.wantReason)
 			}
 		})
 	}
@@ -515,7 +595,7 @@ func TestCreatePaymentWithOpenIDReturnsJSAPIResult(t *testing.T) {
 			t.Fatalf("scene_info payer_client_ip = %q, want %q", wxSV(req.SceneInfo.PayerClientIp), "203.0.113.10")
 		}
 		return &jsapi.PrepayWithRequestPaymentResponse{
-			Appid:     core.String("wx123"),
+			Appid:     core.String(wxpayTestAppID),
 			TimeStamp: core.String("1712345678"),
 			NonceStr:  core.String("nonce-123"),
 			Package:   core.String("prepay_id=wx_prepay_123"),
@@ -534,7 +614,7 @@ func TestCreatePaymentWithOpenIDReturnsJSAPIResult(t *testing.T) {
 
 	provider := &Wxpay{
 		config: map[string]string{
-			"appId":        "wx123",
+			"appId":        wxpayTestAppID,
 			"mchId":        "mch123",
 			"jsapiEnabled": "true",
 		},
@@ -567,8 +647,8 @@ func TestCreatePaymentWithOpenIDReturnsJSAPIResult(t *testing.T) {
 	if resp.JSAPI == nil {
 		t.Fatal("expected jsapi payload, got nil")
 	}
-	if resp.JSAPI.AppID != "wx123" {
-		t.Fatalf("jsapi appId = %q, want %q", resp.JSAPI.AppID, "wx123")
+	if resp.JSAPI.AppID != wxpayTestAppID {
+		t.Fatalf("jsapi appId = %q, want %q", resp.JSAPI.AppID, wxpayTestAppID)
 	}
 	if resp.JSAPI.TimeStamp != "1712345678" {
 		t.Fatalf("jsapi timeStamp = %q, want %q", resp.JSAPI.TimeStamp, "1712345678")
@@ -635,7 +715,7 @@ func TestCreatePaymentMobileH5IncludesConfiguredSceneInfo(t *testing.T) {
 
 	provider := &Wxpay{
 		config: map[string]string{
-			"appId":     "wx123",
+			"appId":     wxpayTestAppID,
 			"mchId":     "mch123",
 			"h5AppName": "Sub2API",
 			"h5AppUrl":  "https://app.example.com",
@@ -798,6 +878,75 @@ func TestMapWxpayPrepayErrorUsesSDKTypesAndSafeMetadata(t *testing.T) {
 	}
 }
 
+func TestCreatePaymentRejectsInvalidAppIDBeforeWechatAPI(t *testing.T) {
+	origJSAPIPrepay := wxpayJSAPIPrepayWithRequestPayment
+	origNativePrepay := wxpayNativePrepay
+	origH5Prepay := wxpayH5Prepay
+	t.Cleanup(func() {
+		wxpayJSAPIPrepayWithRequestPayment = origJSAPIPrepay
+		wxpayNativePrepay = origNativePrepay
+		wxpayH5Prepay = origH5Prepay
+	})
+
+	calls := 0
+	wxpayJSAPIPrepayWithRequestPayment = func(context.Context, jsapi.JsapiApiService, jsapi.PrepayRequest) (*jsapi.PrepayWithRequestPaymentResponse, *core.APIResult, error) {
+		calls++
+		return nil, nil, nil
+	}
+	wxpayNativePrepay = func(context.Context, native.NativeApiService, native.PrepayRequest) (*native.PrepayResponse, *core.APIResult, error) {
+		calls++
+		return nil, nil, nil
+	}
+	wxpayH5Prepay = func(context.Context, h5.H5ApiService, h5.PrepayRequest) (*h5.PrepayResponse, *core.APIResult, error) {
+		calls++
+		return nil, nil, nil
+	}
+
+	tests := []struct {
+		name       string
+		config     map[string]string
+		req        payment.CreatePaymentRequest
+		wantReason string
+	}{
+		{
+			name: "native rejects invalid base app id",
+			config: map[string]string{
+				"appId": "ab1234567890abcdef", "mchId": "mch-id",
+			},
+			req: payment.CreatePaymentRequest{
+				OrderID: "sub2_invalid_native", Amount: "0.01", NotifyURL: "https://merchant.example/notify",
+			},
+			wantReason: "WXPAY_CONFIG_APPID_INVALID",
+		},
+		{
+			name: "jsapi rejects invalid dedicated app id",
+			config: map[string]string{
+				"appId": wxpayTestAppID, "mpAppId": "mp1234567890abcdef", "mchId": "mch-id", "jsapiEnabled": "true",
+			},
+			req: payment.CreatePaymentRequest{
+				OrderID: "sub2_invalid_jsapi", Amount: "0.01", NotifyURL: "https://merchant.example/notify", OpenID: "test-openid",
+			},
+			wantReason: "WXPAY_CONFIG_JSAPI_APPID_INVALID",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider := &Wxpay{config: tt.config, coreClient: &core.Client{}}
+			resp, err := provider.CreatePayment(context.Background(), tt.req)
+			if resp != nil {
+				t.Fatalf("expected nil response, got %+v", resp)
+			}
+			if reason := infraerrors.Reason(err); reason != tt.wantReason {
+				t.Fatalf("reason = %q, want %q", reason, tt.wantReason)
+			}
+		})
+	}
+	if calls != 0 {
+		t.Fatalf("wechat api calls = %d, want 0", calls)
+	}
+}
+
 func TestCreatePaymentAllCapabilitiesDisabledDoesNotCallWechatAPI(t *testing.T) {
 	origJSAPIPrepay := wxpayJSAPIPrepayWithRequestPayment
 	origNativePrepay := wxpayNativePrepay
@@ -881,7 +1030,7 @@ func TestCreatePaymentMobileH5ReturnsNoAuthErrorWithoutNativeFallback(t *testing
 
 	provider := &Wxpay{
 		config: map[string]string{
-			"appId":         "wx123",
+			"appId":         wxpayTestAppID,
 			"mchId":         "mch123",
 			"nativeEnabled": "true",
 			"h5Enabled":     "true",

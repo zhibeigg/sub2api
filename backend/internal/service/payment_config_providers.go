@@ -26,6 +26,11 @@ import (
 // Only validates enabled instances — a disabled instance may be a half-filled
 // draft the admin will complete later.
 func (s *PaymentConfigService) validateProviderConfig(providerKey string, config map[string]string) error {
+	if providerKey == payment.TypeWxpay {
+		if err := provider.ValidateWxpayAppIDConfig(config); err != nil {
+			return err
+		}
+	}
 	_, err := provider.CreateProvider(providerKey, "_validate_", config)
 	if err == nil {
 		return nil

@@ -170,6 +170,8 @@ Direct integration with WeChat Pay APIv3. Supports Native QR code payment, H5 pa
 | **WeChat Pay Public Key ID** | WeChat Pay public key ID | Yes |
 | **Certificate Serial Number** | Merchant certificate serial number | Yes |
 
+The payment `appId` and Official Account `mpAppId` must follow the WeChat AppID shape: lowercase `wx` followed by 16 or 18 ASCII alphanumeric characters. Enabled instances are validated when saved; historical instances remain loadable, but the selected mode is validated again before prepay, and invalid values are blocked locally without calling WeChat.
+
 Capability switches and scenario configuration:
 
 | Config key | Description | Default / compatibility behavior |

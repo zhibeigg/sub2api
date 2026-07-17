@@ -69,6 +69,7 @@ EasyPay 协议约定：
 - 历史兼容：`nativeEnabled` 缺失时为 `true`；`h5Enabled` 缺失时仅在 `h5AppName` 和 `h5AppUrl` 完整时推导为 `true`；`jsapiEnabled` 缺失时仅在 `mpAppId` 非空时推导为 `true`。
 - `h5Enabled="true"` 时，`h5AppName` 必填，`h5AppUrl` 必须是绝对 HTTPS URL。
 - `jsapiEnabled="true"` 时，解析后的 JSAPI AppID 必须非空；`mpAppId` 非空时优先使用，否则使用 `appId`。
+- `appId` 与非空 `mpAppId` 必须以小写 `wx` 开头，后接 16 或 18 位字母数字字符；启用实例保存时校验，历史实例在预下单前按模式再次校验。格式错误分别返回 `WXPAY_CONFIG_APPID_INVALID` 或 `WXPAY_CONFIG_JSAPI_APPID_INVALID`，且不会调用微信 API。
 - 有 OpenID 时只允许 JSAPI；普通移动端优先 H5、回退 Native；桌面端使用 Native；微信内 JSAPI 关闭时不启动 OAuth，并可回退 Native 二维码。未启用的模式不会调用微信 API。
 - 创建订单的结构化原因码包括 `NO_AVAILABLE_WXPAY_CAPABILITY`、`WECHAT_NATIVE_NOT_AUTHORIZED`、`WECHAT_H5_NOT_AUTHORIZED`、`WECHAT_JSAPI_NOT_AUTHORIZED`、`WECHAT_APPID_MCHID_MISMATCH`、`WECHAT_SIGN_ERROR`、`WECHAT_PAYMENT_API_ERROR`。
 - 微信错误 metadata 只会使用 `mode`、`http_status`、`wechat_code`、`request_id`、`action`，不会返回凭据、请求体或其他敏感值。
@@ -379,6 +380,7 @@ Direct WeChat Pay capability contract:
 - Historical compatibility: absent `nativeEnabled` means `true`; absent `h5Enabled` is inferred as `true` only when both `h5AppName` and `h5AppUrl` are complete; absent `jsapiEnabled` is inferred as `true` only when `mpAppId` is non-empty.
 - When `h5Enabled="true"`, `h5AppName` is required and `h5AppUrl` must be an absolute HTTPS URL.
 - When `jsapiEnabled="true"`, the resolved JSAPI AppID must be non-empty. A non-empty `mpAppId` takes precedence; otherwise `appId` is used.
+- `appId` and any non-empty `mpAppId` must start with lowercase `wx` and contain 16 or 18 following ASCII alphanumeric characters. Enabled instances are checked when saved, while historical instances are checked again for the selected mode before prepay. Invalid values return `WXPAY_CONFIG_APPID_INVALID` or `WXPAY_CONFIG_JSAPI_APPID_INVALID` without calling WeChat.
 - An OpenID permits JSAPI only; ordinary mobile browsers prefer H5 and fall back to Native; desktop uses Native. If JSAPI is disabled, an in-WeChat request does not start OAuth and may fall back to a Native QR code. Disabled modes never call their WeChat APIs.
 - Structured order-creation reasons include `NO_AVAILABLE_WXPAY_CAPABILITY`, `WECHAT_NATIVE_NOT_AUTHORIZED`, `WECHAT_H5_NOT_AUTHORIZED`, `WECHAT_JSAPI_NOT_AUTHORIZED`, `WECHAT_APPID_MCHID_MISMATCH`, `WECHAT_SIGN_ERROR`, and `WECHAT_PAYMENT_API_ERROR`.
 - WeChat error metadata uses only `mode`, `http_status`, `wechat_code`, `request_id`, and `action`; credentials, request bodies, and other sensitive values are never returned.
