@@ -26,7 +26,10 @@ export default {
     password: 'Password',
     submit: 'Submit',
     back: 'Back',
+    retry: 'Retry',
+    previous: 'Previous',
     next: 'Next',
+    pagination: 'Pagination',
     yes: 'Yes',
     no: 'No',
     all: 'All',
@@ -195,6 +198,7 @@ export default {
     securityAudit: 'Security Audit',
     contentModeration: 'Content Moderation',
     promptAudit: 'Prompt Audit',
+    qqbot: 'QQBot',
     auditLogs: 'Audit Logs',
   },
 

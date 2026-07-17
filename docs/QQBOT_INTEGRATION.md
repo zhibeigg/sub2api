@@ -1,138 +1,96 @@
-# QQBot 账户绑定集成
+# QQBot 单体集成、管理 API 与迁移指南
 
-Sub2API `0.57.60` 增加供独立 `sub2api-qqbot` 服务使用的 HMAC 私有 API；`0.57.62` 补充绑定前的现有 QQ 身份检测与统一邮箱脱敏响应。QQBot 只接收腾讯官方事件、发送消息、代理网页与管理请求，不直接连接 Sub2API 数据库。
+Sub2API `0.60.64` 将腾讯官方 QQBot Webhook、消息 Runtime、绑定页面和运营管理并入主进程。机器人不再需要独立 `sub2api-qqbot` 服务、独立管理员会话或专用 Redis；管理员统一从 Sub2API 后台的 **QQBot** 页面配置、启停和诊断。
 
-## 架构与信任边界
+已有 QQBot 绑定数据、身份、首次赠送、余额流水和审计继续保存在 Sub2API PostgreSQL 中。单体化不会改变 canonical identity、奖励幂等或历史记录。
+
+## 1. 架构
 
 ```text
 腾讯官方 Webhook
-        │ Ed25519
+        │ Ed25519 / op=13
         ▼
-sub2api-qqbot ── HMAC-SHA256 + timestamp + nonce ──► Sub2API
-        │                                               │
-        ├─ Redis：事件去重、限流、欢迎去重              ├─ Redis：HMAC nonce 防重放
-        └─ Vue：绑定页、管理后台                         └─ PostgreSQL：身份、赠送、流水、审计
+Sub2API /webhooks/qq
+        │
+        ├─ QQBot Runtime
+        │   ├─ Redis Stream：可靠事件队列、重试与恢复
+        │   ├─ Redis：事件/欢迎去重与限流
+        │   └─ BotGo OpenAPI：群、C2C、频道消息
+        │
+        ├─ PostgreSQL
+        │   ├─ 加密 Runtime 配置
+        │   ├─ 绑定挑战与审计
+        │   ├─ auth identity/channel
+        │   └─ provider grant、余额与流水
+        │
+        └─ Vue
+            ├─ /admin/qqbot：统一运营后台
+            └─ /bind：邮箱验证绑定页
 ```
 
-真正绑定主体是腾讯事件提供的 OpenID/频道用户 ID。网页填写的数字 QQ 号只用于展示，不参与认证、唯一性判断或账户合并。
+旧的 `/api/v1/integrations/qqbot` HMAC API 在迁移和回滚窗口内保留。独立实例删除后应关闭 `qqbot_integration.enabled` 并移除 HMAC 环境变量。
 
-## 配置
+## 2. 身份与奖励规则
 
-`config.yaml`：
+- 认证主体始终是腾讯事件中的官方 OpenID 或频道用户 ID。
+- `provider_subject` 保持 `<scene>:<subject>` 格式，并与 `bot_app_id` 一起隔离身份。
+- 支持场景：`group`、`c2c`、`guild`。
+- 网页输入的数字 QQ 号只用于展示，不参与认证、唯一性判断或账户合并。
+- 原始邮箱 token 只存在于邮件链接，数据库仅保存 SHA-256。
+- 首次奖励唯一维度为 `user_id + provider_type=qqbot + grant_reason=first_bind`。
+- 身份、provider grant、余额、兑换流水和挑战完成在一个 PostgreSQL 事务中提交。
+- 解绑不删除历史 grant、不回收奖励，重新绑定不会再次获得首绑奖励。
 
-```yaml
-qqbot_integration:
-  enabled: true
-  key_id: "qqbot-primary"
-  hmac_secret: "至少 32 字节随机密钥"
-  public_base_url: "https://qqbot.poke2api.com"
-  timestamp_tolerance_seconds: 300
-  nonce_ttl_seconds: 600
-```
+## 3. 后台配置
 
-生产环境建议通过环境变量注入：
+入口：`/admin/qqbot`。
 
-```dotenv
-QQBOT_INTEGRATION_ENABLED=true
-QQBOT_INTEGRATION_KEY_ID=qqbot-primary
-QQBOT_INTEGRATION_HMAC_SECRET=<secret>
-QQBOT_INTEGRATION_PUBLIC_BASE_URL=https://qqbot.poke2api.com
-QQBOT_INTEGRATION_TIMESTAMP_TOLERANCE_SECONDS=300
-QQBOT_INTEGRATION_NONCE_TTL_SECONDS=600
-```
+页面包括：
 
-QQBot 侧对应配置 `SUB2API_QQBOT_KEY_ID`、`SUB2API_QQBOT_HMAC_SECRET` 与 Sub2API 内网地址。
+1. **概览**：启用状态、Runtime 状态、队列积压、worker、最近 Webhook/事件/发送时间。
+2. **机器人配置**：AppID、AppSecret、Webhook Secret、Sandbox、公共域名、worker、队列和 API timeout。
+3. **消息与欢迎**：绑定开关、首绑奖励、链接 TTL、帮助文案、欢迎开关、群/频道白名单与频道欢迎映射。
+4. **绑定记录**：统计、分页、状态/场景/时间筛选和管理员解绑。
+5. **诊断**：Webhook URL、域名归属校验 URL、desired/active 配置版本、最近稳定错误码和腾讯凭据 probe。
 
-## HMAC 协议
+### 3.1 敏感字段
 
-请求头：
+AppSecret 和 Webhook Secret 使用 Sub2API 现有 `TOTP_ENCRYPTION_KEY` 派生的 AES-256-GCM encryptor 加密后保存到 PostgreSQL。
 
-- `X-QQBot-Key-Id`
-- `X-QQBot-Timestamp`：Unix 秒
-- `X-QQBot-Nonce`：CSPRNG 随机值
-- `X-QQBot-Signature`：HMAC-SHA256 十六进制小写
-
-规范串：
-
-```text
-METHOD\nrequest.URL.RequestURI()\ntimestamp\nnonce\nsha256(body)
-```
-
-Sub2API 先校验 key、时间窗口和签名，再使用 Redis `SET NX` 写入 nonce。Redis 不可用时 fail-closed，私有请求返回 `503 QQBOT_REPLAY_GUARD_UNAVAILABLE`。
-
-## API
-
-前缀：`/api/v1/integrations/qqbot`
-
-| 方法 | 路径 | 用途 |
-|---|---|---|
-| POST | `/bindings/prepare` | 先检查 QQ 身份是否已绑定；未绑定时创建邮箱验证挑战并异步发送邮件 |
-| POST | `/bindings/inspect` | 检查 token 状态 |
-| POST | `/bindings/complete` | 原子完成绑定和首次赠送 |
-| GET | `/bindings` | 管理端分页记录 |
-| POST | `/bindings/{id}/unbind` | 管理员解绑 |
-| GET | `/stats` | 管理统计 |
-| GET | `/settings` | 读取运行设置 |
-| PATCH | `/settings` | 更新运行设置并写审计 |
-
-所有响应沿用 Sub2API envelope：
+管理 API 只返回：
 
 ```json
 {
-  "code": 0,
-  "message": "success",
-  "data": {}
+  "app_secret_configured": true,
+  "webhook_secret_configured": true
 }
 ```
 
-`POST /bindings/prepare` 在腾讯官方身份已经绑定时返回：
+不会返回明文或密文。更新时将密钥字段留空表示保留原值；只有非空新值才会替换。日志、HTTP 响应和审计记录不得包含密钥。
 
-```json
-{
-  "accepted": true,
-  "already_bound": true,
-  "masked_email": "7***7@qq.com"
-}
-```
+生产必须显式配置稳定的 `TOTP_ENCRYPTION_KEY`。更换该密钥前必须先完成受控的密文重加密，否则历史 QQBot 凭据无法解密。
 
-此时不会创建新挑战或重复发送验证邮件。未绑定时 `already_bound` 省略或为 `false`，`masked_email` 仍使用“首字符 + 星号 + 尾字符”的统一格式。
+### 3.2 Runtime 配置
 
-常用错误 reason：`INVALID_BINDING_TOKEN`、`BINDING_EXPIRED`、`BINDING_REVOKED`、`BINDING_DISABLED`、`INVALID_QQ_NUMBER`、`QQ_IDENTITY_CONFLICT`。
+数据库设置 `qqbot_runtime_config` 保存：
 
-## 邮箱验证与防枚举
+- `enabled`
+- `app_id`
+- 加密后的 AppSecret/Webhook Secret
+- `sandbox`
+- `public_base_url`
+- `worker_count`
+- `queue_capacity`
+- `api_timeout_ms`
+- `config_version`、更新人、更新时间和脱敏变更摘要
 
-1. 用户在 QQ 发送 `/bind name@example.com`。
-2. QQBot 将事件 ID、Bot AppID、场景、官方身份和邮箱发给 Sub2API。
-3. Sub2API 先按 `provider_type=qqbot + BotAppID + 官方身份` 查询现有绑定；已绑定时返回真实账户邮箱的脱敏值，不创建挑战、不发送邮件。
-4. 未绑定时，对存在且可用的账户创建一次性挑战，向账户主邮箱发送链接。
-5. 未知或禁用账户仍返回同形 `accepted=true`，但不会发送邮件，避免账户枚举。
-6. 原始 token 只存在于邮件链接；数据库仅保存 SHA-256。
-7. 链接默认 15 分钟过期，完成、过期或撤销后不可再次改变身份或奖励。
+配置使用版本乐观锁。管理员保存成功后，本实例立即安装新快照，并通过 Redis Pub/Sub 通知其他实例 reload；周期 reload 作为兜底。
 
-## 原子绑定与首次赠送
+启用前会校验必填项并执行腾讯凭据 probe。probe 成功后，主 Redis 仅保存与 AppID、AppSecret、Webhook Secret、Sandbox 组合绑定的哈希指纹凭证，有效期 5 分钟；启用、AppID/Sandbox 变更或任一密钥轮换时，保存接口会在服务端强制校验该凭证，不能只绕过前端直接提交。新配置无法激活时，旧活动配置继续运行，后台显示 `degraded` 原因，不会把无效密钥静默切入生产。
 
-Migration `183_qqbot_account_binding.sql`：
+### 3.3 业务设置
 
-- 将 `qqbot` 加入 `auth_identities`、`auth_identity_channels`、`pending_auth_sessions` 和 `user_provider_default_grants` 的 provider 约束。
-- 创建 `qqbot_binding_challenges` 与 `qqbot_binding_audit_logs`。
-- 写入 QQBot 动态设置默认值。
-
-完成绑定在同一个 PostgreSQL 事务中执行：
-
-1. `FOR UPDATE` 锁定挑战。
-2. 使用 advisory transaction lock 串行化同一 OpenID 和同一用户。
-3. 创建或确认 `provider_type=qqbot` canonical identity 与场景 channel。
-4. 插入唯一 ledger：`user_id + qqbot + first_bind`。
-5. 只有 ledger 首次插入成功时才增加余额并创建已使用 balance redeem 流水。
-6. 更新挑战余额前后快照和完成状态。
-7. 写入不可变审计记录。
-8. 提交后异步失效余额缓存并发送完成通知。
-
-因此并发点击、Webhook 重投、HTTP 重试和解绑后重绑均不会重复到账。解绑不回收既有余额，也不会删除首次 grant。
-
-## 动态设置
-
-数据库 key：
+为兼容现有生产数据，以下 key 继续保留：
 
 - `qqbot_binding_enabled`
 - `qqbot_first_bind_bonus`
@@ -144,19 +102,247 @@ Migration `183_qqbot_account_binding.sql`：
 - `qqbot_allowed_guild_ids`
 - `qqbot_guild_welcome_channels`
 
-群和频道白名单为空时 QQBot 对相应公共场景 fail-closed；C2C 私聊仍可用。
+群或频道白名单为空时，对应公共场景 fail-closed；C2C 私聊仍可使用。
 
-## 隐私与审计
+普通 QQ 群没有官方成员加入事件，因此普通群欢迎基于首次 @/首次交互；QQ 频道使用 `GUILD_MEMBER_ADD` 实现真实成员加入欢迎。
 
-禁止记录原始 token、完整邮箱、完整 OpenID、QQ AppSecret、Webhook Secret、HMAC secret 或管理员会话。管理列表只返回脱敏邮箱和 OpenID 短指纹。审计覆盖 prepare、complete、expire、email、notify、unbind 和 settings。
+## 4. Webhook 和消息处理
 
-## 部署顺序
+### 4.1 腾讯入口
 
-1. 备份 PostgreSQL、Sub2API 配置和镜像。
-2. 部署 Sub2API `0.57.62`（包含 migration `183`、标准 MIME 邮件修复和已绑定身份检测）。
-3. 配置并启用 `qqbot_integration`，确认 Redis 可用。
-4. 部署 QQBot，先保持 `QQBOT_ENABLED=false`，检查 `/readyz`。
-5. 配置 Nginx、TLS 与腾讯 Webhook。
-6. 使用测试群/频道完成灰度，再开启正式白名单和绑定。
+```text
+POST /webhooks/qq
+```
 
-回滚代码时保留 migration `183` 的新增表和列，采用前向修复；不要删除已经产生的身份、grant、流水或审计记录。
+- `op=13`：使用配置的 Webhook Secret（未单独配置时使用 AppSecret）签名 `event_ts + plain_token` 并返回地址校验响应。
+- dispatch：使用 BotGo 官方 Ed25519 方案验证请求签名。
+- 心跳和其他 opcode 按腾讯协议返回 ACK。
+- 请求体有大小限制；非法签名、配置不可用或可靠队列不可用时 fail-closed。
+
+域名归属校验文件由活动 AppID 动态提供：
+
+```text
+GET /<AppID>.json
+```
+
+响应只包含对应 `bot_appid`，AppID 变化后无需重新构建前端静态文件。
+
+### 4.2 可靠事件队列
+
+Webhook 完成验签和事件规范化后，使用 Redis Lua 原子完成：
+
+1. event ID 24 小时去重。
+2. 加密事件 payload。
+3. `XADD` 到 QQBot Stream。
+
+只有可靠写入成功后才返回成功 ACK。worker 通过 consumer group 消费，支持 pending reclaim、有限重试、死信和主进程重启恢复。事件成功后才 `XACK`，不会出现“去重键已写入但业务失败后永不重试”的旧行为。
+
+欢迎去重保留 180 天，`/bind` 默认每个官方身份 5 分钟 3 次。Redis I/O 使用有超时的 context，worker 和 reclaim goroutine 统一由 Runtime 生命周期管理。停用、重载或主进程退出时先停止接收新事件，并在最多 10 秒内等待 backlog/pending 清空；超过门限后取消 worker，未完成消息仍保留在 pending 中供下次 reclaim，不会因强制 ACK 丢失。
+
+### 4.3 命令
+
+支持：
+
+```text
+/help
+help
+帮助
+/帮助
+```
+
+```text
+/bind name@example.com
+bind name@example.com
+绑定 name@example.com
+/绑定 name@example.com
+```
+
+未知邮箱和存在邮箱返回同形结果，防止账户枚举。已绑定的官方身份只返回真实账户邮箱的脱敏值，不创建新挑战或重复发送邮件。
+
+## 5. HTTP API
+
+所有响应沿用 Sub2API envelope：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {}
+}
+```
+
+### 5.1 公共绑定 API
+
+#### 检查链接
+
+```text
+POST /api/v1/public/bindings/inspect
+```
+
+```json
+{ "token": "raw-email-token" }
+```
+
+#### 完成绑定
+
+```text
+POST /api/v1/public/bindings/complete
+```
+
+```json
+{
+  "token": "raw-email-token",
+  "qq_number": "12345678"
+}
+```
+
+`qq_number` 必须是 5 至 12 位数字且不能以 0 开头。公共接口使用统一安全客户端 IP 解析：inspect 为每个来源 IP 每分钟 30 次，complete 为每个来源 IP 每 10 分钟 10 次；不返回用户 ID、完整邮箱或完整 OpenID。
+
+主要错误 reason：
+
+- `INVALID_BINDING_TOKEN`
+- `BINDING_EXPIRED`
+- `BINDING_REVOKED`
+- `BINDING_DISABLED`
+- `INVALID_QQ_NUMBER`
+- `QQ_IDENTITY_CONFLICT`
+
+### 5.2 管理 API
+
+全部位于 Sub2API 标准管理员认证、合规和操作审计中间件之后：
+
+| 方法 | 路径 | 用途 |
+|---|---|---|
+| GET | `/api/v1/admin/qqbot/config` | 读取脱敏配置 |
+| PUT | `/api/v1/admin/qqbot/config` | 原子更新 Runtime 与业务设置 |
+| POST | `/api/v1/admin/qqbot/probe` | 测试腾讯凭据/连接 |
+| GET | `/api/v1/admin/qqbot/runtime` | Runtime、队列与版本状态 |
+| GET | `/api/v1/admin/qqbot/stats` | 绑定统计 |
+| GET | `/api/v1/admin/qqbot/bindings` | 分页和筛选绑定记录 |
+| POST | `/api/v1/admin/qqbot/bindings/:id/unbind` | 管理员解绑 |
+
+管理员主体从认证上下文读取，客户端不能提交或伪造 `admin_subject`。
+
+### 5.3 旧版 HMAC API
+
+迁移窗口内保留：
+
+```text
+/api/v1/integrations/qqbot
+```
+
+它仅用于旧独立实例回滚。正常单体运行不依赖该接口。独立实例删除后：
+
+- `qqbot_integration.enabled=false`
+- 删除 `QQBOT_INTEGRATION_HMAC_SECRET` 等环境变量
+- 不长期保留旧 HMAC secret
+
+## 6. 安全与隐私
+
+禁止记录或返回：
+
+- QQ AppSecret、Webhook Secret、旧 HMAC secret
+- 原始邮件验证 token
+- 完整邮箱
+- 完整 OpenID/provider subject
+- 完整消息正文或 `/bind` 邮箱参数
+- 管理员 Token、Cookie 或密码
+
+日志只使用短 event/request ID、稳定错误码、脱敏邮箱和哈希指纹。QQBot 业务审计的 actor subject 使用哈希/短指纹，不保存完整官方身份。
+
+管理员修改密钥、启停、解绑和 probe 均进入 Sub2API 统一审计。配置变更摘要只保存布尔状态、数量和哈希。
+
+## 7. 从独立实例迁移
+
+### 7.1 迁移前备份
+
+备份：
+
+- 当前 Sub2API 镜像、Compose 和 Nginx QQBot 配置。
+- PostgreSQL 全量数据。
+- 主 Redis 与 QQBot 专用 Redis 的持久数据。
+- 独立 QQBot Compose、`.env` 和镜像的加密离线回滚包。
+
+不得通过终端、日志或工单输出 `.env` 内容。
+
+### 7.2 配置导入
+
+首次部署内置 Runtime 时，migration 会写入一条 pristine、`enabled=false` 的 `qqbot_runtime_config`。当该记录尚未被管理员修改且检测到 `QQBOT_APP_ID`、`QQBOT_APP_SECRET`、`QQBOT_WEBHOOK_SECRET` 或显式 `QQBOT_PUBLIC_BASE_URL` 时，Runtime 可在受控部署窗口执行一次性导入；旧独立服务的通用 `PUBLIC_BASE_URL` 只有在同一环境同时存在 QQBot 凭据时才会读取，避免误用主站域名。
+
+1. 读取旧 AppID、AppSecret、Webhook Secret、Sandbox、公共域名和 worker 参数。
+2. 使用 Sub2API encryptor 加密敏感字段。
+3. 写入数据库，仍保持 disabled，并标记 bootstrap 已完成，后续启动不重复导入。
+4. 在后台确认只显示 configured 状态并通过 probe。
+5. 从主 Compose 移除一次性 bootstrap secret，再重新创建主容器。
+
+导入完成后所有修改都在 `/admin/qqbot` 完成。
+
+### 7.3 Redis 状态
+
+把旧专用 Redis 的 `sub2api:qqbot:*` 去重/欢迎键复制到主 Redis，保留原键名和剩余 TTL。迁移只比较键数量、类型和 TTL 范围，不读取或输出值。
+
+新 Redis Stream 从空队列开始。切流前主 Redis 不应存在冲突的旧 QQBot key。
+
+### 7.4 Nginx 切流
+
+保持腾讯平台和邮件使用的域名：
+
+```text
+https://qqbot.mcwar.cn
+```
+
+把 QQBot Nginx upstream 从：
+
+```text
+127.0.0.1:8090
+```
+
+改为：
+
+```text
+127.0.0.1:8080
+```
+
+执行 `nginx -t` 后 reload。建议将旧 `qqbot.poke2api.com` 统一 308 重定向到 `qqbot.mcwar.cn`。
+
+QQBot 域名只用于 Webhook、归属校验、公共绑定页和静态资源；应拒绝 `/api/v1/admin/*`。管理员从 Sub2API 正式后台进入 `/admin/qqbot`。
+
+## 8. 灰度验收
+
+至少验证：
+
+1. Runtime disabled/running/degraded 状态正确，启停无需重启主容器。
+2. `<AppID>.json` 和 `op=13` 地址校验。
+3. 非法 dispatch 签名被拒绝。
+4. 测试群首次 @ 欢迎只发送一次。
+5. C2C `/help`、`/bind` 和已绑定身份提示。
+6. 邮件链接、绑定完成、余额和兑换流水。
+7. 同链接并发提交、Webhook 重投和解绑后重绑不重复赠送。
+8. 修改帮助文案、白名单和 worker 后热更新生效。
+9. 主容器重启后 pending Stream 事件可恢复。
+10. 日志和审计无密钥、完整邮箱、完整 OpenID 或消息正文。
+
+切流后先停止旧容器但保留其容器、卷、镜像和部署目录，完成回滚演练后再删除。
+
+## 9. 回滚
+
+独立资源删除前的快速回滚：
+
+1. 在后台禁用内置 Runtime。
+2. Nginx upstream 恢复 `127.0.0.1:8090`。
+3. 启动旧 QQBot 与专用 Redis。
+4. 验证旧 `/healthz`、`/readyz` 和 HMAC bridge。
+5. 必要时主镜像恢复到切流前版本。
+
+SQL migration 为向前兼容新增。回滚代码时保留 migration、新设置、挑战、身份、grant、余额、流水和审计，采用前向修复，禁止删除已产生的业务数据。
+
+## 10. 最终下线
+
+仅在单体验收与回滚演练通过后：
+
+- 删除独立 QQBot/Redis 容器、专用网络和数据卷。
+- 删除独立 QQBot 镜像、宿主机 8090 端口和活动部署目录。
+- 关闭旧 HMAC bridge 并移除其环境变量。
+- 轮换 QQ AppSecret/Webhook Secret，并只保存到 Sub2API 加密配置。
+- 废弃独立管理员密码、session secret 和 HMAC secret。
+- 加密离线回滚包按运维保留策略保存，活动服务器不保留明文 `.env`。

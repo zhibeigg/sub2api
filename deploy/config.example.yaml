@@ -65,20 +65,23 @@ server:
     max_upload_buffer_per_stream: 524288
 
 # =============================================================================
-# QQBot Private Integration
-# QQBot 私有集成
+# QQBot Legacy Bridge (migration / rollback only)
+# QQBot 旧版桥接（仅迁移与回滚使用）
 # =============================================================================
-# The standalone sub2api-qqbot service calls /api/v1/integrations/qqbot with
-# HMAC-SHA256. Keep this disabled until a shared secret and public binding URL
-# are configured. Prefer environment variables for the secret:
-# QQBOT_INTEGRATION_HMAC_SECRET=<at least 32 random bytes>
-# 独立 QQBot 服务通过 HMAC-SHA256 调用私有 API。配置共享密钥与公共绑定页后再启用；
-# 密钥建议仅通过环境变量注入。
+# The built-in QQBot runtime is configured from Admin -> QQBot and stores bot
+# credentials encrypted in PostgreSQL. Do not place Tencent AppSecret or
+# Webhook Secret in this file. The HMAC bridge below exists only so an older
+# standalone sub2api-qqbot container can be restored during a migration window.
+# Keep it disabled for normal built-in operation and remove its environment
+# secret after the standalone instance is retired.
+# 内置 QQBot 请在“管理后台 -> QQBot”中配置，机器人密钥加密保存到 PostgreSQL；
+# 不要在此文件填写腾讯 AppSecret 或 Webhook Secret。以下 HMAC 桥接仅用于迁移期回滚旧容器，
+# 正常单体运行时保持关闭，独立实例下线后应移除对应环境变量。
 qqbot_integration:
   enabled: false
   key_id: "qqbot-primary"
   hmac_secret: ""
-  public_base_url: "https://qqbot.example.com"
+  public_base_url: ""
   timestamp_tolerance_seconds: 300
   nonce_ttl_seconds: 600
 

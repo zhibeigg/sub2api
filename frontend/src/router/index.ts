@@ -177,6 +177,17 @@ const routes: RouteRecordRaw[] = [
       title: 'Legal Document'
     }
   },
+  {
+    path: '/bind',
+    name: 'QQBotBind',
+    component: () => import('@/features/qqbot/public/BindView.vue'),
+    meta: {
+      requiresAuth: false,
+      title: 'QQ Account Binding',
+      titleKey: 'qqbotBind.pageTitle',
+      descriptionKey: 'qqbotBind.description'
+    }
+  },
 
   // ==================== User Routes ====================
   {
@@ -627,6 +638,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/qqbot',
+    name: 'AdminQQBot',
+    component: () => import('@/features/qqbot/QQBotView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'QQBot Management',
+      titleKey: 'admin.qqbot.title',
+      descriptionKey: 'admin.qqbot.description'
+    }
+  },
+  {
     path: '/admin/usage',
     name: 'AdminUsage',
     component: () => import('@/views/admin/UsageView.vue'),
@@ -754,7 +777,7 @@ let authInitialized = false
 const navigationLoading = useNavigationLoadingState()
 // 延迟初始化预加载，传入 router 实例
 let routePrefetch: ReturnType<typeof useRoutePrefetch> | null = null
-const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/payment/result', '/payment/airwallex', '/legal']
+const BACKEND_MODE_ALLOWED_PATHS = ['/login', '/key-usage', '/setup', '/payment/result', '/payment/airwallex', '/legal', '/bind']
 const BACKEND_MODE_CALLBACK_PATHS = [
   '/auth/callback',
   '/auth/linuxdo/callback',

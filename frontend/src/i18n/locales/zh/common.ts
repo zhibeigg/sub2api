@@ -26,7 +26,10 @@ export default {
     password: '密码',
     submit: '提交',
     back: '返回',
+    retry: '重试',
+    previous: '上一步',
     next: '下一步',
+    pagination: '分页',
     yes: '是',
     no: '否',
     all: '全部',
@@ -195,6 +198,7 @@ export default {
     securityAudit: '安全审计',
     contentModeration: '内容审核',
     promptAudit: '提示词审计',
+    qqbot: 'QQBot',
     auditLogs: '操作日志',
   },
 

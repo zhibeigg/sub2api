@@ -164,6 +164,11 @@ func runMainServer() {
 			log.Printf("Prompt Audit started in degraded fail-closed state: %v", err)
 		}
 	}
+	if app.QQBot != nil {
+		if err := app.QQBot.Start(context.Background()); err != nil {
+			log.Printf("QQBot runtime started in disabled/degraded state: %v", err)
+		}
+	}
 
 	// 启动服务器
 	go func() {

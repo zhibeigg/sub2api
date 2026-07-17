@@ -13,6 +13,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
+	"github.com/Wei-Shaw/sub2api/internal/qqbot"
 	"github.com/Wei-Shaw/sub2api/internal/repository"
 	"github.com/Wei-Shaw/sub2api/internal/securityaudit"
 	"github.com/Wei-Shaw/sub2api/internal/server"
@@ -313,7 +314,10 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	qqBotBindingRepository := repository.NewQQBotBindingRepository(db)
 	qqBotUserLookup := service.ProvideQQBotUserLookup(userRepository)
 	qqBotService := service.NewQQBotService(qqBotBindingRepository, qqBotUserLookup, settingRepository, emailQueueService, billingCache, notificationEmailService, configConfig)
-	qqBotHandler := handler.NewQQBotHandler(qqBotService)
+	qqbotConfigManager := qqbot.NewConfigManager(db, settingRepository, redisClient, secretEncryptor, configConfig)
+	reliableQueue := qqbot.NewReliableQueue(redisClient, secretEncryptor)
+	runtime := qqbot.NewRuntime(qqbotConfigManager, reliableQueue, qqBotService)
+	qqBotHandler := handler.NewQQBotHandler(qqBotService, qqbotConfigManager, runtime, reliableQueue)
 	idempotencyCoordinator := service.ProvideIdempotencyCoordinator(idempotencyRepository, configConfig)
 	idempotencyCleanupService := service.ProvideIdempotencyCleanupService(idempotencyRepository, configConfig)
 	handlers := handler.ProvideHandlers(authHandler, userHandler, apiKeyHandler, playgroundHandler, usageHandler, redeemHandler, subscriptionHandler, announcementHandler, channelMonitorUserHandler, adminHandlers, gatewayHandler, openAIGatewayHandler, adobeMediaHandler, handlerSettingHandler, totpHandler, handlerPaymentHandler, paymentWebhookHandler, availableChannelHandler, asyncImageHandler, batchImageHandler, qqBotHandler, idempotencyCoordinator, idempotencyCleanupService)
@@ -339,10 +343,11 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	paymentOrderExpiryService := service.ProvidePaymentOrderExpiryService(paymentService, leaderLockCache, db)
 	channelMonitorRunner := service.ProvideChannelMonitorRunner(channelMonitorService, settingService)
 	userPlatformQuotaUsageFlusher := service.ProvideUserPlatformQuotaUsageFlusher(configConfig, billingCache, serviceUserPlatformQuotaRepository, timingWheelService)
-	v := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, schedulerSnapshotService, tokenRefreshService, cursorDashboardMaintenanceService, accountExpiryService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, batchImageCleanupService, openAIImageUploadTempService, batchImageWorkerRuntime, announcementEmailDispatchRuntime, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, userPlatformQuotaUsageFlusher, upstreamBillingProbeService, auditLogService, promptService)
+	v := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, schedulerSnapshotService, tokenRefreshService, cursorDashboardMaintenanceService, accountExpiryService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, batchImageCleanupService, openAIImageUploadTempService, batchImageWorkerRuntime, announcementEmailDispatchRuntime, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, userPlatformQuotaUsageFlusher, upstreamBillingProbeService, auditLogService, promptService, runtime)
 	application := &Application{
 		Server:      httpServer,
 		PromptAudit: promptService,
+		QQBot:       runtime,
 		Cleanup:     v,
 	}
 	return application, nil
@@ -353,6 +358,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 type Application struct {
 	Server      *http.Server
 	PromptAudit *securityaudit.PromptService
+	QQBot       *qqbot.Runtime
 	Cleanup     func()
 }
 
@@ -407,6 +413,7 @@ func provideCleanup(
 	upstreamBillingProbe *service.UpstreamBillingProbeService,
 	auditLog *service.AuditLogService,
 	promptAudit *securityaudit.PromptService,
+	qqBotRuntime *qqbot.Runtime,
 ) func() {
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -418,6 +425,12 @@ func provideCleanup(
 		}
 
 		parallelSteps := []cleanupStep{
+			{"QQBotRuntime", func() error {
+				if qqBotRuntime != nil {
+					return qqBotRuntime.Shutdown(ctx)
+				}
+				return nil
+			}},
 			{"PromptAuditService", func() error {
 				if promptAudit != nil {
 					return promptAudit.Shutdown(ctx)

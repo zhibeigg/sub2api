@@ -117,6 +117,9 @@ func RegisterAdminRoutes(
 		// 独立提示词输入审计
 		registerPromptAuditRoutes(admin, h)
 
+		// QQBot 单体运行时与绑定管理
+		registerQQBotAdminRoutes(admin, h)
+
 		// 邀请返利（专属用户管理）
 		registerAffiliateRoutes(admin, h)
 
@@ -138,6 +141,19 @@ func registerPromptAuditRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		promptAudit.POST("/events/batch-delete", h.Admin.PromptAudit.BatchDelete)
 		promptAudit.POST("/events/delete-preview", h.Admin.PromptAudit.DeletePreview)
 		promptAudit.POST("/events/delete-by-filter", h.Admin.PromptAudit.DeleteByFilter)
+	}
+}
+
+func registerQQBotAdminRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	qqBot := admin.Group("/qqbot")
+	{
+		qqBot.GET("/config", h.QQBot.GetConfig)
+		qqBot.PUT("/config", h.QQBot.UpdateConfig)
+		qqBot.POST("/probe", h.QQBot.Probe)
+		qqBot.GET("/runtime", h.QQBot.GetRuntime)
+		qqBot.GET("/stats", h.QQBot.Stats)
+		qqBot.GET("/bindings", h.QQBot.ListBindings)
+		qqBot.POST("/bindings/:id/unbind", h.QQBot.AdminUnbind)
 	}
 }
 
