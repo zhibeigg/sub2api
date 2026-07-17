@@ -34,7 +34,7 @@ Sub2API 内置支付系统，支持用户自助充值，无需部署独立的支
 |--------|---------|------|
 | **EasyPay（易支付）** | 支付宝、微信支付、QQ 支付 | 同一 `easypay` 服务商通过 `protocolVersion=1/2` 兼容易支付 V1 MD5 与彩虹易支付 2.0 RSA-SHA256；QQ 支付取决于上游是否开通对应通道 |
 | **支付宝官方** | 桌面二维码扫码、移动端支付宝跳转 | 直接对接支付宝开放平台，桌面端返回二维码，移动端返回 WAP/唤起链接 |
-| **微信官方** | Native 扫码、H5、公众号/JSAPI 支付 | 直接对接微信支付 APIv3，按终端环境自动分流 |
+| **微信官方** | Native 扫码、H5、公众号/企业微信 JSAPI 支付 | 直接对接微信支付 APIv3，按终端环境与 OAuth 模式安全分流 |
 | **Stripe** | 银行卡、支付宝、微信支付、Link 等 | 国际支付，支持多币种 |
 
 > 支付宝官方 / 微信官方与易支付可以同时作为后台服务商实例存在，但前台统一展示 `支付宝`、`微信支付`、`QQ 支付` 三种可见方式。管理员需要分别设置是否显示及唯一支付来源：支付宝、微信可选择官方直连或易支付，QQ 支付使用易支付来源。QQ 按钮是否能实际支付还取决于上游商户是否开通 QQ 通道。
@@ -158,7 +158,7 @@ EasyPay V1 支持 `alipay`、`wxpay`；V2 支持 `alipay`、`wxpay`、`qqpay`。
 
 ### 微信官方
 
-直接对接微信支付 APIv3，支持 Native 扫码支付、H5 支付，以及在微信环境内的公众号/JSAPI 支付。
+直接对接微信支付 APIv3，支持 Native 扫码支付、H5 支付，以及公众号或企业微信内的 JSAPI 支付。
 
 | 参数 | 说明 | 必填 |
 |------|------|------|
@@ -170,24 +170,41 @@ EasyPay V1 支持 `alipay`、`wxpay`；V2 支持 `alipay`、`wxpay`、`qqpay`。
 | **微信支付公钥 ID** | 微信支付公钥 ID | 是 |
 | **商户证书序列号** | 商户证书序列号 | 是 |
 
-基础支付 `appId` 可以是商户平台已关联的微信 AppID（小写 `wx` 前缀）或企业微信 CorpID（小写 `ww` 前缀）；公众号 `mpAppId` 仍必须是 `wx` 前缀。启用中的实例会在保存时校验；历史实例仍可加载，但下单前会按实际模式再次校验，格式错误时在本地阻断且不会调用微信接口。企业微信 CorpID 可用于基础支付账号关联，但当前公众号 OAuth/JSAPI 流程不使用企业微信身份；以 `ww` 作为基础账号时，启用 JSAPI 必须另填公众号 `mpAppId`。
-
-能力开关与场景配置：
+JSAPI 支付支持两种 OAuth 身份模式，由 `jsapiAuthType=mp|wecom` 选择；历史配置缺少该字段时默认 `mp`。基础支付 `appId` 仍可使用商户平台已关联的微信 AppID（小写 `wx` 前缀）或企业微信 CorpID（小写 `ww` 前缀），但 JSAPI 的身份、OAuth 凭据和 AppID 必须按所选模式成套匹配：
 
 | 配置键 | 说明 | 默认/兼容行为 |
 |--------|------|---------------|
-| `nativeEnabled` | 是否允许 Native 扫码支付 | 历史配置缺失时为 `true` |
+| `nativeEnabled` | 是否允许 Native 扫码支付 | 历史配置缺失时为 `true`；不受 OAuth 模式影响 |
 | `h5Enabled` | 是否允许 H5 支付 | 历史配置缺失时，仅当 `h5AppName` 与 `h5AppUrl` 均完整时为 `true` |
-| `jsapiEnabled` | 是否允许公众号/JSAPI 支付 | 历史配置缺失时，仅当 `mpAppId` 非空时为 `true` |
+| `jsapiEnabled` | 是否允许 JSAPI 支付 | 历史配置缺失时，仅 `mp` 模式且 `mpAppId` 非空时推导为 `true`；企业微信模式应显式设为 `true` |
+| `jsapiAuthType` | JSAPI OAuth 模式：`mp` 或 `wecom` | 缺失时为 `mp` |
 | `h5AppName` | 微信商户平台登记的 H5 应用名称 | `h5Enabled=true` 时必填 |
 | `h5AppUrl` | H5 应用站点地址 | `h5Enabled=true` 时必须为绝对 HTTPS URL |
-| `mpAppId` | 公众号 AppID（仅 `wx` 前缀） | 基础 `appId` 为 `ww` 企业微信 CorpID 且启用 JSAPI 时必填；否则可留空回退基础 `appId` |
+| `mpAppId` | 公众号 AppID（`wx` 前缀） | `mp` 模式使用；历史 `wx` 配置可在未填写时回退基础 `appId` |
+| `wecomAppSecret` | 企业微信自建应用 Secret | `wecom` 模式启用 JSAPI 时必填，属于敏感字段 |
+| `wecomAgentId` | 企业微信自建应用 AgentId | 可选；填写时必须是正整数 |
 
-显式布尔值始终优先于历史推导。只应启用微信商户平台已经实际开通的能力；关闭的模式会在本地阻断，不会调用对应微信接口。
+- **公众号模式（`mp`）**：JSAPI 使用 `mpAppId`（`wx`）以及全局“微信连接/OAuth”中同一公众号的 OAuth Secret；支付实例 AppID 与全局公众号 OAuth AppID 必须一致。历史 `wx` 实例可沿用 `appId` 回退，但新配置建议显式填写 `mpAppId`。
+- **企业微信模式（`wecom`）**：实例 `appId` 必须是企业微信 CorpID（`ww`），并配置该 CorpID 下自建应用的 `wecomAppSecret`；`wecomAgentId` 可选。企业微信 OAuth 固定使用 `snsapi_base`：内部成员返回 `userid` 时，服务端继续调用成员转换接口得到支付所需 OpenID；外部访问者若直接返回 OpenID，则直接使用。
 
-模式选择规则：有 OpenID 时只允许 JSAPI；微信内但未启用 JSAPI 时不启动 OAuth，并在 Native 已启用时安全返回二维码；普通移动端优先 H5，未启用或缺少客户端 IP 时回退 Native；桌面端使用 Native。当前场景没有可用能力时返回 `NO_AVAILABLE_WXPAY_CAPABILITY`。
+OAuth 启动前，服务端先选择支付实例并签发短时 `context_token`。签名 context 绑定用户、金额、订单类型、支付实例、`authType`、JSAPI AppID（以及套餐、页面 URL 等必要上下文）；OAuth 回调生成的恢复令牌会强制回到原实例，实例被禁用、删除或关键配置变化时安全失败，绝不重新负载均衡到其他实例。客户端不能指定支付实例。
 
-微信 API 错误会映射为结构化原因码，包括 `WECHAT_NATIVE_NOT_AUTHORIZED`、`WECHAT_H5_NOT_AUTHORIZED`、`WECHAT_JSAPI_NOT_AUTHORIZED`、`WECHAT_APPID_MCHID_MISMATCH`、`WECHAT_SIGN_ERROR` 与 `WECHAT_PAYMENT_API_ERROR`。错误 metadata 仅包含 `mode`、`http_status`、`wechat_code`、`request_id`、`action` 中的必要字段，不包含请求体或凭据。
+企业微信页面先使用服务端按当前同源 HTTPS 页面 URL 生成的 `js_config` 完成 JS-SDK 签名配置，随后仍通过 `WeixinJSBridge` 调起 JSAPI 支付；JS-SDK 只负责企业微信页面能力校验和签名，不替代支付桥。页面 URL 会移除 fragment 后参与签名，并要求与当前站点同源。
+
+上线前必须完成以下平台配置：
+
+1. 在企业微信管理后台创建与 CorpID 对应的**自建应用**，配置应用 Secret，并设置正确的**应用可见范围**；需要限制内部成员时应确保付款成员在范围内。
+2. 配置企业微信的**可信域名/JS-SDK 可信域名**，使充值页面域名可以调用 JS-SDK。
+3. 配置企业微信 OAuth 的**网页授权回调域名**，使 `/api/v1/auth/oauth/wechat/payment/callback` 所在域名可回调。
+4. 在微信支付商户平台确认商户号已绑定所用的公众号 AppID 或企业微信 CorpID。
+5. 在微信支付商户平台配置 **JSAPI 支付授权目录**，覆盖实际充值/订阅页面路径。
+6. 如需 H5，另外开通 H5 支付并配置 H5 应用名称与域名；示例和新部署建议保持 `h5Enabled=false`，确认 H5 产品配置完成后再单独开启。
+
+显式布尔值始终优先于历史推导。H5 是与 JSAPI/OAuth 独立的能力，企业微信 OAuth、身份转换、JS-SDK 或 JSAPI 失败时**不会自动回退到 H5**；Native 也不受 `jsapiAuthType` 影响。普通非内置浏览器的移动场景仅在 H5 已独立启用时使用 H5，桌面端使用 Native；企业微信内必须匹配 `wecom` JSAPI 实例，不会静默切换身份模式或支付实例。
+
+启用中的实例会在保存时校验，历史实例会在实际模式使用前再次校验。常见结构化原因码包括 `WXPAY_CONFIG_JSAPI_AUTH_TYPE_INVALID`、`WXPAY_CONFIG_WECOM_CORPID_INVALID`、`WXPAY_CONFIG_WECOM_APP_SECRET_REQUIRED`、`WXPAY_CONFIG_WECOM_AGENT_ID_INVALID`、`WECHAT_PAYMENT_CLIENT_ENVIRONMENT_INVALID`、`WECOM_PAYMENT_PAGE_URL_INVALID`、`WECOM_PAYMENT_PAGE_URL_ORIGIN_MISMATCH`、`WECOM_PAYMENT_INSTANCE_UNAVAILABLE`、`WECHAT_PAYMENT_INSTANCE_CHANGED`、`NO_AVAILABLE_WXPAY_CAPABILITY`、`WECHAT_NATIVE_NOT_AUTHORIZED`、`WECHAT_H5_NOT_AUTHORIZED`、`WECHAT_JSAPI_NOT_AUTHORIZED`、`WECHAT_APPID_MCHID_MISMATCH`、`WECHAT_SIGN_ERROR` 与 `WECHAT_PAYMENT_API_ERROR`。错误 metadata 只包含排障所需的模式、实例、HTTP 状态、微信错误码、请求 ID 或建议动作，不包含请求体和凭据。
+
+`wecomAppSecret`、商户私钥、APIv3 密钥和支付公钥等敏感配置不会由管理 API 回显；编辑已有实例时将敏感字段留空会保留原值。存在 `PENDING`、`PAID` 或 `RECHARGING` 订单时，系统会阻止修改受保护的身份/密钥配置、禁用或删除实例，以避免历史订单失去原实例与验签上下文。
 
 ### Stripe
 

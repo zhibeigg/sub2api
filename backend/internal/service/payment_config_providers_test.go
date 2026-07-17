@@ -255,6 +255,8 @@ func TestIsSensitiveProviderConfigField(t *testing.T) {
 		{"wxpay", "privateKey", true},
 		{"wxpay", "apiV3Key", true},
 		{"wxpay", "publicKey", true},
+		{"wxpay", "wecomAppSecret", true},
+		{"wxpay", "WeComAppSecret", true}, // case-insensitive
 		{"wxpay", "publicKeyId", false},
 		{"wxpay", "certSerial", false},
 		{"wxpay", "mchId", false},
@@ -300,6 +302,45 @@ func TestDecryptAndMaskEasyPayV2ConfigOmitsRSAKeys(t *testing.T) {
 	require.Equal(t, "2", masked["protocolVersion"])
 	require.NotContains(t, masked, "merchantPrivateKey")
 	require.NotContains(t, masked, "platformPublicKey")
+}
+
+func TestWxpayWeComAppSecretIsMaskedAndPreservedOnEmptyEdit(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	svc := &PaymentConfigService{entClient: client}
+	instance, err := svc.CreateProviderInstance(ctx, CreateProviderInstanceRequest{
+		ProviderKey: payment.TypeWxpay,
+		Name:        "masked-wecom-wxpay",
+		Config: map[string]string{
+			"appId":          "ww1234567890abcdef",
+			"jsapiAuthType":  "wecom",
+			"jsapiEnabled":   "true",
+			"wecomAppSecret": "test-wecom-app-secret",
+		},
+		SupportedTypes: []string{payment.TypeWxpay},
+		Enabled:        false,
+	})
+	require.NoError(t, err)
+
+	instances, err := svc.ListProviderInstancesWithConfig(ctx)
+	require.NoError(t, err)
+	require.Len(t, instances, 1)
+	require.Equal(t, "ww1234567890abcdef", instances[0].Config["appId"])
+	require.NotContains(t, instances[0].Config, "wecomAppSecret")
+
+	updated, err := svc.UpdateProviderInstance(ctx, instance.ID, UpdateProviderInstanceRequest{
+		Config: map[string]string{"wecomAppSecret": ""},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+
+	saved, err := client.PaymentProviderInstance.Get(ctx, instance.ID)
+	require.NoError(t, err)
+	config, err := svc.decryptConfig(saved.Config)
+	require.NoError(t, err)
+	require.Equal(t, "test-wecom-app-secret", config["wecomAppSecret"])
 }
 
 func TestValidateEasyPayProtocolUnchanged(t *testing.T) {
@@ -508,6 +549,15 @@ func TestUpdateProviderInstanceRejectsProtectedConfigChangesWhilePendingOrders(t
 			updateConfig:  map[string]string{"mpAppId": "wx0123456789abcdef"},
 			fieldName:     "mpAppId",
 			wantValue:     "wxabcdef1234567890",
+		},
+		{
+			name:          "wxpay wecomAppSecret",
+			providerKey:   payment.TypeWxpay,
+			createConfig:  validWxpayProviderConfigWithWeComJSAPI,
+			supportedType: []string{payment.TypeWxpay},
+			updateConfig:  map[string]string{"wecomAppSecret": "test-wecom-app-secret-updated"},
+			fieldName:     "wecomAppSecret",
+			wantValue:     "test-wecom-app-secret",
 		},
 		{
 			name:          "wxpay mchId",
@@ -976,6 +1026,15 @@ func TestValidateProviderConfigAcceptsWeComCorpID(t *testing.T) {
 	require.NoError(t, svc.validateProviderConfig(payment.TypeWxpay, config))
 }
 
+func TestValidateProviderConfigAcceptsWeComJSAPI(t *testing.T) {
+	t.Parallel()
+
+	svc := &PaymentConfigService{}
+	config := validWxpayProviderConfigWithWeComJSAPI(t)
+
+	require.NoError(t, svc.validateProviderConfig(payment.TypeWxpay, config))
+}
+
 func TestValidateProviderConfigRejectsInvalidWxpayAppIDs(t *testing.T) {
 	t.Parallel()
 
@@ -997,6 +1056,38 @@ func TestValidateProviderConfigRejectsInvalidWxpayAppIDs(t *testing.T) {
 				config["mpAppId"] = "ww1234567890abcdef"
 			},
 			wantReason: "WXPAY_CONFIG_JSAPI_APPID_INVALID",
+		},
+		{
+			name: "invalid jsapi auth type",
+			mutate: func(config map[string]string) {
+				config["jsapiAuthType"] = "miniapp"
+			},
+			wantReason: "WXPAY_CONFIG_JSAPI_AUTH_TYPE_INVALID",
+		},
+		{
+			name: "wecom mode requires corp id",
+			mutate: func(config map[string]string) {
+				config["jsapiAuthType"] = "wecom"
+			},
+			wantReason: "WXPAY_CONFIG_WECOM_CORPID_INVALID",
+		},
+		{
+			name: "wecom jsapi requires app secret",
+			mutate: func(config map[string]string) {
+				config["appId"] = "ww1234567890abcdef"
+				config["jsapiAuthType"] = "wecom"
+				config["jsapiEnabled"] = "true"
+			},
+			wantReason: "WXPAY_CONFIG_WECOM_APP_SECRET_REQUIRED",
+		},
+		{
+			name: "wecom agent id must be positive integer string",
+			mutate: func(config map[string]string) {
+				config["appId"] = "ww1234567890abcdef"
+				config["jsapiAuthType"] = "wecom"
+				config["wecomAgentId"] = "agent-1"
+			},
+			wantReason: "WXPAY_CONFIG_WECOM_AGENT_ID_INVALID",
 		},
 	}
 
@@ -1063,5 +1154,17 @@ func validWxpayProviderConfigWithJSAPIAppID(t *testing.T) map[string]string {
 
 	cfg := validWxpayProviderConfig(t)
 	cfg["mpAppId"] = "wxabcdef1234567890"
+	return cfg
+}
+
+func validWxpayProviderConfigWithWeComJSAPI(t *testing.T) map[string]string {
+	t.Helper()
+
+	cfg := validWxpayProviderConfig(t)
+	cfg["appId"] = "ww1234567890abcdef"
+	cfg["jsapiAuthType"] = "wecom"
+	cfg["jsapiEnabled"] = "true"
+	cfg["wecomAppSecret"] = "test-wecom-app-secret"
+	cfg["wecomAgentId"] = "1000002"
 	return cfg
 }

@@ -43,6 +43,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from '@/stores'
+import { writeWechatPaymentResumeHandoff } from '@/views/user/paymentWechatResume'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -85,9 +86,35 @@ function normalizeRedirectPath(path: string | null | undefined): string {
   return value
 }
 
-function appendQueryParam(query: Record<string, string>, key: string, value: string) {
+const SENSITIVE_CALLBACK_QUERY_KEYS = new Set([
+  'openid',
+  'wechat_resume_token',
+  'resume_token',
+  'context_token',
+  'token',
+  'signature',
+  'paySign',
+])
+
+function appendQueryParam(target: object, key: string, value: string) {
   if (value) {
-    query[key] = value
+    Object.assign(target, { [key]: value })
+  }
+}
+
+function safeRedirectQuery(redirectURL: URL): Record<string, string> {
+  return Object.fromEntries(
+    Array.from(redirectURL.searchParams.entries())
+      .filter(([key]) => !SENSITIVE_CALLBACK_QUERY_KEYS.has(key)),
+  )
+}
+
+function clearSensitiveCallbackLocation() {
+  if (typeof window === 'undefined') return
+  try {
+    window.history.replaceState(null, '', window.location.pathname || '/auth/wechat/payment/callback')
+  } catch {
+    // The callback can still continue with the already parsed in-memory values.
   }
 }
 
@@ -99,14 +126,7 @@ onMounted(async () => {
   const fragment = parseFragmentParams()
   const readParam = (key: string) => fragment.get(key) || readQueryString(key)
 
-  const error = readParam('error') || readParam('err_msg') || readParam('errmsg')
-  const errorDescription = readParam('error_description') || readParam('message')
-
-  if (error) {
-    errorMessage.value = errorDescription || error
-    return
-  }
-
+  const hasOAuthError = !!(readParam('error') || readParam('err_msg') || readParam('errmsg'))
   const resumeToken = readParam('wechat_resume_token')
   const openid = readParam('openid')
   const state = readParam('state')
@@ -120,31 +140,41 @@ onMounted(async () => {
     window.location.origin,
   )
 
+  clearSensitiveCallbackLocation()
+
+  if (hasOAuthError) {
+    errorMessage.value = t('payment.errors.wechatOAuthFailed')
+    return
+  }
+
   if (!resumeToken && !openid) {
     errorMessage.value = t('auth.wechatPayment.callbackMissingResumeToken')
     return
   }
 
-  const query: Record<string, string> = {
-    ...Object.fromEntries(redirectURL.searchParams.entries()),
-    wechat_resume: '1',
-  }
+  const handoff: Parameters<typeof writeWechatPaymentResumeHandoff>[1] = {}
+  appendQueryParam(handoff, 'wechat_resume_token', resumeToken)
+  appendQueryParam(handoff, 'openid', openid)
+  appendQueryParam(handoff, 'state', state)
+  appendQueryParam(handoff, 'scope', scope)
+  appendQueryParam(handoff, 'payment_type', paymentType)
+  appendQueryParam(handoff, 'amount', amount)
+  appendQueryParam(handoff, 'order_type', orderType)
+  appendQueryParam(handoff, 'plan_id', planId)
 
-  if (resumeToken) {
-    query.wechat_resume_token = resumeToken
-  } else {
-    query.openid = openid
-    appendQueryParam(query, 'state', state)
-    appendQueryParam(query, 'scope', scope)
-    appendQueryParam(query, 'payment_type', paymentType)
-    appendQueryParam(query, 'amount', amount)
-    appendQueryParam(query, 'order_type', orderType)
-    appendQueryParam(query, 'plan_id', planId)
+  try {
+    writeWechatPaymentResumeHandoff(window.sessionStorage, handoff)
+  } catch {
+    errorMessage.value = t('payment.errors.wechatOAuthFailed')
+    return
   }
 
   await router.replace({
     path: redirectURL.pathname,
-    query,
+    query: {
+      ...safeRedirectQuery(redirectURL),
+      wechat_resume: '1',
+    },
   })
 })
 </script>

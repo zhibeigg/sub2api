@@ -296,6 +296,51 @@ describe('decidePaymentLaunch', () => {
     expect(decision.paymentState.orderType).toBe('subscription')
   })
 
+  it('does not launch an H5 redirect inside Enterprise WeChat', () => {
+    const decision = decidePaymentLaunch(createOrderResult({
+      pay_url: 'https://wx.tenpay.example/h5pay?prepay_id=sensitive',
+      payment_mode: 'redirect',
+    }), {
+      visibleMethod: 'wxpay',
+      orderType: 'balance',
+      isMobile: true,
+      isWechatBrowser: true,
+      wechatEnvironment: 'wecom',
+    })
+
+    expect(decision.kind).toBe('unhandled')
+  })
+
+  it('keeps an explicit Native QR interaction available inside Enterprise WeChat', () => {
+    const decision = decidePaymentLaunch(createOrderResult({
+      qr_code: 'weixin://wxpay/bizpayurl?pr=native-explicit',
+      payment_mode: 'native',
+    }), {
+      visibleMethod: 'wxpay',
+      orderType: 'balance',
+      isMobile: true,
+      isWechatBrowser: true,
+      wechatEnvironment: 'wecom',
+    })
+
+    expect(decision.kind).toBe('qr_waiting')
+  })
+
+  it('keeps the Official Account hosted redirect behavior unchanged', () => {
+    const decision = decidePaymentLaunch(createOrderResult({
+      pay_url: 'https://pay.example.com/wechat/official-account',
+      payment_mode: 'redirect',
+    }), {
+      visibleMethod: 'wxpay',
+      orderType: 'balance',
+      isMobile: true,
+      isWechatBrowser: true,
+      wechatEnvironment: 'wechat',
+    })
+
+    expect(decision.kind).toBe('redirect_waiting')
+  })
+
   it('forces qr_waiting for mobile alipay when forceQRCode is enabled', () => {
     const decision = decidePaymentLaunch(createOrderResult({
       pay_url: 'https://pay.example.com/mobile/session',
@@ -379,6 +424,30 @@ describe('buildCreateOrderPayload', () => {
       is_mobile: false,
       payment_source: 'wechat_in_app_resume',
     })
+  })
+
+  it('provides Enterprise WeChat environment and the fragment-free page URL without provider selection', () => {
+    const payload = buildCreateOrderPayload({
+      amount: 88,
+      paymentType: 'wxpay_direct',
+      orderType: 'balance',
+      origin: 'https://app.example.com',
+      isMobile: true,
+      isWechatBrowser: true,
+      wechatEnvironment: 'wecom',
+      wechatPageUrl: 'https://app.example.com/purchase?tab=balance',
+    })
+
+    expect(payload).toEqual({
+      amount: 88,
+      payment_type: 'wxpay',
+      order_type: 'balance',
+      return_url: 'https://app.example.com/payment/result',
+      is_mobile: true,
+      payment_source: 'wecom',
+      wechat_page_url: 'https://app.example.com/purchase?tab=balance',
+    })
+    expect(payload).not.toHaveProperty('provider_instance_id')
   })
 
   it('passes is_mobile: false when forceQRCode is enabled for alipay', () => {

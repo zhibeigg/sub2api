@@ -841,6 +841,10 @@ func (c *captureLoadBalancer) GetInstanceConfig(context.Context, int64) (map[str
 	return map[string]string{}, nil
 }
 
+func (c *captureLoadBalancer) GetInstanceSelection(context.Context, string) (*payment.InstanceSelection, error) {
+	return &payment.InstanceSelection{}, nil
+}
+
 func (c *captureLoadBalancer) SelectInstance(_ context.Context, providerKey string, paymentType payment.PaymentType, _ payment.Strategy, _ float64) (*payment.InstanceSelection, error) {
 	c.lastProviderKey = providerKey
 	c.lastPaymentType = paymentType

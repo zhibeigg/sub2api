@@ -1,4 +1,5 @@
 import { normalizeVisibleMethod } from '@/components/payment/paymentFlow'
+import type { WechatClientEnvironment } from '@/components/payment/paymentEnvironment'
 import { extractApiErrorCode } from '@/utils/apiError'
 
 const DISPLAY_METHOD_ALIASES: Record<string, string> = {
@@ -10,6 +11,7 @@ export interface PaymentScenarioContext {
   paymentMethod: string
   isMobile: boolean
   isWechatBrowser: boolean
+  wechatEnvironment?: WechatClientEnvironment
 }
 
 export interface PaymentScenarioErrorDescriptor {
@@ -34,6 +36,7 @@ export function buildPaymentErrorToastMessage(message: string, hint?: string): s
 }
 
 function defaultWechatHint(context: PaymentScenarioContext): string {
+  if (context.wechatEnvironment === 'wecom') return 'payment.errors.wecomRetryHint'
   if (!context.isMobile) return 'payment.errors.wechatScanOnDesktopHint'
   return 'payment.errors.wechatOpenInWeChatHint'
 }
@@ -63,6 +66,43 @@ export function describePaymentScenarioError(
   }
 
   if (method === 'wxpay') {
+    const isWecom = context.wechatEnvironment === 'wecom'
+    if (code === 'WECHAT_OAUTH_URL_INVALID' || code === 'WECOM_OAUTH_CODE_INVALID') {
+      return {
+        messageKey: isWecom ? 'payment.errors.wecomOAuthFailed' : 'payment.errors.wechatOAuthFailed',
+        hintKey: defaultWechatHint(context),
+      }
+    }
+    if (code === 'WECOM_JS_SDK_CONFIG_INVALID') {
+      return {
+        messageKey: 'payment.errors.wecomJsSdkConfigInvalid',
+        hintKey: 'payment.errors.wecomRetryHint',
+      }
+    }
+    if (code === 'WECOM_JS_SDK_CONFIG_FAILED' || code === 'WECOM_JS_CONFIG_URL_INVALID') {
+      return {
+        messageKey: 'payment.errors.wecomJsSdkConfigFailed',
+        hintKey: 'payment.errors.wecomRetryHint',
+      }
+    }
+    if (code === 'WECOM_JS_SDK_CONFIG_TIMEOUT') {
+      return {
+        messageKey: 'payment.errors.wecomJsSdkConfigTimeout',
+        hintKey: 'payment.errors.wecomRetryHint',
+      }
+    }
+    if (code === 'WECHAT_JSAPI_INVOKE_TIMEOUT') {
+      return {
+        messageKey: isWecom ? 'payment.errors.wecomJsapiTimeout' : 'payment.errors.wechatJsapiTimeout',
+        hintKey: defaultWechatHint(context),
+      }
+    }
+    if (code?.startsWith('WECOM_')) {
+      return {
+        messageKey: 'payment.errors.wecomOAuthFailed',
+        hintKey: 'payment.errors.wecomRetryHint',
+      }
+    }
     if (code === 'WECHAT_NATIVE_NOT_AUTHORIZED') {
       return {
         messageKey: 'payment.errors.wechatNativeNotAuthorized',
@@ -123,17 +163,18 @@ export function describePaymentScenarioError(
     }
     if (code === 'WECHAT_JSAPI_FAILED' || normalizedMessage.includes('get_brand_wcpay_request:fail')) {
       return {
-        messageKey: 'payment.errors.wechatJsapiFailed',
+        messageKey: isWecom ? 'payment.errors.wecomJsapiFailed' : 'payment.errors.wechatJsapiFailed',
         hintKey: defaultWechatHint(context),
       }
     }
     if (
-      normalizedMessage.includes('weixinjsbridge is unavailable') ||
-      normalizedMessage.includes('wechat_jsapi_unavailable')
+      code === 'WECHAT_JSAPI_UNAVAILABLE'
+      || normalizedMessage.includes('weixinjsbridge is unavailable')
+      || normalizedMessage.includes('wechat_jsapi_unavailable')
     ) {
       return {
-        messageKey: 'payment.errors.wechatJsapiUnavailable',
-        hintKey: 'payment.errors.wechatOpenInWeChatHint',
+        messageKey: isWecom ? 'payment.errors.wecomJsapiUnavailable' : 'payment.errors.wechatJsapiUnavailable',
+        hintKey: defaultWechatHint(context),
       }
     }
     if (code === 'UNHANDLED_PAYMENT_SCENARIO') {

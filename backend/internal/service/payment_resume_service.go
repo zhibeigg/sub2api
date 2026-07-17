@@ -37,13 +37,17 @@ const (
 	VisibleMethodSourceEasyPayWechat  = "easypay_wxpay"
 	VisibleMethodSourceEasyPayQQPay   = "easypay_qqpay"
 
-	wechatPaymentResumeTokenType = "wechat_payment_resume"
+	wechatPaymentResumeTokenType       = "wechat_payment_resume"
+	wechatPaymentOAuthContextTokenType = "wechat_payment_oauth_context"
+	wechatPaymentClaimsVersionV2       = 2
 
 	paymentResumeNotConfiguredCode    = "PAYMENT_RESUME_NOT_CONFIGURED"
 	paymentResumeNotConfiguredMessage = "payment resume tokens require a configured signing key"
 
-	paymentResumeTokenTTL       = 24 * time.Hour
-	wechatPaymentResumeTokenTTL = 15 * time.Minute
+	paymentResumeTokenTTL          = 24 * time.Hour
+	wechatPaymentResumeTokenTTL    = 15 * time.Minute
+	wechatPaymentOAuthContextTTL   = 10 * time.Minute
+	paymentTokenClockSkewTolerance = time.Minute
 )
 
 type ResumeTokenClaims struct {
@@ -57,17 +61,43 @@ type ResumeTokenClaims struct {
 	ExpiresAt          int64  `json:"exp,omitempty"`
 }
 
+type WeChatPaymentOAuthContextClaims struct {
+	TokenType          string `json:"tk,omitempty"`
+	Version            int    `json:"v,omitempty"`
+	UserID             int64  `json:"uid"`
+	ProviderInstanceID string `json:"pi"`
+	ProviderKey        string `json:"pk"`
+	AuthType           string `json:"at"`
+	JSAPIAppID         string `json:"aid"`
+	PaymentType        string `json:"pt"`
+	Amount             string `json:"amt,omitempty"`
+	OrderType          string `json:"ot,omitempty"`
+	PlanID             int64  `json:"pid,omitempty"`
+	RedirectTo         string `json:"rd,omitempty"`
+	WeChatPageURL      string `json:"pu,omitempty"`
+	IssuedAt           int64  `json:"iat"`
+	ExpiresAt          int64  `json:"exp"`
+}
+
 type WeChatPaymentResumeClaims struct {
-	TokenType   string `json:"tk,omitempty"`
-	OpenID      string `json:"openid"`
-	PaymentType string `json:"pt,omitempty"`
-	Amount      string `json:"amt,omitempty"`
-	OrderType   string `json:"ot,omitempty"`
-	PlanID      int64  `json:"pid,omitempty"`
-	RedirectTo  string `json:"rd,omitempty"`
-	Scope       string `json:"scp,omitempty"`
-	IssuedAt    int64  `json:"iat"`
-	ExpiresAt   int64  `json:"exp,omitempty"`
+	TokenType          string `json:"tk,omitempty"`
+	Version            int    `json:"v,omitempty"`
+	UserID             int64  `json:"uid,omitempty"`
+	ProviderInstanceID string `json:"pi,omitempty"`
+	ProviderKey        string `json:"pk,omitempty"`
+	AuthType           string `json:"at,omitempty"`
+	JSAPIAppID         string `json:"aid,omitempty"`
+	OpenID             string `json:"openid"`
+	PaymentType        string `json:"pt,omitempty"`
+	Amount             string `json:"amt,omitempty"`
+	OrderType          string `json:"ot,omitempty"`
+	PlanID             int64  `json:"pid,omitempty"`
+	RedirectTo         string `json:"rd,omitempty"`
+	Scope              string `json:"scp,omitempty"`
+	WeChatPageURL      string `json:"pu,omitempty"`
+	IssuedAt           int64  `json:"iat"`
+	ExpiresAt          int64  `json:"exp,omitempty"`
+	Legacy             bool   `json:"-"`
 }
 
 type PaymentResumeService struct {
@@ -202,6 +232,10 @@ func newVisibleMethodLoadBalancer(inner payment.LoadBalancer, configService *Pay
 
 func (lb *visibleMethodLoadBalancer) GetInstanceConfig(ctx context.Context, instanceID int64) (map[string]string, error) {
 	return lb.inner.GetInstanceConfig(ctx, instanceID)
+}
+
+func (lb *visibleMethodLoadBalancer) GetInstanceSelection(ctx context.Context, instanceID string) (*payment.InstanceSelection, error) {
+	return lb.inner.GetInstanceSelection(ctx, instanceID)
 }
 
 func (lb *visibleMethodLoadBalancer) SelectInstance(ctx context.Context, providerKey string, paymentType payment.PaymentType, strategy payment.Strategy, orderAmount float64) (*payment.InstanceSelection, error) {
@@ -376,11 +410,84 @@ func (s *PaymentResumeService) ParseToken(token string) (*ResumeTokenClaims, err
 	return &claims, nil
 }
 
+func (s *PaymentResumeService) CreateWeChatPaymentOAuthContextToken(claims WeChatPaymentOAuthContextClaims) (string, error) {
+	if err := s.ensureSigningKey(); err != nil {
+		return "", err
+	}
+	claims.ProviderInstanceID = strings.TrimSpace(claims.ProviderInstanceID)
+	claims.ProviderKey = strings.TrimSpace(claims.ProviderKey)
+	claims.AuthType = strings.ToLower(strings.TrimSpace(claims.AuthType))
+	claims.JSAPIAppID = strings.TrimSpace(claims.JSAPIAppID)
+	claims.PaymentType = NormalizeVisibleMethod(claims.PaymentType)
+	claims.RedirectTo = strings.TrimSpace(claims.RedirectTo)
+	claims.WeChatPageURL = strings.TrimSpace(claims.WeChatPageURL)
+	if claims.UserID <= 0 || claims.ProviderInstanceID == "" || claims.ProviderKey == "" || claims.JSAPIAppID == "" || claims.PaymentType != payment.TypeWxpay {
+		return "", fmt.Errorf("wechat payment oauth context is incomplete")
+	}
+	if claims.AuthType != "mp" && claims.AuthType != "wecom" {
+		return "", fmt.Errorf("wechat payment oauth context auth type is invalid")
+	}
+	if claims.AuthType == "wecom" && claims.WeChatPageURL == "" {
+		return "", fmt.Errorf("wechat payment oauth context requires page url")
+	}
+	now := time.Now()
+	if claims.IssuedAt == 0 {
+		claims.IssuedAt = now.Unix()
+	}
+	if claims.ExpiresAt == 0 {
+		claims.ExpiresAt = now.Add(wechatPaymentOAuthContextTTL).Unix()
+	}
+	claims.TokenType = wechatPaymentOAuthContextTokenType
+	claims.Version = wechatPaymentClaimsVersionV2
+	return s.createSignedToken(claims)
+}
+
+func (s *PaymentResumeService) ParseWeChatPaymentOAuthContextToken(token string) (*WeChatPaymentOAuthContextClaims, error) {
+	if err := s.ensureSigningKey(); err != nil {
+		return nil, err
+	}
+	var claims WeChatPaymentOAuthContextClaims
+	if err := s.parseSignedToken(strings.TrimSpace(token), &claims); err != nil {
+		return nil, infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_OAUTH_CONTEXT", "wechat payment oauth context is invalid")
+	}
+	claims.ProviderInstanceID = strings.TrimSpace(claims.ProviderInstanceID)
+	claims.ProviderKey = strings.TrimSpace(claims.ProviderKey)
+	claims.AuthType = strings.ToLower(strings.TrimSpace(claims.AuthType))
+	claims.JSAPIAppID = strings.TrimSpace(claims.JSAPIAppID)
+	claims.PaymentType = NormalizeVisibleMethod(claims.PaymentType)
+	claims.RedirectTo = strings.TrimSpace(claims.RedirectTo)
+	claims.WeChatPageURL = strings.TrimSpace(claims.WeChatPageURL)
+	if claims.TokenType != wechatPaymentOAuthContextTokenType || claims.Version != wechatPaymentClaimsVersionV2 {
+		return nil, infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_OAUTH_CONTEXT", "wechat payment oauth context type mismatch")
+	}
+	if claims.UserID <= 0 || claims.ProviderInstanceID == "" || claims.ProviderKey == "" || claims.JSAPIAppID == "" || claims.PaymentType != payment.TypeWxpay {
+		return nil, infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_OAUTH_CONTEXT", "wechat payment oauth context is incomplete")
+	}
+	if claims.AuthType != "mp" && claims.AuthType != "wecom" {
+		return nil, infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_OAUTH_CONTEXT", "wechat payment oauth context auth type is invalid")
+	}
+	if claims.AuthType == "wecom" && claims.WeChatPageURL == "" {
+		return nil, infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_OAUTH_CONTEXT", "wechat payment oauth context page url is missing")
+	}
+	if claims.IssuedAt <= 0 || time.Now().Add(paymentTokenClockSkewTolerance).Unix() < claims.IssuedAt {
+		return nil, infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_OAUTH_CONTEXT", "wechat payment oauth context issued time is invalid")
+	}
+	if err := validatePaymentResumeExpiry(claims.ExpiresAt, "WECHAT_PAYMENT_OAUTH_CONTEXT_EXPIRED", "wechat payment oauth context has expired"); err != nil {
+		return nil, err
+	}
+	return &claims, nil
+}
+
 func (s *PaymentResumeService) CreateWeChatPaymentResumeToken(claims WeChatPaymentResumeClaims) (string, error) {
 	if err := s.ensureSigningKey(); err != nil {
 		return "", err
 	}
 	claims.OpenID = strings.TrimSpace(claims.OpenID)
+	claims.ProviderInstanceID = strings.TrimSpace(claims.ProviderInstanceID)
+	claims.ProviderKey = strings.TrimSpace(claims.ProviderKey)
+	claims.AuthType = strings.ToLower(strings.TrimSpace(claims.AuthType))
+	claims.JSAPIAppID = strings.TrimSpace(claims.JSAPIAppID)
+	claims.WeChatPageURL = strings.TrimSpace(claims.WeChatPageURL)
 	if claims.OpenID == "" {
 		return "", fmt.Errorf("wechat payment resume token requires openid")
 	}
@@ -400,6 +507,18 @@ func (s *PaymentResumeService) CreateWeChatPaymentResumeToken(claims WeChatPayme
 		claims.OrderType = payment.OrderTypeBalance
 	}
 	claims.TokenType = wechatPaymentResumeTokenType
+	if claims.UserID > 0 || claims.ProviderInstanceID != "" || claims.ProviderKey != "" || claims.AuthType != "" || claims.JSAPIAppID != "" || claims.WeChatPageURL != "" {
+		if claims.UserID <= 0 || claims.ProviderInstanceID == "" || claims.ProviderKey == "" || claims.JSAPIAppID == "" {
+			return "", fmt.Errorf("wechat payment resume v2 token is incomplete")
+		}
+		if claims.AuthType != "mp" && claims.AuthType != "wecom" {
+			return "", fmt.Errorf("wechat payment resume v2 auth type is invalid")
+		}
+		if claims.AuthType == "wecom" && claims.WeChatPageURL == "" {
+			return "", fmt.Errorf("wechat payment resume v2 requires page url")
+		}
+		claims.Version = wechatPaymentClaimsVersionV2
+	}
 	return s.createSignedToken(claims)
 }
 
@@ -415,6 +534,11 @@ func (s *PaymentResumeService) ParseWeChatPaymentResumeToken(token string) (*WeC
 		return nil, infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_RESUME_TOKEN", "wechat payment resume token type mismatch")
 	}
 	claims.OpenID = strings.TrimSpace(claims.OpenID)
+	claims.ProviderInstanceID = strings.TrimSpace(claims.ProviderInstanceID)
+	claims.ProviderKey = strings.TrimSpace(claims.ProviderKey)
+	claims.AuthType = strings.ToLower(strings.TrimSpace(claims.AuthType))
+	claims.JSAPIAppID = strings.TrimSpace(claims.JSAPIAppID)
+	claims.WeChatPageURL = strings.TrimSpace(claims.WeChatPageURL)
 	if claims.OpenID == "" {
 		return nil, infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_RESUME_TOKEN", "wechat payment resume token missing openid")
 	}
@@ -429,6 +553,26 @@ func (s *PaymentResumeService) ParseWeChatPaymentResumeToken(token string) (*WeC
 	}
 	if claims.OrderType == "" {
 		claims.OrderType = payment.OrderTypeBalance
+	}
+	switch claims.Version {
+	case 0:
+		// Transitional compatibility for legacy Official Account tokens. They do
+		// not carry a user or provider-instance binding and must never be accepted
+		// as enterprise WeChat credentials.
+		claims.AuthType = "mp"
+		claims.Legacy = true
+	case wechatPaymentClaimsVersionV2:
+		if claims.UserID <= 0 || claims.ProviderInstanceID == "" || claims.ProviderKey == "" || claims.JSAPIAppID == "" {
+			return nil, infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_RESUME_TOKEN", "wechat payment resume token binding is incomplete")
+		}
+		if claims.AuthType != "mp" && claims.AuthType != "wecom" {
+			return nil, infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_RESUME_TOKEN", "wechat payment resume token auth type is invalid")
+		}
+		if claims.AuthType == "wecom" && claims.WeChatPageURL == "" {
+			return nil, infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_RESUME_TOKEN", "wechat payment resume token page url is missing")
+		}
+	default:
+		return nil, infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_RESUME_TOKEN", "wechat payment resume token version is unsupported")
 	}
 	return &claims, nil
 }

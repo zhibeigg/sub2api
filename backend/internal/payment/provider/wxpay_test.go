@@ -315,6 +315,21 @@ func TestNewWxpay(t *testing.T) {
 			wantErr:    true,
 			wantReason: "WXPAY_CONFIG_INVALID_KEY_LENGTH",
 		},
+		{
+			name: "valid wecom jsapi config succeeds",
+			config: withOverride(map[string]string{
+				"appId": wxpayTestWeComCorpID, "jsapiAuthType": WxpayJSAPIAuthTypeWeCom,
+				"jsapiEnabled": "true", "wecomAppSecret": "test-wecom-app-secret", "wecomAgentId": "1000002",
+			}),
+		},
+		{
+			name: "wecom jsapi config requires app secret",
+			config: withOverride(map[string]string{
+				"appId": wxpayTestWeComCorpID, "jsapiAuthType": WxpayJSAPIAuthTypeWeCom, "jsapiEnabled": "true",
+			}),
+			wantErr:    true,
+			wantReason: "WXPAY_CONFIG_WECOM_APP_SECRET_REQUIRED",
+		},
 	}
 
 	for _, tt := range tests {
@@ -373,6 +388,31 @@ func TestBuildWxpayResultURLPreservesResumeToken(t *testing.T) {
 	}
 }
 
+func TestResolveWxpayJSAPIAuthType(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		config map[string]string
+		want   string
+	}{
+		{name: "historical missing value defaults to mp", config: map[string]string{}, want: WxpayJSAPIAuthTypeMP},
+		{name: "explicit mp", config: map[string]string{"jsapiAuthType": "mp"}, want: WxpayJSAPIAuthTypeMP},
+		{name: "explicit wecom", config: map[string]string{"jsapiAuthType": "wecom"}, want: WxpayJSAPIAuthTypeWeCom},
+		{name: "value is normalized", config: map[string]string{"jsapiAuthType": "  WECOM  "}, want: WxpayJSAPIAuthTypeWeCom},
+		{name: "unknown value remains available to validation", config: map[string]string{"jsapiAuthType": "miniapp"}, want: "miniapp"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ResolveWxpayJSAPIAuthType(tt.config); got != tt.want {
+				t.Fatalf("ResolveWxpayJSAPIAuthType() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestResolveWxpayJSAPIAppID(t *testing.T) {
 	t.Parallel()
 
@@ -382,7 +422,7 @@ func TestResolveWxpayJSAPIAppID(t *testing.T) {
 		want   string
 	}{
 		{
-			name: "prefers dedicated mp app id",
+			name: "historical mp mode prefers dedicated mp app id",
 			config: map[string]string{
 				"mpAppId": "wx-mp-app",
 				"appId":   "wx-merchant-app",
@@ -390,11 +430,21 @@ func TestResolveWxpayJSAPIAppID(t *testing.T) {
 			want: "wx-mp-app",
 		},
 		{
-			name: "falls back to merchant app id",
+			name: "explicit mp mode falls back to merchant app id",
 			config: map[string]string{
-				"appId": "wx-merchant-app",
+				"jsapiAuthType": WxpayJSAPIAuthTypeMP,
+				"appId":         "wx-merchant-app",
 			},
 			want: "wx-merchant-app",
+		},
+		{
+			name: "wecom mode always uses base corp id",
+			config: map[string]string{
+				"jsapiAuthType": WxpayJSAPIAuthTypeWeCom,
+				"mpAppId":       "wx-mp-app",
+				"appId":         "ww-corp-id",
+			},
+			want: "ww-corp-id",
 		},
 		{
 			name:   "missing app ids returns empty",
@@ -455,8 +505,16 @@ func TestValidateWxpayAppIDConfig(t *testing.T) {
 			config: map[string]string{"appId": wxpayTestAppID},
 		},
 		{
-			name:   "valid enterprise wechat corp id",
+			name:   "valid enterprise wechat corp id in historical mp mode",
 			config: map[string]string{"appId": wxpayTestWeComCorpID},
+		},
+		{
+			name: "valid wecom jsapi config",
+			config: map[string]string{
+				"appId":         wxpayTestWeComCorpID,
+				"jsapiAuthType": WxpayJSAPIAuthTypeWeCom,
+				"wecomAgentId":  "1000002",
+			},
 		},
 		{
 			name: "valid dedicated mp app id",
@@ -478,12 +536,76 @@ func TestValidateWxpayAppIDConfig(t *testing.T) {
 			},
 			wantReason: "WXPAY_CONFIG_JSAPI_APPID_INVALID",
 		},
+		{
+			name: "invalid jsapi auth type",
+			config: map[string]string{
+				"appId":         wxpayTestAppID,
+				"jsapiAuthType": "miniapp",
+			},
+			wantReason: "WXPAY_CONFIG_JSAPI_AUTH_TYPE_INVALID",
+		},
+		{
+			name: "wecom mode requires ww corp id",
+			config: map[string]string{
+				"appId":         wxpayTestAppID,
+				"jsapiAuthType": WxpayJSAPIAuthTypeWeCom,
+			},
+			wantReason: "WXPAY_CONFIG_WECOM_CORPID_INVALID",
+		},
+		{
+			name: "wecom agent id must be a positive integer string",
+			config: map[string]string{
+				"appId":         wxpayTestWeComCorpID,
+				"jsapiAuthType": WxpayJSAPIAuthTypeWeCom,
+				"wecomAgentId":  "0",
+			},
+			wantReason: "WXPAY_CONFIG_WECOM_AGENT_ID_INVALID",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			err := ValidateWxpayAppIDConfig(tt.config)
+			if tt.wantReason == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if reason := infraerrors.Reason(err); reason != tt.wantReason {
+				t.Fatalf("reason = %q, want %q", reason, tt.wantReason)
+			}
+		})
+	}
+}
+
+func TestValidateWxpayWeComAgentID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		agentID    string
+		wantReason string
+	}{
+		{name: "omitted is allowed"},
+		{name: "positive integer", agentID: "1000002"},
+		{name: "surrounding whitespace is normalized", agentID: " 42 "},
+		{name: "zero is rejected", agentID: "0", wantReason: "WXPAY_CONFIG_WECOM_AGENT_ID_INVALID"},
+		{name: "negative is rejected", agentID: "-1", wantReason: "WXPAY_CONFIG_WECOM_AGENT_ID_INVALID"},
+		{name: "plus sign is rejected", agentID: "+1", wantReason: "WXPAY_CONFIG_WECOM_AGENT_ID_INVALID"},
+		{name: "decimal is rejected", agentID: "1.5", wantReason: "WXPAY_CONFIG_WECOM_AGENT_ID_INVALID"},
+		{name: "letters are rejected", agentID: "agent-1", wantReason: "WXPAY_CONFIG_WECOM_AGENT_ID_INVALID"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateWxpayAppIDConfig(map[string]string{
+				"appId":         wxpayTestWeComCorpID,
+				"jsapiAuthType": WxpayJSAPIAuthTypeWeCom,
+				"wecomAgentId":  tt.agentID,
+			})
 			if tt.wantReason == "" {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
@@ -676,6 +798,57 @@ func TestCreatePaymentWithOpenIDReturnsJSAPIResult(t *testing.T) {
 	}
 }
 
+func TestCreatePaymentWithOpenIDAllowsWeComJSAPI(t *testing.T) {
+	origJSAPIPrepay := wxpayJSAPIPrepayWithRequestPayment
+	t.Cleanup(func() {
+		wxpayJSAPIPrepayWithRequestPayment = origJSAPIPrepay
+	})
+
+	calls := 0
+	wxpayJSAPIPrepayWithRequestPayment = func(ctx context.Context, svc jsapi.JsapiApiService, req jsapi.PrepayRequest) (*jsapi.PrepayWithRequestPaymentResponse, *core.APIResult, error) {
+		calls++
+		if got := wxSV(req.Appid); got != wxpayTestWeComCorpID {
+			t.Fatalf("appid = %q, want %q", got, wxpayTestWeComCorpID)
+		}
+		return &jsapi.PrepayWithRequestPaymentResponse{
+			Appid:     core.String(wxpayTestWeComCorpID),
+			TimeStamp: core.String("1712345678"),
+			NonceStr:  core.String("wecom-nonce"),
+			Package:   core.String("prepay_id=wecom_prepay_123"),
+			SignType:  core.String("RSA"),
+			PaySign:   core.String("wecom-signed-payload"),
+		}, nil, nil
+	}
+
+	provider := &Wxpay{
+		config: map[string]string{
+			"appId":          wxpayTestWeComCorpID,
+			"mchId":          "mch123",
+			"jsapiAuthType":  WxpayJSAPIAuthTypeWeCom,
+			"jsapiEnabled":   "true",
+			"wecomAppSecret": "test-wecom-app-secret",
+		},
+		coreClient: &core.Client{},
+	}
+
+	resp, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
+		OrderID:   "sub2_wecom_jsapi",
+		Amount:    "0.01",
+		Subject:   "Balance Recharge",
+		NotifyURL: "https://merchant.example/payment/notify",
+		OpenID:    "wecom-user-openid",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("jsapi prepay calls = %d, want 1", calls)
+	}
+	if resp == nil || resp.JSAPI == nil || resp.JSAPI.AppID != wxpayTestWeComCorpID {
+		t.Fatalf("unexpected jsapi response: %+v", resp)
+	}
+}
+
 func TestCreatePaymentMobileH5IncludesConfiguredSceneInfo(t *testing.T) {
 	origJSAPIPrepay := wxpayJSAPIPrepayWithRequestPayment
 	origNativePrepay := wxpayNativePrepay
@@ -759,6 +932,53 @@ func TestCreatePaymentMobileH5IncludesConfiguredSceneInfo(t *testing.T) {
 	}
 }
 
+func TestCreatePaymentMobileH5AllowsWeComModeWithoutJSAPISecret(t *testing.T) {
+	origH5Prepay := wxpayH5Prepay
+	t.Cleanup(func() {
+		wxpayH5Prepay = origH5Prepay
+	})
+
+	calls := 0
+	wxpayH5Prepay = func(ctx context.Context, svc h5.H5ApiService, req h5.PrepayRequest) (*h5.PrepayResponse, *core.APIResult, error) {
+		calls++
+		if got := wxSV(req.Appid); got != wxpayTestWeComCorpID {
+			t.Fatalf("appid = %q, want %q", got, wxpayTestWeComCorpID)
+		}
+		return &h5.PrepayResponse{H5Url: core.String("https://wx.tenpay.example/h5pay?prepay_id=wecom")}, nil, nil
+	}
+
+	provider := &Wxpay{
+		config: map[string]string{
+			"appId":         wxpayTestWeComCorpID,
+			"mchId":         "mch123",
+			"jsapiAuthType": WxpayJSAPIAuthTypeWeCom,
+			"jsapiEnabled":  "false",
+			"h5Enabled":     "true",
+			"h5AppName":     "Sub2API",
+			"h5AppUrl":      "https://app.example.com",
+		},
+		coreClient: &core.Client{},
+	}
+
+	resp, err := provider.CreatePayment(context.Background(), payment.CreatePaymentRequest{
+		OrderID:   "sub2_wecom_h5",
+		Amount:    "0.01",
+		Subject:   "Balance Recharge",
+		NotifyURL: "https://merchant.example/payment/notify",
+		ClientIP:  "203.0.113.10",
+		IsMobile:  true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("h5 prepay calls = %d, want 1", calls)
+	}
+	if resp == nil || resp.PayURL == "" {
+		t.Fatalf("expected h5 response, got %+v", resp)
+	}
+}
+
 func TestCreatePaymentNativeAcceptsWeComCorpID(t *testing.T) {
 	origNativePrepay := wxpayNativePrepay
 	t.Cleanup(func() {
@@ -829,7 +1049,30 @@ func TestInspectWxpayCapabilities(t *testing.T) {
 			want: WxpayCapabilityStatus{NativeEnabled: true, JSAPIEnabled: true},
 		},
 		{
-			name: "enterprise wechat base id requires dedicated mp app id for jsapi",
+			name: "wecom jsapi uses explicit capability without enabling h5",
+			config: map[string]string{
+				"appId": wxpayTestWeComCorpID, "jsapiAuthType": WxpayJSAPIAuthTypeWeCom,
+				"jsapiEnabled": "true", "wecomAppSecret": "test-wecom-app-secret",
+			},
+			want: WxpayCapabilityStatus{NativeEnabled: true, JSAPIEnabled: true},
+		},
+		{
+			name: "wecom h5 remains independent and does not require jsapi secret",
+			config: map[string]string{
+				"appId": wxpayTestWeComCorpID, "jsapiAuthType": WxpayJSAPIAuthTypeWeCom,
+				"jsapiEnabled": "false", "h5Enabled": "true", "h5AppName": "Sub2API", "h5AppUrl": "https://app.example.com",
+			},
+			want: WxpayCapabilityStatus{NativeEnabled: true, H5Enabled: true},
+		},
+		{
+			name: "wecom jsapi requires app secret",
+			config: map[string]string{
+				"appId": wxpayTestWeComCorpID, "jsapiAuthType": WxpayJSAPIAuthTypeWeCom, "jsapiEnabled": "true",
+			},
+			wantReason: "WXPAY_CONFIG_WECOM_APP_SECRET_REQUIRED",
+		},
+		{
+			name: "enterprise wechat base id requires dedicated mp app id for historical mp jsapi",
 			config: map[string]string{
 				"appId": wxpayTestWeComCorpID, "jsapiEnabled": "true",
 			},
@@ -856,6 +1099,21 @@ func TestInspectWxpayCapabilities(t *testing.T) {
 				"appId": "wx-app", "nativeEnabled": "",
 			},
 			wantReason: "WXPAY_CONFIG_INVALID_BOOLEAN",
+		},
+		{
+			name: "invalid jsapi auth type is rejected",
+			config: map[string]string{
+				"appId": wxpayTestAppID, "jsapiAuthType": "miniapp",
+			},
+			wantReason: "WXPAY_CONFIG_JSAPI_AUTH_TYPE_INVALID",
+		},
+		{
+			name: "enabled wecom jsapi validates optional agent id",
+			config: map[string]string{
+				"appId": wxpayTestWeComCorpID, "jsapiAuthType": WxpayJSAPIAuthTypeWeCom,
+				"jsapiEnabled": "true", "wecomAppSecret": "test-wecom-app-secret", "wecomAgentId": "agent-1",
+			},
+			wantReason: "WXPAY_CONFIG_WECOM_AGENT_ID_INVALID",
 		},
 	}
 

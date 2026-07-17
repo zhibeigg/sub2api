@@ -15,7 +15,7 @@
 - 多分组共享额度订阅：套餐使用 `group_ids`（兼容 `group_id`），并支持 `daily_limit_usd`、`weekly_limit_usd`、`monthly_limit_usd`
 - 管理员订阅分配：`POST /api/v1/admin/subscriptions/assign` 可传 `plan_id`，旧 `group_id` 格式继续兼容
 - 独立禁购设置：`balance_disabled` 与 `subscription_disabled`；被禁用类型的新订单会由后端拒绝
-- 内置支付设置与服务商实例管理，包括 EasyPay V1 MD5 / 彩虹易支付 2.0 RSA-SHA256 和 `qqpay`
+- 内置支付设置与服务商实例管理，包括 EasyPay V1 MD5 / 彩虹易支付 2.0 RSA-SHA256、`qqpay`，以及微信 JSAPI 的 `mp`/`wecom` 双 OAuth 模式
 
 ### 基础地址
 - 生产：`https://<your-domain>`
@@ -64,23 +64,96 @@ EasyPay 协议约定：
 - 协议版本创建后不可切换；协议升级、PID 变更或密钥轮换必须新建实例，不要直接覆盖仍有关联订单的实例配置。
 - `GET` 响应不会回传私钥等敏感配置；`PUT` 可只提交需要变更的 `config` 字段，未提交的敏感字段保持原值。不要把真实凭证写入文档、日志或示例。
 
-微信官方支付能力约定：
-- `config.nativeEnabled`、`config.h5Enabled`、`config.jsapiEnabled` 是字符串布尔值（`"true"` / `"false"`），显式值优先。
-- 历史兼容：`nativeEnabled` 缺失时为 `true`；`h5Enabled` 缺失时仅在 `h5AppName` 和 `h5AppUrl` 完整时推导为 `true`；`jsapiEnabled` 缺失时仅在 `mpAppId` 非空时推导为 `true`。
-- `h5Enabled="true"` 时，`h5AppName` 必填，`h5AppUrl` 必须是绝对 HTTPS URL。
-- `jsapiEnabled="true"` 时，解析后的 JSAPI AppID 必须是 `wx` 前缀；`mpAppId` 非空时优先使用，否则使用 `appId`。基础账号为 `ww` 企业微信 CorpID 时必须另填 `mpAppId`。
-- 基础 `appId` 可使用小写 `wx` 开头的微信 AppID，或商户平台已关联的小写 `ww` 企业微信 CorpID；非空 `mpAppId` 仅允许 `wx`。启用实例保存时校验，历史实例在预下单前按模式再次校验。格式错误分别返回 `WXPAY_CONFIG_APPID_INVALID` 或 `WXPAY_CONFIG_JSAPI_APPID_INVALID`，且不会调用微信 API。
-- 有 OpenID 时只允许 JSAPI；普通移动端优先 H5、回退 Native；桌面端使用 Native；微信内 JSAPI 关闭时不启动 OAuth，并可回退 Native 二维码。未启用的模式不会调用微信 API。
-- 创建订单的结构化原因码包括 `NO_AVAILABLE_WXPAY_CAPABILITY`、`WECHAT_NATIVE_NOT_AUTHORIZED`、`WECHAT_H5_NOT_AUTHORIZED`、`WECHAT_JSAPI_NOT_AUTHORIZED`、`WECHAT_APPID_MCHID_MISMATCH`、`WECHAT_SIGN_ERROR`、`WECHAT_PAYMENT_API_ERROR`。
-- 微信错误 metadata 只会使用 `mode`、`http_status`、`wechat_code`、`request_id`、`action`，不会返回凭据、请求体或其他敏感值。
+微信官方支付双 OAuth 模式与配置字段：
 
-微信能力配置示例（凭据仅为占位符）：
+| `config` 字段 | 说明 | 约束 / 默认 |
+|---|---|---|
+| `appId` | 基础支付 AppID；`wecom` 模式下也是 CorpID | `mp`/Native/H5 可为商户已绑定的 `wx` 或 `ww`；`wecom` JSAPI 必须为 `ww` CorpID |
+| `mpAppId` | 公众号 JSAPI AppID | `mp` 模式使用，必须为 `wx`；历史 `wx` 配置可回退 `appId` |
+| `jsapiAuthType` | JSAPI OAuth 身份模式 | `mp` 或 `wecom`；缺失默认 `mp` |
+| `wecomAppSecret` | 企业微信自建应用 Secret | `wecom` 且 `jsapiEnabled="true"` 时必填；敏感字段，不回显 |
+| `wecomAgentId` | 企业微信自建应用 AgentId | 可选；非空时必须为正整数 |
+| `nativeEnabled` | Native 能力开关 | 字符串布尔值；缺失默认 `true`，不受 OAuth 模式影响 |
+| `h5Enabled` | H5 能力开关 | 字符串布尔值；缺失时仅在 `h5AppName`、`h5AppUrl` 完整时推导为 `true` |
+| `jsapiEnabled` | JSAPI 能力开关 | 字符串布尔值；缺失时仅 `mp` + 非空 `mpAppId` 推导为 `true` |
+| `h5AppName` / `h5AppUrl` | H5 产品登记信息 | H5 开启时必填；URL 必须为绝对 HTTPS URL |
+
+- `mp` 使用 `mpAppId` 和全局微信连接配置中的同公众号 OAuth Secret；实例解析出的公众号 AppID 必须与全局 OAuth AppID 一致。
+- `wecom` 使用实例 `appId`（CorpID）、实例敏感字段 `wecomAppSecret` 与可选 `wecomAgentId`。企业微信 OAuth 固定 `snsapi_base`：内部成员按 `code -> userid -> openid` 转换，外部访问者可由 `code` 直接得到 OpenID。
+- 企业微信页面先使用响应中的 `jsapi.js_config` 完成当前页面 URL 的 JS-SDK 签名配置，再通过 `WeixinJSBridge` 调起支付。`js_config` 仅在 `wecom` 模式返回；支付参数仍在 `jsapi` 对象中。
+- H5 是独立产品能力，企业微信 OAuth、身份转换、JS-SDK 或 JSAPI 失败不会自动回退 H5。Native 不受 `jsapiAuthType` 影响。示例保持 `h5Enabled="false"`。
+- 上线前必须配置企业微信可信域名/JS-SDK 可信域名、OAuth 网页授权回调域名、自建应用可见范围，以及微信支付商户号与公众号 AppID/CorpID 绑定、JSAPI 支付授权目录；H5 需另行开通并配置。
+- Admin `GET` 不返回 `wecomAppSecret`、私钥、APIv3 密钥或支付公钥等敏感值；`PUT` 中敏感字段省略或传空字符串会保留原值。
+- 实例存在 `PENDING`、`PAID` 或 `RECHARGING` 订单时，修改受保护的身份/密钥字段、禁用实例、删除实例或移除在用支付类型会返回 `PENDING_ORDERS`。
+
+#### CreateOrder 的微信 OAuth / JSAPI 契约
+
+认证用户通过 `POST /api/v1/payment/orders` 创建订单。请求中的 `wechat_page_url` 可选，但仅企业微信 JSAPI 使用：必须是当前站点同源的绝对 HTTPS URL，服务端会移除 fragment 后签名。其他支付模式传入该字段会返回结构化错误。
+
+客户端**不得指定支付实例**；请求契约没有 `provider_instance_id`。服务端在 OAuth 前完成实例选择，并将用户、金额、订单类型、实例、`authType`、JSAPI AppID、套餐与页面 URL 等写入短时签名 context。OAuth 回调后的恢复令牌强制加载原实例，不会再次负载均衡。
+
+需要 OAuth 时，`result_type` 为 `oauth_required`，并返回：
+
+```json
+{
+  "result_type": "oauth_required",
+  "oauth": {
+    "authorize_url": "/api/v1/auth/oauth/wechat/payment/start?context_token=<signed-context-token>",
+    "appid": "<wx-or-ww-app-id>",
+    "scope": "snsapi_base",
+    "redirect_url": "/auth/wechat/payment/callback",
+    "auth_type": "<mp-or-wecom>"
+  }
+}
+```
+
+新客户端必须使用仅含服务端签名 `context_token` 的 `authorize_url`。旧版 query 参数式启动 URL 仅作为 legacy MP 兼容桥保留，不支持企业微信模式，也不应由新集成继续生成。
+
+OAuth 恢复并预下单成功时，`result_type` 为 `jsapi_ready`。`jsapi.auth_type` 始终标识实际身份模式；企业微信还返回 `jsapi.js_config`：
+
+```json
+{
+  "result_type": "jsapi_ready",
+  "jsapi": {
+    "appId": "<wx-or-ww-app-id>",
+    "timeStamp": "<unix-seconds-string>",
+    "nonceStr": "<payment-nonce>",
+    "package": "prepay_id=<prepay-id>",
+    "signType": "RSA",
+    "paySign": "<payment-signature>",
+    "auth_type": "<mp-or-wecom>",
+    "js_config": {
+      "appId": "<wecom-corp-id>",
+      "timestamp": 1700000000,
+      "nonceStr": "<js-sdk-nonce>",
+      "signature": "<js-sdk-signature>",
+      "jsApiList": ["chooseWXPay"]
+    }
+  }
+}
+```
+
+公众号模式不返回 `js_config`。兼容字段 `jsapi_payload` 与 `jsapi` 表示同一支付参数对象；新客户端优先读取 `jsapi`。
+
+相关结构化错误码包括：
+
+| 类别 | 原因码 |
+|---|---|
+| 配置校验 | `WXPAY_CONFIG_APPID_INVALID`、`WXPAY_CONFIG_JSAPI_APPID_INVALID`、`WXPAY_CONFIG_JSAPI_AUTH_TYPE_INVALID`、`WXPAY_CONFIG_WECOM_CORPID_INVALID`、`WXPAY_CONFIG_WECOM_APP_SECRET_REQUIRED`、`WXPAY_CONFIG_WECOM_AGENT_ID_INVALID` |
+| 客户端/页面 | `WECHAT_PAYMENT_CLIENT_ENVIRONMENT_INVALID`、`WECOM_PAYMENT_PAGE_URL_INVALID`、`WECOM_PAYMENT_PAGE_URL_ORIGIN_MISMATCH`、`WECOM_PAYMENT_PAGE_URL_NOT_ALLOWED` |
+| OAuth/context | `WECHAT_PAYMENT_OAUTH_NOT_CONFIGURED`、`WECHAT_PAYMENT_MP_NOT_CONFIGURED`、`WECHAT_PAYMENT_MP_APP_MISMATCH`、`INVALID_WECHAT_PAYMENT_OAUTH_CONTEXT`、`WECHAT_PAYMENT_OAUTH_CONTEXT_EXPIRED`、`INVALID_WECHAT_PAYMENT_RESUME_TOKEN` |
+| 实例固定 | `WECOM_PAYMENT_INSTANCE_UNAVAILABLE`、`WECHAT_PAYMENT_INSTANCE_UNAVAILABLE`、`WECHAT_PAYMENT_INSTANCE_CHANGED`、`PENDING_ORDERS` |
+| 微信支付 API | `NO_AVAILABLE_WXPAY_CAPABILITY`、`WECHAT_NATIVE_NOT_AUTHORIZED`、`WECHAT_H5_NOT_AUTHORIZED`、`WECHAT_JSAPI_NOT_AUTHORIZED`、`WECHAT_APPID_MCHID_MISMATCH`、`WECHAT_SIGN_ERROR`、`WECHAT_PAYMENT_API_ERROR` |
+
+错误 metadata 只包含必要的 `auth_type`、`client_environment`、`instance_id`、`mode`、`http_status`、`wechat_code`、`request_id` 或 `action`，不返回凭据、请求体或上游敏感响应。
+
+企业微信模式配置示例（全部凭据均为占位符）：
 ```json
 {
   "provider_key": "wxpay",
-  "name": "WeChat Pay",
+  "name": "<provider-display-name>",
   "config": {
-    "appId": "<wechat-app-id>",
+    "appId": "<wecom-corp-id>",
     "mchId": "<merchant-id>",
     "privateKey": "<merchant-private-key-pem>",
     "apiV3Key": "<32-byte-api-v3-key>",
@@ -89,7 +162,10 @@ EasyPay 协议约定：
     "certSerial": "<merchant-certificate-serial>",
     "nativeEnabled": "true",
     "h5Enabled": "false",
-    "jsapiEnabled": "false"
+    "jsapiEnabled": "true",
+    "jsapiAuthType": "wecom",
+    "wecomAppSecret": "<wecom-custom-app-secret>",
+    "wecomAgentId": "<positive-agent-id>"
   },
   "supported_types": ["wxpay"],
   "enabled": true,
@@ -326,7 +402,7 @@ This document describes the minimal Sub2API Admin API surface for external payme
 - User lookup
 - Manual balance correction
 - Purchase page query parameter forwarding
-- Built-in payment settings and provider instance management, including EasyPay V1 MD5 / Rainbow EasyPay 2.0 RSA-SHA256 and `qqpay`
+- Built-in payment settings and provider instance management, including EasyPay V1 MD5 / Rainbow EasyPay 2.0 RSA-SHA256, `qqpay`, and `mp`/`wecom` dual OAuth modes for WeChat JSAPI
 
 ### Base URL
 - Production: `https://<your-domain>`
@@ -375,23 +451,96 @@ EasyPay protocol contract:
 - The protocol version is immutable after creation. Use a new instance for protocol upgrades, PID changes, or key rotation instead of overwriting an instance that still has associated orders.
 - `GET` responses omit private keys and other sensitive config. A `PUT` may submit only changed `config` fields; omitted sensitive fields retain their stored values. Never place real credentials in documentation, logs, or examples.
 
-Direct WeChat Pay capability contract:
-- `config.nativeEnabled`, `config.h5Enabled`, and `config.jsapiEnabled` are string booleans (`"true"` / `"false"`); explicit values take precedence.
-- Historical compatibility: absent `nativeEnabled` means `true`; absent `h5Enabled` is inferred as `true` only when both `h5AppName` and `h5AppUrl` are complete; absent `jsapiEnabled` is inferred as `true` only when `mpAppId` is non-empty.
-- When `h5Enabled="true"`, `h5AppName` is required and `h5AppUrl` must be an absolute HTTPS URL.
-- When `jsapiEnabled="true"`, the resolved JSAPI AppID must use the `wx` prefix. A non-empty `mpAppId` takes precedence; otherwise `appId` is used. A base `ww` WeCom CorpID therefore requires a separate `mpAppId`.
-- The base `appId` may be a lowercase `wx` WeChat AppID or a Merchant-Platform-associated lowercase `ww` WeCom CorpID; any non-empty `mpAppId` must use `wx`. Enabled instances are checked when saved, while historical instances are checked again for the selected mode before prepay. Invalid values return `WXPAY_CONFIG_APPID_INVALID` or `WXPAY_CONFIG_JSAPI_APPID_INVALID` without calling WeChat.
-- An OpenID permits JSAPI only; ordinary mobile browsers prefer H5 and fall back to Native; desktop uses Native. If JSAPI is disabled, an in-WeChat request does not start OAuth and may fall back to a Native QR code. Disabled modes never call their WeChat APIs.
-- Structured order-creation reasons include `NO_AVAILABLE_WXPAY_CAPABILITY`, `WECHAT_NATIVE_NOT_AUTHORIZED`, `WECHAT_H5_NOT_AUTHORIZED`, `WECHAT_JSAPI_NOT_AUTHORIZED`, `WECHAT_APPID_MCHID_MISMATCH`, `WECHAT_SIGN_ERROR`, and `WECHAT_PAYMENT_API_ERROR`.
-- WeChat error metadata uses only `mode`, `http_status`, `wechat_code`, `request_id`, and `action`; credentials, request bodies, and other sensitive values are never returned.
+Direct WeChat Pay dual-OAuth modes and configuration fields:
 
-WeChat capability request example using placeholders only:
+| `config` field | Description | Constraint / default |
+|---|---|---|
+| `appId` | Base payment AppID; also the CorpID in `wecom` mode | Native/H5/`mp` may use a merchant-bound `wx` or `ww`; WeCom JSAPI requires a `ww` CorpID |
+| `mpAppId` | Official Account JSAPI AppID | Used by `mp`, must start with `wx`; legacy `wx` configs may fall back to `appId` |
+| `jsapiAuthType` | JSAPI OAuth identity mode | `mp` or `wecom`; defaults to `mp` when absent |
+| `wecomAppSecret` | Secret of the WeCom custom app | Required when WeCom JSAPI is enabled; sensitive and never echoed |
+| `wecomAgentId` | AgentId of the WeCom custom app | Optional; when non-empty it must be a positive integer |
+| `nativeEnabled` | Native capability switch | String boolean; defaults to `true`; unaffected by OAuth mode |
+| `h5Enabled` | H5 capability switch | String boolean; inferred only when both H5 fields are complete |
+| `jsapiEnabled` | JSAPI capability switch | String boolean; absent is inferred only for `mp` with non-empty `mpAppId` |
+| `h5AppName` / `h5AppUrl` | H5 product registration | Required when H5 is enabled; URL must be absolute HTTPS |
+
+- `mp` uses `mpAppId` and the global WeChat Connect configuration's OAuth Secret for the same Official Account. The resolved instance MP AppID must match the global OAuth AppID.
+- `wecom` uses instance `appId` (CorpID), sensitive instance field `wecomAppSecret`, and optional `wecomAgentId`. OAuth is fixed to `snsapi_base`: internal members follow `code -> userid -> openid`, while an external visitor may return OpenID directly.
+- A WeCom page first applies `jsapi.js_config`, signed for the current page URL, and then invokes payment through `WeixinJSBridge`. `js_config` is returned only for `wecom`; payment invocation fields remain in `jsapi`.
+- H5 is an independent product capability. WeCom OAuth, identity conversion, JS-SDK, or JSAPI failures never automatically fall back to H5. Native is unaffected by `jsapiAuthType`. Examples keep `h5Enabled="false"`.
+- Before rollout, configure the WeCom trusted/JS-SDK domain, OAuth web authorization callback domain, custom-app visibility scope, WeChat Pay merchant AppID/CorpID association, and JSAPI payment authorization directory. H5 requires separate product enablement and registration.
+- Admin `GET` responses omit `wecomAppSecret`, private keys, APIv3 keys, payment public keys, and other secrets. Omitting a sensitive field or submitting an empty string in `PUT` preserves its stored value.
+- While an instance has `PENDING`, `PAID`, or `RECHARGING` orders, protected identity/key changes, disabling, deletion, and removal of an in-use payment type return `PENDING_ORDERS`.
+
+#### CreateOrder WeChat OAuth / JSAPI contract
+
+Authenticated users create orders with `POST /api/v1/payment/orders`. The optional `wechat_page_url` is accepted only for WeCom JSAPI. It must be an absolute same-origin HTTPS URL; the server removes its fragment before signing. Supplying it for another mode returns a structured error.
+
+Clients **must not select a provider instance**; the request contract has no `provider_instance_id`. The server selects an instance before OAuth and puts the user, amount, order type, instance, `authType`, JSAPI AppID, plan, and page URL into a short-lived signed context. The post-callback resume token must load that exact instance and is never load-balanced again.
+
+When OAuth is required, `result_type` is `oauth_required`:
+
+```json
+{
+  "result_type": "oauth_required",
+  "oauth": {
+    "authorize_url": "/api/v1/auth/oauth/wechat/payment/start?context_token=<signed-context-token>",
+    "appid": "<wx-or-ww-app-id>",
+    "scope": "snsapi_base",
+    "redirect_url": "/auth/wechat/payment/callback",
+    "auth_type": "<mp-or-wecom>"
+  }
+}
+```
+
+New clients must use the `authorize_url` containing only the server-signed `context_token`. The old query-parameter start URL remains only as a legacy MP compatibility bridge; it does not support WeCom and should not be generated by new integrations.
+
+After OAuth resume and successful prepay, `result_type` is `jsapi_ready`. `jsapi.auth_type` always identifies the actual identity mode, and WeCom also returns `jsapi.js_config`:
+
+```json
+{
+  "result_type": "jsapi_ready",
+  "jsapi": {
+    "appId": "<wx-or-ww-app-id>",
+    "timeStamp": "<unix-seconds-string>",
+    "nonceStr": "<payment-nonce>",
+    "package": "prepay_id=<prepay-id>",
+    "signType": "RSA",
+    "paySign": "<payment-signature>",
+    "auth_type": "<mp-or-wecom>",
+    "js_config": {
+      "appId": "<wecom-corp-id>",
+      "timestamp": 1700000000,
+      "nonceStr": "<js-sdk-nonce>",
+      "signature": "<js-sdk-signature>",
+      "jsApiList": ["chooseWXPay"]
+    }
+  }
+}
+```
+
+Official Account mode omits `js_config`. The compatibility field `jsapi_payload` represents the same payment object as `jsapi`; new clients should prefer `jsapi`.
+
+Relevant structured reasons include:
+
+| Category | Reasons |
+|---|---|
+| Configuration | `WXPAY_CONFIG_APPID_INVALID`, `WXPAY_CONFIG_JSAPI_APPID_INVALID`, `WXPAY_CONFIG_JSAPI_AUTH_TYPE_INVALID`, `WXPAY_CONFIG_WECOM_CORPID_INVALID`, `WXPAY_CONFIG_WECOM_APP_SECRET_REQUIRED`, `WXPAY_CONFIG_WECOM_AGENT_ID_INVALID` |
+| Client/page | `WECHAT_PAYMENT_CLIENT_ENVIRONMENT_INVALID`, `WECOM_PAYMENT_PAGE_URL_INVALID`, `WECOM_PAYMENT_PAGE_URL_ORIGIN_MISMATCH`, `WECOM_PAYMENT_PAGE_URL_NOT_ALLOWED` |
+| OAuth/context | `WECHAT_PAYMENT_OAUTH_NOT_CONFIGURED`, `WECHAT_PAYMENT_MP_NOT_CONFIGURED`, `WECHAT_PAYMENT_MP_APP_MISMATCH`, `INVALID_WECHAT_PAYMENT_OAUTH_CONTEXT`, `WECHAT_PAYMENT_OAUTH_CONTEXT_EXPIRED`, `INVALID_WECHAT_PAYMENT_RESUME_TOKEN` |
+| Instance binding | `WECOM_PAYMENT_INSTANCE_UNAVAILABLE`, `WECHAT_PAYMENT_INSTANCE_UNAVAILABLE`, `WECHAT_PAYMENT_INSTANCE_CHANGED`, `PENDING_ORDERS` |
+| WeChat Pay API | `NO_AVAILABLE_WXPAY_CAPABILITY`, `WECHAT_NATIVE_NOT_AUTHORIZED`, `WECHAT_H5_NOT_AUTHORIZED`, `WECHAT_JSAPI_NOT_AUTHORIZED`, `WECHAT_APPID_MCHID_MISMATCH`, `WECHAT_SIGN_ERROR`, `WECHAT_PAYMENT_API_ERROR` |
+
+Error metadata is limited to necessary `auth_type`, `client_environment`, `instance_id`, `mode`, `http_status`, `wechat_code`, `request_id`, or `action` fields. Credentials, request bodies, and sensitive upstream responses are not returned.
+
+WeCom-mode configuration example using placeholders only:
 ```json
 {
   "provider_key": "wxpay",
-  "name": "WeChat Pay",
+  "name": "<provider-display-name>",
   "config": {
-    "appId": "<wechat-app-id>",
+    "appId": "<wecom-corp-id>",
     "mchId": "<merchant-id>",
     "privateKey": "<merchant-private-key-pem>",
     "apiV3Key": "<32-byte-api-v3-key>",
@@ -400,7 +549,10 @@ WeChat capability request example using placeholders only:
     "certSerial": "<merchant-certificate-serial>",
     "nativeEnabled": "true",
     "h5Enabled": "false",
-    "jsapiEnabled": "false"
+    "jsapiEnabled": "true",
+    "jsapiAuthType": "wecom",
+    "wecomAppSecret": "<wecom-custom-app-secret>",
+    "wecomAgentId": "<positive-agent-id>"
   },
   "supported_types": ["wxpay"],
   "enabled": true,

@@ -698,6 +698,35 @@ describe('PaymentView WeChat JSAPI flow', () => {
     expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toBeNull()
   })
 
+  it('does not fall back or create another order when WeCom JSAPI preparation fails', async () => {
+    createOrder.mockResolvedValue({
+      ...jsapiOrderFixture('resume-token-wecom'),
+      jsapi: {
+        ...jsapiOrderFixture('resume-token-wecom').jsapi,
+        auth_type: 'wecom' as const,
+      },
+    })
+
+    shallowMount(PaymentView, {
+      global: {
+        stubs: {
+          Teleport: true,
+          Transition: false,
+        },
+      },
+    })
+    await flushPromises()
+    await flushPromises()
+
+    expect(createOrder).toHaveBeenCalledTimes(1)
+    expect(showWarning).not.toHaveBeenCalled()
+    expect(showError).toHaveBeenCalledWith(
+      'payment.errors.wecomJsSdkConfigInvalid payment.errors.wecomRetryHint',
+    )
+    expect(routerPush).not.toHaveBeenCalled()
+    expect(window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY)).toBeNull()
+  })
+
   it('clears stale recovery state when JSAPI never becomes available', async () => {
     vi.useFakeTimers()
     createOrder.mockResolvedValue(jsapiOrderFixture('resume-token-missing-bridge'))

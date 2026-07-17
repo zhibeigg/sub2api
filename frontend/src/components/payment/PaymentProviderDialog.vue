@@ -148,6 +148,37 @@
             <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.settings.payment.wxpayJsapiEnabledHint') }}</p>
           </div>
         </div>
+        <div v-if="wxpayCapabilities.jsapiEnabled" class="space-y-3 border-t border-gray-100 pt-3 dark:border-dark-700">
+          <div>
+            <label class="input-label">{{ t('admin.settings.payment.wxpayJsapiAuthType') }}</label>
+            <Select
+              v-model="wxpayCapabilities.jsapiAuthType"
+              :options="wxpayJsapiAuthTypeOptions"
+              @change="syncWxpayCapabilities"
+            />
+            <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              {{ t('admin.settings.payment.wxpayJsapiAuthTypeHint') }}
+            </p>
+            <p
+              v-if="wxpayWecomSuggested"
+              class="mt-1 text-xs leading-relaxed text-amber-600 dark:text-amber-300"
+            >
+              {{ t('admin.settings.payment.wxpayWecomSuggested') }}
+            </p>
+          </div>
+          <div
+            v-if="wxpayCapabilities.jsapiAuthType === WXPAY_JSAPI_AUTH_WECOM"
+            class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs leading-relaxed text-blue-700 dark:border-blue-800/50 dark:bg-blue-900/20 dark:text-blue-300"
+          >
+            <p class="font-medium">{{ t('admin.settings.payment.wxpayWecomSetupTitle') }}</p>
+            <ul class="mt-1.5 list-disc space-y-1 pl-4">
+              <li>{{ t('admin.settings.payment.wxpayWecomTrustedDomainHint') }}</li>
+              <li>{{ t('admin.settings.payment.wxpayWecomCallbackHint') }}</li>
+              <li>{{ t('admin.settings.payment.wxpayWecomVisibilityHint') }}</li>
+              <li>{{ t('admin.settings.payment.wxpayWecomPaymentDirectoryHint') }}</li>
+            </ul>
+          </div>
+        </div>
       </div>
 
       <!-- Config fields -->
@@ -196,7 +227,7 @@
               <span v-else class="text-red-500"> *</span>
             </label>
             <textarea
-              v-if="field.sensitive && field.key.toLowerCase().includes('key') && field.key !== 'pkey'"
+              v-if="field.inputType === 'textarea'"
               v-model="config[field.key]"
               rows="3"
               class="input font-mono text-xs"
@@ -351,10 +382,17 @@ import Select from '@/components/common/Select.vue'
 import type { SelectOption } from '@/components/common/Select.vue'
 import ToggleSwitch from './ToggleSwitch.vue'
 import type { ProviderInstance } from '@/types/payment'
-import type { EasyPayCustomMethod, TypeOption, WxpayCapabilityConfig } from './providerConfig'
+import type {
+  EasyPayCustomMethod,
+  TypeOption,
+  WxpayCapabilityConfig,
+  WxpayCapabilityToggleKey,
+} from './providerConfig'
 import {
   PROVIDER_CALLBACK_PATHS,
   DEFAULT_WXPAY_CAPABILITIES,
+  WXPAY_JSAPI_AUTH_MP,
+  WXPAY_JSAPI_AUTH_WECOM,
   EASYPAY_PROTOCOL_V1,
   EASYPAY_PROTOCOL_V2,
   WEBHOOK_PATHS,
@@ -365,6 +403,7 @@ import {
   getAvailableTypes,
   getProviderConfigFields,
   getProviderSupportedTypes,
+  getWxpayJsapiConfigFields,
   normalizeEasyPayProtocolVersion,
   resolveWxpayCapabilities,
   writeWxpayCapabilities,
@@ -478,6 +517,18 @@ const callbackPaths = computed(() => PROVIDER_CALLBACK_PATHS[form.provider_key] 
 
 const supportsPaymentMode = computed(() => providerSupportsPaymentMode(form.provider_key))
 
+const wxpayJsapiAuthTypeOptions = computed<TypeOption[]>(() => [
+  { value: WXPAY_JSAPI_AUTH_MP, label: t('admin.settings.payment.wxpayJsapiAuthMp') },
+  { value: WXPAY_JSAPI_AUTH_WECOM, label: t('admin.settings.payment.wxpayJsapiAuthWecom') },
+])
+
+const wxpayWecomSuggested = computed(() => (
+  form.provider_key === 'wxpay'
+  && wxpayCapabilities.jsapiEnabled
+  && wxpayCapabilities.jsapiAuthType === WXPAY_JSAPI_AUTH_MP
+  && config.appId?.trim().toLowerCase().startsWith('ww')
+))
+
 const paymentModeOptions = computed(() => {
   if (form.provider_key === 'alipay') {
     // For Alipay official: "" = default (precreate → page.pay fallback);
@@ -527,14 +578,7 @@ const resolvedFields = computed(() => {
     )
   }
   if (form.provider_key === 'wxpay' && wxpayCapabilities.jsapiEnabled) {
-    fields.push({
-      key: 'mpAppId',
-      label: '',
-      sensitive: false,
-      optional: true,
-      clearable: true,
-      hintKey: 'admin.settings.payment.field_mpAppIdHint',
-    })
+    fields.push(...getWxpayJsapiConfigFields(wxpayCapabilities.jsapiAuthType))
   }
   return fields.map(f => ({
     ...f,
@@ -664,7 +708,7 @@ function applyWxpayCapabilities(source: Record<string, string> | null | undefine
   syncWxpayCapabilities()
 }
 
-function toggleWxpayCapability(key: keyof WxpayCapabilityConfig): void {
+function toggleWxpayCapability(key: WxpayCapabilityToggleKey): void {
   wxpayCapabilities[key] = !wxpayCapabilities[key]
   syncWxpayCapabilities()
 }
@@ -796,6 +840,26 @@ function handleSave() {
     } catch {
       emitValidationError(t('admin.settings.payment.validationWxpayH5AppUrl'))
       return
+    }
+  }
+  if (form.provider_key === 'wxpay' && wxpayCapabilities.jsapiEnabled) {
+    const baseAppId = config.appId?.trim().toLowerCase() || ''
+    if (wxpayCapabilities.jsapiAuthType === WXPAY_JSAPI_AUTH_MP) {
+      const mpAppId = config.mpAppId?.trim().toLowerCase() || baseAppId
+      if (!mpAppId.startsWith('wx')) {
+        emitValidationError(t('admin.settings.payment.validationWxpayMpAppId'))
+        return
+      }
+    } else {
+      if (!baseAppId.startsWith('ww')) {
+        emitValidationError(t('admin.settings.payment.validationWxpayWecomCorpId'))
+        return
+      }
+      const wecomAgentId = config.wecomAgentId?.trim() || ''
+      if (wecomAgentId && !/^[1-9]\d*$/.test(wecomAgentId)) {
+        emitValidationError(t('admin.settings.payment.validationWxpayWecomAgentId'))
+        return
+      }
     }
   }
 

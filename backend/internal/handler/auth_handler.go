@@ -19,14 +19,15 @@ import (
 
 // AuthHandler handles authentication-related requests
 type AuthHandler struct {
-	cfg                  *config.Config
-	authService          *service.AuthService
-	userService          *service.UserService
-	settingSvc           *service.SettingService
-	promoService         *service.PromoService
-	redeemService        *service.RedeemService
-	totpService          *service.TotpService
-	userAttributeService *service.UserAttributeService
+	cfg                       *config.Config
+	authService               *service.AuthService
+	userService               *service.UserService
+	settingSvc                *service.SettingService
+	promoService              *service.PromoService
+	redeemService             *service.RedeemService
+	totpService               *service.TotpService
+	userAttributeService      *service.UserAttributeService
+	wechatPaymentOAuthService *service.WeChatPaymentOAuthService
 
 	dingTalkClientInstance *DingTalkClient
 	dingTalkClientMu       sync.Mutex
@@ -44,6 +45,10 @@ func NewAuthHandler(cfg *config.Config, authService *service.AuthService, userSe
 		totpService:          totpService,
 		userAttributeService: userAttributeService,
 	}
+}
+
+func (h *AuthHandler) SetWeChatPaymentOAuthService(oauthService *service.WeChatPaymentOAuthService) {
+	h.wechatPaymentOAuthService = oauthService
 }
 
 // RegisterRequest represents the registration request payload

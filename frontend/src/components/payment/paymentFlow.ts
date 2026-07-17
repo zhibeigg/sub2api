@@ -6,6 +6,7 @@ import type {
   WechatJSAPIPayload,
   WechatOAuthInfo,
 } from '@/types/payment'
+import type { WechatClientEnvironment } from './paymentEnvironment'
 
 export const PAYMENT_RECOVERY_STORAGE_KEY = 'payment.recovery.current'
 
@@ -56,6 +57,7 @@ export interface PaymentLaunchContext {
   orderType: OrderType
   isMobile: boolean
   isWechatBrowser?: boolean
+  wechatEnvironment?: WechatClientEnvironment
   /** When true, Alipay payments always use QR code regardless of device type */
   forceQRCode?: boolean
   now?: number
@@ -81,6 +83,8 @@ export interface BuildCreateOrderPayloadInput {
   origin?: string
   isMobile: boolean
   isWechatBrowser: boolean
+  wechatEnvironment?: WechatClientEnvironment
+  wechatPageUrl?: string
   /** When true, Alipay payments always use QR code (passes is_mobile: false to backend) */
   forceQRCode?: boolean
 }
@@ -121,19 +125,24 @@ export function getVisibleMethods(methods: Record<string, MethodLimit>): Record<
 export function buildCreateOrderPayload(input: BuildCreateOrderPayloadInput): CreateOrderRequest {
   const visibleMethod = normalizeVisibleMethod(input.paymentType) || input.paymentType.trim()
   const normalizedOrigin = (input.origin || '').trim().replace(/\/+$/, '')
+  const wechatEnvironment = input.wechatEnvironment
+    ?? (input.isWechatBrowser ? 'wechat' : 'other')
   // When forceQRCode is enabled for alipay, always tell the backend this is not a mobile
   // request so it generates a QR code instead of a mobile-redirect URL.
   const effectiveMobile = (input.forceQRCode && visibleMethod === 'alipay')
     ? false
     : input.isMobile
+  const paymentSource = visibleMethod === 'wxpay' && wechatEnvironment === 'wecom'
+    ? 'wecom'
+    : (visibleMethod === 'wxpay' && wechatEnvironment === 'wechat'
+        ? 'wechat_in_app_resume'
+        : 'hosted_redirect')
   const payload: CreateOrderRequest = {
     amount: input.amount,
     payment_type: visibleMethod,
     order_type: input.orderType,
     is_mobile: effectiveMobile,
-    payment_source: visibleMethod === 'wxpay' && input.isWechatBrowser
-      ? 'wechat_in_app_resume'
-      : 'hosted_redirect',
+    payment_source: paymentSource,
   }
 
   if (input.planId) {
@@ -141,6 +150,12 @@ export function buildCreateOrderPayload(input: BuildCreateOrderPayloadInput): Cr
   }
   if (normalizedOrigin) {
     payload.return_url = `${normalizedOrigin}/payment/result`
+  }
+  if (visibleMethod === 'wxpay' && wechatEnvironment === 'wecom') {
+    const pageUrl = (input.wechatPageUrl || '').trim()
+    if (pageUrl) {
+      payload.wechat_page_url = pageUrl
+    }
   }
 
   return payload
@@ -205,6 +220,8 @@ export function decidePaymentLaunch(
   }
 
   const normalizedPaymentMode = baseState.paymentMode.trim().toLowerCase()
+  const wechatEnvironment = context.wechatEnvironment
+    ?? (context.isWechatBrowser ? 'wechat' : 'other')
   // When forceQRCode is on for alipay, treat the device as desktop so the mobile-redirect
   // branch is bypassed and we fall through to qr_waiting.
   const effectiveMobile = (context.forceQRCode && visibleMethod === 'alipay')
@@ -217,7 +234,15 @@ export function decidePaymentLaunch(
     || normalizedPaymentMode === 'native'
     || (!prefersRedirect && !!baseState.qrCode)
 
-  if (visibleMethod === 'wxpay' && context.isWechatBrowser && baseState.payUrl && !baseState.qrCode) {
+  if (visibleMethod === 'wxpay' && wechatEnvironment === 'wecom') {
+    const isExplicitNativeFlow = normalizedPaymentMode === 'native' || normalizedPaymentMode === 'qrcode'
+    if (isExplicitNativeFlow && baseState.qrCode) {
+      return { kind: 'qr_waiting', paymentState: baseState, recovery: baseState }
+    }
+    return { kind: 'unhandled', paymentState: baseState, recovery: baseState }
+  }
+
+  if (visibleMethod === 'wxpay' && wechatEnvironment === 'wechat' && baseState.payUrl && !baseState.qrCode) {
     return { kind: 'redirect_waiting', paymentState: baseState, recovery: baseState }
   }
 

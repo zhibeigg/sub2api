@@ -277,7 +277,7 @@ import { paymentAPI } from '@/api/payment'
 import { extractApiErrorMessage, extractI18nErrorMessage } from '@/utils/apiError'
 import { isMobileDevice } from '@/utils/device'
 import { hasPeakRate, formatPeakRateWindow, serverTimezoneLabel } from '@/utils/peak-rate'
-import type { SubscriptionPlan, CheckoutInfoResponse, CreateOrderResult, OrderType } from '@/types/payment'
+import type { SubscriptionPlan, CheckoutInfoResponse, CreateOrderResult, OrderType, WechatJSAPIPayload } from '@/types/payment'
 import type { Group, UserSubscription } from '@/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import AmountInput from '@/components/payment/AmountInput.vue'
@@ -303,7 +303,27 @@ import Icon from '@/components/icons/Icon.vue'
 import { DEFAULT_PAYMENT_CURRENCY, formatPaymentAmount, normalizePaymentCurrency } from '@/components/payment/currency'
 import type { PaymentMethodOption } from '@/components/payment/PaymentMethodSelector.vue'
 import { buildPaymentErrorToastMessage, describePaymentScenarioError } from './paymentUx'
-import { hasWechatResumeQuery, parseWechatResumeRoute, stripWechatResumeQuery } from './paymentWechatResume'
+import {
+  consumeWechatPaymentResumeHandoff,
+  hasWechatResumeQuery,
+  parseWechatResumeRoute,
+  stripWechatResumeQuery,
+  type WechatPaymentResumeHandoff,
+} from './paymentWechatResume'
+import {
+  buildWechatOAuthAuthorizeUrl,
+  classifyWechatClient,
+  isWechatInAppEnvironment,
+  stripUrlFragment,
+  type WechatClientEnvironment,
+} from '@/components/payment/paymentEnvironment'
+import {
+  classifyWechatBridgePaymentResult,
+  invokeWechatJsapiPayment,
+  isWecomJSAPIPayload,
+  prepareWechatJSAPI,
+  WechatPaymentClientError,
+} from '@/components/payment/wecomJSSDK'
 
 const i18n = useI18n()
 const { t } = i18n
@@ -313,6 +333,16 @@ const authStore = useAuthStore()
 const paymentStore = usePaymentStore()
 const subscriptionStore = useSubscriptionStore()
 const appStore = useAppStore()
+
+function currentWechatEnvironment(): WechatClientEnvironment {
+  if (typeof window === 'undefined') return 'other'
+  return classifyWechatClient(window.navigator.userAgent)
+}
+
+function currentWechatPageUrl(): string {
+  if (typeof window === 'undefined') return ''
+  return stripUrlFragment(window.location.href)
+}
 
 const user = computed(() => authStore.user)
 const activeSubscriptions = computed(() => subscriptionStore.activeSubscriptions)
@@ -369,14 +399,6 @@ interface CreateOrderOptions {
   mobileQrFallbackAttempted?: boolean
 }
 
-interface WeixinJSBridgeLike {
-  invoke(
-    action: string,
-    payload: Record<string, unknown>,
-    callback: (result: Record<string, unknown>) => void,
-  ): void
-}
-
 function emptyPaymentState(): PaymentRecoverySnapshot {
   return {
     orderId: 0,
@@ -397,41 +419,6 @@ function emptyPaymentState(): PaymentRecoverySnapshot {
     resumeToken: '',
     createdAt: 0,
   }
-}
-
-function getWeixinJSBridge(): WeixinJSBridgeLike | undefined {
-  return (window as Window & { WeixinJSBridge?: WeixinJSBridgeLike }).WeixinJSBridge
-}
-
-function waitForWeixinJSBridge(timeoutMs = 4000): Promise<WeixinJSBridgeLike | null> {
-  const existing = getWeixinJSBridge()
-  if (existing) return Promise.resolve(existing)
-
-  return new Promise((resolve) => {
-    let settled = false
-    const finish = (bridge: WeixinJSBridgeLike | null) => {
-      if (settled) return
-      settled = true
-      document.removeEventListener('WeixinJSBridgeReady', handleReady)
-      document.removeEventListener('onWeixinJSBridgeReady', handleReady)
-      window.clearTimeout(timer)
-      resolve(bridge)
-    }
-    const handleReady = () => finish(getWeixinJSBridge() ?? null)
-    const timer = window.setTimeout(() => finish(getWeixinJSBridge() ?? null), timeoutMs)
-    document.addEventListener('WeixinJSBridgeReady', handleReady, false)
-    document.addEventListener('onWeixinJSBridgeReady', handleReady, false)
-  })
-}
-
-async function invokeWechatJsapiPayment(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const bridge = await waitForWeixinJSBridge()
-  if (!bridge) {
-    throw new Error('WECHAT_JSAPI_UNAVAILABLE')
-  }
-  return new Promise((resolve) => {
-    bridge.invoke('getBrandWCPayRequest', payload, (result) => resolve(result || {}))
-  })
 }
 
 const paymentState = ref<PaymentRecoverySnapshot>(emptyPaymentState())
@@ -467,43 +454,6 @@ async function redirectToPaymentResult(state: PaymentRecoverySnapshot): Promise<
     path: '/payment/result',
     query,
   })
-}
-
-function buildWechatOAuthAuthorizeUrl(
-  authorizeUrl: string,
-  context: { paymentType: string; orderType: OrderType; planId?: number; orderAmount: number },
-): string {
-  const normalizedUrl = authorizeUrl.trim()
-  if (!normalizedUrl || typeof window === 'undefined') {
-    return normalizedUrl
-  }
-
-  try {
-    const targetUrl = new URL(normalizedUrl, window.location.origin)
-    const redirectPath = targetUrl.searchParams.get('redirect') || '/purchase'
-    const redirectUrl = new URL(redirectPath, window.location.origin)
-    const paymentType = normalizeVisibleMethod(context.paymentType) || context.paymentType.trim() || 'wxpay'
-
-    redirectUrl.searchParams.set('payment_type', paymentType)
-    redirectUrl.searchParams.set('order_type', context.orderType)
-
-    if (context.planId) {
-      redirectUrl.searchParams.set('plan_id', String(context.planId))
-    } else {
-      redirectUrl.searchParams.delete('plan_id')
-    }
-
-    if (context.orderAmount > 0) {
-      redirectUrl.searchParams.set('amount', String(context.orderAmount))
-    } else {
-      redirectUrl.searchParams.delete('amount')
-    }
-
-    targetUrl.searchParams.set('redirect', `${redirectUrl.pathname}${redirectUrl.search}`)
-    return targetUrl.toString()
-  } catch {
-    return normalizedUrl
-  }
 }
 
 function onPaymentDone() {
@@ -837,6 +787,8 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
   errorMessage.value = ''
   errorHintMessage.value = ''
   const requestType = normalizeVisibleMethod(options.paymentType || selectedMethod.value) || options.paymentType || selectedMethod.value
+  const wechatEnvironment = currentWechatEnvironment()
+  let failureWechatEnvironment = wechatEnvironment
   try {
     const payload = buildCreateOrderPayload({
       amount: orderAmount,
@@ -845,7 +797,9 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
       planId,
       origin: typeof window !== 'undefined' ? window.location.origin : '',
       isMobile: isMobileDevice(),
-      isWechatBrowser: typeof window !== 'undefined' && /MicroMessenger/i.test(window.navigator.userAgent),
+      isWechatBrowser: isWechatInAppEnvironment(wechatEnvironment),
+      wechatEnvironment,
+      wechatPageUrl: wechatEnvironment === 'wecom' ? currentWechatPageUrl() : '',
       forceQRCode: !!(checkout.value.alipay_force_qrcode && normalizeVisibleMethod(requestType) === 'alipay'),
     })
     if (options.openid) {
@@ -894,7 +848,8 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
       visibleMethod,
       orderType,
       isMobile: isMobileDevice(),
-      isWechatBrowser: typeof window !== 'undefined' && /MicroMessenger/i.test(window.navigator.userAgent),
+      isWechatBrowser: isWechatInAppEnvironment(wechatEnvironment),
+      wechatEnvironment,
       forceQRCode: !!(checkout.value.alipay_force_qrcode && visibleMethod === 'alipay'),
       stripePopupUrl: stripeRouteUrl,
       stripeRouteUrl,
@@ -902,12 +857,19 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
     })
 
     if (decision.kind === 'wechat_oauth' && decision.oauth?.authorize_url) {
-      window.location.href = buildWechatOAuthAuthorizeUrl(decision.oauth.authorize_url, {
+      if (decision.oauth.auth_type === 'wecom') {
+        failureWechatEnvironment = 'wecom'
+      }
+      const authorizeUrl = buildWechatOAuthAuthorizeUrl(decision.oauth.authorize_url, {
         paymentType: visibleMethod,
         orderType,
         planId,
         orderAmount,
-      })
+      }, window.location.origin)
+      if (!authorizeUrl) {
+        throw new WechatPaymentClientError('WECHAT_OAUTH_URL_INVALID')
+      }
+      window.location.href = authorizeUrl
       return
     }
 
@@ -933,26 +895,31 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
       return
     }
     if (decision.kind === 'wechat_jsapi' && decision.jsapi) {
+      const jsapiPayload: WechatJSAPIPayload = decision.jsapi
+      const jsapiEnvironment: WechatClientEnvironment = isWecomJSAPIPayload(jsapiPayload)
+        ? 'wecom'
+        : wechatEnvironment
+      failureWechatEnvironment = jsapiEnvironment
       try {
-        const jsapiResult = await invokeWechatJsapiPayment(decision.jsapi as Record<string, unknown>)
-        const errMsg = String(jsapiResult.err_msg || '').toLowerCase()
-        if (errMsg.includes('cancel')) {
+        await prepareWechatJSAPI(jsapiPayload)
+        const jsapiResult = await invokeWechatJsapiPayment(jsapiPayload)
+        const paymentStatus = classifyWechatBridgePaymentResult(jsapiResult)
+        if (paymentStatus === 'cancel') {
           appStore.showInfo(t('payment.qr.cancelled'))
           resetPayment()
-        } else if (errMsg && !errMsg.includes('ok')) {
+        } else if (paymentStatus === 'failure') {
           resetPayment()
-          const fallbackApplied = await attemptMobileQrFallback(
-            { reason: 'WECHAT_JSAPI_FAILED', message: errMsg },
-            {
-              orderAmount,
-              orderType,
-              planId,
-              paymentType: visibleMethod,
-              attempted: options.mobileQrFallbackAttempted === true,
-            },
-          )
+          const paymentError = new WechatPaymentClientError('WECHAT_JSAPI_FAILED')
+          const fallbackApplied = await attemptMobileQrFallback(paymentError, {
+            orderAmount,
+            orderType,
+            planId,
+            paymentType: visibleMethod,
+            attempted: options.mobileQrFallbackAttempted === true,
+            wechatEnvironment: jsapiEnvironment,
+          })
           if (!fallbackApplied) {
-            applyScenarioError({ reason: 'WECHAT_JSAPI_FAILED', message: errMsg }, visibleMethod)
+            throw paymentError
           }
         } else {
           const resultState = { ...decision.paymentState }
@@ -967,6 +934,7 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
           planId,
           paymentType: visibleMethod,
           attempted: options.mobileQrFallbackAttempted === true,
+          wechatEnvironment: jsapiEnvironment,
         })
         if (!fallbackApplied) {
           throw err
@@ -996,12 +964,14 @@ async function createOrder(orderAmount: number, orderType: OrderType, planId?: n
       planId,
       paymentType: requestType,
       attempted: options.mobileQrFallbackAttempted === true,
+      wechatEnvironment: failureWechatEnvironment,
     })) {
       return
     } else {
       const handled = applyScenarioError(
         err,
         normalizeVisibleMethod(options.paymentType || selectedMethod.value) || selectedMethod.value,
+        failureWechatEnvironment,
       )
       if (!handled) {
         errorMessage.value = extractI18nErrorMessage(err, t, 'payment.errors', extractApiErrorMessage(err, t('payment.result.failed')))
@@ -1023,10 +993,16 @@ interface MobileQrFallbackContext {
   planId?: number
   paymentType: string
   attempted: boolean
+  wechatEnvironment: WechatClientEnvironment
 }
 
-function shouldFallbackToDesktopQr(err: unknown, paymentMethod: string, attempted: boolean): boolean {
-  if (attempted || !isMobileDevice()) {
+function shouldFallbackToDesktopQr(
+  err: unknown,
+  paymentMethod: string,
+  attempted: boolean,
+  wechatEnvironment: WechatClientEnvironment,
+): boolean {
+  if (attempted || !isMobileDevice() || wechatEnvironment === 'wecom') {
     return false
   }
 
@@ -1053,7 +1029,12 @@ function shouldFallbackToDesktopQr(err: unknown, paymentMethod: string, attempte
 }
 
 async function attemptMobileQrFallback(err: unknown, context: MobileQrFallbackContext): Promise<boolean> {
-  if (!shouldFallbackToDesktopQr(err, context.paymentType, context.attempted)) {
+  if (!shouldFallbackToDesktopQr(
+    err,
+    context.paymentType,
+    context.attempted,
+    context.wechatEnvironment,
+  )) {
     return false
   }
 
@@ -1067,6 +1048,7 @@ async function attemptMobileQrFallback(err: unknown, context: MobileQrFallbackCo
       origin: typeof window !== 'undefined' ? window.location.origin : '',
       isMobile: false,
       isWechatBrowser: false,
+      wechatEnvironment: 'other',
     })
     const result = await paymentStore.createOrder(payload) as CreateOrderResult & { resume_token?: string }
     const stripeMethod = visibleMethod === 'wxpay' ? 'wechat_pay' : 'alipay'
@@ -1086,6 +1068,7 @@ async function attemptMobileQrFallback(err: unknown, context: MobileQrFallbackCo
       orderType: context.orderType,
       isMobile: false,
       isWechatBrowser: false,
+      wechatEnvironment: 'other',
       stripePopupUrl: stripeRouteUrl,
       stripeRouteUrl,
     })
@@ -1106,11 +1089,16 @@ async function attemptMobileQrFallback(err: unknown, context: MobileQrFallbackCo
   }
 }
 
-function applyScenarioError(err: unknown, paymentMethod: string): boolean {
+function applyScenarioError(
+  err: unknown,
+  paymentMethod: string,
+  wechatEnvironment: WechatClientEnvironment = currentWechatEnvironment(),
+): boolean {
   const descriptor = describePaymentScenarioError(err, {
     paymentMethod,
     isMobile: isMobileDevice(),
-    isWechatBrowser: typeof window !== 'undefined' && /MicroMessenger/i.test(window.navigator.userAgent),
+    isWechatBrowser: isWechatInAppEnvironment(wechatEnvironment),
+    wechatEnvironment,
   })
   if (!descriptor) {
     errorMessage.value = ''
@@ -1123,8 +1111,8 @@ function applyScenarioError(err: unknown, paymentMethod: string): boolean {
   return true
 }
 
-async function resumeWechatPaymentFromQuery() {
-  const resume = parseWechatResumeRoute(route.query, checkout.value.plans, validAmount.value)
+async function resumeWechatPaymentFromQuery(handoff?: WechatPaymentResumeHandoff | null) {
+  const resume = parseWechatResumeRoute(route.query, checkout.value.plans, validAmount.value, handoff)
   if (!resume) {
     return
   }
@@ -1170,15 +1158,22 @@ onMounted(async () => {
       })
       selectedMethod.value = sorted[0]
     }
+    let wechatResumeHandoff: WechatPaymentResumeHandoff | null = null
     if (typeof window !== 'undefined') {
-      if (hasWechatResumeQuery(route.query)) {
+      try {
+        wechatResumeHandoff = consumeWechatPaymentResumeHandoff(window.sessionStorage)
+      } catch {
+        wechatResumeHandoff = null
+      }
+      if (hasWechatResumeQuery(route.query) || wechatResumeHandoff) {
         removeRecoverySnapshot()
       }
-      const routeResumeToken = typeof route.query.resume_token === 'string'
-        ? route.query.resume_token
-        : typeof route.query.wechat_resume_token === 'string'
-          ? route.query.wechat_resume_token
-          : undefined
+      const routeResumeToken = wechatResumeHandoff?.wechat_resume_token
+        || (typeof route.query.resume_token === 'string'
+          ? route.query.resume_token
+          : typeof route.query.wechat_resume_token === 'string'
+            ? route.query.wechat_resume_token
+            : undefined)
       const restored = readPaymentRecoverySnapshot(
         window.localStorage.getItem(PAYMENT_RECOVERY_STORAGE_KEY),
         { resumeToken: routeResumeToken },
@@ -1195,7 +1190,7 @@ onMounted(async () => {
         removeRecoverySnapshot()
       }
     }
-    await resumeWechatPaymentFromQuery()
+    await resumeWechatPaymentFromQuery(wechatResumeHandoff)
     if (checkout.value.balance_disabled && !checkout.value.subscription_disabled) {
       activeTab.value = 'subscription'
     } else if (checkout.value.subscription_disabled) {

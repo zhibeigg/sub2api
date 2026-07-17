@@ -4,10 +4,13 @@
 
 // --- Types ---
 
+export type ConfigFieldInputType = 'text' | 'password' | 'textarea' | 'select'
+
 export interface ConfigFieldDef {
   key: string
   label: string
   sensitive: boolean
+  inputType?: ConfigFieldInputType
   optional?: boolean
   clearable?: boolean
   defaultValue?: string
@@ -32,16 +35,24 @@ export type EasyPayProtocolVersion = '1' | '2'
 export const EASYPAY_PROTOCOL_V1: EasyPayProtocolVersion = '1'
 export const EASYPAY_PROTOCOL_V2: EasyPayProtocolVersion = '2'
 
+export type WxpayJsapiAuthType = 'mp' | 'wecom'
+export type WxpayCapabilityToggleKey = 'nativeEnabled' | 'h5Enabled' | 'jsapiEnabled'
+
+export const WXPAY_JSAPI_AUTH_MP: WxpayJsapiAuthType = 'mp'
+export const WXPAY_JSAPI_AUTH_WECOM: WxpayJsapiAuthType = 'wecom'
+
 export interface WxpayCapabilityConfig {
   nativeEnabled: boolean
   h5Enabled: boolean
   jsapiEnabled: boolean
+  jsapiAuthType: WxpayJsapiAuthType
 }
 
 export const DEFAULT_WXPAY_CAPABILITIES: WxpayCapabilityConfig = {
   nativeEnabled: true,
   h5Enabled: false,
   jsapiEnabled: false,
+  jsapiAuthType: WXPAY_JSAPI_AUTH_MP,
 }
 
 export const EASYPAY_PROTOCOL_OPTIONS: TypeOption[] = [
@@ -157,33 +168,33 @@ export const PROVIDER_CONFIG_FIELDS: Record<string, ConfigFieldDef[]> = {
     { key: 'protocolVersion', label: '', sensitive: false, defaultValue: EASYPAY_PROTOCOL_V2, options: EASYPAY_PROTOCOL_OPTIONS },
     { key: 'pid', label: 'PID', sensitive: false },
     { key: 'apiBase', label: '', sensitive: false, hintKey: 'admin.settings.payment.field_easypayApiBaseHint' },
-    { key: 'merchantPrivateKey', label: '', sensitive: true },
-    { key: 'platformPublicKey', label: '', sensitive: true },
+    { key: 'merchantPrivateKey', label: '', sensitive: true, inputType: 'textarea' },
+    { key: 'platformPublicKey', label: '', sensitive: true, inputType: 'textarea' },
   ],
   alipay: [
     { key: 'appId', label: 'App ID', sensitive: false },
-    { key: 'privateKey', label: '', sensitive: true },
-    { key: 'publicKey', label: '', sensitive: true },
+    { key: 'privateKey', label: '', sensitive: true, inputType: 'textarea' },
+    { key: 'publicKey', label: '', sensitive: true, inputType: 'textarea' },
   ],
   wxpay: [
     { key: 'appId', label: 'App ID', sensitive: false },
     { key: 'mchId', label: '', sensitive: false },
-    { key: 'privateKey', label: '', sensitive: true },
-    { key: 'apiV3Key', label: '', sensitive: true },
+    { key: 'privateKey', label: '', sensitive: true, inputType: 'textarea' },
+    { key: 'apiV3Key', label: '', sensitive: true, inputType: 'password' },
     { key: 'certSerial', label: '', sensitive: false },
-    { key: 'publicKey', label: '', sensitive: true },
+    { key: 'publicKey', label: '', sensitive: true, inputType: 'textarea' },
     { key: 'publicKeyId', label: '', sensitive: false },
   ],
   stripe: [
-    { key: 'secretKey', label: '', sensitive: true },
+    { key: 'secretKey', label: '', sensitive: true, inputType: 'password' },
     { key: 'publishableKey', label: '', sensitive: false },
-    { key: 'webhookSecret', label: '', sensitive: true },
+    { key: 'webhookSecret', label: '', sensitive: true, inputType: 'password' },
     { key: 'currency', label: '', sensitive: false, defaultValue: 'CNY', hintKey: 'admin.settings.payment.field_paymentCurrencyHint', options: PAYMENT_CURRENCY_OPTIONS },
   ],
   airwallex: [
     { key: 'clientId', label: '', sensitive: false },
-    { key: 'apiKey', label: '', sensitive: true },
-    { key: 'webhookSecret', label: '', sensitive: true },
+    { key: 'apiKey', label: '', sensitive: true, inputType: 'password' },
+    { key: 'webhookSecret', label: '', sensitive: true, inputType: 'password' },
     { key: 'apiBase', label: '', sensitive: false, defaultValue: 'https://api.airwallex.com/api/v1', hintKey: 'admin.settings.payment.field_airwallexApiBaseHint' },
     { key: 'countryCode', label: '', sensitive: false, defaultValue: 'CN' },
     { key: 'currency', label: '', sensitive: false, defaultValue: 'CNY', hintKey: 'admin.settings.payment.field_paymentCurrencyHint', options: PAYMENT_CURRENCY_OPTIONS },
@@ -204,11 +215,25 @@ export function normalizeProviderConfigBoolean(value: unknown, fallback: boolean
   return fallback
 }
 
+export function normalizeWxpayJsapiAuthType(
+  value: unknown,
+  fallback: WxpayJsapiAuthType = WXPAY_JSAPI_AUTH_MP,
+): WxpayJsapiAuthType {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (normalized === WXPAY_JSAPI_AUTH_MP || normalized === WXPAY_JSAPI_AUTH_WECOM) {
+    return normalized
+  }
+  return fallback
+}
+
 export function resolveWxpayCapabilities(
   config: Record<string, string> | null | undefined,
   defaults: WxpayCapabilityConfig = DEFAULT_WXPAY_CAPABILITIES,
 ): WxpayCapabilityConfig {
   const h5Fallback = Boolean(config?.h5AppName?.trim() && config?.h5AppUrl?.trim())
+  // Only the historical Official Account field implied JSAPI enablement.
+  // WeCom was introduced with an explicit capability switch, so its fields
+  // must never silently enable JSAPI when jsapiEnabled is absent.
   const jsapiFallback = Boolean(config?.mpAppId?.trim())
   return {
     nativeEnabled: hasOwnConfigValue(config, 'nativeEnabled')
@@ -220,6 +245,10 @@ export function resolveWxpayCapabilities(
     jsapiEnabled: hasOwnConfigValue(config, 'jsapiEnabled')
       ? normalizeProviderConfigBoolean(config?.jsapiEnabled, jsapiFallback)
       : jsapiFallback,
+    // Historical configurations did not store the auth mode. Always interpret
+    // those as Official Account mode; a ww-prefixed base AppID is only a UI
+    // suggestion and must never silently migrate an existing provider.
+    jsapiAuthType: normalizeWxpayJsapiAuthType(config?.jsapiAuthType, defaults.jsapiAuthType),
   }
 }
 
@@ -230,6 +259,42 @@ export function writeWxpayCapabilities(
   config.nativeEnabled = String(capabilities.nativeEnabled)
   config.h5Enabled = String(capabilities.h5Enabled)
   config.jsapiEnabled = String(capabilities.jsapiEnabled)
+  config.jsapiAuthType = normalizeWxpayJsapiAuthType(capabilities.jsapiAuthType)
+}
+
+export function getWxpayJsapiConfigFields(authType: unknown): ConfigFieldDef[] {
+  if (normalizeWxpayJsapiAuthType(authType) === WXPAY_JSAPI_AUTH_WECOM) {
+    return [
+      {
+        key: 'wecomAppSecret',
+        label: '',
+        sensitive: true,
+        inputType: 'password',
+        hintKey: 'admin.settings.payment.field_wecomAppSecretHint',
+      },
+      {
+        key: 'wecomAgentId',
+        label: '',
+        sensitive: false,
+        inputType: 'text',
+        optional: true,
+        clearable: true,
+        hintKey: 'admin.settings.payment.field_wecomAgentIdHint',
+      },
+    ]
+  }
+
+  return [
+    {
+      key: 'mpAppId',
+      label: '',
+      sensitive: false,
+      inputType: 'text',
+      optional: true,
+      clearable: true,
+      hintKey: 'admin.settings.payment.field_mpAppIdHint',
+    },
+  ]
 }
 
 export function normalizeEasyPayProtocolVersion(
@@ -287,8 +352,8 @@ export function getProviderConfigFields(
   }
   return [
     ...commonFields,
-    { key: 'merchantPrivateKey', label: '', sensitive: true },
-    { key: 'platformPublicKey', label: '', sensitive: true },
+    { key: 'merchantPrivateKey', label: '', sensitive: true, inputType: 'textarea' },
+    { key: 'platformPublicKey', label: '', sensitive: true, inputType: 'textarea' },
   ]
 }
 

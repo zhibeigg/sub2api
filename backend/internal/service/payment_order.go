@@ -31,6 +31,9 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	if normalized := NormalizeVisibleMethod(req.PaymentType); normalized != "" {
 		req.PaymentType = normalized
 	}
+	if err := validateCreateOrderResumeRequest(req); err != nil {
+		return nil, err
+	}
 	cfg, err := s.configService.GetPaymentConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get payment config: %w", err)
@@ -89,6 +92,14 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 	if err := s.validateSelectedCreateOrderInstance(ctx, req, sel); err != nil {
 		return nil, err
 	}
+	req, err = s.prepareWeChatRequestForSelection(ctx, req, sel)
+	if err != nil {
+		return nil, err
+	}
+	weComJSConfig, err := s.buildWeComResumeJSConfig(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	selectedCurrency := payment.DefaultPaymentCurrency
 	if sel != nil {
 		selectedCurrency = paymentProviderConfigCurrency(sel.ProviderKey, sel.Config)
@@ -120,6 +131,7 @@ func (s *PaymentService) CreateOrder(ctx context.Context, req CreateOrderRequest
 			Save(ctx)
 		return nil, err
 	}
+	decorateWeChatJSAPIResponse(resp, sel, weComJSConfig)
 	return resp, nil
 }
 
@@ -446,14 +458,34 @@ func (s *PaymentService) checkDailyLimit(ctx context.Context, tx *dbent.Tx, user
 }
 
 func (s *PaymentService) selectCreateOrderInstance(ctx context.Context, req CreateOrderRequest, cfg *PaymentConfig, payAmount float64) (*payment.InstanceSelection, error) {
+	if claims := req.WeChatResumeClaims; claims != nil && !claims.Legacy {
+		sel, err := s.loadBalancer.GetInstanceSelection(ctx, claims.ProviderInstanceID)
+		if err != nil || sel == nil {
+			return nil, infraerrors.ServiceUnavailable("WECHAT_PAYMENT_INSTANCE_UNAVAILABLE", "the selected WeChat payment instance is no longer available").
+				WithMetadata(map[string]string{"instance_id": strings.TrimSpace(claims.ProviderInstanceID), "auth_type": strings.TrimSpace(claims.AuthType)})
+		}
+		if strings.TrimSpace(sel.ProviderKey) != strings.TrimSpace(claims.ProviderKey) || !payment.InstanceSupportsType(sel.SupportedTypes, req.PaymentType) {
+			return nil, infraerrors.Conflict("WECHAT_PAYMENT_INSTANCE_CHANGED", "the selected WeChat payment instance no longer matches the resume token").
+				WithMetadata(map[string]string{"instance_id": strings.TrimSpace(claims.ProviderInstanceID), "auth_type": strings.TrimSpace(claims.AuthType)})
+		}
+		return sel, nil
+	}
+
 	selectCtx, err := s.prepareCreateOrderSelectionContext(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 	sel, err := s.loadBalancer.SelectInstance(selectCtx, "", req.PaymentType, payment.Strategy(cfg.LoadBalanceStrategy), payAmount)
 	if err != nil {
-		return nil, infraerrors.ServiceUnavailable("PAYMENT_GATEWAY_ERROR", "method_not_configured").
-			WithMetadata(map[string]string{"payment_type": req.PaymentType})
+		reason := "PAYMENT_GATEWAY_ERROR"
+		message := "method_not_configured"
+		metadata := map[string]string{"payment_type": req.PaymentType}
+		if req.IsWeComBrowser && payment.GetBasePaymentType(req.PaymentType) == payment.TypeWxpay {
+			reason = "WECOM_PAYMENT_INSTANCE_UNAVAILABLE"
+			message = "no enterprise WeChat JSAPI payment instance is available"
+			metadata["auth_type"] = provider.WxpayJSAPIAuthTypeWeCom
+		}
+		return nil, infraerrors.ServiceUnavailable(reason, message).WithMetadata(metadata)
 	}
 	if sel == nil {
 		return nil, infraerrors.TooManyRequests("NO_AVAILABLE_INSTANCE", "no_available_instance")
@@ -464,6 +496,9 @@ func (s *PaymentService) selectCreateOrderInstance(ctx context.Context, req Crea
 func (s *PaymentService) prepareCreateOrderSelectionContext(ctx context.Context, req CreateOrderRequest) (context.Context, error) {
 	if !requestNeedsWeChatJSAPICompatibility(req) {
 		return ctx, nil
+	}
+	if req.IsWeComBrowser {
+		return payment.WithWxpayJSAPIAuth(ctx, provider.WxpayJSAPIAuthTypeWeCom, ""), nil
 	}
 	capabilities, err := s.officialWxpayVisibleMethodCapabilities(ctx)
 	if err != nil {
@@ -479,14 +514,88 @@ func (s *PaymentService) prepareCreateOrderSelectionContext(ctx context.Context,
 		}
 		return nil, err
 	}
-	return payment.WithWxpayJSAPIAppID(ctx, expectedAppID), nil
+	return payment.WithWxpayJSAPIAuth(ctx, provider.WxpayJSAPIAuthTypeMP, expectedAppID), nil
 }
 
 func requestNeedsWeChatJSAPICompatibility(req CreateOrderRequest) bool {
 	if payment.GetBasePaymentType(req.PaymentType) != payment.TypeWxpay {
 		return false
 	}
-	return req.IsWeChatBrowser || strings.TrimSpace(req.OpenID) != ""
+	return req.IsWeChatBrowser || req.IsWeComBrowser || strings.TrimSpace(req.OpenID) != ""
+}
+
+func validateCreateOrderResumeRequest(req CreateOrderRequest) error {
+	claims := req.WeChatResumeClaims
+	if claims == nil {
+		return nil
+	}
+	environment := PaymentClientEnvironmentOther
+	if req.IsWeComBrowser {
+		environment = PaymentClientEnvironmentWeCom
+	} else if req.IsWeChatBrowser {
+		environment = PaymentClientEnvironmentWeChat
+	}
+	if err := ValidatePaymentClientEnvironment(claims.AuthType, environment); err != nil {
+		return err
+	}
+	if claims.Legacy {
+		return nil
+	}
+	if claims.UserID != req.UserID {
+		return infraerrors.Forbidden("WECHAT_PAYMENT_RESUME_USER_MISMATCH", "wechat payment resume token belongs to another user").
+			WithMetadata(map[string]string{"auth_type": strings.TrimSpace(claims.AuthType)})
+	}
+	if NormalizeVisibleMethod(claims.PaymentType) != NormalizeVisibleMethod(req.PaymentType) {
+		return infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_RESUME_TOKEN", "wechat payment resume token payment type mismatch")
+	}
+	return nil
+}
+
+func (s *PaymentService) prepareWeChatRequestForSelection(ctx context.Context, req CreateOrderRequest, sel *payment.InstanceSelection) (CreateOrderRequest, error) {
+	if sel == nil || sel.ProviderKey != payment.TypeWxpay || payment.GetBasePaymentType(req.PaymentType) != payment.TypeWxpay {
+		if strings.TrimSpace(req.WeChatPageURL) != "" {
+			return req, infraerrors.BadRequest("WECOM_PAYMENT_PAGE_URL_NOT_ALLOWED", "enterprise WeChat page URL is only accepted for enterprise WeChat JSAPI payment")
+		}
+		return req, nil
+	}
+	authType := provider.ResolveWxpayJSAPIAuthType(sel.Config)
+	if claims := req.WeChatResumeClaims; claims != nil && !claims.Legacy {
+		req.WeChatPageURL = claims.WeChatPageURL
+	}
+	if authType != provider.WxpayJSAPIAuthTypeWeCom {
+		if strings.TrimSpace(req.WeChatPageURL) != "" {
+			return req, infraerrors.BadRequest("WECOM_PAYMENT_PAGE_URL_NOT_ALLOWED", "enterprise WeChat page URL is only accepted for enterprise WeChat JSAPI payment")
+		}
+		return req, nil
+	}
+	canonical, err := CanonicalizeWeComPageURL(req.WeChatPageURL, req.RequestScheme, req.SrcHost, req.RequestOrigin, req.SrcURL)
+	if err != nil {
+		return req, err
+	}
+	req.WeChatPageURL = canonical
+	if claims := req.WeChatResumeClaims; claims != nil && !claims.Legacy && canonical != strings.TrimSpace(claims.WeChatPageURL) {
+		return req, infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_RESUME_TOKEN", "wechat payment resume page URL mismatch")
+	}
+	return req, nil
+}
+
+func (s *PaymentService) buildWeComResumeJSConfig(ctx context.Context, req CreateOrderRequest) (*payment.WechatJSConfig, error) {
+	claims := req.WeChatResumeClaims
+	if claims == nil || claims.Legacy || claims.AuthType != provider.WxpayJSAPIAuthTypeWeCom {
+		return nil, nil
+	}
+	claimsCopy := *claims
+	claimsCopy.WeChatPageURL = req.WeChatPageURL
+	return s.wechatPaymentOAuth().BuildJSConfig(ctx, &claimsCopy)
+}
+
+func decorateWeChatJSAPIResponse(resp *CreateOrderResponse, sel *payment.InstanceSelection, jsConfig *payment.WechatJSConfig) {
+	if resp == nil || sel == nil || sel.ProviderKey != payment.TypeWxpay || resp.JSAPI == nil {
+		return
+	}
+	resp.JSAPI.AuthType = provider.ResolveWxpayJSAPIAuthType(sel.Config)
+	resp.JSAPI.JSConfig = jsConfig
+	resp.JSAPIPayload = resp.JSAPI
 }
 
 func (s *PaymentService) usesOfficialWxpayVisibleMethod(ctx context.Context) bool {
@@ -586,6 +695,7 @@ func (s *PaymentService) invokeProvider(ctx context.Context, order *dbent.Paymen
 		ClientIP:        req.ClientIP,
 		IsMobile:        req.IsMobile,
 		IsWeChatBrowser: req.IsWeChatBrowser,
+		IsWeComBrowser:  req.IsWeComBrowser,
 		ReturnURL:       providerReturnURL,
 	}, sel, outTradeNo, payAmountStr, subject)
 	finishProviderCall := servertiming.ObserveDependency(ctx, "payment")
@@ -653,6 +763,7 @@ func buildProviderCreatePaymentRequest(req CreateOrderRequest, sel *payment.Inst
 		ClientIP:           req.ClientIP,
 		IsMobile:           req.IsMobile,
 		IsWeChatBrowser:    req.IsWeChatBrowser,
+		IsWeComBrowser:     req.IsWeComBrowser,
 		InstanceSubMethods: selectedInstanceSupportedTypes(sel),
 	}
 }
@@ -709,7 +820,7 @@ func (s *PaymentService) maybeBuildWeChatOAuthRequiredResponseForSelection(ctx c
 	if sel != nil && sel.ProviderKey != "" && sel.ProviderKey != payment.TypeWxpay {
 		return nil, nil
 	}
-	if strings.TrimSpace(req.OpenID) != "" || !req.IsWeChatBrowser || payment.GetBasePaymentType(req.PaymentType) != payment.TypeWxpay {
+	if strings.TrimSpace(req.OpenID) != "" || (!req.IsWeChatBrowser && !req.IsWeComBrowser) || payment.GetBasePaymentType(req.PaymentType) != payment.TypeWxpay {
 		return nil, nil
 	}
 	canFallbackToNative := false
@@ -719,30 +830,58 @@ func (s *PaymentService) maybeBuildWeChatOAuthRequiredResponseForSelection(ctx c
 			return nil, err
 		}
 		if !capabilities.JSAPIEnabled {
+			if req.IsWeComBrowser {
+				return nil, infraerrors.ServiceUnavailable("WECOM_PAYMENT_INSTANCE_UNAVAILABLE", "enterprise WeChat JSAPI payment is unavailable").
+					WithMetadata(map[string]string{"auth_type": provider.WxpayJSAPIAuthTypeWeCom})
+			}
 			return nil, nil
 		}
-		canFallbackToNative = capabilities.NativeEnabled
+		canFallbackToNative = capabilities.NativeEnabled && !req.IsWeComBrowser
 	}
-	resp, err := s.buildWeChatOAuthRequiredResponse(ctx, req, amount, payAmount, feeRate)
+	resp, err := s.buildWeChatOAuthRequiredResponse(ctx, req, amount, payAmount, feeRate, sel)
 	if err != nil && canFallbackToNative {
-		switch infraerrors.Reason(err) {
-		case "WECHAT_PAYMENT_MP_NOT_CONFIGURED", "PAYMENT_RESUME_NOT_CONFIGURED":
+		reason := infraerrors.Reason(err)
+		switch reason {
+		case "WECHAT_PAYMENT_MP_NOT_CONFIGURED", "WECHAT_PAYMENT_MP_APP_MISMATCH", "PAYMENT_RESUME_NOT_CONFIGURED":
 			return nil, nil
 		}
 	}
 	return resp, err
 }
 
-func (s *PaymentService) buildWeChatOAuthRequiredResponse(ctx context.Context, req CreateOrderRequest, amount, payAmount, feeRate float64) (*CreateOrderResponse, error) {
-	appID, _, err := s.getWeChatPaymentOAuthCredential(ctx)
+func (s *PaymentService) buildWeChatOAuthRequiredResponse(ctx context.Context, req CreateOrderRequest, amount, payAmount, feeRate float64, sel *payment.InstanceSelection) (*CreateOrderResponse, error) {
+	if sel == nil || sel.ProviderKey != payment.TypeWxpay {
+		return s.buildLegacyMPWeChatOAuthRequiredResponse(ctx, req, amount, payAmount, feeRate)
+	}
+	authType := provider.ResolveWxpayJSAPIAuthType(sel.Config)
+	appID := provider.ResolveWxpayJSAPIAppID(sel.Config)
+	environment := PaymentClientEnvironmentOther
+	if req.IsWeComBrowser {
+		environment = PaymentClientEnvironmentWeCom
+	} else if req.IsWeChatBrowser {
+		environment = PaymentClientEnvironmentWeChat
+	}
+	if err := ValidatePaymentClientEnvironment(authType, environment); err != nil {
+		return nil, err
+	}
+	claims := WeChatPaymentOAuthContextClaims{
+		UserID:             req.UserID,
+		ProviderInstanceID: strings.TrimSpace(sel.InstanceID),
+		ProviderKey:        strings.TrimSpace(sel.ProviderKey),
+		AuthType:           authType,
+		JSAPIAppID:         appID,
+		PaymentType:        req.PaymentType,
+		Amount:             strconv.FormatFloat(req.Amount, 'f', -1, 64),
+		OrderType:          req.OrderType,
+		PlanID:             req.PlanID,
+		RedirectTo:         paymentRedirectPathFromURL(req.SrcURL),
+		WeChatPageURL:      req.WeChatPageURL,
+	}
+	contextToken, err := s.wechatPaymentOAuth().CreateContextToken(claims)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.paymentResume().ensureSigningKey(); err != nil {
-		return nil, err
-	}
-
-	authorizeURL, err := buildWeChatPaymentOAuthStartURL(req, "snsapi_base")
+	authorizeURL, err := buildWeChatPaymentOAuthStartURL(contextToken)
 	if err != nil {
 		return nil, err
 	}
@@ -758,6 +897,7 @@ func (s *PaymentService) buildWeChatOAuthRequiredResponse(ctx context.Context, r
 			AppID:        appID,
 			Scope:        "snsapi_base",
 			RedirectURL:  "/auth/wechat/payment/callback",
+			AuthType:     authType,
 		},
 	}, nil
 }
@@ -770,6 +910,24 @@ func (s *PaymentService) validateSelectedCreateOrderInstance(ctx context.Context
 	if err != nil {
 		return err
 	}
+	selectedAuthType := provider.ResolveWxpayJSAPIAuthType(sel.Config)
+	selectedAppID := provider.ResolveWxpayJSAPIAppID(sel.Config)
+	if claims := req.WeChatResumeClaims; claims != nil && !claims.Legacy {
+		if !capabilities.JSAPIEnabled || strings.TrimSpace(sel.InstanceID) != strings.TrimSpace(claims.ProviderInstanceID) ||
+			strings.TrimSpace(sel.ProviderKey) != strings.TrimSpace(claims.ProviderKey) || selectedAuthType != claims.AuthType || selectedAppID != claims.JSAPIAppID {
+			return infraerrors.Conflict("WECHAT_PAYMENT_INSTANCE_CHANGED", "the selected WeChat payment configuration has changed").
+				WithMetadata(map[string]string{"instance_id": strings.TrimSpace(claims.ProviderInstanceID), "auth_type": strings.TrimSpace(claims.AuthType)})
+		}
+		_, err := s.wechatPaymentOAuth().ValidateResumeBinding(ctx, claims)
+		return err
+	}
+	if req.IsWeComBrowser {
+		if !capabilities.JSAPIEnabled || selectedAuthType != provider.WxpayJSAPIAuthTypeWeCom || selectedAppID == "" {
+			return infraerrors.ServiceUnavailable("WECOM_PAYMENT_INSTANCE_UNAVAILABLE", "no enterprise WeChat JSAPI payment instance is available").
+				WithMetadata(map[string]string{"auth_type": provider.WxpayJSAPIAuthTypeWeCom})
+		}
+		return nil
+	}
 	if !capabilities.JSAPIEnabled {
 		return nil
 	}
@@ -780,8 +938,7 @@ func (s *PaymentService) validateSelectedCreateOrderInstance(ctx context.Context
 		}
 		return err
 	}
-	selectedAppID := provider.ResolveWxpayJSAPIAppID(sel.Config)
-	if selectedAppID == "" || selectedAppID != expectedAppID {
+	if selectedAuthType != provider.WxpayJSAPIAuthTypeMP || selectedAppID == "" || selectedAppID != expectedAppID {
 		return infraerrors.TooManyRequests("NO_AVAILABLE_INSTANCE", "selected payment instance is not compatible with the current WeChat OAuth app")
 	}
 	return nil
@@ -851,7 +1008,7 @@ func requiresWeChatJSAPICompatibleSelection(req CreateOrderRequest, sel *payment
 	if sel == nil || sel.ProviderKey != payment.TypeWxpay || payment.GetBasePaymentType(req.PaymentType) != payment.TypeWxpay {
 		return false
 	}
-	return req.IsWeChatBrowser || strings.TrimSpace(req.OpenID) != ""
+	return req.IsWeChatBrowser || req.IsWeComBrowser || strings.TrimSpace(req.OpenID) != ""
 }
 
 func (s *PaymentService) getWeChatPaymentOAuthCredential(ctx context.Context) (string, string, error) {
@@ -906,30 +1063,59 @@ func buildCreateOrderResponse(order *dbent.PaymentOrder, req CreateOrderRequest,
 	}
 }
 
-func buildWeChatPaymentOAuthStartURL(req CreateOrderRequest, scope string) (string, error) {
+func buildWeChatPaymentOAuthStartURL(contextToken string) (string, error) {
 	u, err := url.Parse("/api/v1/auth/oauth/wechat/payment/start")
 	if err != nil {
 		return "", fmt.Errorf("build wechat payment oauth start url: %w", err)
 	}
+	contextToken = strings.TrimSpace(contextToken)
+	if contextToken == "" {
+		return "", infraerrors.BadRequest("INVALID_WECHAT_PAYMENT_OAUTH_CONTEXT", "wechat payment oauth context token is missing")
+	}
 	q := u.Query()
-	q.Set("payment_type", strings.TrimSpace(req.PaymentType))
-	if req.Amount > 0 {
-		q.Set("amount", strconv.FormatFloat(req.Amount, 'f', -1, 64))
+	q.Set("context_token", contextToken)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
+// buildLegacyMPWeChatOAuthRequiredResponse constructs the legacy query-based OAuth
+// start URL for the MP path when no InstanceSelection is available (pre-selection flow).
+func (s *PaymentService) buildLegacyMPWeChatOAuthRequiredResponse(ctx context.Context, req CreateOrderRequest, amount, payAmount, feeRate float64) (*CreateOrderResponse, error) {
+	appID, _, err := s.getWeChatPaymentOAuthCredential(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if orderType := strings.TrimSpace(req.OrderType); orderType != "" {
-		q.Set("order_type", orderType)
+	resumeSvc := s.paymentResume()
+	if resumeSvc == nil || !resumeSvc.isSigningConfigured() {
+		return nil, infraerrors.ServiceUnavailable("PAYMENT_RESUME_NOT_CONFIGURED", "payment resume tokens require a configured signing key")
 	}
+	redirect := paymentRedirectPathFromURL(req.SrcURL)
+	u, _ := url.Parse("/api/v1/auth/oauth/wechat/payment/start")
+	q := u.Query()
+	q.Set("payment_type", req.PaymentType)
+	q.Set("amount", strconv.FormatFloat(req.Amount, 'f', -1, 64))
+	q.Set("order_type", req.OrderType)
 	if req.PlanID > 0 {
 		q.Set("plan_id", strconv.FormatInt(req.PlanID, 10))
 	}
-	if scope = strings.TrimSpace(scope); scope != "" {
-		q.Set("scope", scope)
-	}
-	if redirectTo := paymentRedirectPathFromURL(req.SrcURL); redirectTo != "" {
-		q.Set("redirect", redirectTo)
-	}
+	q.Set("redirect", redirect)
+	q.Set("scope", "snsapi_base")
 	u.RawQuery = q.Encode()
-	return u.String(), nil
+
+	return &CreateOrderResponse{
+		Amount:      amount,
+		PayAmount:   payAmount,
+		FeeRate:     feeRate,
+		ResultType:  payment.CreatePaymentResultOAuthRequired,
+		PaymentType: req.PaymentType,
+		OAuth: &payment.WechatOAuthInfo{
+			AuthorizeURL: u.String(),
+			AppID:        appID,
+			Scope:        "snsapi_base",
+			RedirectURL:  "/auth/wechat/payment/callback",
+			AuthType:     "mp",
+		},
+	}, nil
 }
 
 func paymentRedirectPathFromURL(rawURL string) string {

@@ -251,6 +251,7 @@ type CreateOrderRequest struct {
 	PaymentType       string  `json:"payment_type" binding:"required"`
 	OpenID            string  `json:"openid"`
 	WechatResumeToken string  `json:"wechat_resume_token"`
+	WeChatPageURL     string  `json:"wechat_page_url,omitempty"`
 	ReturnURL         string  `json:"return_url"`
 	PaymentSource     string  `json:"payment_source"`
 	OrderType         string  `json:"order_type"`
@@ -274,9 +275,19 @@ func (h *PaymentHandler) CreateOrder(c *gin.Context) {
 		response.BadRequest(c, "Invalid request: "+err.Error())
 		return
 	}
+	var resumeClaims *service.WeChatPaymentResumeClaims
 	if strings.TrimSpace(req.WechatResumeToken) != "" {
 		claims, err := h.paymentService.ParseWeChatPaymentResumeToken(req.WechatResumeToken)
 		if err != nil {
+			response.ErrorFrom(c, err)
+			return
+		}
+		if !claims.Legacy && claims.UserID != subject.UserID {
+			response.ErrorFrom(c, infraerrors.Forbidden("WECHAT_PAYMENT_RESUME_USER_MISMATCH", "wechat payment resume token belongs to another user").
+				WithMetadata(map[string]string{"auth_type": strings.TrimSpace(claims.AuthType)}))
+			return
+		}
+		if err := service.ValidatePaymentClientEnvironment(claims.AuthType, paymentClientEnvironment(c)); err != nil {
 			response.ErrorFrom(c, err)
 			return
 		}
@@ -284,6 +295,7 @@ func (h *PaymentHandler) CreateOrder(c *gin.Context) {
 			response.ErrorFrom(c, err)
 			return
 		}
+		resumeClaims = claims
 	}
 
 	mobile := isMobile(c)
@@ -291,20 +303,25 @@ func (h *PaymentHandler) CreateOrder(c *gin.Context) {
 		mobile = *req.IsMobile
 	}
 	result, err := h.paymentService.CreateOrder(c.Request.Context(), service.CreateOrderRequest{
-		UserID:          subject.UserID,
-		Amount:          req.Amount,
-		PaymentType:     req.PaymentType,
-		OpenID:          req.OpenID,
-		ClientIP:        c.ClientIP(),
-		IsMobile:        mobile,
-		IsWeChatBrowser: isWeChatBrowser(c),
-		SrcHost:         c.Request.Host,
-		SrcURL:          c.Request.Referer(),
-		ReturnURL:       req.ReturnURL,
-		PaymentSource:   req.PaymentSource,
-		OrderType:       req.OrderType,
-		PlanID:          req.PlanID,
-		Locale:          c.GetHeader("Accept-Language"),
+		UserID:             subject.UserID,
+		Amount:             req.Amount,
+		PaymentType:        req.PaymentType,
+		OpenID:             req.OpenID,
+		ClientIP:           c.ClientIP(),
+		IsMobile:           mobile,
+		IsWeChatBrowser:    isWeChatBrowser(c),
+		IsWeComBrowser:     isWeComBrowser(c),
+		RequestScheme:      paymentRequestScheme(c),
+		RequestOrigin:      c.GetHeader("Origin"),
+		SrcHost:            c.Request.Host,
+		SrcURL:             c.Request.Referer(),
+		ReturnURL:          req.ReturnURL,
+		PaymentSource:      req.PaymentSource,
+		OrderType:          req.OrderType,
+		PlanID:             req.PlanID,
+		Locale:             c.GetHeader("Accept-Language"),
+		WeChatPageURL:      req.WeChatPageURL,
+		WeChatResumeClaims: resumeClaims,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -347,6 +364,9 @@ func applyWeChatPaymentResumeClaims(req *CreateOrderRequest, claims *service.WeC
 	}
 	if claims.PlanID > 0 {
 		req.PlanID = claims.PlanID
+	}
+	if !claims.Legacy {
+		req.WeChatPageURL = strings.TrimSpace(claims.WeChatPageURL)
 	}
 	return nil
 }
@@ -701,6 +721,41 @@ func sanitizePaymentOrderForResponse(order *dbent.PaymentOrder) *PaymentOrderRes
 	}
 }
 
+func paymentClientEnvironment(c *gin.Context) string {
+	if c == nil {
+		return service.PaymentClientEnvironmentOther
+	}
+	ua := strings.ToLower(strings.TrimSpace(c.GetHeader("User-Agent")))
+	if strings.Contains(ua, "wxwork") {
+		return service.PaymentClientEnvironmentWeCom
+	}
+	if strings.Contains(ua, "micromessenger") {
+		return service.PaymentClientEnvironmentWeChat
+	}
+	return service.PaymentClientEnvironmentOther
+}
+
 func isWeChatBrowser(c *gin.Context) bool {
-	return strings.Contains(strings.ToLower(c.GetHeader("User-Agent")), "micromessenger")
+	return paymentClientEnvironment(c) == service.PaymentClientEnvironmentWeChat
+}
+
+func isWeComBrowser(c *gin.Context) bool {
+	return paymentClientEnvironment(c) == service.PaymentClientEnvironmentWeCom
+}
+
+func paymentRequestScheme(c *gin.Context) string {
+	if c == nil || c.Request == nil {
+		return ""
+	}
+	if c.Request.TLS != nil {
+		return "https"
+	}
+	forwarded := strings.TrimSpace(c.GetHeader("X-Forwarded-Proto"))
+	if forwarded != "" {
+		return strings.ToLower(strings.TrimSpace(strings.Split(forwarded, ",")[0]))
+	}
+	if c.Request.URL != nil {
+		return strings.ToLower(strings.TrimSpace(c.Request.URL.Scheme))
+	}
+	return "http"
 }

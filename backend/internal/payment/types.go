@@ -111,7 +111,8 @@ type CreatePaymentRequest struct {
 	OpenID             string // WeChat JSAPI payer OpenID when available
 	ClientIP           string // Payer's IP address
 	IsMobile           bool   // Whether the request comes from a mobile device
-	IsWeChatBrowser    bool   // Whether the request comes from the built-in WeChat browser
+	IsWeChatBrowser    bool   // Whether the request comes from the ordinary WeChat built-in browser
+	IsWeComBrowser     bool   // Whether the request comes from the WeCom built-in browser
 	InstanceSubMethods string // Comma-separated sub-methods from instance supported_types (for Stripe)
 }
 
@@ -132,16 +133,28 @@ type WechatOAuthInfo struct {
 	Scope        string `json:"scope,omitempty"`
 	State        string `json:"state,omitempty"`
 	RedirectURL  string `json:"redirect_url,omitempty"`
+	AuthType     string `json:"auth_type,omitempty"`
+}
+
+// WechatJSConfig contains the wx.config fields signed for the current WeCom page URL.
+type WechatJSConfig struct {
+	AppID     string   `json:"appId"`
+	Timestamp int64    `json:"timestamp"`
+	NonceStr  string   `json:"nonceStr"`
+	Signature string   `json:"signature"`
+	JSAPIList []string `json:"jsApiList"`
 }
 
 // WechatJSAPIPayload contains the fields the frontend needs to invoke WeChat JSAPI payment.
 type WechatJSAPIPayload struct {
-	AppID     string `json:"appId,omitempty"`
-	TimeStamp string `json:"timeStamp,omitempty"`
-	NonceStr  string `json:"nonceStr,omitempty"`
-	Package   string `json:"package,omitempty"`
-	SignType  string `json:"signType,omitempty"`
-	PaySign   string `json:"paySign,omitempty"`
+	AppID     string          `json:"appId,omitempty"`
+	TimeStamp string          `json:"timeStamp,omitempty"`
+	NonceStr  string          `json:"nonceStr,omitempty"`
+	Package   string          `json:"package,omitempty"`
+	SignType  string          `json:"signType,omitempty"`
+	PaySign   string          `json:"paySign,omitempty"`
+	AuthType  string          `json:"auth_type,omitempty"`
+	JSConfig  *WechatJSConfig `json:"js_config,omitempty"`
 }
 
 // CreatePaymentResponse is returned after successfully initiating a payment.

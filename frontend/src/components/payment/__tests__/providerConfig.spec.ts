@@ -4,8 +4,11 @@ import {
   EASYPAY_PROTOCOL_V2,
   PAYMENT_CURRENCY_OPTIONS,
   PROVIDER_CONFIG_FIELDS,
+  WXPAY_JSAPI_AUTH_MP,
+  WXPAY_JSAPI_AUTH_WECOM,
   getEasyPayProtocolVersion,
   getProviderConfigFields,
+  getWxpayJsapiConfigFields,
   getProviderSupportedTypes,
   isBuiltInAlipayMethod,
   isBuiltInQqpayMethod,
@@ -29,17 +32,20 @@ describe('PROVIDER_CONFIG_FIELDS.wxpay', () => {
 
   it('only keeps the simplified visible credential set in the admin form', () => {
     expect(findField('wxpay', 'mpAppId')).toBeUndefined()
+    expect(findField('wxpay', 'wecomAppSecret')).toBeUndefined()
+    expect(findField('wxpay', 'wecomAgentId')).toBeUndefined()
     expect(findField('wxpay', 'h5AppName')).toBeUndefined()
     expect(findField('wxpay', 'h5AppUrl')).toBeUndefined()
   })
 })
 
 describe('wxpay capability config', () => {
-  it('uses backward-compatible inference only when explicit booleans are missing', () => {
+  it('infers historical H5 fields while keeping new instances disabled and defaults JSAPI auth mode to mp', () => {
     expect(resolveWxpayCapabilities({})).toEqual({
       nativeEnabled: true,
       h5Enabled: false,
       jsapiEnabled: false,
+      jsapiAuthType: WXPAY_JSAPI_AUTH_MP,
     })
     expect(resolveWxpayCapabilities({
       h5AppName: 'Sub2API',
@@ -49,11 +55,32 @@ describe('wxpay capability config', () => {
       nativeEnabled: true,
       h5Enabled: true,
       jsapiEnabled: true,
+      jsapiAuthType: WXPAY_JSAPI_AUTH_MP,
+    })
+    expect(resolveWxpayCapabilities({
+      appId: 'ww-corp-id',
+      jsapiEnabled: 'true',
+    })).toEqual({
+      nativeEnabled: true,
+      h5Enabled: false,
+      jsapiEnabled: true,
+      jsapiAuthType: WXPAY_JSAPI_AUTH_MP,
+    })
+    expect(resolveWxpayCapabilities({
+      appId: 'ww-corp-id',
+      jsapiAuthType: 'wecom',
+      wecomAgentId: '1000002',
+    })).toEqual({
+      nativeEnabled: true,
+      h5Enabled: false,
+      jsapiEnabled: false,
+      jsapiAuthType: WXPAY_JSAPI_AUTH_WECOM,
     })
     expect(resolveWxpayCapabilities({
       nativeEnabled: 'false',
       h5Enabled: 'false',
       jsapiEnabled: 'false',
+      jsapiAuthType: 'wecom',
       h5AppName: 'Sub2API',
       h5AppUrl: 'https://pay.example.com',
       mpAppId: 'wx-mp-app',
@@ -61,27 +88,44 @@ describe('wxpay capability config', () => {
       nativeEnabled: false,
       h5Enabled: false,
       jsapiEnabled: false,
+      jsapiAuthType: WXPAY_JSAPI_AUTH_WECOM,
     })
   })
 
-  it('writes stable explicit boolean strings without touching sensitive values', () => {
+  it('writes stable capability strings without touching sensitive values', () => {
     const config = {
       privateKey: 'masked-secret-value',
       publicKey: 'masked-public-value',
+      wecomAppSecret: 'masked-wecom-secret',
     }
     writeWxpayCapabilities(config, {
       nativeEnabled: true,
       h5Enabled: false,
       jsapiEnabled: true,
+      jsapiAuthType: WXPAY_JSAPI_AUTH_WECOM,
     })
 
     expect(config).toEqual({
       privateKey: 'masked-secret-value',
       publicKey: 'masked-public-value',
+      wecomAppSecret: 'masked-wecom-secret',
       nativeEnabled: 'true',
       h5Enabled: 'false',
       jsapiEnabled: 'true',
+      jsapiAuthType: 'wecom',
     })
+  })
+
+  it('returns only the fields dedicated to the selected JSAPI auth mode', () => {
+    const mpFields = getWxpayJsapiConfigFields('mp')
+    expect(mpFields.map(field => field.key)).toEqual(['mpAppId'])
+    expect(mpFields[0]).toMatchObject({ sensitive: false, optional: true, clearable: true, inputType: 'text' })
+
+    const wecomFields = getWxpayJsapiConfigFields('wecom')
+    expect(wecomFields.map(field => field.key)).toEqual(['wecomAppSecret', 'wecomAgentId'])
+    expect(wecomFields[0]).toMatchObject({ sensitive: true, inputType: 'password' })
+    expect(wecomFields[0]?.optional).toBeFalsy()
+    expect(wecomFields[1]).toMatchObject({ sensitive: false, optional: true, clearable: true, inputType: 'text' })
   })
 })
 

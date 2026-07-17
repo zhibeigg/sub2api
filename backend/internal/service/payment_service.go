@@ -78,6 +78,9 @@ type CreateOrderRequest struct {
 	ClientIP        string
 	IsMobile        bool
 	IsWeChatBrowser bool
+	IsWeComBrowser  bool
+	RequestScheme   string
+	RequestOrigin   string
 	SrcHost         string
 	SrcURL          string
 	ReturnURL       string
@@ -85,6 +88,11 @@ type CreateOrderRequest struct {
 	OrderType       string
 	PlanID          int64
 	Locale          string
+	WeChatPageURL   string
+
+	// WeChatResumeClaims is server-populated from a verified signed token. It is
+	// intentionally not part of the public JSON request contract.
+	WeChatResumeClaims *WeChatPaymentResumeClaims
 }
 
 type CreateOrderResponse struct {
@@ -182,19 +190,20 @@ type TopUserStat struct {
 // --- Service ---
 
 type PaymentService struct {
-	providerMu               sync.Mutex
-	providersLoaded          bool
-	entClient                *dbent.Client
-	registry                 *payment.Registry
-	loadBalancer             payment.LoadBalancer
-	redeemService            *RedeemService
-	subscriptionSvc          *SubscriptionService
-	configService            *PaymentConfigService
-	userRepo                 UserRepository
-	groupRepo                GroupRepository
-	resumeService            *PaymentResumeService
-	affiliateService         *AffiliateService
-	notificationEmailService *NotificationEmailService
+	providerMu                sync.Mutex
+	providersLoaded           bool
+	entClient                 *dbent.Client
+	registry                  *payment.Registry
+	loadBalancer              payment.LoadBalancer
+	redeemService             *RedeemService
+	subscriptionSvc           *SubscriptionService
+	configService             *PaymentConfigService
+	userRepo                  UserRepository
+	groupRepo                 GroupRepository
+	resumeService             *PaymentResumeService
+	affiliateService          *AffiliateService
+	notificationEmailService  *NotificationEmailService
+	wechatPaymentOAuthService *WeChatPaymentOAuthService
 }
 
 func NewPaymentService(entClient *dbent.Client, registry *payment.Registry, loadBalancer payment.LoadBalancer, redeemService *RedeemService, subscriptionSvc *SubscriptionService, configService *PaymentConfigService, userRepo UserRepository, groupRepo GroupRepository, affiliateService *AffiliateService) *PaymentService {
@@ -205,6 +214,24 @@ func NewPaymentService(entClient *dbent.Client, registry *payment.Registry, load
 
 func (s *PaymentService) SetNotificationEmailService(notificationEmailService *NotificationEmailService) {
 	s.notificationEmailService = notificationEmailService
+}
+
+func (s *PaymentService) SetWeChatPaymentOAuthService(oauthService *WeChatPaymentOAuthService) {
+	s.wechatPaymentOAuthService = oauthService
+}
+
+func (s *PaymentService) wechatPaymentOAuth() *WeChatPaymentOAuthService {
+	if s == nil {
+		return nil
+	}
+	if s.wechatPaymentOAuthService != nil {
+		return s.wechatPaymentOAuthService
+	}
+	var settingSvc *SettingService
+	if s.configService != nil && s.configService.settingRepo != nil {
+		settingSvc = &SettingService{settingRepo: s.configService.settingRepo}
+	}
+	return NewWeChatPaymentOAuthService(s.entClient, s.configService, settingSvc, nil)
 }
 
 // --- Provider Registry ---

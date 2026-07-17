@@ -411,7 +411,8 @@ func TestMaybeBuildWeChatOAuthRequiredResponse(t *testing.T) {
 		PaymentType:     payment.TypeWxpay,
 		IsWeChatBrowser: true,
 		SrcURL:          "https://merchant.example/payment?from=wechat",
-		OrderType:       payment.OrderTypeBalance,
+		OrderType:       payment.OrderTypeSubscription,
+		PlanID:          7,
 	}, 12.5, 12.88, 0.03)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -434,7 +435,7 @@ func TestMaybeBuildWeChatOAuthRequiredResponse(t *testing.T) {
 	if resp.OAuth.RedirectURL != "/auth/wechat/payment/callback" {
 		t.Fatalf("redirect_url = %q, want %q", resp.OAuth.RedirectURL, "/auth/wechat/payment/callback")
 	}
-	if resp.OAuth.AuthorizeURL != "/api/v1/auth/oauth/wechat/payment/start?amount=12.5&order_type=balance&payment_type=wxpay&redirect=%2Fpurchase%3Ffrom%3Dwechat&scope=snsapi_base" {
+	if resp.OAuth.AuthorizeURL != "/api/v1/auth/oauth/wechat/payment/start?amount=12.5&order_type=subscription&payment_type=wxpay&plan_id=7&redirect=%2Fpurchase%3Ffrom%3Dwechat&scope=snsapi_base" {
 		t.Fatalf("authorize_url = %q", resp.OAuth.AuthorizeURL)
 	}
 }
@@ -541,9 +542,10 @@ func TestMaybeBuildWeChatOAuthRequiredResponseFallsBackToConfiguredLegacySigning
 	}
 }
 
-func TestMaybeBuildWeChatOAuthRequiredResponseForSelectionFallsBackToNativeWhenOAuthUnavailable(t *testing.T) {
+func TestMaybeBuildWeChatOAuthRequiredResponseForSelectionDoesNotHideUnknownOAuthError(t *testing.T) {
 	svc := newWeChatPaymentOAuthTestService(nil)
 	sel := &payment.InstanceSelection{
+		InstanceID:  "42",
 		ProviderKey: payment.TypeWxpay,
 		Config: map[string]string{
 			"appId":         "wx1234567890abcdef",
@@ -557,17 +559,16 @@ func TestMaybeBuildWeChatOAuthRequiredResponseForSelectionFallsBackToNativeWhenO
 		PaymentType:     payment.TypeWxpay,
 		IsWeChatBrowser: true,
 		OrderType:       payment.OrderTypeBalance,
+		// Missing UserID makes context-token construction return an unclassified error.
+		// Native fallback must only handle the explicit allowlist above.
 	}
 
-	if err := svc.validateSelectedCreateOrderInstance(context.Background(), req, sel); err != nil {
-		t.Fatalf("expected native fallback to pass selection validation, got %v", err)
-	}
 	resp, err := svc.maybeBuildWeChatOAuthRequiredResponseForSelection(context.Background(), req, 12.5, 12.88, 0.03, sel)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
 	if resp != nil {
-		t.Fatalf("expected native fallback without oauth, got %+v", resp)
+		t.Fatalf("expected nil response, got %+v", resp)
+	}
+	if err == nil || !strings.Contains(err.Error(), "oauth context is incomplete") {
+		t.Fatalf("expected the unknown oauth error to be returned, got %v", err)
 	}
 }
 
@@ -620,6 +621,168 @@ func TestMaybeBuildWeChatOAuthRequiredResponseForSelectionSkipsEasyPayProvider(t
 	if resp != nil {
 		t.Fatalf("expected nil response, got %+v", resp)
 	}
+}
+
+func TestBuildLegacyMPWeChatOAuthRequiredResponseUsesRequestContext(t *testing.T) {
+	t.Setenv("PAYMENT_RESUME_SIGNING_KEY", "0123456789abcdef0123456789abcdef")
+
+	type contextKey string
+	const markerKey contextKey = "payment-order-context"
+	seenMarker := false
+	values := map[string]string{
+		SettingKeyWeChatConnectEnabled:     "true",
+		SettingKeyWeChatConnectAppID:       "wx123456",
+		SettingKeyWeChatConnectAppSecret:   "wechat-secret",
+		SettingKeyWeChatConnectMode:        "mp",
+		SettingKeyWeChatConnectMPEnabled:   "true",
+		SettingKeyWeChatConnectMPAppID:     "wx123456",
+		SettingKeyWeChatConnectMPAppSecret: "wechat-secret",
+	}
+	repo := &paymentConfigSettingRepoStub{
+		values: values,
+		getMultipleFunc: func(ctx context.Context, keys []string) (map[string]string, error) {
+			seenMarker = ctx.Value(markerKey) == "request"
+			out := make(map[string]string, len(keys))
+			for _, key := range keys {
+				out[key] = values[key]
+			}
+			return out, nil
+		},
+	}
+	svc := &PaymentService{configService: &PaymentConfigService{
+		settingRepo:   repo,
+		encryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+	}}
+
+	ctx := context.WithValue(context.Background(), markerKey, "request")
+	resp, err := svc.buildLegacyMPWeChatOAuthRequiredResponse(ctx, CreateOrderRequest{
+		Amount:          10,
+		PaymentType:     payment.TypeWxpay,
+		IsWeChatBrowser: true,
+		OrderType:       payment.OrderTypeBalance,
+	}, 10, 10, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp == nil || !seenMarker {
+		t.Fatalf("request context was not propagated: response=%+v seen=%v", resp, seenMarker)
+	}
+}
+
+func TestSelectCreateOrderInstanceUsesExactResumeBinding(t *testing.T) {
+	bound := &payment.InstanceSelection{
+		InstanceID:     "42",
+		ProviderKey:    payment.TypeWxpay,
+		SupportedTypes: payment.TypeWxpay,
+	}
+	lb := &exactResumeLoadBalancer{selection: bound}
+	svc := &PaymentService{loadBalancer: lb}
+
+	selected, err := svc.selectCreateOrderInstance(context.Background(), CreateOrderRequest{
+		PaymentType: payment.TypeWxpay,
+		WeChatResumeClaims: &WeChatPaymentResumeClaims{
+			ProviderInstanceID: "42",
+			ProviderKey:        payment.TypeWxpay,
+			AuthType:           "mp",
+		},
+	}, &PaymentConfig{}, 12.5)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if selected != bound || lb.requestedInstanceID != "42" || lb.selectCalls != 0 {
+		t.Fatalf("resume did not use exact instance: selected=%+v requested=%q select_calls=%d", selected, lb.requestedInstanceID, lb.selectCalls)
+	}
+}
+
+func TestSelectCreateOrderInstanceDoesNotFallbackWhenExactInstanceUnavailable(t *testing.T) {
+	lb := &exactResumeLoadBalancer{exactErr: infraerrors.ServiceUnavailable("TEST_INSTANCE_UNAVAILABLE", "unavailable")}
+	svc := &PaymentService{loadBalancer: lb}
+
+	selected, err := svc.selectCreateOrderInstance(context.Background(), CreateOrderRequest{
+		PaymentType: payment.TypeWxpay,
+		WeChatResumeClaims: &WeChatPaymentResumeClaims{
+			ProviderInstanceID: "42",
+			ProviderKey:        payment.TypeWxpay,
+			AuthType:           "mp",
+		},
+	}, &PaymentConfig{}, 12.5)
+	if selected != nil || infraerrors.Reason(err) != "WECHAT_PAYMENT_INSTANCE_UNAVAILABLE" || lb.selectCalls != 0 {
+		t.Fatalf("unexpected exact-instance failure: selected=%+v reason=%q select_calls=%d", selected, infraerrors.Reason(err), lb.selectCalls)
+	}
+}
+
+func TestValidateCreateOrderResumeRequestRejectsAnotherUser(t *testing.T) {
+	err := validateCreateOrderResumeRequest(CreateOrderRequest{
+		UserID:          22,
+		PaymentType:     payment.TypeWxpay,
+		IsWeChatBrowser: true,
+		WeChatResumeClaims: &WeChatPaymentResumeClaims{
+			UserID:      21,
+			AuthType:    "mp",
+			PaymentType: payment.TypeWxpay,
+		},
+	})
+	if infraerrors.Reason(err) != "WECHAT_PAYMENT_RESUME_USER_MISMATCH" {
+		t.Fatalf("reason = %q, want WECHAT_PAYMENT_RESUME_USER_MISMATCH", infraerrors.Reason(err))
+	}
+}
+
+func TestCanonicalizeWeComPageURLUsesRequestOrigin(t *testing.T) {
+	got, err := CanonicalizeWeComPageURL(
+		"https://app.example.com:443/purchase?from=wecom#pay",
+		"https",
+		"api.example.com",
+		"https://app.example.com",
+		"https://other.example.com/purchase",
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "https://app.example.com:443/purchase?from=wecom" {
+		t.Fatalf("canonical page URL = %q", got)
+	}
+}
+
+func TestCanonicalizeWeComPageURLRejectsOriginMismatchEvenWhenRefererMatches(t *testing.T) {
+	_, err := CanonicalizeWeComPageURL(
+		"https://evil.example/purchase",
+		"https",
+		"api.example.com",
+		"https://app.example.com",
+		"https://evil.example/purchase",
+	)
+	if infraerrors.Reason(err) != "WECOM_PAYMENT_PAGE_URL_ORIGIN_MISMATCH" {
+		t.Fatalf("reason = %q, want WECOM_PAYMENT_PAGE_URL_ORIGIN_MISMATCH", infraerrors.Reason(err))
+	}
+}
+
+func TestProvidePaymentServiceWiresWeChatPaymentOAuthService(t *testing.T) {
+	oauthService := &WeChatPaymentOAuthService{}
+	svc := ProvidePaymentService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, oauthService)
+	if svc == nil || svc.wechatPaymentOAuthService != oauthService {
+		t.Fatalf("wechat payment oauth service was not wired: %+v", svc)
+	}
+}
+
+type exactResumeLoadBalancer struct {
+	selection           *payment.InstanceSelection
+	exactErr            error
+	requestedInstanceID string
+	selectCalls         int
+}
+
+func (l *exactResumeLoadBalancer) GetInstanceConfig(context.Context, int64) (map[string]string, error) {
+	return nil, nil
+}
+
+func (l *exactResumeLoadBalancer) GetInstanceSelection(_ context.Context, instanceID string) (*payment.InstanceSelection, error) {
+	l.requestedInstanceID = instanceID
+	return l.selection, l.exactErr
+}
+
+func (l *exactResumeLoadBalancer) SelectInstance(context.Context, string, payment.PaymentType, payment.Strategy, float64) (*payment.InstanceSelection, error) {
+	l.selectCalls++
+	return nil, nil
 }
 
 func newWeChatPaymentOAuthTestService(values map[string]string) *PaymentService {

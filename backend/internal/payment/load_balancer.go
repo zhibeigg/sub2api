@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -35,6 +36,7 @@ type InstanceLimits map[string]ChannelLimits
 // LoadBalancer selects a provider instance for a given payment type.
 type LoadBalancer interface {
 	GetInstanceConfig(ctx context.Context, instanceID int64) (map[string]string, error)
+	GetInstanceSelection(ctx context.Context, instanceID string) (*InstanceSelection, error)
 	SelectInstance(ctx context.Context, providerKey string, paymentType PaymentType, strategy Strategy, orderAmount float64) (*InstanceSelection, error)
 }
 
@@ -49,6 +51,7 @@ type contextKey string
 
 const (
 	wxpayJSAPIAppIDContextKey     contextKey = "payment.wxpay.jsapi_app_id"
+	wxpayJSAPIAuthTypeContextKey  contextKey = "payment.wxpay.jsapi_auth_type"
 	wxpayNativeRequiredContextKey contextKey = "payment.wxpay.native_required"
 )
 
@@ -65,12 +68,35 @@ func WithWxpayJSAPIAppID(ctx context.Context, appID string) context.Context {
 	return context.WithValue(ctx, wxpayJSAPIAppIDContextKey, appID)
 }
 
+// WithWxpayJSAPIAuth constrains official WeChat Pay selection to one OAuth
+// channel. appID may be empty for WeCom first-pass selection, where the CorpID
+// is learned from the selected instance and then bound into the signed context.
+func WithWxpayJSAPIAuth(ctx context.Context, authType, appID string) context.Context {
+	authType = strings.ToLower(strings.TrimSpace(authType))
+	appID = strings.TrimSpace(appID)
+	if authType != "" {
+		ctx = context.WithValue(ctx, wxpayJSAPIAuthTypeContextKey, authType)
+	}
+	if appID != "" {
+		ctx = context.WithValue(ctx, wxpayJSAPIAppIDContextKey, appID)
+	}
+	return ctx
+}
+
 func wxpayJSAPIAppIDFromContext(ctx context.Context) string {
 	if ctx == nil {
 		return ""
 	}
 	appID, _ := ctx.Value(wxpayJSAPIAppIDContextKey).(string)
 	return strings.TrimSpace(appID)
+}
+
+func wxpayJSAPIAuthTypeFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	authType, _ := ctx.Value(wxpayJSAPIAuthTypeContextKey).(string)
+	return strings.ToLower(strings.TrimSpace(authType))
 }
 
 func WithWxpayNativeRequired(ctx context.Context) context.Context {
@@ -152,6 +178,7 @@ func (lb *DefaultLoadBalancer) queryEnabledInstances(
 
 	var matched []*dbent.PaymentProviderInstance
 	expectedWxpayJSAPIAppID := wxpayJSAPIAppIDFromContext(ctx)
+	expectedWxpayJSAPIAuthType := wxpayJSAPIAuthTypeFromContext(ctx)
 	requireWxpayNative := wxpayNativeRequiredFromContext(ctx)
 	for _, inst := range instances {
 		// Stripe: match by provider_key because supported_types lists sub-types (card,link,alipay,wxpay),
@@ -162,10 +189,13 @@ func (lb *DefaultLoadBalancer) queryEnabledInstances(
 			}
 		} else if InstanceSupportsType(inst.SupportedTypes, paymentType) {
 			isOfficialWxpay := normalizeVisibleMethodSupportType(paymentType) == TypeWxpay && inst.ProviderKey == TypeWxpay
-			if isOfficialWxpay && (expectedWxpayJSAPIAppID != "" || requireWxpayNative) {
+			if isOfficialWxpay && (expectedWxpayJSAPIAppID != "" || expectedWxpayJSAPIAuthType != "" || requireWxpayNative) {
 				config, cfgErr := lb.decryptConfig(inst.Config)
 				if cfgErr != nil {
 					slog.Warn("skip wxpay instance with unreadable config during capability filtering", "instance_id", inst.ID, "error", cfgErr)
+					continue
+				}
+				if expectedWxpayJSAPIAuthType != "" && (!resolveWxpayJSAPIEnabled(config) || resolveWxpayJSAPIAuthType(config) != expectedWxpayJSAPIAuthType) {
 					continue
 				}
 				if expectedWxpayJSAPIAppID != "" && (!resolveWxpayJSAPIEnabled(config) || resolveWxpayJSAPIAppID(config) != expectedWxpayJSAPIAppID) {
@@ -443,14 +473,43 @@ func resolveWxpayJSAPIEnabled(config map[string]string) bool {
 	if raw, exists := config["jsapiEnabled"]; exists {
 		return strings.EqualFold(strings.TrimSpace(raw), "true")
 	}
-	return strings.TrimSpace(config["mpAppId"]) != ""
+	return resolveWxpayJSAPIAuthType(config) == "mp" && strings.TrimSpace(config["mpAppId"]) != ""
+}
+
+func resolveWxpayJSAPIAuthType(config map[string]string) string {
+	authType := strings.ToLower(strings.TrimSpace(config["jsapiAuthType"]))
+	if authType == "" {
+		return "mp"
+	}
+	return authType
 }
 
 func resolveWxpayJSAPIAppID(config map[string]string) string {
+	if resolveWxpayJSAPIAuthType(config) == "wecom" {
+		return strings.TrimSpace(config["appId"])
+	}
 	if appID := strings.TrimSpace(config["mpAppId"]); appID != "" {
 		return appID
 	}
 	return strings.TrimSpace(config["appId"])
+}
+
+// GetInstanceSelection returns one exact enabled provider instance. It is used
+// by signed resume flows and deliberately never falls back to another instance.
+func (lb *DefaultLoadBalancer) GetInstanceSelection(ctx context.Context, instanceID string) (*InstanceSelection, error) {
+	instanceID = strings.TrimSpace(instanceID)
+	id, err := strconv.ParseInt(instanceID, 10, 64)
+	if err != nil || id <= 0 {
+		return nil, fmt.Errorf("invalid provider instance id")
+	}
+	inst, err := lb.db.PaymentProviderInstance.Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get provider instance: %w", err)
+	}
+	if !inst.Enabled {
+		return nil, fmt.Errorf("provider instance is disabled")
+	}
+	return lb.buildSelection(inst)
 }
 
 // GetInstanceConfig decrypts and returns the configuration for a provider instance by ID.

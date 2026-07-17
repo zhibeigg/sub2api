@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { parseWechatResumeRoute, stripWechatResumeQuery } from '../paymentWechatResume'
+import {
+  WECHAT_PAYMENT_RESUME_HANDOFF_KEY,
+  consumeWechatPaymentResumeHandoff,
+  parseWechatResumeRoute,
+  stripWechatResumeQuery,
+  writeWechatPaymentResumeHandoff,
+} from '../paymentWechatResume'
 
 describe('parseWechatResumeRoute', () => {
   it('prefers the opaque resume token over legacy openid query params', () => {
@@ -34,6 +40,26 @@ describe('parseWechatResumeRoute', () => {
       orderAmount: 12.5,
       planId: undefined,
     })
+  })
+
+  it('consumes an opaque resume handoff without requiring the token in the route URL', () => {
+    window.sessionStorage.clear()
+    writeWechatPaymentResumeHandoff(window.sessionStorage, {
+      wechat_resume_token: 'resume-token-private',
+      payment_type: 'wxpay_direct',
+      order_type: 'subscription',
+      plan_id: '7',
+    }, 1000)
+
+    const handoff = consumeWechatPaymentResumeHandoff(window.sessionStorage, 1500)
+    expect(parseWechatResumeRoute({ wechat_resume: '1' }, [], 0, handoff)).toEqual({
+      wechatResumeToken: 'resume-token-private',
+      paymentType: 'wxpay',
+      orderType: 'subscription',
+      orderAmount: 0,
+      planId: 7,
+    })
+    expect(window.sessionStorage.getItem(WECHAT_PAYMENT_RESUME_HANDOFF_KEY)).toBeNull()
   })
 })
 

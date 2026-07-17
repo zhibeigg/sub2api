@@ -16,6 +16,16 @@ const messages: Record<string, string> = {
   'admin.settings.payment.paymentGuideTrigger': 'View payment guide',
   'admin.settings.payment.alipayGuideSummary': 'Desktop prefers QR precreate and falls back to cashier; mobile prefers WAP checkout.',
   'admin.settings.payment.wxpayGuideSummary': 'Desktop prefers Native QR; mobile routes to JSAPI or H5 based on browser context.',
+  'admin.settings.payment.wxpayH5Enabled': 'H5 payment',
+  'admin.settings.payment.wxpayJsapiEnabled': 'JSAPI payment',
+  'admin.settings.payment.wxpayJsapiAuthType': 'JSAPI authentication type',
+  'admin.settings.payment.wxpayJsapiAuthMp': 'WeChat Official Account',
+  'admin.settings.payment.wxpayJsapiAuthWecom': 'WeCom custom app',
+  'admin.settings.payment.wxpayWecomSuggested': 'WeCom mode is recommended for a ww-prefixed CorpID.',
+  'admin.settings.payment.wxpayWecomSetupTitle': 'WeCom JSAPI configuration checklist',
+  'admin.settings.payment.field_mpAppId': 'Official Account AppID',
+  'admin.settings.payment.field_wecomAppSecret': 'WeCom App Secret',
+  'admin.settings.payment.field_wecomAgentId': 'WeCom App AgentId',
   'admin.settings.payment.airwallexGuideSummary': 'Use Payment Acceptance read/write only.',
   'admin.settings.payment.stripeWebhookHint': 'Configure Stripe webhook.',
   'admin.settings.payment.stripeWebhookApiVersionHint': 'Use Stripe API version {version}.',
@@ -85,10 +95,14 @@ function mountDialog(options: { editing?: ProviderInstance | null } = {}) {
         Select: {
           name: 'Select',
           props: ['modelValue', 'options', 'disabled'],
-          template: '<div class="select-stub" />',
+          emits: ['update:modelValue', 'change'],
+          template: '<div class="select-stub" :data-value="modelValue" />',
         },
         ToggleSwitch: {
-          template: '<div />',
+          name: 'ToggleSwitch',
+          props: ['label', 'checked'],
+          emits: ['toggle'],
+          template: '<button type="button" class="toggle-stub" :data-label="label" :data-checked="checked" @click="$emit(\'toggle\')">{{ label }}</button>',
         },
       },
     },
@@ -166,7 +180,7 @@ describe('PaymentProviderDialog payment guide', () => {
     expect(payload.config.accountId).toBe('')
   })
 
-  it('infers historical wxpay capabilities and saves stable explicit booleans', async () => {
+  it('infers historical H5 and JSAPI fields while saving explicit capability flags and mp auth mode', async () => {
     const provider = providerFactory({
       provider_key: 'wxpay',
       name: 'WeChat Pay',
@@ -192,6 +206,7 @@ describe('PaymentProviderDialog payment guide', () => {
     expect(payload.config.nativeEnabled).toBe('true')
     expect(payload.config.h5Enabled).toBe('true')
     expect(payload.config.jsapiEnabled).toBe('true')
+    expect(payload.config.jsapiAuthType).toBe('mp')
     expect(payload.config.h5AppName).toBe('Sub2API')
     expect(payload.config.h5AppUrl).toBe('https://pay.example.com')
     expect(payload.config.mpAppId).toBe('wx-mp-app')
@@ -229,6 +244,140 @@ describe('PaymentProviderDialog payment guide', () => {
     expect(payload.config.nativeEnabled).toBe('true')
     expect(payload.config.h5Enabled).toBe('false')
     expect(payload.config.jsapiEnabled).toBe('false')
+    expect(payload.config.jsapiAuthType).toBe('mp')
+    expect(wrapper.text()).not.toContain(messages['admin.settings.payment.wxpayJsapiAuthType'])
+    expect(wrapper.text()).not.toContain(messages['admin.settings.payment.field_mpAppId'])
+  })
+
+  it('keeps new wxpay H5 and JSAPI disabled, then reveals mp mode only after JSAPI is enabled', async () => {
+    const wrapper = mountDialog()
+
+    ;(wrapper.vm as unknown as { reset: (key: string) => void }).reset('wxpay')
+    await nextTick()
+
+    const h5Toggle = wrapper.find(`button[data-label="${messages['admin.settings.payment.wxpayH5Enabled']}"]`)
+    const jsapiToggle = wrapper.find(`button[data-label="${messages['admin.settings.payment.wxpayJsapiEnabled']}"]`)
+    expect(h5Toggle.attributes('data-checked')).toBe('false')
+    expect(jsapiToggle.attributes('data-checked')).toBe('false')
+    expect(wrapper.text()).not.toContain(messages['admin.settings.payment.wxpayJsapiAuthType'])
+    expect(wrapper.text()).not.toContain(messages['admin.settings.payment.field_mpAppId'])
+
+    await jsapiToggle.trigger('click')
+    await nextTick()
+
+    expect(wrapper.text()).toContain(messages['admin.settings.payment.wxpayJsapiAuthType'])
+    expect(wrapper.text()).toContain(messages['admin.settings.payment.field_mpAppId'])
+    expect(wrapper.text()).not.toContain(messages['admin.settings.payment.field_wecomAppSecret'])
+    const authSelect = wrapper.findAllComponents({ name: 'Select' })
+      .find(select => select.props('modelValue') === 'mp')
+    expect(authSelect?.props('options')).toEqual([
+      { value: 'mp', label: messages['admin.settings.payment.wxpayJsapiAuthMp'] },
+      { value: 'wecom', label: messages['admin.settings.payment.wxpayJsapiAuthWecom'] },
+    ])
+  })
+
+  it('suggests WeCom for ww-prefixed historical providers without silently changing mp mode', async () => {
+    const provider = providerFactory({
+      provider_key: 'wxpay',
+      name: 'WeChat Pay',
+      config: {
+        appId: 'ww-corp-id',
+        mchId: 'mch-1',
+        publicKeyId: 'PUB_KEY_ID_1',
+        certSerial: 'CERT_1',
+        mpAppId: 'wx-official-account',
+        jsapiEnabled: 'true',
+      },
+      supported_types: ['wxpay'],
+    })
+    const wrapper = mountDialog({ editing: provider })
+
+    ;(wrapper.vm as unknown as { loadProvider: (provider: ProviderInstance) => void }).loadProvider(provider)
+    await nextTick()
+
+    const authSelect = wrapper.findAllComponents({ name: 'Select' })
+      .find(select => select.props('modelValue') === 'mp')
+    expect(authSelect).toBeDefined()
+    expect(wrapper.text()).toContain(messages['admin.settings.payment.wxpayWecomSuggested'])
+    expect(wrapper.text()).toContain(messages['admin.settings.payment.field_mpAppId'])
+    expect(wrapper.text()).not.toContain(messages['admin.settings.payment.field_wecomAppSecret'])
+  })
+
+  it('shows WeCom fields and preserves a blank stored app secret while editing', async () => {
+    const provider = providerFactory({
+      provider_key: 'wxpay',
+      name: 'WeCom Pay',
+      config: {
+        appId: 'ww-corp-id',
+        mchId: 'mch-1',
+        publicKeyId: 'PUB_KEY_ID_1',
+        certSerial: 'CERT_1',
+        jsapiEnabled: 'true',
+        jsapiAuthType: 'wecom',
+        wecomAgentId: '1000002',
+      },
+      supported_types: ['wxpay'],
+    })
+    const wrapper = mountDialog({ editing: provider })
+
+    ;(wrapper.vm as unknown as { loadProvider: (provider: ProviderInstance) => void }).loadProvider(provider)
+    await nextTick()
+
+    expect(wrapper.text()).toContain(messages['admin.settings.payment.field_wecomAppSecret'])
+    expect(wrapper.text()).toContain(messages['admin.settings.payment.field_wecomAgentId'])
+    expect(wrapper.text()).toContain(messages['admin.settings.payment.wxpayWecomSetupTitle'])
+    expect(wrapper.text()).not.toContain(messages['admin.settings.payment.field_mpAppId'])
+    const passwordInputs = wrapper.findAll('input[type="password"]')
+    expect(passwordInputs).toHaveLength(2)
+    expect(passwordInputs.every(input => input.attributes('placeholder') === 'admin.accounts.leaveEmptyToKeep')).toBe(true)
+
+    await wrapper.find('form').trigger('submit.prevent')
+
+    const payload = wrapper.emitted('save')?.[0]?.[0] as { config: Record<string, string> }
+    expect(payload.config.jsapiAuthType).toBe('wecom')
+    expect(payload.config.wecomAgentId).toBe('1000002')
+    expect(payload.config).not.toHaveProperty('wecomAppSecret')
+    expect(payload.config).not.toHaveProperty('mpAppId')
+  })
+
+  it.each([
+    {
+      name: 'mp mode with only a WeCom CorpID',
+      config: {
+        appId: 'ww-corp-id',
+        mchId: 'mch-1',
+        publicKeyId: 'PUB_KEY_ID_1',
+        certSerial: 'CERT_1',
+        jsapiEnabled: 'true',
+        jsapiAuthType: 'mp',
+      },
+    },
+    {
+      name: 'WeCom mode with a non-numeric AgentId',
+      config: {
+        appId: 'ww-corp-id',
+        mchId: 'mch-1',
+        publicKeyId: 'PUB_KEY_ID_1',
+        certSerial: 'CERT_1',
+        jsapiEnabled: 'true',
+        jsapiAuthType: 'wecom',
+        wecomAgentId: 'agent-1',
+      },
+    },
+  ])('blocks the clear invalid JSAPI combination: $name', async ({ config }) => {
+    const provider = providerFactory({
+      provider_key: 'wxpay',
+      name: 'Invalid JSAPI configuration',
+      config,
+      supported_types: ['wxpay'],
+    })
+    const wrapper = mountDialog({ editing: provider })
+
+    ;(wrapper.vm as unknown as { loadProvider: (provider: ProviderInstance) => void }).loadProvider(provider)
+    await nextTick()
+    await wrapper.find('form').trigger('submit.prevent')
+
+    expect(wrapper.emitted('save')).toBeUndefined()
   })
 
   it('defaults new EasyPay providers to V2 with QQ Wallet and V2 key fields', async () => {

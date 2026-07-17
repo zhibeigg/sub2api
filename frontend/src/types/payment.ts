@@ -260,10 +260,12 @@ export interface CreateOrderRequest {
   payment_source?: string
   openid?: string
   wechat_resume_token?: string
+  wechat_page_url?: string
   is_mobile?: boolean
 }
 
 export type CreateOrderResultType = 'order_created' | 'oauth_required' | 'jsapi_ready'
+export type WechatJSAPIAuthType = 'mp' | 'wecom'
 
 export interface WechatOAuthInfo {
   authorize_url?: string
@@ -272,6 +274,15 @@ export interface WechatOAuthInfo {
   scope?: string
   state?: string
   redirect_url?: string
+  auth_type?: WechatJSAPIAuthType
+}
+
+export interface WechatJSAPIConfig {
+  appId: string
+  timestamp: number | string
+  nonceStr: string
+  signature: string
+  jsApiList?: string[]
 }
 
 export interface WechatJSAPIPayload {
@@ -281,6 +292,8 @@ export interface WechatJSAPIPayload {
   package?: string
   signType?: string
   paySign?: string
+  auth_type?: WechatJSAPIAuthType
+  js_config?: WechatJSAPIConfig
 }
 
 export interface CreateOrderResult {

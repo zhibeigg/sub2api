@@ -34,7 +34,7 @@ An active `standard_quota` subscription takes priority over balance billing. Exh
 |----------|----------------|-------------|
 | **EasyPay** | Alipay, WeChat Pay, QQ Pay | One `easypay` provider supports EasyPay V1 MD5 and Rainbow EasyPay 2.0 RSA-SHA256 through `protocolVersion=1/2`; QQ Pay availability depends on the upstream channel |
 | **Alipay (Direct)** | Desktop QR code, mobile Alipay redirect | Direct integration with Alipay Open Platform, returning desktop QR codes and mobile WAP/app launch links |
-| **WeChat Pay (Direct)** | Native QR, H5, MP/JSAPI Pay | Direct integration with WeChat Pay APIv3 with environment-aware routing |
+| **WeChat Pay (Direct)** | Native QR, H5, Official Account/WeCom JSAPI | Direct WeChat Pay APIv3 integration with environment- and OAuth-aware routing |
 | **Stripe** | Card, Alipay, WeChat Pay, Link, etc. | International payments, multi-currency support |
 
 > Direct Alipay/WeChat Pay and EasyPay can coexist as backend provider instances, while the frontend exposes three unified methods: `Alipay`, `WeChat Pay`, and `QQ Pay`. Administrators independently control visibility and choose one source for each method: Alipay and WeChat Pay may use direct or EasyPay sources, while QQ Pay uses EasyPay. Actual QQ Pay availability still depends on the upstream merchant channel being enabled.
@@ -158,7 +158,7 @@ Direct integration with Alipay Open Platform. Mobile flows return an Alipay WAP/
 
 ### WeChat Pay (Direct)
 
-Direct integration with WeChat Pay APIv3. Supports Native QR code payment, H5 payment, and MP/JSAPI payment inside the WeChat environment.
+Direct integration with WeChat Pay APIv3. Supports Native QR code payment, H5 payment, and JSAPI payment in Official Account or WeCom environments.
 
 | Parameter | Description | Required |
 |-----------|-------------|----------|
@@ -170,24 +170,41 @@ Direct integration with WeChat Pay APIv3. Supports Native QR code payment, H5 pa
 | **WeChat Pay Public Key ID** | WeChat Pay public key ID | Yes |
 | **Certificate Serial Number** | Merchant certificate serial number | Yes |
 
-The base payment `appId` may be a Merchant-Platform-associated WeChat AppID (lowercase `wx`) or WeCom CorpID (lowercase `ww`); the Official Account `mpAppId` must still use the `wx` prefix. Enabled instances are validated when saved, while historical instances remain loadable and are checked again for the selected mode before prepay. A WeCom CorpID can identify the base associated payment account, but the current Official Account OAuth/JSAPI flow does not use WeCom identities; when the base account starts with `ww`, enabling JSAPI requires a separate `mpAppId`.
-
-Capability switches and scenario configuration:
+JSAPI payment supports two OAuth identity modes selected by `jsapiAuthType=mp|wecom`; a missing value defaults to `mp` for backward compatibility. The base payment `appId` may still be a Merchant-Platform-associated WeChat AppID (lowercase `wx`) or WeCom CorpID (lowercase `ww`), but the JSAPI identity, OAuth credential, and AppID must match the selected mode as one configuration set.
 
 | Config key | Description | Default / compatibility behavior |
 |------------|-------------|----------------------------------|
-| `nativeEnabled` | Allow Native QR payment | Defaults to `true` when absent from historical config |
+| `nativeEnabled` | Allow Native QR payment | Defaults to `true` when absent; unaffected by OAuth mode |
 | `h5Enabled` | Allow H5 payment | When absent, inferred as `true` only if both `h5AppName` and `h5AppUrl` are complete |
-| `jsapiEnabled` | Allow MP/JSAPI payment | When absent, inferred as `true` only if `mpAppId` is non-empty |
+| `jsapiEnabled` | Allow JSAPI payment | When absent, inferred as `true` only for `mp` with a non-empty `mpAppId`; WeCom should set it explicitly |
+| `jsapiAuthType` | JSAPI OAuth mode: `mp` or `wecom` | Defaults to `mp` when absent |
 | `h5AppName` | H5 application name registered in WeChat Pay Merchant Platform | Required when `h5Enabled=true` |
 | `h5AppUrl` | H5 application site URL | Must be an absolute HTTPS URL when `h5Enabled=true` |
-| `mpAppId` | Official Account AppID (`wx` prefix only) | Required for JSAPI when the base `appId` is a `ww` WeCom CorpID; otherwise JSAPI may fall back to the base `appId` |
+| `mpAppId` | Official Account AppID (`wx` prefix) | Used by `mp`; legacy `wx` configs may fall back to the base `appId` |
+| `wecomAppSecret` | Secret of the WeCom custom app | Required when WeCom JSAPI is enabled; sensitive |
+| `wecomAgentId` | AgentId of the WeCom custom app | Optional; when present it must be a positive integer |
 
-Explicit booleans always override historical inference. Enable only capabilities actually authorized in WeChat Pay Merchant Platform; disabled modes are blocked locally and their WeChat APIs are never called.
+- **Official Account mode (`mp`)** uses `mpAppId` (`wx`) and the global WeChat Connect/OAuth Secret for that same Official Account. The payment instance AppID must match the global MP OAuth AppID. Legacy `wx` instances may use the base `appId` fallback, but new configurations should set `mpAppId` explicitly.
+- **WeCom mode (`wecom`)** requires the instance `appId` to be the WeCom CorpID (`ww`) and uses `wecomAppSecret` from a custom app under that CorpID; `wecomAgentId` is optional. OAuth always uses `snsapi_base`. For internal members, the returned `userid` is converted server-side to the OpenID required by payment; an external visitor's directly returned OpenID is used as-is.
 
-Mode selection is deterministic: an OpenID permits JSAPI only; when JSAPI is disabled, an in-WeChat request does not start OAuth and safely returns a Native QR code if Native is enabled; ordinary mobile browsers prefer H5 and fall back to Native when H5 is disabled or the client IP is unavailable; desktop uses Native. If no capability is available for the scenario, the API returns `NO_AVAILABLE_WXPAY_CAPABILITY`.
+Before OAuth starts, the server selects the payment instance and issues a short-lived signed `context_token`. The context binds the user, amount, order type, provider instance, `authType`, JSAPI AppID, and necessary plan/page details. The callback resume token is forced back to that exact instance; if it is disabled, removed, or materially reconfigured, the request fails safely instead of being load-balanced elsewhere. Clients cannot select a provider instance.
 
-WeChat API failures are mapped to structured reasons including `WECHAT_NATIVE_NOT_AUTHORIZED`, `WECHAT_H5_NOT_AUTHORIZED`, `WECHAT_JSAPI_NOT_AUTHORIZED`, `WECHAT_APPID_MCHID_MISMATCH`, `WECHAT_SIGN_ERROR`, and `WECHAT_PAYMENT_API_ERROR`. Error metadata contains only necessary fields from `mode`, `http_status`, `wechat_code`, `request_id`, and `action`; request bodies and credentials are never included.
+For WeCom pages, the frontend first applies the server-generated `js_config`, signed for the current same-origin HTTPS page URL, and then still invokes payment through `WeixinJSBridge`. The JS-SDK configuration validates and authorizes page capabilities; it does not replace the payment bridge. The URL fragment is removed before signing.
+
+Complete these prerequisites before enabling WeCom JSAPI:
+
+1. Create a **WeCom custom app** under the matching CorpID, configure its Secret, and set the correct **application visibility scope**.
+2. Configure the WeCom **trusted domain / JS-SDK trusted domain** for the payment page host.
+3. Configure the WeCom OAuth **web authorization callback domain** for the host serving `/api/v1/auth/oauth/wechat/payment/callback`.
+4. In WeChat Pay Merchant Platform, bind the merchant to the Official Account AppID or WeCom CorpID used by the instance.
+5. Configure the **JSAPI payment authorization directory** to cover the actual recharge and subscription page paths.
+6. If H5 is needed, enable and configure the H5 product separately. Keep `h5Enabled=false` in examples and new deployments until its application name and domain are ready.
+
+Explicit booleans override historical inference. H5 is independent from JSAPI/OAuth: a WeCom OAuth, identity conversion, JS-SDK, or JSAPI failure **never automatically falls back to H5**. Native is also unaffected by `jsapiAuthType`. Ordinary mobile browsers use H5 only when it has been enabled separately, desktop uses Native, and the WeCom built-in browser requires a matching `wecom` JSAPI instance without silently changing identity mode or payment instance.
+
+Enabled instances are validated on save, while historical instances are checked again before the selected mode is used. Structured reasons include `WXPAY_CONFIG_JSAPI_AUTH_TYPE_INVALID`, `WXPAY_CONFIG_WECOM_CORPID_INVALID`, `WXPAY_CONFIG_WECOM_APP_SECRET_REQUIRED`, `WXPAY_CONFIG_WECOM_AGENT_ID_INVALID`, `WECHAT_PAYMENT_CLIENT_ENVIRONMENT_INVALID`, `WECOM_PAYMENT_PAGE_URL_INVALID`, `WECOM_PAYMENT_PAGE_URL_ORIGIN_MISMATCH`, `WECOM_PAYMENT_INSTANCE_UNAVAILABLE`, `WECHAT_PAYMENT_INSTANCE_CHANGED`, `NO_AVAILABLE_WXPAY_CAPABILITY`, `WECHAT_NATIVE_NOT_AUTHORIZED`, `WECHAT_H5_NOT_AUTHORIZED`, `WECHAT_JSAPI_NOT_AUTHORIZED`, `WECHAT_APPID_MCHID_MISMATCH`, `WECHAT_SIGN_ERROR`, and `WECHAT_PAYMENT_API_ERROR`. Error metadata is limited to troubleshooting fields such as mode, instance, HTTP status, WeChat code, request ID, or action; bodies and credentials are excluded.
+
+`wecomAppSecret`, merchant private keys, APIv3 keys, and payment public keys are omitted from admin GET responses. Leaving a sensitive field empty during an edit preserves its stored value. While an instance owns `PENDING`, `PAID`, or `RECHARGING` orders, protected identity/key changes, disabling, and deletion are blocked so historical orders retain their original instance and verification context.
 
 ### Stripe
 
