@@ -170,6 +170,10 @@ Direct integration with WeChat Pay APIv3. Supports Native QR code payment, H5 pa
 | **WeChat Pay Public Key ID** | WeChat Pay public key ID | Yes |
 | **Certificate Serial Number** | Merchant certificate serial number | Yes |
 
+The `APIv3 Key` must exactly match the key currently configured in WeChat Pay Merchant Platform. It cannot be retrieved through WeChat APIs or management endpoints; if it is lost, reset it in Merchant Platform and immediately update the provider instance. A mismatch allows signature verification to succeed but prevents decryption of real payment notifications.
+
+API responses continue to use the configured WeChat Pay public key. Payment notifications use combined verification, accepting either the WeChat Pay public-key ID or a platform-certificate serial backed by certificates automatically downloaded and maintained by the SDK. Both paths remain strictly verified; never work around configuration problems by disabling signature or timestamp checks.
+
 JSAPI payment supports two OAuth identity modes selected by `jsapiAuthType=mp|wecom`; a missing value defaults to `mp` for backward compatibility. The base payment `appId` may still be a Merchant-Platform-associated WeChat AppID (lowercase `wx`) or WeCom CorpID (lowercase `ww`), but the JSAPI identity, OAuth credential, and AppID must match the selected mode as one configuration set.
 
 | Config key | Description | Default / compatibility behavior |

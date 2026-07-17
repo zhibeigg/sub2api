@@ -66,6 +66,9 @@ EasyPay 协议约定：
 
 微信官方支付双 OAuth 模式与配置字段：
 
+- API 响应继续由 `publicKeyId` 对应的 `publicKey` 验签；通知使用组合验签，既接受该微信支付公钥 ID，也接受 SDK 自动下载并维护的平台证书序列号。
+- `apiV3Key` 必须与微信支付商户平台当前设置完全一致。该密钥不能通过微信 API 读取；遗失时必须在商户平台重置并同步更新实例，否则真实通知即使签名有效也无法解密。
+
 | `config` 字段 | 说明 | 约束 / 默认 |
 |---|---|---|
 | `appId` | 基础支付 AppID；`wecom` 模式下也是 CorpID | `mp`/Native/H5 可为商户已绑定的 `wx` 或 `ww`；`wecom` JSAPI 必须为 `ww` CorpID |
@@ -452,6 +455,9 @@ EasyPay protocol contract:
 - `GET` responses omit private keys and other sensitive config. A `PUT` may submit only changed `config` fields; omitted sensitive fields retain their stored values. Never place real credentials in documentation, logs, or examples.
 
 Direct WeChat Pay dual-OAuth modes and configuration fields:
+
+- API responses continue to be verified with the `publicKey` identified by `publicKeyId`. Notifications use combined verification, accepting either that WeChat Pay public-key ID or a platform-certificate serial backed by certificates automatically downloaded and maintained by the SDK.
+- `apiV3Key` must exactly match the current WeChat Pay Merchant Platform setting. It cannot be read through WeChat APIs; if lost, reset it in Merchant Platform and update the provider instance, otherwise validly signed real notifications cannot be decrypted.
 
 | `config` field | Description | Constraint / default |
 |---|---|---|
