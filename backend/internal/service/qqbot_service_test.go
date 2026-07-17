@@ -12,6 +12,9 @@ import (
 )
 
 type qqBotRepoStub struct {
+	boundEmail        string
+	alreadyBound      bool
+	findBoundErr      error
 	createInput       QQBotChallengeCreateInput
 	createRecord      QQBotBindingRecord
 	createCreated     bool
@@ -24,6 +27,9 @@ type qqBotRepoStub struct {
 	settingsAudit     map[string]any
 }
 
+func (s *qqBotRepoStub) FindBoundEmail(context.Context, string, string) (string, bool, error) {
+	return s.boundEmail, s.alreadyBound, s.findBoundErr
+}
 func (s *qqBotRepoStub) CreateChallenge(_ context.Context, input QQBotChallengeCreateInput) (QQBotBindingRecord, bool, error) {
 	s.createInput = input
 	return s.createRecord, s.createCreated, nil
@@ -159,6 +165,34 @@ func TestQQBotPrepareBindingHashesTokenAndQueuesVerificationEmail(t *testing.T) 
 	require.NotEmpty(t, token)
 	require.NotEqual(t, repo.createInput.TokenHash, token)
 	require.Equal(t, repo.createInput.TokenHash, hashQQBotToken(token))
+}
+
+func TestQQBotPrepareBindingReturnsExistingBindingWithoutCreatingChallenge(t *testing.T) {
+	repo := &qqBotRepoStub{boundEmail: "785740487@qq.com", alreadyBound: true}
+	queue := &EmailQueueService{taskChan: make(chan EmailTask, 1)}
+	svc := NewQQBotService(
+		repo,
+		qqBotUserLookupStub{err: ErrUserNotFound},
+		&qqBotSettingRepoStub{values: map[string]string{}},
+		queue,
+		nil,
+		nil,
+		&config.Config{QQBotIntegration: config.QQBotIntegrationConfig{PublicBaseURL: "https://qqbot.example.com"}},
+	)
+
+	result, err := svc.PrepareBinding(context.Background(), QQBotPrepareBindingRequest{
+		EventID:         "event-bound",
+		BotAppID:        "app-1",
+		Scene:           "c2c",
+		ProviderSubject: "c2c:openid-bound",
+		Email:           "different@example.com",
+	})
+	require.NoError(t, err)
+	require.True(t, result.Accepted)
+	require.True(t, result.AlreadyBound)
+	require.Equal(t, "7***7@qq.com", result.MaskedEmail)
+	require.Empty(t, repo.createInput.EventID)
+	require.Empty(t, queue.taskChan)
 }
 
 func TestQQBotPrepareBindingDoesNotRevealMissingAccount(t *testing.T) {
