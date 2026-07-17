@@ -1,6 +1,6 @@
 # QQBot 账户绑定集成
 
-Sub2API `0.57.60` 增加供独立 `sub2api-qqbot` 服务使用的 HMAC 私有 API；`0.57.62` 补充绑定前的现有 QQ 身份检测与统一邮箱脱敏响应。QQBot 只接收腾讯官方事件、发送消息、代理网页与管理请求，不直接连接 Sub2API 数据库。
+Sub2API `0.57.60` 增加供独立 `sub2api-qqbot` 服务使用的 HMAC 私有 API；`0.57.63` 补充绑定前的现有 QQ 身份检测与统一邮箱脱敏响应。QQBot 只接收腾讯官方事件、发送消息、代理网页与管理请求，不直接连接 Sub2API 数据库。
 
 ## 架构与信任边界
 
@@ -153,7 +153,7 @@ Migration `183_qqbot_account_binding.sql`：
 ## 部署顺序
 
 1. 备份 PostgreSQL、Sub2API 配置和镜像。
-2. 部署 Sub2API `0.57.62`（包含 migration `183`、标准 MIME 邮件修复和已绑定身份检测）。
+2. 部署 Sub2API `0.57.63`（包含 migration `183`、标准 MIME 邮件修复和已绑定身份检测）。
 3. 配置并启用 `qqbot_integration`，确认 Redis 可用。
 4. 部署 QQBot，先保持 `QQBOT_ENABLED=false`，检查 `/readyz`。
 5. 配置 Nginx、TLS 与腾讯 Webhook。
