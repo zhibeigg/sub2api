@@ -35,6 +35,7 @@ func newGatewayRoutesTestRouterWithAPIKey(apiKey *service.APIKey) *gin.Engine {
 		&handler.Handlers{
 			Gateway:       &handler.GatewayHandler{},
 			OpenAIGateway: &handler.OpenAIGatewayHandler{},
+			AsyncImage:    handler.NewAsyncImageHandler(nil, nil),
 		},
 		servermiddleware.APIKeyAuthMiddleware(func(c *gin.Context) {
 			c.Set(string(servermiddleware.ContextKeyAPIKey), apiKey)
@@ -159,6 +160,25 @@ func TestGatewayRoutesExplicitNonImageGroupDoesNotAutoSwitchForImages(t *testing
 
 	require.Equal(t, http.StatusNotFound, w.Code)
 	require.Contains(t, w.Body.String(), "Images API is not supported for this platform")
+}
+
+func TestGatewayRoutesAsyncImagesPathsAreRegistered(t *testing.T) {
+	router := newGatewayRoutesTestRouter()
+	registered := make(map[string]bool)
+	for _, route := range router.Routes() {
+		registered[route.Method+" "+route.Path] = true
+	}
+
+	for _, route := range []string{
+		"POST /v1/images/generations/async",
+		"POST /v1/images/edits/async",
+		"GET /v1/images/tasks/:task_id",
+		"POST /images/generations/async",
+		"POST /images/edits/async",
+		"GET /images/tasks/:task_id",
+	} {
+		require.True(t, registered[route], "%s should be registered", route)
+	}
 }
 
 func TestGatewayRoutesGrokImagesAndVideosPathsAreRegistered(t *testing.T) {

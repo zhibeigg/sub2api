@@ -11,6 +11,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplan"
 	"github.com/Wei-Shaw/sub2api/ent/subscriptionplangroup"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
+	"github.com/Wei-Shaw/sub2api/internal/payment"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
 
@@ -34,6 +35,20 @@ func validateSubscriptionPlanType(value string, allowLegacy bool) error {
 	return infraerrors.BadRequest("PLAN_TYPE_INVALID", "plan type must be subscription or standard_quota")
 }
 
+// normalizePlanCurrency validates and normalizes the display-only currency label.
+// Empty means "no label" and is kept as-is so existing plans stay unchanged.
+func normalizePlanCurrency(raw string) (string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return "", nil
+	}
+	currency, err := payment.NormalizePaymentCurrency(raw)
+	if err != nil {
+		return "", infraerrors.BadRequest("PLAN_CURRENCY_INVALID", "currency must be a 3-letter ISO currency code")
+	}
+	return currency, nil
+}
+
+// validatePlanRequired checks that all required fields for a plan are provided.
 func validatePlanRequired(name string, groupIDs []int64, price float64, validityDays int, validityUnit string, originalPrice *float64) error {
 	if strings.TrimSpace(name) == "" {
 		return infraerrors.BadRequest("PLAN_NAME_REQUIRED", "plan name is required")
@@ -82,6 +97,11 @@ func validatePlanPatch(req UpdatePlanRequest) error {
 	}
 	if req.OriginalPrice != nil && *req.OriginalPrice < 0 {
 		return infraerrors.BadRequest("PLAN_ORIGINAL_PRICE_INVALID", "original price must be >= 0")
+	}
+	if req.Currency != nil {
+		if _, err := normalizePlanCurrency(*req.Currency); err != nil {
+			return err
+		}
 	}
 	return validatePlanQuotaLimits(req.DailyLimitUSD, req.WeeklyLimitUSD, req.MonthlyLimitUSD)
 }
@@ -166,6 +186,7 @@ type SubscriptionPlanResponse struct {
 	Description     string          `json:"description"`
 	Price           float64         `json:"price"`
 	OriginalPrice   *float64        `json:"original_price,omitempty"`
+	Currency        string          `json:"currency"`
 	DailyLimitUSD   *float64        `json:"daily_limit_usd"`
 	WeeklyLimitUSD  *float64        `json:"weekly_limit_usd"`
 	MonthlyLimitUSD *float64        `json:"monthly_limit_usd"`
@@ -265,7 +286,7 @@ func (s *PaymentConfigService) PlanResponses(ctx context.Context, plans []*dbent
 		}
 		out = append(out, SubscriptionPlanResponse{
 			ID: plan.ID, PlanType: normalizeSubscriptionPlanType(plan.PlanType), GroupID: plan.GroupID, GroupIDs: groupIDs, Groups: groups,
-			Name: plan.Name, Description: plan.Description, Price: plan.Price, OriginalPrice: plan.OriginalPrice,
+			Name: plan.Name, Description: plan.Description, Price: plan.Price, OriginalPrice: plan.OriginalPrice, Currency: plan.Currency,
 			DailyLimitUSD: plan.DailyLimitUsd, WeeklyLimitUSD: plan.WeeklyLimitUsd, MonthlyLimitUSD: plan.MonthlyLimitUsd,
 			ValidityDays: plan.ValidityDays, ValidityUnit: plan.ValidityUnit, Features: plan.Features,
 			ProductName: plan.ProductName, ForSale: plan.ForSale, SortOrder: plan.SortOrder,
@@ -363,6 +384,10 @@ func (s *PaymentConfigService) CreatePlan(ctx context.Context, req CreatePlanReq
 	if err := s.validatePlanGroups(ctx, planType, groupIDs); err != nil {
 		return nil, err
 	}
+	currency, err := normalizePlanCurrency(req.Currency)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := s.entClient.Tx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin create plan transaction: %w", err)
@@ -371,7 +396,7 @@ func (s *PaymentConfigService) CreatePlan(ctx context.Context, req CreatePlanReq
 	b := tx.SubscriptionPlan.Create().
 		SetPlanType(planType).
 		SetGroupID(groupIDs[0]).SetName(req.Name).SetDescription(req.Description).
-		SetPrice(req.Price).SetValidityDays(req.ValidityDays).SetValidityUnit(req.ValidityUnit).
+		SetPrice(req.Price).SetCurrency(currency).SetValidityDays(req.ValidityDays).SetValidityUnit(req.ValidityUnit).
 		SetFeatures(req.Features).SetProductName(req.ProductName).
 		SetForSale(req.ForSale).SetSortOrder(req.SortOrder).
 		SetNillableOriginalPrice(req.OriginalPrice).
@@ -469,6 +494,13 @@ func (s *PaymentConfigService) UpdatePlan(ctx context.Context, id int64, req Upd
 	}
 	if req.OriginalPrice != nil {
 		u.SetOriginalPrice(*req.OriginalPrice)
+	}
+	if req.Currency != nil {
+		currency, err := normalizePlanCurrency(*req.Currency)
+		if err != nil {
+			return nil, err
+		}
+		u.SetCurrency(currency)
 	}
 	if req.ValidityDays != nil {
 		u.SetValidityDays(*req.ValidityDays)

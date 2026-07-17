@@ -45,7 +45,7 @@ func setupValidateCredentialsRouter(upstream service.HTTPUpstream) *gin.Engine {
 	}})
 	testService := service.NewAccountTestService(nil, nil, nil, nil, nil, nil, &config.Config{}, nil)
 	testService.SetCursorGatewayService(gateway)
-	handler := NewAccountHandler(nil, nil, nil, nil, nil, nil, nil, testService, nil, nil, nil, nil, nil)
+	handler := NewAccountHandler(nil, nil, nil, nil, nil, nil, nil, nil, testService, nil, nil, nil, nil, nil)
 	router.POST("/api/v1/admin/accounts/validate-credentials", handler.ValidateCredentials)
 	return router
 }

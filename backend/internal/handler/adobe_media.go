@@ -207,7 +207,7 @@ func (h *AdobeMediaHandler) Images(c *gin.Context) {
 	switchCount := 0
 	var lastUpstreamErr error
 	for {
-		selection, _, selectErr := h.gateway.SelectAccountWithSchedulerForCapability(c.Request.Context(), apiKey.GroupID, "", "", req.Model, failedAccountIDs, service.OpenAIUpstreamTransportHTTPSSE, "", false, false, service.PlatformAdobe)
+		selection, _, selectErr := h.gateway.SelectAccountWithSchedulerForCapability(c.Request.Context(), apiKey.GroupID, "", "", req.Model, failedAccountIDs, service.OpenAIUpstreamTransportHTTPSSE, "", false, false, false, service.PlatformAdobe)
 		if selectErr != nil || selection == nil || selection.Account == nil {
 			markOpsRoutingCapacityLimitedIfNoAvailable(c, selectErr)
 			if lastUpstreamErr != nil {
@@ -266,7 +266,7 @@ func (h *AdobeMediaHandler) Images(c *gin.Context) {
 		}
 		if attemptErr != nil {
 			releaseAccount()
-			h.gateway.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+			h.gateway.ReportOpenAIAccountScheduleResult(account.ID, upstreamModel, false, nil)
 			h.gateway.HandleAdobeAccountFailure(c.Request.Context(), account.ID, attemptErr)
 			lastUpstreamErr = attemptErr
 			if c.Request.Context().Err() == nil && shouldFailoverAdobeError(attemptErr) && switchCount < h.maxAccountSwitches {
@@ -305,7 +305,7 @@ func (h *AdobeMediaHandler) Images(c *gin.Context) {
 			writeAdobeGatewayError(c, http.StatusServiceUnavailable, "service_unavailable", "Image usage settlement failed")
 			return
 		}
-		h.gateway.ReportOpenAIAccountScheduleResult(account.ID, true, nil)
+		h.gateway.ReportOpenAIAccountScheduleResult(account.ID, upstreamModel, true, nil)
 		c.JSON(http.StatusOK, gin.H{"created": time.Now().Unix(), "data": []gin.H{item}})
 		return
 	}
@@ -826,7 +826,7 @@ func (h *AdobeMediaHandler) VideoGeneration(c *gin.Context) {
 	switchCount := 0
 	var lastUpstreamErr error
 	for {
-		selection, _, selectErr := h.gateway.SelectAccountWithSchedulerForCapability(c.Request.Context(), apiKey.GroupID, "", "", requestedModel, failedAccountIDs, service.OpenAIUpstreamTransportHTTPSSE, "", false, false, service.PlatformAdobe)
+		selection, _, selectErr := h.gateway.SelectAccountWithSchedulerForCapability(c.Request.Context(), apiKey.GroupID, "", "", requestedModel, failedAccountIDs, service.OpenAIUpstreamTransportHTTPSSE, "", false, false, false, service.PlatformAdobe)
 		if selectErr != nil || selection == nil || selection.Account == nil {
 			markOpsRoutingCapacityLimitedIfNoAvailable(c, selectErr)
 			if lastUpstreamErr != nil {
@@ -898,7 +898,7 @@ func (h *AdobeMediaHandler) VideoGeneration(c *gin.Context) {
 				writeAdobeProviderError(c, attemptErr)
 				return
 			}
-			h.gateway.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+			h.gateway.ReportOpenAIAccountScheduleResult(account.ID, upstreamModel, false, nil)
 			h.gateway.HandleAdobeAccountFailure(c.Request.Context(), account.ID, attemptErr)
 			lastUpstreamErr = attemptErr
 			if c.Request.Context().Err() == nil && shouldFailoverAdobeError(attemptErr) && switchCount < h.maxAccountSwitches {
@@ -911,7 +911,7 @@ func (h *AdobeMediaHandler) VideoGeneration(c *gin.Context) {
 			return
 		}
 		releaseAccount()
-		h.gateway.ReportOpenAIAccountScheduleResult(account.ID, true, nil)
+		h.gateway.ReportOpenAIAccountScheduleResult(account.ID, upstreamModel, true, nil)
 		c.JSON(http.StatusOK, gin.H{"request_id": task.TaskID, "id": task.TaskID, "status": "pending", "model": requestedModel})
 		return
 	}

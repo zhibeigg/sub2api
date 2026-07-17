@@ -26,3 +26,14 @@ func TestWithHTTPUpstreamProfile_CursorH2(t *testing.T) {
 		t.Fatalf("expected profile %q, got %q", HTTPUpstreamProfileCursorH2, profile)
 	}
 }
+
+func TestWithHTTPUpstreamRedirectsDisabled(t *testing.T) {
+	//nolint:staticcheck // Exercises the defensive nil-context fallback.
+	ctx := WithHTTPUpstreamRedirectsDisabled(nil)
+	if !HTTPUpstreamRedirectsDisabled(ctx) {
+		t.Fatal("expected redirects to be disabled")
+	}
+	if HTTPUpstreamRedirectsDisabled(context.Background()) {
+		t.Fatal("redirects should remain enabled by default")
+	}
+}

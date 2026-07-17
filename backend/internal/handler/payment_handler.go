@@ -67,6 +67,7 @@ func (h *PaymentHandler) GetPlans(c *gin.Context) {
 		Description        string                  `json:"description"`
 		Price              float64                 `json:"price"`
 		OriginalPrice      *float64                `json:"original_price,omitempty"`
+		Currency           string                  `json:"currency,omitempty"`
 		DailyLimitUSD      *float64                `json:"daily_limit_usd"`
 		WeeklyLimitUSD     *float64                `json:"weekly_limit_usd"`
 		MonthlyLimitUSD    *float64                `json:"monthly_limit_usd"`
@@ -93,7 +94,8 @@ func (h *PaymentHandler) GetPlans(c *gin.Context) {
 			RateMultiplier: gi.RateMultiplier, PeakRateEnabled: gi.PeakRateEnabled,
 			PeakStart: gi.PeakStart, PeakEnd: gi.PeakEnd, PeakRateMultiplier: gi.PeakRateMultiplier,
 			Name: p.Name, Description: p.Description, Price: p.Price, OriginalPrice: p.OriginalPrice,
-			DailyLimitUSD: p.DailyLimitUsd, WeeklyLimitUSD: p.WeeklyLimitUsd, MonthlyLimitUSD: p.MonthlyLimitUsd,
+			Currency: p.Currency, DailyLimitUSD: p.DailyLimitUsd,
+			WeeklyLimitUSD: p.WeeklyLimitUsd, MonthlyLimitUSD: p.MonthlyLimitUsd,
 			ValidityDays: p.ValidityDays, ValidityUnit: p.ValidityUnit, Features: p.Features,
 			ProductName: p.ProductName, ForSale: p.ForSale, SortOrder: p.SortOrder,
 		})
@@ -152,6 +154,7 @@ func (h *PaymentHandler) GetCheckoutInfo(c *gin.Context) {
 			WeeklyLimitUSD: p.WeeklyLimitUsd, MonthlyLimitUSD: p.MonthlyLimitUsd,
 			ModelScopes: modelScopes,
 			Name:        p.Name, Description: p.Description, Price: p.Price, OriginalPrice: p.OriginalPrice,
+			Currency:     p.Currency,
 			ValidityDays: p.ValidityDays, ValidityUnit: p.ValidityUnit, Features: parseFeatures(p.Features),
 			ProductName: p.ProductName,
 		})
@@ -211,6 +214,7 @@ type checkoutPlan struct {
 	Description        string                  `json:"description"`
 	Price              float64                 `json:"price"`
 	OriginalPrice      *float64                `json:"original_price,omitempty"`
+	Currency           string                  `json:"currency,omitempty"`
 	ValidityDays       int                     `json:"validity_days"`
 	ValidityUnit       string                  `json:"validity_unit"`
 	Features           []string                `json:"features"`
