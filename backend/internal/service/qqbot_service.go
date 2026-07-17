@@ -89,6 +89,18 @@ func (s *QQBotService) PrepareBinding(ctx context.Context, input QQBotPrepareBin
 		return QQBotPrepareBindingResponse{}, ErrQQBotNotConfigured
 	}
 
+	boundEmail, alreadyBound, err := s.repo.FindBoundEmail(ctx, input.BotAppID, input.ProviderSubject)
+	if err != nil {
+		return QQBotPrepareBindingResponse{}, err
+	}
+	if alreadyBound {
+		return QQBotPrepareBindingResponse{
+			Accepted:     true,
+			AlreadyBound: true,
+			MaskedEmail:  maskQQBotEmail(boundEmail),
+		}, nil
+	}
+
 	token, err := newQQBotToken(32)
 	if err != nil {
 		return QQBotPrepareBindingResponse{}, err

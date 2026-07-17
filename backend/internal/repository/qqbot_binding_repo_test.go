@@ -2,12 +2,49 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"regexp"
 	"testing"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/require"
 )
+
+func TestQQBotBindingRepositoryFindBoundEmail(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectQuery(regexp.QuoteMeta(qqBotFindBoundEmailSQL)).
+		WithArgs("qqbot:app-1", "c2c:openid-1").
+		WillReturnRows(sqlmock.NewRows([]string{"email"}).AddRow("785740487@qq.com"))
+
+	repo := &qqBotBindingRepository{db: db}
+	email, found, err := repo.FindBoundEmail(context.Background(), " app-1 ", " c2c:openid-1 ")
+
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, "785740487@qq.com", email)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestQQBotBindingRepositoryFindBoundEmailReturnsNotFound(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectQuery(regexp.QuoteMeta(qqBotFindBoundEmailSQL)).
+		WithArgs("qqbot:app-1", "group:openid-2").
+		WillReturnError(sql.ErrNoRows)
+
+	repo := &qqBotBindingRepository{db: db}
+	email, found, err := repo.FindBoundEmail(context.Background(), "app-1", "group:openid-2")
+
+	require.NoError(t, err)
+	require.False(t, found)
+	require.Empty(t, email)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
 
 func TestQQBotBindingRepositoryUpdateEmailStatusUsesTypedParameters(t *testing.T) {
 	db, mock, err := sqlmock.New()

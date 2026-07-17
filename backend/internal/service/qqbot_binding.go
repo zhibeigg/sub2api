@@ -92,8 +92,9 @@ type QQBotPrepareBindingRequest struct {
 }
 
 type QQBotPrepareBindingResponse struct {
-	Accepted    bool   `json:"accepted"`
-	MaskedEmail string `json:"masked_email,omitempty"`
+	Accepted     bool   `json:"accepted"`
+	AlreadyBound bool   `json:"already_bound,omitempty"`
+	MaskedEmail  string `json:"masked_email,omitempty"`
 }
 
 type QQBotInspectBindingRequest struct {
@@ -233,6 +234,7 @@ type QQBotUserLookup interface {
 }
 
 type QQBotBindingRepository interface {
+	FindBoundEmail(ctx context.Context, botAppID, providerSubject string) (string, bool, error)
 	CreateChallenge(ctx context.Context, input QQBotChallengeCreateInput) (QQBotBindingRecord, bool, error)
 	GetChallengeByToken(ctx context.Context, token string) (QQBotBindingRecord, string, error)
 	UpdateEmailStatus(ctx context.Context, id int64, status, failureCode string) error
