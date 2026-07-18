@@ -4,7 +4,7 @@ package service
 // dto 层做响应脱敏、service 层做更新合并都引用此清单——新增凭证类型时务必同步。
 var SensitiveCredentialKeys = []string{
 	// OAuth
-	"access_token", "refresh_token", "id_token", "dashboard_access_token", "dashboard_refresh_token",
+	"access_token", "refresh_token", "id_token", "agent_private_key", "dashboard_access_token", "dashboard_refresh_token",
 	// API Key 类
 	"api_key", "session_key", "cookie", "password", "device_token", "device_id",
 	// 云服务凭据

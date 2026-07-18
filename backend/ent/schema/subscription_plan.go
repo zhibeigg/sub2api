@@ -61,6 +61,9 @@ func (SubscriptionPlan) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,8)"}),
+		field.String("currency").
+			MaxLen(3).
+			Default(""),
 		field.Int("validity_days").
 			Default(30),
 		field.String("validity_unit").

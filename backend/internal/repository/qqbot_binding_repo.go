@@ -128,7 +128,7 @@ INSERT INTO qqbot_binding_audit_logs (
 ) VALUES ($1, 'prepare', $2, 'qq_user', $3, $4, $5, $6, $7, $8, $9::jsonb)`,
 		id,
 		input.Status,
-		input.ProviderSubject,
+		qqBotFingerprint(input.ProviderSubject),
 		input.UserID,
 		input.BotAppID,
 		qqBotFingerprint(input.ProviderSubject),
@@ -387,7 +387,7 @@ INSERT INTO qqbot_binding_audit_logs (
     challenge_id, action, status, actor_type, actor_subject, user_id,
     bot_app_id, provider_subject_hash, masked_email, metadata
 ) VALUES ($1, 'complete', 'completed', 'qq_user', $2, $3, $4, $5, $6, $7::jsonb)`,
-		parseQQBotRecordID(record.ID), record.ProviderSubject, *record.UserID, record.BotAppID,
+		parseQQBotRecordID(record.ID), qqBotFingerprint(record.ProviderSubject), *record.UserID, record.BotAppID,
 		qqBotFingerprint(record.ProviderSubject), record.MaskedEmail, string(metadata)); err != nil {
 		return service.QQBotCompleteRepositoryResult{}, err
 	}
@@ -544,7 +544,7 @@ func (r *qqBotBindingRepository) RecordSettingsAudit(ctx context.Context, adminS
 	}
 	_, err = r.db.ExecContext(ctx, `
 INSERT INTO qqbot_binding_audit_logs (action, status, actor_type, actor_subject, metadata)
-VALUES ('settings', 'completed', 'admin', $1, $2::jsonb)`, strings.TrimSpace(adminSubject), string(payload))
+VALUES ('settings', 'completed', 'admin', $1, $2::jsonb)`, qqBotFingerprint(strings.TrimSpace(adminSubject)), string(payload))
 	return err
 }
 
@@ -576,13 +576,14 @@ SET status = 'revoked', revoked_at = $1, updated_at = $1
 WHERE user_id = $2 AND bot_app_id = $3 AND provider_subject = $4 AND status = 'completed'`, now, *record.UserID, record.BotAppID, record.ProviderSubject); err != nil {
 		return err
 	}
-	metadata, _ := json.Marshal(map[string]string{"reason": reason, "admin_subject": adminSubject})
+	adminFingerprint := qqBotFingerprint(adminSubject)
+	metadata, _ := json.Marshal(map[string]string{"reason": reason, "admin_subject_hash": adminFingerprint})
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO qqbot_binding_audit_logs (
     challenge_id, action, status, actor_type, actor_subject, user_id,
     bot_app_id, provider_subject_hash, masked_email, reason, metadata
 ) VALUES ($1, 'unbind', 'revoked', 'admin', $2, $3, $4, $5, $6, $7, $8::jsonb)`,
-		id, adminSubject, *record.UserID, record.BotAppID, qqBotFingerprint(record.ProviderSubject), record.MaskedEmail, reason, string(metadata)); err != nil {
+		id, adminFingerprint, *record.UserID, record.BotAppID, qqBotFingerprint(record.ProviderSubject), record.MaskedEmail, reason, string(metadata)); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -612,7 +613,7 @@ INSERT INTO qqbot_binding_audit_logs (
     challenge_id, action, status, actor_type, actor_subject, user_id,
     bot_app_id, provider_subject_hash, masked_email, reason, metadata
 ) VALUES ($1, $2, $3, 'system', $4, $5, $6, $7, $8, $9, $10::jsonb)`,
-		parseQQBotRecordID(record.ID), action, status, record.ProviderSubject, record.UserID,
+		parseQQBotRecordID(record.ID), action, status, qqBotFingerprint(record.ProviderSubject), record.UserID,
 		record.BotAppID, qqBotFingerprint(record.ProviderSubject), record.MaskedEmail, code, string(metadata))
 	return err
 }

@@ -156,6 +156,19 @@ func runMainServer() {
 		log.Fatalf("Failed to initialize application: %v", err)
 	}
 	defer app.Cleanup()
+	if app.PromptAudit != nil {
+		if err := app.PromptAudit.Start(context.Background()); err != nil {
+			// Startup continues so unrelated APIs stay up, but Prompt Audit itself
+			// fails closed (unavailable) until a later reload installs a trusted
+			// snapshot—avoiding a silent ModeOff bypass of persisted blocking policy.
+			log.Printf("Prompt Audit started in degraded fail-closed state: %v", err)
+		}
+	}
+	if app.QQBot != nil {
+		if err := app.QQBot.Start(context.Background()); err != nil {
+			log.Printf("QQBot runtime started in disabled/degraded state: %v", err)
+		}
+	}
 
 	// 启动服务器
 	go func() {

@@ -104,6 +104,9 @@ func ProvideAccountUsageService(
 	service.SetCursorUsageProber(cursorGatewayService)
 	service.SetCursorDashboardFetcher(cursorDashboardAuthService)
 	service.SetKiroUsageService(kiroUsageService)
+	if openAIQuotaService != nil {
+		service.agentIdentityWS = openAIQuotaService.agentIdentityWS
+	}
 	return service
 }
 
@@ -130,6 +133,37 @@ func ProvideAccountTestService(
 	service.SetAdobeTokenProvider(adobeTokenProvider)
 	service.SetCursorGatewayService(cursorGatewayService)
 	service.SetKiroUsageService(kiroUsageService)
+	return service
+}
+
+func ProvideAccountTestServiceWithAgentIdentity(
+	accountRepo AccountRepository,
+	geminiTokenProvider *GeminiTokenProvider,
+	claudeTokenProvider *ClaudeTokenProvider,
+	grokTokenProvider *GrokTokenProvider,
+	antigravityGatewayService *AntigravityGatewayService,
+	httpUpstream HTTPUpstream,
+	cfg *config.Config,
+	tlsFPProfileService *TLSFingerprintProfileService,
+	adobeTokenProvider *AdobeTokenProvider,
+	cursorGatewayService *CursorGatewayService,
+	kiroUsageService *KiroUsageService,
+	openAIGatewayService *OpenAIGatewayService,
+) *AccountTestService {
+	service := ProvideAccountTestService(
+		accountRepo,
+		geminiTokenProvider,
+		claudeTokenProvider,
+		grokTokenProvider,
+		antigravityGatewayService,
+		httpUpstream,
+		cfg,
+		tlsFPProfileService,
+		adobeTokenProvider,
+		cursorGatewayService,
+		kiroUsageService,
+	)
+	service.agentIdentityWS = openAIGatewayService
 	return service
 }
 
@@ -218,8 +252,11 @@ func ProvideOpenAIQuotaService(
 	proxyRepo ProxyRepository,
 	tokenProvider *OpenAITokenProvider,
 	privacyClientFactory PrivacyClientFactory,
+	openAIGatewayService *OpenAIGatewayService,
 ) *OpenAIQuotaService {
-	return NewOpenAIQuotaService(accountRepo, proxyRepo, tokenProvider, privacyClientFactory)
+	service := NewOpenAIQuotaService(accountRepo, proxyRepo, tokenProvider, privacyClientFactory)
+	service.agentIdentityWS = openAIGatewayService
+	return service
 }
 
 func ProvideGrokQuotaService(
@@ -227,9 +264,10 @@ func ProvideGrokQuotaService(
 	proxyRepo ProxyRepository,
 	tokenProvider *GrokTokenProvider,
 	httpUpstream HTTPUpstream,
+	cfg *config.Config,
 	usageLogRepo UsageLogRepository,
 ) *GrokQuotaService {
-	return NewGrokQuotaService(accountRepo, proxyRepo, tokenProvider, httpUpstream, usageLogRepo)
+	return NewGrokQuotaService(accountRepo, proxyRepo, tokenProvider, httpUpstream, cfg, usageLogRepo)
 }
 
 // ProvideGeminiTokenProvider creates GeminiTokenProvider with OAuthRefreshAPI injection
@@ -273,7 +311,7 @@ func ProvideGrokTokenProvider(
 	p := NewGrokTokenProvider(accountRepo, tokenCache)
 	executor := NewGrokTokenRefresher(grokOAuthService)
 	p.SetRefreshAPI(refreshAPI, executor)
-	p.SetRefreshPolicy(AntigravityProviderRefreshPolicy())
+	p.SetRefreshPolicy(GrokProviderRefreshPolicy())
 	p.SetTempUnschedCache(tempUnschedCache)
 	return p
 }
@@ -486,6 +524,14 @@ func ProvideOpsSystemLogSink(opsRepo OpsRepository) *OpsSystemLogSink {
 	return sink
 }
 
+// ProvideAuditLogService 创建操作审计日志服务并启动异步写入与保留期清理协程。
+// 停止逻辑挂在 cmd/server 的 provideCleanup。
+func ProvideAuditLogService(repo AuditLogRepository, settingService *SettingService) *AuditLogService {
+	svc := NewAuditLogService(repo, settingService)
+	svc.Start()
+	return svc
+}
+
 func buildIdempotencyConfig(cfg *config.Config) IdempotencyConfig {
 	idempotencyCfg := DefaultIdempotencyConfig()
 	if cfg != nil {
@@ -564,6 +610,22 @@ func ProvideAPIKeyAuthCacheInvalidator(apiKeyService *APIKeyService) APIKeyAuthC
 	// Start Pub/Sub subscriber for L1 cache invalidation across instances
 	apiKeyService.StartAuthCacheInvalidationSubscriber(context.Background())
 	return apiKeyService
+}
+
+// ProvideImageTaskService 构造异步图片任务服务。
+//
+// 对象存储是异步图片任务的启用前提：仅当 image_storage 开关打开且凭证齐全时，
+// 服务才启用，并挂上把结果转存到对象存储的 uploader；否则功能整体禁用
+// （handler 返回 404，不创建任务、不写 Redis），从而避免大 base64 结果撑爆 Redis。
+func ProvideImageTaskService(store ImageTaskStore, storage ImageStorage, cfg *config.Config) *ImageTaskService {
+	if !cfg.ImageStorage.Active() {
+		if cfg.ImageStorage.Enabled {
+			logger.L().Warn("image_storage.enabled is true but object storage is not fully configured; async image tasks are disabled")
+		}
+		return NewImageTaskService(store)
+	}
+	uploader := NewImageResultUploader(storage, cfg.ImageStorage.Prefix, cfg.ImageStorage.MaxDownloadByte, nil)
+	return NewImageTaskServiceWithUploader(store, uploader, defaultImageTaskTTL, defaultImageTaskExecutionTimeout)
 }
 
 // ProvideBackupService creates and starts BackupService
@@ -701,6 +763,7 @@ var ProviderSet = wire.NewSet(
 	NewAdobeFireflyAdapter,
 	wire.Bind(new(AdobeVideoUpstream), new(*AdobeFireflyAdapter)),
 	NewAdobeVideoService,
+	ProvideImageTaskService,
 	ProvideBatchImageModelPricingResolver,
 	NewBatchImagePublicService,
 	NewBatchImageDownloadService,
@@ -713,6 +776,7 @@ var ProviderSet = wire.NewSet(
 	NewWeChatPaymentOAuthService,
 	ProvideOpenAIOAuthService,
 	NewGrokOAuthService,
+	wire.Bind(new(GrokOAuthTokenService), new(*GrokOAuthService)),
 	NewGeminiOAuthService,
 	NewGeminiQuotaService,
 	ProvideCompositeTokenCacheInvalidator,
@@ -737,12 +801,14 @@ var ProviderSet = wire.NewSet(
 	NewKiroGatewayService,
 	ProvideRateLimitService,
 	ProvideAccountUsageService,
-	ProvideAccountTestService,
+	ProvideAccountTestServiceWithAgentIdentity,
+	ProvideUpstreamBillingProbeService,
 	ProvideSettingService,
 	NewDataManagementService,
 	ProvideBackupService,
 	ProvideOpsSystemLogSink,
 	ProvideOpsService,
+	ProvideAuditLogService,
 	ProvideOpsMetricsCollector,
 	ProvideOpsAggregationService,
 	ProvideOpsAlertEvaluatorService,
@@ -764,6 +830,7 @@ var ProviderSet = wire.NewSet(
 	NewCRSSyncService,
 	ProvideUpdateService,
 	ProvideTokenRefreshService,
+	wire.Bind(new(GrokOAuthReconciler), new(*TokenRefreshService)),
 	ProvideAccountExpiryService,
 	ProvideProxyExpiryService,
 	ProvideSubscriptionExpiryService,

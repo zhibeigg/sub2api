@@ -64,7 +64,17 @@ EasyPay 协议约定：
 - 协议版本创建后不可切换；协议升级、PID 变更或密钥轮换必须新建实例，不要直接覆盖仍有关联订单的实例配置。
 - `GET` 响应不会回传私钥等敏感配置；`PUT` 可只提交需要变更的 `config` 字段，未提交的敏感字段保持原值。不要把真实凭证写入文档、日志或示例。
 
-微信官方支付双 OAuth 模式与配置字段：
+微信官方支付双 OAuth 模式与能力约定：
+- `config.nativeEnabled`、`config.h5Enabled`、`config.jsapiEnabled` 是字符串布尔值（`"true"` / `"false"`），显式值优先。
+- 历史兼容：`nativeEnabled` 缺失时为 `true`；`h5Enabled` 缺失时仅在 `h5AppName` 和 `h5AppUrl` 完整时推导为 `true`；`jsapiEnabled` 缺失时仅在 `mpAppId` 非空时推导为 `true`。
+- `h5Enabled="true"` 时，`h5AppName` 必填，`h5AppUrl` 必须是绝对 HTTPS URL。
+- `jsapiEnabled="true"` 时，解析后的 JSAPI AppID 必须非空；`mpAppId` 非空时优先使用，否则使用 `appId`。
+- `appId` 与非空 `mpAppId` 必须以小写 `wx` 开头，后接 16 或 18 位字母数字字符；`wecom` JSAPI 使用 `ww` CorpID，并与企业微信自建应用 OAuth 凭据成套配置。启用实例保存时校验，历史实例在预下单前按模式再次校验。
+- 有 OpenID 时只允许 JSAPI；普通移动端优先 H5、回退 Native；桌面端使用 Native；微信内 JSAPI 关闭时不启动 OAuth，并可回退 Native 二维码。企业微信 OAuth、身份转换、JS-SDK 或 JSAPI 失败不会自动回退 H5。
+- 创建订单的结构化原因码包括 `NO_AVAILABLE_WXPAY_CAPABILITY`、`WECHAT_NATIVE_NOT_AUTHORIZED`、`WECHAT_H5_NOT_AUTHORIZED`、`WECHAT_JSAPI_NOT_AUTHORIZED`、`WECHAT_APPID_MCHID_MISMATCH`、`WECHAT_SIGN_ERROR`、`WECHAT_PAYMENT_API_ERROR`。
+- API 响应继续由 `publicKeyId` 对应的 `publicKey` 验签；通知使用组合验签，既接受该微信支付公钥 ID，也接受 SDK 自动下载并维护的平台证书序列号。
+- `apiV3Key` 必须与微信支付商户平台当前设置完全一致。该密钥不能通过微信 API 读取；遗失时必须在商户平台重置并同步更新实例，否则真实通知即使签名有效也无法解密。
+- 微信错误 metadata 只会使用 `auth_type`、`client_environment`、`instance_id`、`mode`、`http_status`、`wechat_code`、`request_id`、`action`，不会返回凭据、请求体或其他敏感值。
 
 | `config` 字段 | 说明 | 约束 / 默认 |
 |---|---|---|
@@ -451,7 +461,17 @@ EasyPay protocol contract:
 - The protocol version is immutable after creation. Use a new instance for protocol upgrades, PID changes, or key rotation instead of overwriting an instance that still has associated orders.
 - `GET` responses omit private keys and other sensitive config. A `PUT` may submit only changed `config` fields; omitted sensitive fields retain their stored values. Never place real credentials in documentation, logs, or examples.
 
-Direct WeChat Pay dual-OAuth modes and configuration fields:
+Direct WeChat Pay dual-OAuth modes and capability contract:
+- `config.nativeEnabled`, `config.h5Enabled`, and `config.jsapiEnabled` are string booleans (`"true"` / `"false"`); explicit values take precedence.
+- Historical compatibility: absent `nativeEnabled` means `true`; absent `h5Enabled` is inferred as `true` only when both `h5AppName` and `h5AppUrl` are complete; absent `jsapiEnabled` is inferred as `true` only when `mpAppId` is non-empty.
+- When `h5Enabled="true"`, `h5AppName` is required and `h5AppUrl` must be an absolute HTTPS URL.
+- When `jsapiEnabled="true"`, the resolved JSAPI AppID must be non-empty. A non-empty `mpAppId` takes precedence; otherwise `appId` is used.
+- `appId` and any non-empty `mpAppId` must start with lowercase `wx` and contain 16 or 18 following ASCII alphanumeric characters; WeCom JSAPI uses a `ww` CorpID together with matching custom-app OAuth credentials. Enabled instances are checked when saved, while historical instances are checked again for the selected mode before prepay.
+- An OpenID permits JSAPI only; ordinary mobile browsers prefer H5 and fall back to Native; desktop uses Native. If JSAPI is disabled, an in-WeChat request does not start OAuth and may fall back to a Native QR code. WeCom OAuth, identity conversion, JS-SDK, or JSAPI failures never automatically fall back to H5.
+- Structured order-creation reasons include `NO_AVAILABLE_WXPAY_CAPABILITY`, `WECHAT_NATIVE_NOT_AUTHORIZED`, `WECHAT_H5_NOT_AUTHORIZED`, `WECHAT_JSAPI_NOT_AUTHORIZED`, `WECHAT_APPID_MCHID_MISMATCH`, `WECHAT_SIGN_ERROR`, and `WECHAT_PAYMENT_API_ERROR`.
+- API responses continue to be verified with the `publicKey` identified by `publicKeyId`. Notifications use combined verification, accepting either that WeChat Pay public-key ID or a platform-certificate serial backed by certificates automatically downloaded and maintained by the SDK.
+- `apiV3Key` must exactly match the current WeChat Pay Merchant Platform setting. It cannot be read through WeChat APIs; if lost, reset it in Merchant Platform and update the provider instance, otherwise validly signed real notifications cannot be decrypted.
+- WeChat error metadata is limited to `auth_type`, `client_environment`, `instance_id`, `mode`, `http_status`, `wechat_code`, `request_id`, and `action`; credentials, request bodies, and other sensitive values are never returned.
 
 | `config` field | Description | Constraint / default |
 |---|---|---|

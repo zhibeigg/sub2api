@@ -171,6 +171,7 @@ type CreatePlanRequest struct {
 	Description     string   `json:"description"`
 	Price           float64  `json:"price"`
 	OriginalPrice   *float64 `json:"original_price"`
+	Currency        string   `json:"currency"`
 	DailyLimitUSD   *float64 `json:"daily_limit_usd"`
 	WeeklyLimitUSD  *float64 `json:"weekly_limit_usd"`
 	MonthlyLimitUSD *float64 `json:"monthly_limit_usd"`
@@ -191,6 +192,7 @@ type UpdatePlanRequest struct {
 	Description     *string  `json:"description"`
 	Price           *float64 `json:"price"`
 	OriginalPrice   *float64 `json:"original_price"`
+	Currency        *string  `json:"currency"`
 	DailyLimitUSD   *float64 `json:"daily_limit_usd"`
 	WeeklyLimitUSD  *float64 `json:"weekly_limit_usd"`
 	MonthlyLimitUSD *float64 `json:"monthly_limit_usd"`

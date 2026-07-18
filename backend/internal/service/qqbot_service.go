@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -31,13 +32,14 @@ func ProvideQQBotUserLookup(repo UserRepository) QQBotUserLookup {
 }
 
 type QQBotService struct {
-	repo          QQBotBindingRepository
-	userRepo      QQBotUserLookup
-	settingRepo   SettingRepository
-	emailQueue    *EmailQueueService
-	billingCache  BillingCache
-	publicBaseURL string
-	now           func() time.Time
+	repo            QQBotBindingRepository
+	userRepo        QQBotUserLookup
+	settingRepo     SettingRepository
+	emailQueue      *EmailQueueService
+	billingCache    BillingCache
+	publicBaseURLMu sync.RWMutex
+	publicBaseURL   string
+	now             func() time.Time
 }
 
 func NewQQBotService(
@@ -64,6 +66,24 @@ func NewQQBotService(
 	}
 }
 
+func (s *QQBotService) SetPublicBaseURL(value string) {
+	if s == nil {
+		return
+	}
+	s.publicBaseURLMu.Lock()
+	s.publicBaseURL = strings.TrimRight(strings.TrimSpace(value), "/")
+	s.publicBaseURLMu.Unlock()
+}
+
+func (s *QQBotService) getPublicBaseURL() string {
+	if s == nil {
+		return ""
+	}
+	s.publicBaseURLMu.RLock()
+	defer s.publicBaseURLMu.RUnlock()
+	return s.publicBaseURL
+}
+
 func (s *QQBotService) PrepareBinding(ctx context.Context, input QQBotPrepareBindingRequest) (QQBotPrepareBindingResponse, error) {
 	input.EventID = strings.TrimSpace(input.EventID)
 	input.MessageID = strings.TrimSpace(input.MessageID)
@@ -85,7 +105,7 @@ func (s *QQBotService) PrepareBinding(ctx context.Context, input QQBotPrepareBin
 	if !settings.BindingEnabled {
 		return QQBotPrepareBindingResponse{}, ErrQQBotBindingDisabled
 	}
-	if s.publicBaseURL == "" {
+	if s.getPublicBaseURL() == "" {
 		return QQBotPrepareBindingResponse{}, ErrQQBotNotConfigured
 	}
 
@@ -481,7 +501,7 @@ func (s *QQBotService) deliveryCallback(challengeID int64, verification bool) fu
 }
 
 func (s *QQBotService) bindingURL(token string) (string, error) {
-	base, err := url.Parse(s.publicBaseURL)
+	base, err := url.Parse(s.getPublicBaseURL())
 	if err != nil || !base.IsAbs() || base.Host == "" {
 		return "", ErrQQBotNotConfigured
 	}

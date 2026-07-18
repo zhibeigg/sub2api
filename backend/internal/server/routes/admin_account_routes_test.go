@@ -17,7 +17,7 @@ func TestAccountValidateCredentialsRouteIsRegistered(t *testing.T) {
 		Account:     &adminhandler.AccountHandler{},
 		OAuth:       &adminhandler.OAuthHandler{},
 		OpenAIOAuth: &adminhandler.OpenAIOAuthHandler{},
-	}})
+	}}, nil)
 
 	for _, route := range router.Routes() {
 		if route.Method == http.MethodPost && route.Path == "/api/v1/admin/accounts/validate-credentials" {

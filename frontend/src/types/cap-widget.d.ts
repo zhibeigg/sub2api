@@ -4,7 +4,6 @@ import type { DefineComponent } from 'vue'
 
 declare module '@vue/runtime-core' {
   export interface GlobalComponents {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     'cap-widget': DefineComponent<Record<string, any>>
   }
 }

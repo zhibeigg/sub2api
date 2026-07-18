@@ -95,10 +95,10 @@ func (h *OpenAIGatewayHandler) handleArkVideo(c *gin.Context, isSubmit bool, req
 			h.errorResponse(c, http.StatusForbidden, "permission_error", service.ImageGenerationPermissionMessage())
 			return
 		}
-		if prompt := strings.TrimSpace(requestInfo.Prompt); prompt != "" {
-			decision := h.checkContentModeration(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIImages, requestModel, requestInfo.ModerationBody())
-			if decision != nil && decision.Blocked {
-				h.errorResponse(c, contentModerationStatus(decision), contentModerationErrorCode(decision), decision.Message)
+		if moderationBody := requestInfo.ModerationBody(); len(moderationBody) > 0 {
+			decision := h.checkSecurityAudit(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIImages, requestModel, moderationBody)
+			if decision != nil && !decision.AllowNextStage {
+				h.openAISecurityAuditError(c, decision)
 				return
 			}
 		}
@@ -163,6 +163,7 @@ func (h *OpenAIGatewayHandler) handleArkVideo(c *gin.Context, isSubmit bool, req
 			"",
 			false,
 			false,
+			false,
 			service.PlatformOpenAI,
 		)
 		if err != nil {
@@ -218,7 +219,7 @@ func (h *OpenAIGatewayHandler) handleArkVideo(c *gin.Context, isSubmit bool, req
 		if err != nil {
 			var failoverErr *service.UpstreamFailoverError
 			if errors.As(err, &failoverErr) {
-				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+				h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(requestModel), false, nil)
 				if c.Writer.Size() != writerSizeBeforeForward {
 					h.handleFailoverExhausted(c, failoverErr, true)
 					return
@@ -238,7 +239,7 @@ func (h *OpenAIGatewayHandler) handleArkVideo(c *gin.Context, isSubmit bool, req
 				)
 				continue
 			}
-			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, false, nil)
+			h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(requestModel), false, nil)
 			if c.Writer.Size() == writerSizeBeforeForward {
 				h.errorResponse(c, http.StatusBadGateway, "upstream_error", "Upstream request failed")
 			}
@@ -246,7 +247,7 @@ func (h *OpenAIGatewayHandler) handleArkVideo(c *gin.Context, isSubmit bool, req
 			return
 		}
 
-		h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, true, nil)
+		h.gatewayService.ReportOpenAIAccountScheduleResult(account.ID, account.GetMappedModel(requestModel), true, nil)
 
 		if isSubmit && result != nil && strings.TrimSpace(result.ResponseID) != "" {
 			if err := h.gatewayService.BindArkVideoRequestAccount(requestCtx, apiKey.GroupID, result.ResponseID, account.ID); err != nil {

@@ -16,6 +16,7 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/wechatpay-apiv3/wechatpay-go/core"
 	"github.com/wechatpay-apiv3/wechatpay-go/core/auth/verifiers"
+	"github.com/wechatpay-apiv3/wechatpay-go/core/downloader"
 	"github.com/wechatpay-apiv3/wechatpay-go/core/notify"
 	"github.com/wechatpay-apiv3/wechatpay-go/core/option"
 	"github.com/wechatpay-apiv3/wechatpay-go/services/payments"
@@ -95,11 +96,12 @@ var (
 )
 
 type Wxpay struct {
-	instanceID    string
-	config        map[string]string
-	mu            sync.Mutex
-	coreClient    *core.Client
-	notifyHandler *notify.Handler
+	instanceID       string
+	config           map[string]string
+	mu               sync.Mutex
+	coreClient       *core.Client
+	notifyHandler    *notify.Handler
+	certificateStore core.CertificateGetter
 }
 
 const (
@@ -285,9 +287,9 @@ func validateWxpayCapabilityConfig(config map[string]string, status WxpayCapabil
 }
 
 func NewWxpay(instanceID string, config map[string]string) (*Wxpay, error) {
-	// All fields are required. Platform-certificate mode is intentionally unsupported —
-	// WeChat has been migrating all merchants to the pubkey verifier since 2024-10,
-	// and newly-provisioned merchants cannot download platform certificates at all.
+	// Public-key credentials remain required for API responses. The runtime also
+	// downloads platform certificates so callbacks signed during WeChat's migration
+	// window can be verified by the SDK's combined verifier.
 	required := []string{"appId", "mchId", "privateKey", "apiV3Key", "certSerial", "publicKey", "publicKeyId"}
 	for _, k := range required {
 		if config[k] == "" {
@@ -402,11 +404,14 @@ func formatPEM(key, keyType string) string {
 	return fmt.Sprintf("-----BEGIN %s-----\n%s\n-----END %s-----", keyType, key, keyType)
 }
 
-func (w *Wxpay) ensureClient() (*core.Client, error) {
+func (w *Wxpay) ensureClient(ctx context.Context) (*core.Client, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.coreClient != nil {
 		return w.coreClient, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 	privateKey, err := utils.LoadPrivateKey(formatPEM(w.config["privateKey"], "PRIVATE KEY"))
 	if err != nil {
@@ -418,20 +423,67 @@ func (w *Wxpay) ensureClient() (*core.Client, error) {
 		return nil, infraerrors.BadRequest("WXPAY_CONFIG_INVALID_KEY", "invalid_key").
 			WithMetadata(map[string]string{"action": "verify_wechat_pay_public_key"})
 	}
-	verifier := verifiers.NewSHA256WithRSAPubkeyVerifier(w.config["publicKeyId"], *publicKey)
-	client, err := core.NewClient(context.Background(),
+	verifier := verifiers.NewSHA256WithRSAPubkeyVerifier(
+		strings.TrimSpace(w.config["publicKeyId"]),
+		*publicKey,
+	)
+	client, err := core.NewClient(ctx,
 		option.WithMerchantCredential(w.config["mchId"], w.config["certSerial"], privateKey),
 		option.WithVerifier(verifier))
 	if err != nil {
 		return nil, fmt.Errorf("wxpay init client: %w", err)
 	}
+	w.coreClient = client
+	return w.coreClient, nil
+}
+
+func (w *Wxpay) ensureNotifyHandler(ctx context.Context) (*notify.Handler, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.notifyHandler != nil {
+		return w.notifyHandler, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	privateKey, err := utils.LoadPrivateKey(formatPEM(w.config["privateKey"], "PRIVATE KEY"))
+	if err != nil {
+		return nil, infraerrors.BadRequest("WXPAY_CONFIG_INVALID_KEY", "invalid_key").
+			WithMetadata(map[string]string{"action": "verify_merchant_private_key"})
+	}
+	publicKey, err := utils.LoadPublicKey(formatPEM(w.config["publicKey"], "PUBLIC KEY"))
+	if err != nil {
+		return nil, infraerrors.BadRequest("WXPAY_CONFIG_INVALID_KEY", "invalid_key").
+			WithMetadata(map[string]string{"action": "verify_wechat_pay_public_key"})
+	}
+	certificateStore := w.certificateStore
+	if certificateStore == nil {
+		manager := downloader.MgrInstance()
+		merchantID := strings.TrimSpace(w.config["mchId"])
+		if !manager.HasDownloader(ctx, merchantID) {
+			if err := manager.RegisterDownloaderWithPrivateKey(
+				ctx,
+				privateKey,
+				strings.TrimSpace(w.config["certSerial"]),
+				merchantID,
+				w.config["apiV3Key"],
+			); err != nil {
+				return nil, fmt.Errorf("wxpay download platform certificates: %w", err)
+			}
+		}
+		certificateStore = manager.GetCertificateVisitor(merchantID)
+	}
+	verifier := verifiers.NewSHA256WithRSACombinedVerifier(
+		certificateStore,
+		strings.TrimSpace(w.config["publicKeyId"]),
+		*publicKey,
+	)
 	handler, err := notify.NewRSANotifyHandler(w.config["apiV3Key"], verifier)
 	if err != nil {
 		return nil, fmt.Errorf("wxpay init notify handler: %w", err)
 	}
 	w.notifyHandler = handler
-	w.coreClient = client
-	return w.coreClient, nil
+	return w.notifyHandler, nil
 }
 
 func (w *Wxpay) CreatePayment(ctx context.Context, req payment.CreatePaymentRequest) (*payment.CreatePaymentResponse, error) {
@@ -446,7 +498,7 @@ func (w *Wxpay) CreatePayment(ctx context.Context, req payment.CreatePaymentRequ
 	if err := validateWxpayAppIDForMode(w.config, mode); err != nil {
 		return nil, err
 	}
-	client, err := w.ensureClient()
+	client, err := w.ensureClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -751,7 +803,7 @@ func buildWxpayTransactionMetadata(tx *payments.Transaction) map[string]string {
 }
 
 func (w *Wxpay) QueryOrder(ctx context.Context, tradeNo string) (*payment.QueryOrderResponse, error) {
-	c, err := w.ensureClient()
+	c, err := w.ensureClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -784,7 +836,8 @@ func (w *Wxpay) QueryOrder(ctx context.Context, tradeNo string) (*payment.QueryO
 }
 
 func (w *Wxpay) VerifyNotification(ctx context.Context, rawBody string, headers map[string]string) (*payment.PaymentNotification, error) {
-	if _, err := w.ensureClient(); err != nil {
+	handler, err := w.ensureNotifyHandler(ctx)
+	if err != nil {
 		return nil, err
 	}
 	r, err := http.NewRequestWithContext(ctx, http.MethodPost, "/", io.NopCloser(bytes.NewBufferString(rawBody)))
@@ -795,7 +848,7 @@ func (w *Wxpay) VerifyNotification(ctx context.Context, rawBody string, headers 
 		r.Header.Set(k, v)
 	}
 	var tx payments.Transaction
-	nr, err := w.notifyHandler.ParseNotifyRequest(ctx, r, &tx)
+	nr, err := handler.ParseNotifyRequest(ctx, r, &tx)
 	if err != nil {
 		return nil, fmt.Errorf("wxpay verify notification: %w", err)
 	}
@@ -817,7 +870,7 @@ func (w *Wxpay) VerifyNotification(ctx context.Context, rawBody string, headers 
 }
 
 func (w *Wxpay) Refund(ctx context.Context, req payment.RefundRequest) (*payment.RefundResponse, error) {
-	c, err := w.ensureClient()
+	c, err := w.ensureClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -849,7 +902,7 @@ func (w *Wxpay) Refund(ctx context.Context, req payment.RefundRequest) (*payment
 }
 
 func (w *Wxpay) QueryRefund(ctx context.Context, req payment.RefundQueryRequest) (*payment.RefundResponse, error) {
-	c, err := w.ensureClient()
+	c, err := w.ensureClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -909,7 +962,7 @@ func (w *Wxpay) queryOrderTotalFen(ctx context.Context, c *core.Client, orderID 
 }
 
 func (w *Wxpay) CancelPayment(ctx context.Context, tradeNo string) error {
-	c, err := w.ensureClient()
+	c, err := w.ensureClient(ctx)
 	if err != nil {
 		return err
 	}

@@ -229,7 +229,7 @@ func (m APIKeyMutation) Client() *Client {
 // it returns an error otherwise.
 func (m APIKeyMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -2419,7 +2419,7 @@ func (m APIKeyGroupMutation) Client() *Client {
 // it returns an error otherwise.
 func (m APIKeyGroupMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -2977,7 +2977,7 @@ func (m AccountMutation) Client() *Client {
 // it returns an error otherwise.
 func (m AccountMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -5710,7 +5710,7 @@ func (m AccountGroupMutation) Client() *Client {
 // it returns an error otherwise.
 func (m AccountGroupMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -6240,7 +6240,7 @@ func (m AnnouncementMutation) Client() *Client {
 // it returns an error otherwise.
 func (m AnnouncementMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -7452,7 +7452,7 @@ func (m AnnouncementEmailDeliveryMutation) Client() *Client {
 // it returns an error otherwise.
 func (m AnnouncementEmailDeliveryMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -8862,7 +8862,7 @@ func (m AnnouncementEmailJobMutation) Client() *Client {
 // it returns an error otherwise.
 func (m AnnouncementEmailJobMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -11111,7 +11111,7 @@ func (m AnnouncementReadMutation) Client() *Client {
 // it returns an error otherwise.
 func (m AnnouncementReadMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -11712,7 +11712,7 @@ func (m AuthIdentityMutation) Client() *Client {
 // it returns an error otherwise.
 func (m AuthIdentityMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -12730,7 +12730,7 @@ func (m AuthIdentityChannelMutation) Client() *Client {
 // it returns an error otherwise.
 func (m AuthIdentityChannelMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -13540,7 +13540,7 @@ func (m BatchImageEventMutation) Client() *Client {
 // it returns an error otherwise.
 func (m BatchImageEventMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -14140,7 +14140,7 @@ func (m BatchImageItemMutation) Client() *Client {
 // it returns an error otherwise.
 func (m BatchImageItemMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -15763,7 +15763,7 @@ func (m BatchImageJobMutation) Client() *Client {
 // it returns an error otherwise.
 func (m BatchImageJobMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -19035,7 +19035,7 @@ func (m ChannelMonitorMutation) Client() *Client {
 // it returns an error otherwise.
 func (m ChannelMonitorMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -20760,7 +20760,7 @@ func (m ChannelMonitorDailyRollupMutation) Client() *Client {
 // it returns an error otherwise.
 func (m ChannelMonitorDailyRollupMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -22160,7 +22160,7 @@ func (m ChannelMonitorHistoryMutation) Client() *Client {
 // it returns an error otherwise.
 func (m ChannelMonitorHistoryMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -22997,7 +22997,7 @@ func (m ChannelMonitorRequestTemplateMutation) Client() *Client {
 // it returns an error otherwise.
 func (m ChannelMonitorRequestTemplateMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -23897,7 +23897,7 @@ func (m ErrorPassthroughRuleMutation) Client() *Client {
 // it returns an error otherwise.
 func (m ErrorPassthroughRuleMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -25143,6 +25143,7 @@ type GroupMutation struct {
 	addpeak_rate_multiplier                 *float64
 	is_exclusive                            *bool
 	status                                  *string
+	duplicate_operation_id                  *string
 	platform                                *string
 	subscription_type                       *string
 	daily_limit_usd                         *float64
@@ -25295,7 +25296,7 @@ func (m GroupMutation) Client() *Client {
 // it returns an error otherwise.
 func (m GroupMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -25862,6 +25863,55 @@ func (m *GroupMutation) OldStatus(ctx context.Context) (v string, err error) {
 // ResetStatus resets all changes to the "status" field.
 func (m *GroupMutation) ResetStatus() {
 	m.status = nil
+}
+
+// SetDuplicateOperationID sets the "duplicate_operation_id" field.
+func (m *GroupMutation) SetDuplicateOperationID(s string) {
+	m.duplicate_operation_id = &s
+}
+
+// DuplicateOperationID returns the value of the "duplicate_operation_id" field in the mutation.
+func (m *GroupMutation) DuplicateOperationID() (r string, exists bool) {
+	v := m.duplicate_operation_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDuplicateOperationID returns the old "duplicate_operation_id" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldDuplicateOperationID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDuplicateOperationID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDuplicateOperationID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDuplicateOperationID: %w", err)
+	}
+	return oldValue.DuplicateOperationID, nil
+}
+
+// ClearDuplicateOperationID clears the value of the "duplicate_operation_id" field.
+func (m *GroupMutation) ClearDuplicateOperationID() {
+	m.duplicate_operation_id = nil
+	m.clearedFields[group.FieldDuplicateOperationID] = struct{}{}
+}
+
+// DuplicateOperationIDCleared returns if the "duplicate_operation_id" field was cleared in this mutation.
+func (m *GroupMutation) DuplicateOperationIDCleared() bool {
+	_, ok := m.clearedFields[group.FieldDuplicateOperationID]
+	return ok
+}
+
+// ResetDuplicateOperationID resets all changes to the "duplicate_operation_id" field.
+func (m *GroupMutation) ResetDuplicateOperationID() {
+	m.duplicate_operation_id = nil
+	delete(m.clearedFields, group.FieldDuplicateOperationID)
 }
 
 // SetPlatform sets the "platform" field.
@@ -28256,7 +28306,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 49)
+	fields := make([]string, 0, 50)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -28295,6 +28345,9 @@ func (m *GroupMutation) Fields() []string {
 	}
 	if m.status != nil {
 		fields = append(fields, group.FieldStatus)
+	}
+	if m.duplicate_operation_id != nil {
+		fields = append(fields, group.FieldDuplicateOperationID)
 	}
 	if m.platform != nil {
 		fields = append(fields, group.FieldPlatform)
@@ -28438,6 +28491,8 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.IsExclusive()
 	case group.FieldStatus:
 		return m.Status()
+	case group.FieldDuplicateOperationID:
+		return m.DuplicateOperationID()
 	case group.FieldPlatform:
 		return m.Platform()
 	case group.FieldSubscriptionType:
@@ -28545,6 +28600,8 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldIsExclusive(ctx)
 	case group.FieldStatus:
 		return m.OldStatus(ctx)
+	case group.FieldDuplicateOperationID:
+		return m.OldDuplicateOperationID(ctx)
 	case group.FieldPlatform:
 		return m.OldPlatform(ctx)
 	case group.FieldSubscriptionType:
@@ -28716,6 +28773,13 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetStatus(v)
+		return nil
+	case group.FieldDuplicateOperationID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDuplicateOperationID(v)
 		return nil
 	case group.FieldPlatform:
 		v, ok := value.(string)
@@ -29260,6 +29324,9 @@ func (m *GroupMutation) ClearedFields() []string {
 	if m.FieldCleared(group.FieldDescription) {
 		fields = append(fields, group.FieldDescription)
 	}
+	if m.FieldCleared(group.FieldDuplicateOperationID) {
+		fields = append(fields, group.FieldDuplicateOperationID)
+	}
 	if m.FieldCleared(group.FieldDailyLimitUsd) {
 		fields = append(fields, group.FieldDailyLimitUsd)
 	}
@@ -29318,6 +29385,9 @@ func (m *GroupMutation) ClearField(name string) error {
 		return nil
 	case group.FieldDescription:
 		m.ClearDescription()
+		return nil
+	case group.FieldDuplicateOperationID:
+		m.ClearDuplicateOperationID()
 		return nil
 	case group.FieldDailyLimitUsd:
 		m.ClearDailyLimitUsd()
@@ -29404,6 +29474,9 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldStatus:
 		m.ResetStatus()
+		return nil
+	case group.FieldDuplicateOperationID:
+		m.ResetDuplicateOperationID()
 		return nil
 	case group.FieldPlatform:
 		m.ResetPlatform()
@@ -29896,7 +29969,7 @@ func (m IdempotencyRecordMutation) Client() *Client {
 // it returns an error otherwise.
 func (m IdempotencyRecordMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -30875,7 +30948,7 @@ func (m IdentityAdoptionDecisionMutation) Client() *Client {
 // it returns an error otherwise.
 func (m IdentityAdoptionDecisionMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -31646,7 +31719,7 @@ func (m PaymentAuditLogMutation) Client() *Client {
 // it returns an error otherwise.
 func (m PaymentAuditLogMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -32240,7 +32313,7 @@ func (m PaymentOrderMutation) Client() *Client {
 // it returns an error otherwise.
 func (m PaymentOrderMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -35783,7 +35856,7 @@ func (m PaymentProviderInstanceMutation) Client() *Client {
 // it returns an error otherwise.
 func (m PaymentProviderInstanceMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -36750,7 +36823,7 @@ func (m PendingAuthSessionMutation) Client() *Client {
 // it returns an error otherwise.
 func (m PendingAuthSessionMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -38382,7 +38455,7 @@ func (m PromoCodeMutation) Client() *Client {
 // it returns an error otherwise.
 func (m PromoCodeMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -39453,7 +39526,7 @@ func (m PromoCodeUsageMutation) Client() *Client {
 // it returns an error otherwise.
 func (m PromoCodeUsageMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -40090,7 +40163,7 @@ func (m ProxyMutation) Client() *Client {
 // it returns an error otherwise.
 func (m ProxyMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -41419,7 +41492,7 @@ func (m RedeemCodeMutation) Client() *Client {
 // it returns an error otherwise.
 func (m RedeemCodeMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -42554,7 +42627,7 @@ func (m SecuritySecretMutation) Client() *Client {
 // it returns an error otherwise.
 func (m SecuritySecretMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -43041,7 +43114,7 @@ func (m SettingMutation) Client() *Client {
 // it returns an error otherwise.
 func (m SettingMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -43418,6 +43491,7 @@ type SubscriptionPlanMutation struct {
 	addweekly_limit_usd  *float64
 	monthly_limit_usd    *float64
 	addmonthly_limit_usd *float64
+	currency             *string
 	validity_days        *int
 	addvalidity_days     *int
 	validity_unit        *string
@@ -43503,7 +43577,7 @@ func (m SubscriptionPlanMutation) Client() *Client {
 // it returns an error otherwise.
 func (m SubscriptionPlanMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -44038,6 +44112,42 @@ func (m *SubscriptionPlanMutation) ResetMonthlyLimitUsd() {
 	delete(m.clearedFields, subscriptionplan.FieldMonthlyLimitUsd)
 }
 
+// SetCurrency sets the "currency" field.
+func (m *SubscriptionPlanMutation) SetCurrency(s string) {
+	m.currency = &s
+}
+
+// Currency returns the value of the "currency" field in the mutation.
+func (m *SubscriptionPlanMutation) Currency() (r string, exists bool) {
+	v := m.currency
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCurrency returns the old "currency" field's value of the SubscriptionPlan entity.
+// If the SubscriptionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubscriptionPlanMutation) OldCurrency(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCurrency is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCurrency requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCurrency: %w", err)
+	}
+	return oldValue.Currency, nil
+}
+
+// ResetCurrency resets all changes to the "currency" field.
+func (m *SubscriptionPlanMutation) ResetCurrency() {
+	m.currency = nil
+}
+
 // SetValidityDays sets the "validity_days" field.
 func (m *SubscriptionPlanMutation) SetValidityDays(i int) {
 	m.validity_days = &i
@@ -44508,7 +44618,7 @@ func (m *SubscriptionPlanMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SubscriptionPlanMutation) Fields() []string {
-	fields := make([]string, 0, 17)
+	fields := make([]string, 0, 18)
 	if m.group_id != nil {
 		fields = append(fields, subscriptionplan.FieldGroupID)
 	}
@@ -44535,6 +44645,9 @@ func (m *SubscriptionPlanMutation) Fields() []string {
 	}
 	if m.monthly_limit_usd != nil {
 		fields = append(fields, subscriptionplan.FieldMonthlyLimitUsd)
+	}
+	if m.currency != nil {
+		fields = append(fields, subscriptionplan.FieldCurrency)
 	}
 	if m.validity_days != nil {
 		fields = append(fields, subscriptionplan.FieldValidityDays)
@@ -44586,6 +44699,8 @@ func (m *SubscriptionPlanMutation) Field(name string) (ent.Value, bool) {
 		return m.WeeklyLimitUsd()
 	case subscriptionplan.FieldMonthlyLimitUsd:
 		return m.MonthlyLimitUsd()
+	case subscriptionplan.FieldCurrency:
+		return m.Currency()
 	case subscriptionplan.FieldValidityDays:
 		return m.ValidityDays()
 	case subscriptionplan.FieldValidityUnit:
@@ -44629,6 +44744,8 @@ func (m *SubscriptionPlanMutation) OldField(ctx context.Context, name string) (e
 		return m.OldWeeklyLimitUsd(ctx)
 	case subscriptionplan.FieldMonthlyLimitUsd:
 		return m.OldMonthlyLimitUsd(ctx)
+	case subscriptionplan.FieldCurrency:
+		return m.OldCurrency(ctx)
 	case subscriptionplan.FieldValidityDays:
 		return m.OldValidityDays(ctx)
 	case subscriptionplan.FieldValidityUnit:
@@ -44716,6 +44833,13 @@ func (m *SubscriptionPlanMutation) SetField(name string, value ent.Value) error 
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetMonthlyLimitUsd(v)
+		return nil
+	case subscriptionplan.FieldCurrency:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCurrency(v)
 		return nil
 	case subscriptionplan.FieldValidityDays:
 		v, ok := value.(int)
@@ -44975,6 +45099,9 @@ func (m *SubscriptionPlanMutation) ResetField(name string) error {
 	case subscriptionplan.FieldMonthlyLimitUsd:
 		m.ResetMonthlyLimitUsd()
 		return nil
+	case subscriptionplan.FieldCurrency:
+		m.ResetCurrency()
+		return nil
 	case subscriptionplan.FieldValidityDays:
 		m.ResetValidityDays()
 		return nil
@@ -45162,7 +45289,7 @@ func (m SubscriptionPlanGroupMutation) Client() *Client {
 // it returns an error otherwise.
 func (m SubscriptionPlanGroupMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -45696,7 +45823,7 @@ func (m TLSFingerprintProfileMutation) Client() *Client {
 // it returns an error otherwise.
 func (m TLSFingerprintProfileMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -47062,7 +47189,7 @@ func (m UsageCleanupTaskMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UsageCleanupTaskMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -48201,7 +48328,7 @@ func (m UsageLogMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UsageLogMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -52226,7 +52353,7 @@ func (m UserMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UserMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -55263,7 +55390,7 @@ func (m UserAllowedGroupMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UserAllowedGroupMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -55726,7 +55853,7 @@ func (m UserAttributeDefinitionMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UserAttributeDefinitionMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -56856,7 +56983,7 @@ func (m UserAttributeValueMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UserAttributeValueMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -57528,7 +57655,7 @@ func (m UserPlatformQuotaMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UserPlatformQuotaMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -58967,7 +59094,7 @@ func (m UserSubscriptionMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UserSubscriptionMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -61135,7 +61262,7 @@ func (m UserSubscriptionGroupMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UserSubscriptionGroupMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
+		return nil, errors.New("entmerge: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()

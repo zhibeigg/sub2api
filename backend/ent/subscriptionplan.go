@@ -35,6 +35,8 @@ type SubscriptionPlan struct {
 	WeeklyLimitUsd *float64 `json:"weekly_limit_usd,omitempty"`
 	// MonthlyLimitUsd holds the value of the "monthly_limit_usd" field.
 	MonthlyLimitUsd *float64 `json:"monthly_limit_usd,omitempty"`
+	// Currency holds the value of the "currency" field.
+	Currency string `json:"currency,omitempty"`
 	// ValidityDays holds the value of the "validity_days" field.
 	ValidityDays int `json:"validity_days,omitempty"`
 	// ValidityUnit holds the value of the "validity_unit" field.
@@ -108,7 +110,7 @@ func (*SubscriptionPlan) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullFloat64)
 		case subscriptionplan.FieldID, subscriptionplan.FieldGroupID, subscriptionplan.FieldValidityDays, subscriptionplan.FieldSortOrder:
 			values[i] = new(sql.NullInt64)
-		case subscriptionplan.FieldPlanType, subscriptionplan.FieldName, subscriptionplan.FieldDescription, subscriptionplan.FieldValidityUnit, subscriptionplan.FieldFeatures, subscriptionplan.FieldProductName:
+		case subscriptionplan.FieldPlanType, subscriptionplan.FieldName, subscriptionplan.FieldDescription, subscriptionplan.FieldCurrency, subscriptionplan.FieldValidityUnit, subscriptionplan.FieldFeatures, subscriptionplan.FieldProductName:
 			values[i] = new(sql.NullString)
 		case subscriptionplan.FieldCreatedAt, subscriptionplan.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -190,6 +192,12 @@ func (_m *SubscriptionPlan) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.MonthlyLimitUsd = new(float64)
 				*_m.MonthlyLimitUsd = value.Float64
+			}
+		case subscriptionplan.FieldCurrency:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field currency", values[i])
+			} else if value.Valid {
+				_m.Currency = value.String
 			}
 		case subscriptionplan.FieldValidityDays:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -279,7 +287,7 @@ func (_m *SubscriptionPlan) Update() *SubscriptionPlanUpdateOne {
 func (_m *SubscriptionPlan) Unwrap() *SubscriptionPlan {
 	_tx, ok := _m.config.driver.(*txDriver)
 	if !ok {
-		panic("ent: SubscriptionPlan is not a transactional entity")
+		panic("entmerge: SubscriptionPlan is not a transactional entity")
 	}
 	_m.config.driver = _tx.drv
 	return _m
@@ -324,6 +332,9 @@ func (_m *SubscriptionPlan) String() string {
 		builder.WriteString("monthly_limit_usd=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("currency=")
+	builder.WriteString(_m.Currency)
 	builder.WriteString(", ")
 	builder.WriteString("validity_days=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ValidityDays))

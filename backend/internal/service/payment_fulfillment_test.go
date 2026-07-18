@@ -661,6 +661,91 @@ func TestHandlePaymentNotificationEasyPayDuplicateCallbackIsIdempotent(t *testin
 	}
 }
 
+func TestHandlePaymentNotificationWxpayDuplicateCallbackIsIdempotent(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	ensurePaymentAuditOrderActionUniqueIndex(t, ctx, client)
+
+	user, err := client.User.Create().
+		SetEmail("duplicate-wxpay@example.com").
+		SetPasswordHash("hash").
+		SetUsername("duplicate-wxpay-user").
+		Save(ctx)
+	require.NoError(t, err)
+
+	order, err := client.PaymentOrder.Create().
+		SetUserID(user.ID).
+		SetUserEmail(user.Email).
+		SetUserName(user.Username).
+		SetAmount(40.24).
+		SetPayAmount(40.24).
+		SetFeeRate(0).
+		SetRechargeCode("DUPLICATE-WXPAY").
+		SetOutTradeNo("sub2_duplicate_wxpay").
+		SetPaymentType(payment.TypeWxpay).
+		SetPaymentTradeNo("420000000020260717000001").
+		SetOrderType(payment.OrderTypeBalance).
+		SetStatus(OrderStatusCompleted).
+		SetExpiresAt(time.Now().Add(time.Hour)).
+		SetPaidAt(time.Now()).
+		SetCompletedAt(time.Now()).
+		SetClientIP("127.0.0.1").
+		SetSrcHost("api.example.com").
+		SetProviderKey(payment.TypeWxpay).
+		SetProviderSnapshot(map[string]any{
+			"schema_version":  3,
+			"provider_key":    payment.TypeWxpay,
+			"merchant_app_id": "wx-app-duplicate",
+			"merchant_id":     "mch-duplicate",
+			"currency":        "CNY",
+		}).
+		Save(ctx)
+	require.NoError(t, err)
+
+	_, err = client.PaymentAuditLog.Create().
+		SetOrderID(strconv.FormatInt(order.ID, 10)).
+		SetAction("ORDER_PAID").
+		SetDetail(`{"tradeNo":"420000000020260717000001","paidAmount":40.24}`).
+		SetOperator(payment.TypeWxpay).
+		Save(ctx)
+	require.NoError(t, err)
+	_, err = client.PaymentAuditLog.Create().
+		SetOrderID(strconv.FormatInt(order.ID, 10)).
+		SetAction("RECHARGE_SUCCESS").
+		SetDetail(`{"rechargeCode":"DUPLICATE-WXPAY"}`).
+		SetOperator("system").
+		Save(ctx)
+	require.NoError(t, err)
+
+	notification := &payment.PaymentNotification{
+		OrderID: order.OutTradeNo,
+		TradeNo: order.PaymentTradeNo,
+		Amount:  order.PayAmount,
+		Status:  payment.NotificationStatusSuccess,
+		Metadata: map[string]string{
+			"appid":       "wx-app-duplicate",
+			"mchid":       "mch-duplicate",
+			"currency":    "CNY",
+			"trade_state": "SUCCESS",
+		},
+	}
+	svc := &PaymentService{entClient: client}
+	require.NoError(t, svc.HandlePaymentNotification(ctx, notification, payment.TypeWxpay))
+	require.NoError(t, svc.HandlePaymentNotification(ctx, notification, payment.TypeWxpay))
+
+	reloaded, err := client.PaymentOrder.Get(ctx, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusCompleted, reloaded.Status)
+	for _, action := range []string{"ORDER_PAID", "RECHARGE_SUCCESS"} {
+		count, countErr := client.PaymentAuditLog.Query().Where(
+			paymentauditlog.OrderIDEQ(strconv.FormatInt(order.ID, 10)),
+			paymentauditlog.ActionEQ(action),
+		).Count(ctx)
+		require.NoError(t, countErr)
+		require.Equal(t, 1, count, action)
+	}
+}
+
 func TestPaymentAmountToleranceForThreeDecimalCurrency(t *testing.T) {
 	t.Parallel()
 

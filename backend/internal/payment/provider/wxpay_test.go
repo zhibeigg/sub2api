@@ -4,15 +4,23 @@ package provider
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"math/big"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -21,6 +29,7 @@ import (
 	"github.com/wechatpay-apiv3/wechatpay-go/services/payments/h5"
 	"github.com/wechatpay-apiv3/wechatpay-go/services/payments/jsapi"
 	"github.com/wechatpay-apiv3/wechatpay-go/services/payments/native"
+	"github.com/wechatpay-apiv3/wechatpay-go/utils"
 )
 
 const (
@@ -1396,5 +1405,279 @@ func TestCreatePaymentMobileH5ReturnsNoAuthErrorWithoutNativeFallback(t *testing
 	}
 	if strings.Contains(appErr.Error(), "secret") || strings.Contains(appErr.Error(), "fixture message") {
 		t.Fatalf("structured error leaked upstream body/message: %v", appErr)
+	}
+}
+
+func TestEnsureClientDoesNotInitializeNotifyVerifier(t *testing.T) {
+	t.Parallel()
+
+	privateKeyPEM, publicKeyPEM := generateTestKeyPair(t)
+	provider, err := NewWxpay("api-client-only-test", map[string]string{
+		"appId":       wxpayTestAppID,
+		"mchId":       "1234567890",
+		"privateKey":  privateKeyPEM,
+		"apiV3Key":    "12345678901234567890123456789012",
+		"publicKey":   publicKeyPEM,
+		"publicKeyId": "PUB_KEY_ID_API_CLIENT_TEST",
+		"certSerial":  "MERCHANT_CERT_SERIAL_API_CLIENT_TEST",
+	})
+	if err != nil {
+		t.Fatalf("NewWxpay returned error: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	client, err := provider.ensureClient(ctx)
+	if err != nil {
+		t.Fatalf("ensureClient returned error: %v", err)
+	}
+	if client == nil {
+		t.Fatal("ensureClient returned nil client")
+	}
+	if provider.notifyHandler != nil {
+		t.Fatal("API client initialization must not initialize the notification verifier")
+	}
+}
+
+func TestVerifyNotificationAcceptsSignedNativeTransaction(t *testing.T) {
+	t.Parallel()
+
+	provider, platformPrivateKey, apiV3Key, publicKeyID := newWxpayNotifyTestProvider(t)
+	rawBody, headers := buildSignedWxpayNotification(t, apiV3Key, publicKeyID, platformPrivateKey, wxpayEventTransactionSuccess)
+
+	notification, err := provider.VerifyNotification(context.Background(), rawBody, headers)
+	if err != nil {
+		t.Fatalf("VerifyNotification returned error: %v", err)
+	}
+	if notification == nil {
+		t.Fatal("VerifyNotification returned nil notification")
+	}
+	if notification.OrderID != "sub2_native_callback" {
+		t.Fatalf("OrderID = %q, want %q", notification.OrderID, "sub2_native_callback")
+	}
+	if notification.TradeNo != "420000000020260717000001" {
+		t.Fatalf("TradeNo = %q, want %q", notification.TradeNo, "420000000020260717000001")
+	}
+	if got := strconv.FormatFloat(notification.Amount, 'f', 2, 64); got != "40.24" {
+		t.Fatalf("Amount = %q, want %q", got, "40.24")
+	}
+	if notification.Status != payment.ProviderStatusSuccess {
+		t.Fatalf("Status = %q, want %q", notification.Status, payment.ProviderStatusSuccess)
+	}
+	if notification.RawData != rawBody {
+		t.Fatal("RawData does not preserve the signed request body")
+	}
+	wantMetadata := map[string]string{
+		wxpayMetadataAppID:      wxpayTestAppID,
+		wxpayMetadataMerchantID: "1234567890",
+		wxpayMetadataTradeState: wxpayTradeStateSuccess,
+		wxpayMetadataCurrency:   wxpayCurrency,
+	}
+	for key, want := range wantMetadata {
+		if got := notification.Metadata[key]; got != want {
+			t.Fatalf("Metadata[%q] = %q, want %q", key, got, want)
+		}
+	}
+}
+
+func TestVerifyNotificationAcceptsPlatformCertificateDuringPublicKeyMigration(t *testing.T) {
+	t.Parallel()
+
+	provider, _, apiV3Key, publicKeyID := newWxpayNotifyTestProvider(t)
+	platformPrivateKey, platformCertificate, platformSerial := generateWxpayPlatformCertificate(t)
+	if platformSerial == publicKeyID {
+		t.Fatal("platform certificate serial must differ from the WeChat Pay public key ID")
+	}
+	provider.certificateStore = core.NewCertificateMap(map[string]*x509.Certificate{
+		platformSerial: platformCertificate,
+	})
+	rawBody, headers := buildSignedWxpayNotification(
+		t,
+		apiV3Key,
+		platformSerial,
+		platformPrivateKey,
+		wxpayEventTransactionSuccess,
+	)
+
+	notification, err := provider.VerifyNotification(context.Background(), rawBody, headers)
+	if err != nil {
+		t.Fatalf("VerifyNotification returned error for platform certificate: %v", err)
+	}
+	if notification == nil {
+		t.Fatal("VerifyNotification returned nil notification for platform certificate")
+	}
+	if notification.OrderID != "sub2_native_callback" {
+		t.Fatalf("OrderID = %q, want %q", notification.OrderID, "sub2_native_callback")
+	}
+}
+
+func TestVerifyNotificationIgnoresNonTransactionSuccessEvent(t *testing.T) {
+	t.Parallel()
+
+	provider, platformPrivateKey, apiV3Key, publicKeyID := newWxpayNotifyTestProvider(t)
+	rawBody, headers := buildSignedWxpayNotification(t, apiV3Key, publicKeyID, platformPrivateKey, "REFUND.SUCCESS")
+
+	notification, err := provider.VerifyNotification(context.Background(), rawBody, headers)
+	if err != nil {
+		t.Fatalf("VerifyNotification returned error: %v", err)
+	}
+	if notification != nil {
+		t.Fatalf("VerifyNotification returned %+v, want nil", notification)
+	}
+}
+
+func TestVerifyNotificationRejectsTamperedSignedBody(t *testing.T) {
+	t.Parallel()
+
+	provider, platformPrivateKey, apiV3Key, publicKeyID := newWxpayNotifyTestProvider(t)
+	rawBody, headers := buildSignedWxpayNotification(t, apiV3Key, publicKeyID, platformPrivateKey, wxpayEventTransactionSuccess)
+
+	notification, err := provider.VerifyNotification(context.Background(), rawBody+"\n", headers)
+	if err == nil {
+		t.Fatal("VerifyNotification accepted a tampered request body")
+	}
+	if notification != nil {
+		t.Fatalf("VerifyNotification returned %+v for tampered body", notification)
+	}
+	if !strings.Contains(err.Error(), "verify") {
+		t.Fatalf("error = %q, want signature verification failure", err)
+	}
+}
+
+func newWxpayNotifyTestProvider(t *testing.T) (*Wxpay, *rsa.PrivateKey, string, string) {
+	t.Helper()
+
+	const (
+		apiV3Key    = "12345678901234567890123456789012"
+		publicKeyID = "PUB_KEY_ID_NOTIFY_TEST"
+	)
+	privateKeyPEM, publicKeyPEM := generateTestKeyPair(t)
+	platformPrivateKey, err := utils.LoadPrivateKey(privateKeyPEM)
+	if err != nil {
+		t.Fatalf("load platform private key: %v", err)
+	}
+	provider, err := NewWxpay("notify-test-instance", map[string]string{
+		"appId":       wxpayTestAppID,
+		"mchId":       "1234567890",
+		"privateKey":  privateKeyPEM,
+		"apiV3Key":    apiV3Key,
+		"publicKey":   publicKeyPEM,
+		"publicKeyId": publicKeyID,
+		"certSerial":  "MERCHANT_CERT_SERIAL_NOTIFY_TEST",
+	})
+	if err != nil {
+		t.Fatalf("NewWxpay returned error: %v", err)
+	}
+	provider.certificateStore = core.NewCertificateMapWithList(nil)
+	return provider, platformPrivateKey, apiV3Key, publicKeyID
+}
+
+func generateWxpayPlatformCertificate(t *testing.T) (*rsa.PrivateKey, *x509.Certificate, string) {
+	t.Helper()
+
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate platform certificate key: %v", err)
+	}
+	serialNumber, ok := new(big.Int).SetString("3F547D515486BBD32A02C355E79C6A1D1750EEFE", 16)
+	if !ok {
+		t.Fatal("parse platform certificate serial")
+	}
+	template := &x509.Certificate{
+		SerialNumber:          serialNumber,
+		Subject:               pkix.Name{CommonName: "WeChat Pay Platform Test"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &privateKey.PublicKey, privateKey)
+	if err != nil {
+		t.Fatalf("create platform certificate: %v", err)
+	}
+	certificate, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatalf("parse platform certificate: %v", err)
+	}
+	return privateKey, certificate, strings.ToUpper(serialNumber.Text(16))
+}
+
+func buildSignedWxpayNotification(
+	t *testing.T,
+	apiV3Key string,
+	publicKeyID string,
+	platformPrivateKey *rsa.PrivateKey,
+	eventType string,
+) (string, map[string]string) {
+	t.Helper()
+
+	transactionJSON, err := json.Marshal(map[string]any{
+		"appid":            wxpayTestAppID,
+		"mchid":            "1234567890",
+		"out_trade_no":     "sub2_native_callback",
+		"transaction_id":   "420000000020260717000001",
+		"trade_type":       "NATIVE",
+		"trade_state":      wxpayTradeStateSuccess,
+		"trade_state_desc": "支付成功",
+		"bank_type":        "OTHERS",
+		"success_time":     "2026-07-17T22:20:09+08:00",
+		"payer": map[string]any{
+			"openid": "o-native-test-user",
+		},
+		"amount": map[string]any{
+			"total":          4024,
+			"payer_total":    4024,
+			"currency":       wxpayCurrency,
+			"payer_currency": wxpayCurrency,
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal transaction: %v", err)
+	}
+
+	block, err := aes.NewCipher([]byte(apiV3Key))
+	if err != nil {
+		t.Fatalf("create AES cipher: %v", err)
+	}
+	aead, err := cipher.NewGCM(block)
+	if err != nil {
+		t.Fatalf("create AES-GCM cipher: %v", err)
+	}
+	resourceNonce := []byte("0123456789ab")
+	associatedData := "transaction"
+	ciphertext := aead.Seal(nil, resourceNonce, transactionJSON, []byte(associatedData))
+
+	rawBodyBytes, err := json.Marshal(map[string]any{
+		"id":            "native-notify-20260717-0001",
+		"create_time":   time.Now().UTC().Format(time.RFC3339),
+		"resource_type": "encrypt-resource",
+		"event_type":    eventType,
+		"summary":       "支付成功",
+		"resource": map[string]any{
+			"original_type":   "transaction",
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      base64.StdEncoding.EncodeToString(ciphertext),
+			"associated_data": associatedData,
+			"nonce":           string(resourceNonce),
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal notification body: %v", err)
+	}
+	rawBody := string(rawBodyBytes)
+	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
+	headerNonce := "native-notify-header-nonce"
+	signature, err := utils.SignSHA256WithRSA(
+		fmt.Sprintf("%s\n%s\n%s\n", timestamp, headerNonce, rawBody),
+		platformPrivateKey,
+	)
+	if err != nil {
+		t.Fatalf("sign notification body: %v", err)
+	}
+	return rawBody, map[string]string{
+		"Content-Type":        "application/json",
+		"Wechatpay-Nonce":     headerNonce,
+		"Wechatpay-Timestamp": timestamp,
+		"Wechatpay-Serial":    publicKeyID,
+		"Wechatpay-Signature": signature,
 	}
 }
