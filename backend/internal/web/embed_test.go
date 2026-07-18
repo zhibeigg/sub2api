@@ -739,6 +739,11 @@ func TestEmbeddedFrontendBypassesBareVideoAPIRoutes(t *testing.T) {
 	}
 }
 
+func TestEmbeddedFrontendBypassesQQBotWebhook(t *testing.T) {
+	require.True(t, shouldBypassEmbeddedFrontend("/webhooks/qq"))
+	require.False(t, shouldBypassEmbeddedFrontend("/webhooks/qq/extra"))
+}
+
 func TestNewFrontendServer(t *testing.T) {
 	t.Run("creates_server_successfully", func(t *testing.T) {
 		provider := &mockSettingsProvider{
