@@ -28,6 +28,7 @@ export const BRAND_LABEL: Record<string, string> = {
   gemini: 'Gemini',
   grok: 'Grok',
   adobe: 'Adobe',
+  opencode: 'OpenCode Go',
   deepseek: 'DeepSeek',
   moonshot: 'Kimi',
   zhipu: '智谱',
@@ -48,6 +49,7 @@ const BRAND_COLOR: Record<string, string> = {
   gemini: 'text-blue-600 dark:text-blue-400',
   grok: 'text-zinc-800 dark:text-zinc-200',
   adobe: 'text-red-700 dark:text-red-400',
+  opencode: 'text-teal-700 dark:text-teal-300',
   deepseek: 'text-[#4D6BFE] dark:text-[#7f95ff]',
   moonshot: 'text-zinc-800 dark:text-zinc-100', // Kimi
   zhipu: 'text-[#3859FF] dark:text-[#7c90ff]', // GLM
@@ -75,6 +77,7 @@ const NAME_RULES: { match: string[]; keyword: string }[] = [
   { match: ['gemini', 'gemma'], keyword: 'gemini' },
   { match: ['grok'], keyword: 'grok' },
   { match: ['adobe', 'firefly', 'nano-banana', 'veo3', 'sora'], keyword: 'adobe' },
+  { match: ['opencode go', 'opencode'], keyword: 'opencode' },
   { match: ['ernie', 'wenxin', '文心'], keyword: 'ernie' },
   { match: ['spark', '星火'], keyword: 'spark' },
   { match: ['hunyuan', '混元'], keyword: 'hunyuan' },
@@ -89,6 +92,7 @@ const PLATFORM_KEYWORD: Record<string, string> = {
   grok: 'grok',
   adobe: 'adobe',
   antigravity: 'gemini',
+  opencode: 'opencode',
 }
 
 // Map the resolved keyword to the icon family used for coloring. Keyword strings
@@ -99,6 +103,7 @@ const KEYWORD_TO_BRAND: Record<string, string> = {
   gemini: 'gemini',
   grok: 'grok',
   adobe: 'adobe',
+  opencode: 'opencode',
   deepseek: 'deepseek',
   kimi: 'moonshot',
   glm: 'zhipu',

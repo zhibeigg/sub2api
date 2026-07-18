@@ -31,6 +31,15 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (*OpenAIForwardResult, error) {
+	if account != nil && account.IsOpenCode() {
+		gateway, err := s.requireOpenCodeGatewayService()
+		if err != nil {
+			return nil, err
+		}
+		result, err := gateway.ForwardMessages(ctx, c, account, body)
+		return openCodeForwardResultToOpenAI(result), err
+	}
+
 	// 入口分流：APIKey 账号 + 上游不支持 Responses API → 走 CC 直转（与
 	// ForwardAsChatCompletions 对称）。缺少此分流时，/v1/messages 入站请求
 	// 会被无条件转为 Responses 格式发往上游 /v1/responses，导致只支持

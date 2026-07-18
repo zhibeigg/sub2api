@@ -88,6 +88,94 @@ export function resetCursorCredentialEditState(state: CursorCredentialEditState)
   }
 }
 
+export const OPEN_CODE_DEFAULT_BASE_URL = 'https://opencode.ai/zen/go'
+export const OPEN_CODE_PROTOCOLS = ['chat_completions', 'messages'] as const
+export type OpenCodeModelProtocol = typeof OPEN_CODE_PROTOCOLS[number]
+export const OPEN_CODE_SENSITIVE_CREDENTIAL_KEYS = ['api_key', 'quota_cookie'] as const
+export type OpenCodeSensitiveCredentialKey = typeof OPEN_CODE_SENSITIVE_CREDENTIAL_KEYS[number]
+export type OpenCodeCredentialAction = 'keep' | 'replace' | 'clear'
+
+export interface OpenCodeCredentialInput {
+  api_key?: string
+  base_url?: string
+  quota_cookie?: string
+  quota_workspace_id?: string
+  model_mapping?: Record<string, string> | null
+  model_protocols?: Record<string, unknown> | null
+}
+
+export interface OpenCodeCredentialEditField {
+  action: OpenCodeCredentialAction
+  value: string
+}
+
+export type OpenCodeCredentialEditState = Record<OpenCodeSensitiveCredentialKey, OpenCodeCredentialEditField>
+
+export function normalizeOpenCodeModelProtocols(value?: Record<string, unknown> | null): Record<string, OpenCodeModelProtocol> {
+  const protocols: Record<string, OpenCodeModelProtocol> = {}
+  if (!value) return protocols
+  for (const [rawModel, rawProtocol] of Object.entries(value)) {
+    const model = rawModel.trim()
+    if (!model) continue
+    if (rawProtocol === 'chat_completions' || rawProtocol === 'messages') {
+      protocols[model] = rawProtocol
+    }
+  }
+  return protocols
+}
+
+export function buildOpenCodeCreateCredentials(input: OpenCodeCredentialInput): Record<string, unknown> {
+  const credentials: Record<string, unknown> = {
+    base_url: input.base_url?.trim() || OPEN_CODE_DEFAULT_BASE_URL
+  }
+  const apiKey = input.api_key?.trim()
+  const quotaCookie = input.quota_cookie?.trim()
+  const workspaceID = input.quota_workspace_id?.trim()
+  if (apiKey) credentials.api_key = apiKey
+  if (quotaCookie) credentials.quota_cookie = quotaCookie
+  if (workspaceID) credentials.quota_workspace_id = workspaceID
+  if (input.model_mapping && Object.keys(input.model_mapping).length > 0) {
+    credentials.model_mapping = input.model_mapping
+  }
+  const protocols = normalizeOpenCodeModelProtocols(input.model_protocols)
+  if (Object.keys(protocols).length > 0) credentials.model_protocols = protocols
+  return credentials
+}
+
+export function createOpenCodeCredentialEditState(): OpenCodeCredentialEditState {
+  return Object.fromEntries(
+    OPEN_CODE_SENSITIVE_CREDENTIAL_KEYS.map((key) => [key, { action: 'keep', value: '' }])
+  ) as OpenCodeCredentialEditState
+}
+
+export function buildOpenCodeCredentialUpdate(state: OpenCodeCredentialEditState): {
+  credentials?: Record<string, string>
+  clear_credentials?: string[]
+} {
+  const credentials: Record<string, string> = {}
+  const clearCredentials: string[] = []
+  for (const key of OPEN_CODE_SENSITIVE_CREDENTIAL_KEYS) {
+    const field = state[key]
+    if (field.action === 'replace') {
+      const value = field.value.trim()
+      if (value) credentials[key] = value
+    } else if (field.action === 'clear') {
+      clearCredentials.push(key)
+    }
+  }
+  return {
+    ...(Object.keys(credentials).length > 0 ? { credentials } : {}),
+    ...(clearCredentials.length > 0 ? { clear_credentials: clearCredentials } : {})
+  }
+}
+
+export function resetOpenCodeCredentialEditState(state: OpenCodeCredentialEditState): void {
+  for (const key of OPEN_CODE_SENSITIVE_CREDENTIAL_KEYS) {
+    state[key].action = 'keep'
+    state[key].value = ''
+  }
+}
+
 export const ADOBE_SENSITIVE_CREDENTIAL_KEYS = [
   'access_token',
   'cookie',

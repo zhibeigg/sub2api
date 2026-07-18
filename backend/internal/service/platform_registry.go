@@ -7,6 +7,7 @@ import (
 
 // PlatformCapabilities centralizes platform validation and behavior switches.
 type PlatformCapabilities struct {
+	DisplayName          string
 	AccountTypes         map[string]struct{}
 	ImageGeneration      bool
 	VideoGeneration      bool
@@ -53,6 +54,13 @@ var platformCapabilities = map[string]PlatformCapabilities{
 		DefaultConcurrency: 1,
 	},
 	PlatformCursor: {
+		AccountTypes:       accountTypeSet(AccountTypeAPIKey),
+		MixedScheduling:    true,
+		UpstreamModelSync:  true,
+		DefaultConcurrency: 1,
+	},
+	PlatformOpenCode: {
+		DisplayName:        PlatformOpenCodeDisplayName,
 		AccountTypes:       accountTypeSet(AccountTypeAPIKey),
 		MixedScheduling:    true,
 		UpstreamModelSync:  true,
@@ -125,6 +133,11 @@ func PlatformSupportsBatchImageGeneration(platform string) bool {
 func PlatformSupportsUpstreamModelSync(platform string) bool {
 	capabilities, ok := GetPlatformCapabilities(platform)
 	return ok && capabilities.UpstreamModelSync
+}
+
+func PlatformSupportsMixedScheduling(platform string) bool {
+	capabilities, ok := GetPlatformCapabilities(platform)
+	return ok && capabilities.MixedScheduling
 }
 
 func DefaultAccountConcurrency(platform string) int {

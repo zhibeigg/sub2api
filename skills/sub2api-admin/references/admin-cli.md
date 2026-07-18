@@ -67,6 +67,28 @@ node scripts/sub2api-admin.js accounts apply-oauth 40 --file credentials.json
 node scripts/sub2api-admin.js accounts reset-temp-unschedulable 40
 ```
 
+### OpenCode Go 账号
+
+OpenCode Go 使用独立 `platform=opencode` 和 `type=apikey`。创建示例：
+
+```bash
+node scripts/sub2api-admin.js accounts create --json '{"name":"OpenCode Go","platform":"opencode","type":"apikey","concurrency":1,"credentials":{"api_key":"<opencode-api-key>","base_url":"https://opencode.ai/zen/go","model_mapping":{"my-grok":"grok-4.5"},"model_protocols":{"grok-4.5":"chat_completions","minimax-m3":"messages"},"quota_cookie":"<optional-cookie>","quota_workspace_id":"<optional-workspace-id>"},"extra":{"mixed_scheduling":false},"group_ids":[1]}'
+```
+
+更新时未发送的敏感字段会保留；非空值表示替换：
+
+```bash
+node scripts/sub2api-admin.js accounts update 123 --json '{"credentials":{"api_key":"<replacement-api-key>","base_url":"https://opencode.ai/zen/go","model_protocols":{"minimax-m3":"messages"}},"extra":{"mixed_scheduling":true}}'
+```
+
+使用 `clear_credentials` 显式清除敏感字段，例如只清除额度 Cookie 而保留推理 API Key：
+
+```bash
+node scripts/sub2api-admin.js accounts update 123 --json '{"clear_credentials":["quota_cookie"]}'
+```
+
+`quota_cookie` / `quota_workspace_id` 仅用于额度展示，查询失败不影响推理。OpenCode Go 混合调度只参与 Anthropic / OpenAI 分组。完整协议、模型目录和错误语义见 `docs/OPENCODE_GO_INTEGRATION.md`。
+
 ### 删除与清理
 
 删除前先列出目标账号名和 ID。

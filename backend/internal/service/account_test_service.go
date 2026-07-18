@@ -99,6 +99,7 @@ type AccountTestService struct {
 	kiroUsageService          *KiroUsageService
 	adobeTokenProvider        *AdobeTokenProvider
 	cursorGatewayService      *CursorGatewayService
+	openCodeGatewayService    *OpenCodeGatewayService
 	agentIdentityTaskMu       sync.Mutex
 	agentIdentityWS           agentIdentityWSConnectionInvalidator
 }
@@ -115,6 +116,10 @@ func (s *AccountTestService) SetAdobeTokenProvider(provider *AdobeTokenProvider)
 
 func (s *AccountTestService) SetCursorGatewayService(gateway *CursorGatewayService) {
 	s.cursorGatewayService = gateway
+}
+
+func (s *AccountTestService) SetOpenCodeGatewayService(gateway *OpenCodeGatewayService) {
+	s.openCodeGatewayService = gateway
 }
 
 func (s *AccountTestService) RefreshAdobeCredentials(ctx context.Context, account *Account) (*Account, error) {
@@ -192,6 +197,23 @@ func (s *AccountTestService) ValidateTransientCredentials(ctx context.Context, i
 			Credits:      summary.Credits,
 			CreditsKnown: &creditsKnown,
 			ExpiresAt:    summary.ExpiresAt,
+		}, nil
+
+	case platform == PlatformOpenCode && accountType == AccountTypeAPIKey:
+		if s.openCodeGatewayService == nil {
+			return nil, ErrTransientCredentialValidationUnavailable
+		}
+		if err := ValidateOpenCodeAccountCredentials(accountType, account.Credentials); err != nil {
+			return nil, err
+		}
+		if _, err := s.openCodeGatewayService.TestConnection(ctx, account); err != nil {
+			return nil, err
+		}
+		return &TransientCredentialValidationResult{
+			Success:  true,
+			Platform: PlatformOpenCode,
+			Message:  "OpenCode Go API key verified",
+			Summary:  "Authenticated /v1/models request succeeded",
 		}, nil
 
 	case platform == PlatformCursor && accountType == AccountTypeAPIKey:
@@ -314,6 +336,9 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	if account.IsCursor() {
 		return s.testCursorAccountConnection(c, account, modelID, prompt)
 	}
+	if account.IsOpenCode() {
+		return s.testOpenCodeAccountConnection(c, account)
+	}
 	if account.IsOpenAI() {
 		return s.testOpenAIAccountConnection(c, account, modelID, prompt, normalizeAccountTestMode(mode))
 	}
@@ -335,6 +360,24 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	}
 
 	return s.testClaudeAccountConnection(c, account, modelID)
+}
+
+func (s *AccountTestService) testOpenCodeAccountConnection(c *gin.Context, account *Account) error {
+	if s.openCodeGatewayService == nil {
+		return s.sendErrorAndEnd(c, "OpenCode Go gateway service not configured")
+	}
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Writer.Header().Set("X-Accel-Buffering", "no")
+	c.Writer.Flush()
+	s.sendEvent(c, TestEvent{Type: "test_start", Model: "OpenCode Go /v1/models"})
+	if _, err := s.openCodeGatewayService.TestConnection(c.Request.Context(), account); err != nil {
+		return s.sendErrorAndEnd(c, fmt.Sprintf("OpenCode Go connection check failed: %s", err.Error()))
+	}
+	s.sendEvent(c, TestEvent{Type: "content", Text: "OpenCode Go API key verified"})
+	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
+	return nil
 }
 
 func (s *AccountTestService) testCursorAccountConnection(c *gin.Context, account *Account, modelID, prompt string) error {

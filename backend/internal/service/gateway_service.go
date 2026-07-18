@@ -539,9 +539,15 @@ type ForwardResult struct {
 	RequestID string
 	Usage     ClaudeUsage
 	Model     string
+	// BillingModel is the provider-scoped model used for cost calculation.
+	// Empty preserves the legacy requested/upstream model selection behavior.
+	BillingModel string
 	// UpstreamModel is the actual upstream model after mapping.
 	// Prefer empty when it is identical to Model; persistence normalizes equal values away as no-op mappings.
-	UpstreamModel    string
+	UpstreamModel string
+	// UpstreamEndpoint is the actual upstream API path used for this request.
+	// Empty preserves the existing platform-based endpoint inference.
+	UpstreamEndpoint string
 	Stream           bool
 	Duration         time.Duration
 	FirstTokenMs     *int // 首字时间（流式请求）

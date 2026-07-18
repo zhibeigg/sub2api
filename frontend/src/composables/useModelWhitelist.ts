@@ -51,6 +51,18 @@ export const claudeModels = [
 
 // Cursor 逻辑模型目录（离线默认值；联网时以官方 /v1/models 为准）。
 // thinking、effort、context、fast 等执行参数不能作为独立白名单模型写入。
+export const openCodeChatModels = [
+  'grok-4.5', 'glm-5.2', 'glm-5.1', 'kimi-k3', 'kimi-k2.7-code', 'kimi-k2.6',
+  'deepseek-v4-pro', 'deepseek-v4-flash', 'mimo-v2.5', 'mimo-v2.5-pro'
+]
+
+export const openCodeMessagesModels = [
+  'minimax-m3', 'minimax-m2.7', 'minimax-m2.5',
+  'qwen3.7-max', 'qwen3.7-plus', 'qwen3.6-plus'
+]
+
+export const openCodeModels = [...openCodeChatModels, ...openCodeMessagesModels]
+
 export const cursorModels = [
   'claude-fable-5', 'claude-haiku-4-5',
   'claude-opus-4-5', 'claude-opus-4-6', 'claude-opus-4-7', 'claude-opus-4-8',
@@ -259,6 +271,7 @@ const perplexityModels = [
 // 所有模型（去重）
 const allModelsList: string[] = [
   ...openaiModels,
+  ...openCodeModels,
   ...adobeModels,
   ...claudeModels,
   ...geminiModels,
@@ -443,6 +456,7 @@ export function getModelsByPlatform(platform: string): string[] {
     case 'claude':
     case 'kiro': return claudeModels
     case 'cursor': return cursorModels
+    case 'opencode': return openCodeModels
     case 'gemini': return geminiModels
     case 'antigravity': return antigravityModels
     case 'zhipu': return zhipuModels
@@ -468,6 +482,7 @@ export function getModelsByPlatform(platform: string): string[] {
 // 按平台获取预设映射
 export function getPresetMappingsByPlatform(platform: string) {
   if (platform === 'adobe') return adobeModels.map(model => ({ label: model, from: model, to: model, color: 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400' }))
+  if (platform === 'opencode') return openCodeModels.map(model => ({ label: model, from: model, to: model, color: 'bg-teal-100 text-teal-700 hover:bg-teal-200 dark:bg-teal-900/30 dark:text-teal-300' }))
   if (platform === 'openai') return openaiPresetMappings
   if (platform === 'gemini') return geminiPresetMappings
   if (platform === 'grok' || platform === 'xai') return grokPresetMappings

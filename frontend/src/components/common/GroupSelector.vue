@@ -109,6 +109,10 @@ const filteredGroups = computed(() => {
       result = result.filter(
         (g) => g.platform === 'kiro' || g.platform === 'anthropic' || g.platform === 'openai'
       )
+    } else if (props.platform === 'opencode' && props.mixedScheduling) {
+      result = result.filter(
+        (g) => g.platform === 'opencode' || g.platform === 'openai' || g.platform === 'anthropic'
+      )
     } else if (props.platform === 'cursor' && props.mixedScheduling) {
       // Cursor Cloud Agents 模型目录覆盖 Claude、Gemini、OpenAI、Grok 及 Cursor 原生模型。
       result = result.filter(

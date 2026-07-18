@@ -24,6 +24,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	opencodepkg "github.com/Wei-Shaw/sub2api/internal/pkg/opencode"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/Wei-Shaw/sub2api/internal/securityaudit"
@@ -46,6 +47,7 @@ type GatewayHandler struct {
 	antigravityGatewayService *service.AntigravityGatewayService
 	cursorGatewayService      *service.CursorGatewayService
 	kiroGatewayService        *service.KiroGatewayService
+	openCodeGatewayService    *service.OpenCodeGatewayService
 	userService               *service.UserService
 	billingCacheService       *service.BillingCacheService
 	usageService              *service.UsageService
@@ -70,6 +72,7 @@ func NewGatewayHandler(
 	antigravityGatewayService *service.AntigravityGatewayService,
 	cursorGatewayService *service.CursorGatewayService,
 	kiroGatewayService *service.KiroGatewayService,
+	openCodeGatewayService *service.OpenCodeGatewayService,
 	userService *service.UserService,
 	concurrencyService *service.ConcurrencyService,
 	billingCacheService *service.BillingCacheService,
@@ -95,6 +98,13 @@ func NewGatewayHandler(
 		}
 	}
 
+	// OpenAI groups can select Kiro/OpenCode accounts only through explicit
+	// mixed scheduling; inject their native forwarders before either handler runs.
+	if openAIGatewayService != nil {
+		openAIGatewayService.SetKiroGatewayService(kiroGatewayService)
+		openAIGatewayService.SetOpenCodeGatewayService(openCodeGatewayService)
+	}
+
 	// 初始化用户消息串行队列 helper
 	var umqHelper *UserMsgQueueHelper
 	if userMsgQueueService != nil && cfg != nil {
@@ -108,6 +118,7 @@ func NewGatewayHandler(
 		antigravityGatewayService: antigravityGatewayService,
 		cursorGatewayService:      cursorGatewayService,
 		kiroGatewayService:        kiroGatewayService,
+		openCodeGatewayService:    openCodeGatewayService,
 		userService:               userService,
 		billingCacheService:       billingCacheService,
 		usageService:              usageService,
@@ -519,6 +530,9 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			requestPayloadHash := service.HashUsageRequestPayload(body)
 			inboundEndpoint := GetInboundEndpoint(c)
 			upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
+			if result != nil && result.UpstreamEndpoint != "" {
+				upstreamEndpoint = result.UpstreamEndpoint
+			}
 
 			if result.ReasoningEffort == nil {
 				result.ReasoningEffort = service.NormalizeClaudeOutputEffort(parsedReq.OutputEffort)
@@ -815,6 +829,12 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 				result, err = h.cursorGatewayService.Forward(requestCtx, c, account, attemptBody)
 			} else if account.Platform == service.PlatformKiro && account.Type != service.AccountTypeAPIKey {
 				result, err = h.kiroGatewayService.Forward(requestCtx, c, account, attemptBody)
+			} else if account.Platform == service.PlatformOpenCode {
+				if h.openCodeGatewayService == nil {
+					err = errors.New("OpenCode Go gateway service is not configured")
+				} else {
+					result, err = h.openCodeGatewayService.ForwardMessages(requestCtx, c, account, attemptBody)
+				}
 			} else {
 				result, err = h.gatewayService.Forward(requestCtx, c, account, attemptParsedReq)
 			}
@@ -957,6 +977,9 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			requestPayloadHash := service.HashUsageRequestPayload(attemptParsedReq.Body.Bytes())
 			inboundEndpoint := GetInboundEndpoint(c)
 			upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
+			if result != nil && result.UpstreamEndpoint != "" {
+				upstreamEndpoint = result.UpstreamEndpoint
+			}
 
 			if result.ReasoningEffort == nil {
 				result.ReasoningEffort = service.NormalizeClaudeOutputEffort(attemptParsedReq.OutputEffort)
@@ -1356,6 +1379,8 @@ func publicGatewayFallbackModelIDs(platform string) []string {
 	switch platform {
 	case service.PlatformOpenAI:
 		return openai.DefaultModelIDs()
+	case service.PlatformOpenCode:
+		return opencodepkg.DefaultModelIDs()
 	case service.PlatformGemini:
 		ids := make([]string, 0, len(geminicli.DefaultModels))
 		for _, model := range geminicli.DefaultModels {
@@ -1375,6 +1400,8 @@ func defaultModelIDsForPlatform(platform string) []string {
 	switch platform {
 	case service.PlatformOpenAI:
 		return openai.DefaultModelIDs()
+	case service.PlatformOpenCode:
+		return opencodepkg.DefaultModelIDs()
 	case service.PlatformGemini:
 		ids := make([]string, 0, len(geminicli.DefaultModels))
 		for _, model := range geminicli.DefaultModels {
@@ -2119,6 +2146,18 @@ func (h *GatewayHandler) CountTokens(c *gin.Context) {
 		return
 	}
 	setOpsSelectedAccount(c, account.ID, account.Platform)
+
+	// OpenCode Go 不公开 count_tokens 端点，使用本地确定性估算。
+	if account.Platform == service.PlatformOpenCode {
+		if h.openCodeGatewayService == nil {
+			h.errorResponse(c, http.StatusBadGateway, "api_error", "OpenCode Go gateway service is not configured")
+			return
+		}
+		if _, countErr := h.openCodeGatewayService.CountTokens(c.Request.Context(), c, account, body); countErr != nil {
+			h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", countErr.Error())
+		}
+		return
+	}
 
 	// Cursor Cloud Agents API 不提供聊天协议的 count_tokens 接口，使用本地确定性估算。
 	if account.Platform == service.PlatformCursor {

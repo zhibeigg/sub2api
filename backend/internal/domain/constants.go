@@ -25,7 +25,11 @@ const (
 	PlatformGrok        = "grok"
 	PlatformAdobe       = "adobe"
 	PlatformCursor      = "cursor"
+	PlatformOpenCode    = "opencode"
 	PlatformKiro        = "kiro" // AWS Kiro / CodeWhisperer (provides Claude models)
+
+	PlatformOpenCodeDisplayName = "OpenCode Go"
+	DefaultOpenCodeBaseURL      = "https://opencode.ai/zen/go"
 )
 
 // Account type constants

@@ -19,6 +19,15 @@ import (
 
 // Forward forwards request to OpenAI API
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
+	if account != nil && account.IsOpenCode() {
+		gateway, err := s.requireOpenCodeGatewayService()
+		if err != nil {
+			return nil, err
+		}
+		result, err := gateway.ForwardResponses(ctx, c, account, body)
+		return openCodeForwardResultToOpenAI(result), err
+	}
+
 	startTime := time.Now()
 	// 固定渠道映射后的请求级 canonical body；账号 normalize/strip 不得改写跨 failover hint。
 	canonicalImageIntentBody := body

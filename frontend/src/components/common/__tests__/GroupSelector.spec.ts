@@ -13,6 +13,7 @@ vi.mock('vue-i18n', async () => {
 
 const platforms: GroupPlatform[] = [
   'cursor',
+  'opencode',
   'anthropic',
   'gemini',
   'openai',
@@ -31,12 +32,12 @@ const groups = platforms.map((platform, index) => ({
   account_count: 0
 })) as AdminGroup[]
 
-function visiblePlatforms(mixedScheduling: boolean): string[] {
+function visiblePlatforms(mixedScheduling: boolean, platform: GroupPlatform = 'cursor'): string[] {
   const wrapper = mount(GroupSelector, {
     props: {
       modelValue: [],
       groups,
-      platform: 'cursor',
+      platform,
       mixedScheduling
     },
     global: {
@@ -60,5 +61,9 @@ describe('GroupSelector Cursor mixed scheduling', () => {
 
   it('keeps Cursor-only filtering when mixed scheduling is disabled', () => {
     expect(visiblePlatforms(false)).toEqual(['cursor'])
+  })
+
+  it('supports OpenCode Go mixed scheduling with OpenAI and Anthropic groups', () => {
+    expect(visiblePlatforms(true, 'opencode')).toEqual(['opencode', 'anthropic', 'openai'])
   })
 })

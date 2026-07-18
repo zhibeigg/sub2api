@@ -194,7 +194,7 @@ Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的
 
 ## 核心功能
 
-- **多账号管理** - 支持多种上游账号类型（OAuth、API Key、服务账户），原生集成 Anthropic、OpenAI、Gemini、Antigravity、Grok、Kiro（AWS CodeWhisperer，提供 Claude 模型）、Adobe Firefly 与 Cursor IDE Chat / Cloud Agent
+- **多账号管理** - 支持多种上游账号类型（OAuth、API Key、服务账户），原生集成 Anthropic、OpenAI、Gemini、Antigravity、Grok、Kiro（AWS CodeWhisperer，提供 Claude 模型）、Adobe Firefly、Cursor IDE Chat / Cloud Agent，以及独立 `platform=opencode`、支持 Messages / Chat Completions / Responses 三入口的 OpenCode Go API Key 平台（[接入文档](docs/OPENCODE_GO_INTEGRATION.md)）
 - **Cursor Agent RPC + Cloud Agent** - 普通 Anthropic Messages、OpenAI Chat Completions 和 OpenAI Responses 请求通过双向 HTTP/2 Connect-Protobuf `agent.v1.AgentService/Run` 转发，实时透传文本、thinking 与 MCP 工具增量；下一轮通过原生 history/state 恢复工具结果，不执行本地 shell/file。Cloud Agent 保持独立显式任务模式，内部 `GetUsableModels` 目录刷新不阻塞聊天热路径。Dashboard Token 仅在服务端加密保存并支持自动续期（[接入文档](docs/CURSOR_INTEGRATION.md)）
 - **Kiro 原生接入** - 内建 AWS Builder ID 设备码、IAM Identity Center（PKCE）、SSO Token 导入与凭证 JSON 四种登录方式，支持 token 自动刷新、订阅/用量/超额查询、健康检查与动态模型发现
 - **Adobe Firefly 原生接入** - 支持 IMS 凭据创建前两步预检、安全管理与自动续期、profile/credits 展示、OpenAI Images 兼容图片生成与编辑、Redis 异步视频任务和成功轮询幂等媒体结算（[接入文档](docs/ADOBE_INTEGRATION.md)）

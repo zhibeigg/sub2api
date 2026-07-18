@@ -88,6 +88,16 @@ func (s *AccountTestService) FetchUpstreamSupportedModels(ctx context.Context, a
 	if account.Platform == PlatformKiro {
 		return s.fetchKiroUpstreamModels(ctx, account)
 	}
+	if account.Platform == PlatformOpenCode {
+		if s.openCodeGatewayService == nil {
+			return nil, newUpstreamModelSyncConfigError("OpenCode Go gateway service is not configured", nil)
+		}
+		models, err := s.openCodeGatewayService.ListModels(ctx, account)
+		if err != nil {
+			return nil, newUpstreamModelSyncUpstreamError("Failed to request OpenCode Go model list", err)
+		}
+		return models, nil
+	}
 	if account.Platform == PlatformAdobe {
 		return nil, newUpstreamModelSyncUnsupportedError("Adobe Firefly does not expose a dynamic upstream model list; use the local Firefly catalog", nil)
 	}

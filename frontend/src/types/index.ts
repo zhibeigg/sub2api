@@ -539,7 +539,7 @@ export interface PaginationConfig {
 
 // ==================== API Key & Group Types ====================
 
-export type GroupPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'adobe' | 'cursor' | 'kiro'
+export type GroupPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'adobe' | 'cursor' | 'opencode' | 'kiro'
 
 export type SubscriptionType = 'standard' | 'subscription'
 
@@ -810,7 +810,7 @@ export interface UpdateGroupRequest {
 
 // ==================== Account & Proxy Types ====================
 
-export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'adobe' | 'cursor' | 'kiro'
+export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'adobe' | 'cursor' | 'opencode' | 'kiro'
 export type AccountType = 'oauth' | 'setup-token' | 'apikey' | 'upstream' | 'bedrock' | 'service_account'
 export type CursorTransportMode = 'auto' | 'ide_chat' | 'cloud_agent'
 export type OAuthAddMethod = 'oauth' | 'setup-token'
@@ -1140,6 +1140,26 @@ export interface AntigravityModelQuota {
   reset_time: string  // 重置时间 ISO8601
 }
 
+export type OpenCodeQuotaState = 'missing' | 'cached' | 'verified' | 'stale' | 'error'
+
+export interface OpenCodeQuotaWindow {
+  status: string
+  usage_percent: number
+  reset_in_seconds: number
+  reset_at?: string | null
+}
+
+export interface OpenCodeQuotaSnapshot {
+  configured: boolean
+  state: OpenCodeQuotaState
+  message?: string | null
+  workspace_id?: string | null
+  fetched_at?: string | null
+  rolling: OpenCodeQuotaWindow
+  weekly: OpenCodeQuotaWindow
+  monthly?: OpenCodeQuotaWindow | null
+}
+
 export interface GrokQuotaWindow {
   limit?: number | null
   remaining?: number | null
@@ -1266,6 +1286,8 @@ export interface AccountUsageInfo {
     billing_cycle_end?: string | null
     updated_at?: string | null
   } | null
+  // OpenCode Go 官方配额快照。
+  open_code_quota?: OpenCodeQuotaSnapshot | null
   // Antigravity 403 forbidden 状态
   is_forbidden?: boolean
   forbidden_reason?: string
@@ -2311,6 +2333,7 @@ export type {
   PlatformQuotaItem,
   PlatformQuotaUpdateItem,
   PlatformQuotaPlatform,
+  UserQuotaPlatform,
   PlatformQuotaWindow,
   PlatformQuotasResponse,
 } from '@/api/admin/users'

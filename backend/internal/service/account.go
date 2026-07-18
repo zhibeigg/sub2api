@@ -268,6 +268,14 @@ func (a *Account) IsCursorAPIKey() bool {
 	return a.IsCursor() && a.Type == AccountTypeAPIKey
 }
 
+func (a *Account) IsOpenCode() bool {
+	return a != nil && a.Platform == PlatformOpenCode
+}
+
+func (a *Account) IsOpenCodeAPIKey() bool {
+	return a.IsOpenCode() && a.Type == AccountTypeAPIKey
+}
+
 func (a *Account) IsGrokOAuth() bool {
 	return a.IsGrok() && a.Type == AccountTypeOAuth
 }
@@ -338,6 +346,57 @@ func (a *Account) GetCredential(key string) string {
 	default:
 		return ""
 	}
+}
+
+func (a *Account) GetOpenCodeAPIKey() string {
+	if !a.IsOpenCodeAPIKey() {
+		return ""
+	}
+	return strings.TrimSpace(a.GetCredential("api_key"))
+}
+
+func (a *Account) GetOpenCodeQuotaCookie() string {
+	if !a.IsOpenCodeAPIKey() {
+		return ""
+	}
+	return a.GetCredential("quota_cookie")
+}
+
+func (a *Account) GetOpenCodeQuotaWorkspaceID() string {
+	if !a.IsOpenCodeAPIKey() {
+		return ""
+	}
+	return strings.TrimSpace(a.GetCredential("quota_workspace_id"))
+}
+
+// ValidateOpenCodeAccountCredentials validates the credential shape used by OpenCode Go.
+// base_url, quota_cookie, quota_workspace_id, model_mapping and model_protocols are optional;
+// api_key is required for the only supported account type.
+func ValidateOpenCodeAccountCredentials(accountType string, credentials map[string]any) error {
+	if strings.ToLower(strings.TrimSpace(accountType)) != AccountTypeAPIKey {
+		return errors.New("OpenCode Go only supports apikey accounts")
+	}
+	account := &Account{Platform: PlatformOpenCode, Type: AccountTypeAPIKey, Credentials: credentials}
+	if account.GetOpenCodeAPIKey() == "" {
+		return errors.New("OpenCode Go api_key is required")
+	}
+	for _, key := range []string{"base_url", "quota_cookie", "quota_workspace_id"} {
+		if raw, ok := credentials[key]; ok && raw != nil {
+			if _, ok := raw.(string); !ok {
+				return errors.New("OpenCode Go " + key + " must be a string")
+			}
+		}
+	}
+	for _, key := range []string{"model_mapping", "model_protocols"} {
+		if raw, ok := credentials[key]; ok && raw != nil {
+			switch raw.(type) {
+			case map[string]any, map[string]string:
+			default:
+				return errors.New("OpenCode Go " + key + " must be a string map")
+			}
+		}
+	}
+	return nil
 }
 
 // GetCredentialAsTime 解析凭证中的时间戳字段，支持多种格式
@@ -591,6 +650,20 @@ func (a *Account) GetModelMapping() map[string]string {
 	a.modelMappingCacheRawLen = rawLen
 	a.modelMappingCacheRawSig = rawSig
 	return mapping
+}
+
+// GetModelProtocols returns the per-model upstream protocol hints stored in credentials.
+// The gateway implementation consumes these hints later; the foundation layer only preserves
+// and exposes the normalized string map.
+func (a *Account) GetModelProtocols() map[string]string {
+	if a == nil || a.Credentials == nil {
+		return nil
+	}
+	return stringMappingFromRaw(a.Credentials["model_protocols"])
+}
+
+func (a *Account) GetModelProtocol(model string) string {
+	return strings.TrimSpace(a.GetModelProtocols()[strings.TrimSpace(model)])
 }
 
 func (a *Account) resolveModelMapping(rawMapping map[string]any) map[string]string {
@@ -932,14 +1005,27 @@ func (a *Account) GetBaseURL() string {
 	if a.Type != AccountTypeAPIKey {
 		return ""
 	}
-	baseURL := a.GetCredential("base_url")
+	baseURL := strings.TrimSpace(a.GetCredential("base_url"))
 	if baseURL == "" {
+		if a.IsOpenCode() {
+			return DefaultOpenCodeBaseURL
+		}
 		return "https://api.anthropic.com"
 	}
 	if a.Platform == PlatformAntigravity {
 		return strings.TrimRight(baseURL, "/") + "/antigravity"
 	}
+	if a.IsOpenCode() {
+		return strings.TrimRight(baseURL, "/")
+	}
 	return baseURL
+}
+
+func (a *Account) GetOpenCodeBaseURL() string {
+	if !a.IsOpenCodeAPIKey() {
+		return ""
+	}
+	return a.GetBaseURL()
 }
 
 // GetGeminiBaseURL 返回 Gemini 兼容端点的 base URL。
@@ -1454,8 +1540,13 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 	if capability == "" {
 		return true
 	}
-	// 混合调度平台账号(如 kiro)通过 openai 兼容端点透传，仅支持 ChatCompletions。
+	// OpenCode Go can bridge both Chat Completions and Responses through its
+	// model-level Chat/Messages upstream protocols. Other mixed platforms retain
+	// the legacy Chat-only capability unless they declare a native bridge.
 	if !a.IsOpenAICompatible() {
+		if a.IsOpenCode() && a.IsMixedSchedulingEnabled() {
+			return capability == OpenAIEndpointCapabilityChatCompletions || capability == OpenAIEndpointCapabilityResponses
+		}
 		if IsMixedSchedulingCapablePlatform(a.Platform) && a.IsMixedSchedulingEnabled() {
 			return capability == OpenAIEndpointCapabilityChatCompletions
 		}
@@ -1643,10 +1734,9 @@ func (a *Account) IsOpenAITokenExpired() bool {
 }
 
 // IsMixedSchedulingCapablePlatform 返回该平台的账户是否可通过 mixed_scheduling
-// 参与其它平台分组的调度。Antigravity、Kiro 与 Cursor 都提供可转换为
-// Anthropic Messages 的模型，因此可按账号显式开关参与兼容端点调度。
+// 参与其它平台分组的调度。能力由 platform registry 统一声明。
 func IsMixedSchedulingCapablePlatform(platform string) bool {
-	return platform == PlatformAntigravity || platform == PlatformKiro || platform == PlatformCursor
+	return PlatformSupportsMixedScheduling(platform)
 }
 
 // GroupPlatformSupportsMixedScheduling 返回该分组平台是否启用混合调度候选加载。
@@ -1671,11 +1761,16 @@ func MixedSchedulingCandidatePlatforms(groupPlatform string) []string {
 	if CursorSupportsGroupPlatform(groupPlatform) && groupPlatform != PlatformCursor {
 		platforms = append(platforms, PlatformCursor)
 	}
+	// OpenCode Go only exposes Chat Completions and Anthropic Messages upstreams;
+	// do not mix it into Gemini/Grok native groups.
+	if groupPlatform == PlatformAnthropic || groupPlatform == PlatformOpenAI {
+		platforms = append(platforms, PlatformOpenCode)
+	}
 	return platforms
 }
 
 // IsMixedSchedulingEnabled 检查账户是否启用混合调度
-// 启用后可参与 anthropic/gemini/openai 分组的账户调度
+// 启用后由 MixedSchedulingCandidatePlatforms 决定可参与的目标分组。
 func (a *Account) IsMixedSchedulingEnabled() bool {
 	if !IsMixedSchedulingCapablePlatform(a.Platform) {
 		return false

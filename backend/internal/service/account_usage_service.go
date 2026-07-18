@@ -16,6 +16,7 @@ import (
 	cursorpkg "github.com/Wei-Shaw/sub2api/internal/pkg/cursor"
 	httppool "github.com/Wei-Shaw/sub2api/internal/pkg/httpclient"
 	openaipkg "github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	opencodepkg "github.com/Wei-Shaw/sub2api/internal/pkg/opencode"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
@@ -364,6 +365,10 @@ type UsageInfo struct {
 	// Adobe Firefly credits；Known=false 与 Available=0 语义严格区分。
 	AdobeCredits *AdobeCreditsInfo `json:"adobe_credits,omitempty"`
 
+	// OpenCode Go optional subscription quota snapshot. This data comes from the
+	// website session cookie and is deliberately isolated from inference health.
+	OpenCodeQuota *OpenCodeQuotaInfo `json:"open_code_quota,omitempty"`
+
 	// Cursor Cloud Agents API Key status, local forwarding statistics, and optional
 	// desktop Dashboard plan snapshot are deliberately reported separately.
 	CursorLocalUsage          *WindowStats                `json:"cursor_local_usage,omitempty"`
@@ -499,6 +504,7 @@ type AccountUsageService struct {
 	grokQuotaFetcher        *GrokQuotaFetcher
 	grokQuotaService        *GrokQuotaService
 	openAIQuotaService      *OpenAIQuotaService
+	openCodeQuotaService    *OpenCodeQuotaService
 	cache                   *UsageCache
 	identityCache           IdentityCache
 	tlsFPProfileService     *TLSFingerprintProfileService
@@ -514,6 +520,10 @@ type AccountUsageService struct {
 // Optional; when nil, Kiro usage is served passively from the Extra snapshot.
 func (s *AccountUsageService) SetKiroUsageService(k *KiroUsageService) {
 	s.kiroUsageService = k
+}
+
+func (s *AccountUsageService) SetOpenCodeQuotaService(quota *OpenCodeQuotaService) {
+	s.openCodeQuotaService = quota
 }
 
 func (s *AccountUsageService) SetAdobeTokenProvider(provider *AdobeTokenProvider) {
@@ -648,6 +658,19 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 			s.refreshCursorDashboardUsage(ctx, account, usage, now)
 		}
 		return usage, nil
+	}
+
+	if account.Platform == PlatformOpenCode {
+		if s.openCodeQuotaService == nil {
+			return &UsageInfo{Source: "active", OpenCodeQuota: &OpenCodeQuotaInfo{
+				Configured: strings.TrimSpace(account.GetOpenCodeQuotaCookie()) != "",
+				State:      "error",
+				Message:    "OpenCode Go quota service is not configured",
+			}}, nil
+		}
+		quota := s.openCodeQuotaService.GetQuota(ctx, account, forceProbe)
+		s.applyOpenCodeQuotaCooldown(account, quota)
+		return &UsageInfo{Source: "active", UpdatedAt: quota.FetchedAt, OpenCodeQuota: quota}, nil
 	}
 
 	if account.Platform == PlatformOpenAI && account.Type == AccountTypeOAuth {
@@ -786,6 +809,44 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 
 	// API Key账号不支持usage查询
 	return nil, fmt.Errorf("account type %s does not support usage query", account.Type)
+}
+
+func (s *AccountUsageService) applyOpenCodeQuotaCooldown(account *Account, quota *OpenCodeQuotaInfo) {
+	if s == nil || s.accountRepo == nil || account == nil || quota == nil {
+		return
+	}
+	if quota.State != "verified" && quota.State != "cached" {
+		return
+	}
+	resetAt := openCodeQuotaCooldownReset(quota)
+	if resetAt == nil || !resetAt.After(time.Now()) {
+		return
+	}
+	accountID := account.ID
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.accountRepo.SetRateLimited(ctx, accountID, *resetAt); err != nil {
+			slog.Warn("failed to apply OpenCode Go quota cooldown", "account_id", accountID, "reset_at", resetAt, "error", err)
+		}
+	}()
+}
+
+func openCodeQuotaCooldownReset(quota *OpenCodeQuotaInfo) *time.Time {
+	if quota == nil {
+		return nil
+	}
+	var latest *time.Time
+	for _, window := range []*opencodepkg.QuotaWindow{quota.Rolling, quota.Weekly, quota.Monthly} {
+		if window == nil || window.Status == "unlimited" || window.UsagePercent < 100 || window.ResetAt == nil {
+			continue
+		}
+		if latest == nil || window.ResetAt.After(*latest) {
+			value := *window.ResetAt
+			latest = &value
+		}
+	}
+	return latest
 }
 
 // GetPassiveUsage 从 Account.Extra 中的被动采样数据构建 UsageInfo，不调用外部 API。

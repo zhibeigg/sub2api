@@ -566,6 +566,36 @@
       </div>
     </template>
 
+    <!-- OpenCode Go API Key accounts: official rolling/weekly/monthly quota -->
+    <template v-else-if="account.platform === 'opencode' && account.type === 'apikey'">
+      <div class="space-y-1" data-testid="opencode-usage-status">
+        <div v-if="loading && !usageInfo" class="space-y-1.5">
+          <div class="h-3 w-24 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+          <div class="h-3 w-20 animate-pulse rounded bg-gray-100 dark:bg-gray-800"></div>
+        </div>
+        <div v-else-if="error" class="text-xs text-red-500">{{ error }}</div>
+        <template v-else>
+          <div v-if="openCodeQuotaError" class="max-w-[220px] truncate text-xs text-amber-600 dark:text-amber-400" :title="openCodeQuotaError" data-testid="opencode-quota-error">
+            {{ t('admin.accounts.opencode.quotaError') }}
+          </div>
+          <div v-else-if="openCodeQuotaNotConfigured" class="text-xs text-gray-400" data-testid="opencode-quota-not-configured">
+            {{ t('admin.accounts.opencode.quotaNotConfigured') }}
+          </div>
+          <div v-else-if="openCodeQuotaBars.length > 0" class="space-y-1" data-testid="opencode-quota-bars">
+            <UsageProgressBar v-for="bar in openCodeQuotaBars" :key="bar.key" :label="bar.label" :utilization="bar.utilization" :resets-at="bar.resetsAt" :color="bar.color" />
+          </div>
+          <div v-else class="text-xs text-gray-400">{{ t('admin.accounts.opencode.quotaUnavailable') }}</div>
+          <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+            <button type="button" data-testid="opencode-usage-refresh" class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium text-teal-700 transition-colors hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-teal-300 dark:hover:bg-teal-900/30" :disabled="activeQueryLoading" @click="loadActiveUsage">
+              <svg class="h-2.5 w-2.5" :class="{ 'animate-spin': activeQueryLoading }" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              {{ t('admin.accounts.opencode.refreshQuota') }}
+            </button>
+            <span v-if="openCodeQuotaUpdatedAt" class="text-[9px] text-gray-400 dark:text-gray-500">{{ t('admin.accounts.opencode.quotaUpdatedAt', { time: formatRelativeTime(openCodeQuotaUpdatedAt) }) }}</span>
+          </div>
+        </template>
+      </div>
+    </template>
+
     <!-- Cursor API Key accounts: local usage windows and credential probe -->
     <template v-else-if="account.platform === 'cursor' && account.type === 'apikey'">
       <div class="space-y-1" data-testid="cursor-usage-status">
@@ -880,7 +910,7 @@ import { ref, computed, onMounted, onBeforeUnmount, onUnmounted, watch } from 'v
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api/admin'
 import type { GrokQuotaProbeResult } from '@/api/admin/grok'
-import type { Account, AccountUsageInfo, GeminiCredentials, WindowStats } from '@/types'
+import type { Account, AccountUsageInfo, GeminiCredentials, OpenCodeQuotaWindow, WindowStats } from '@/types'
 import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
 import { enqueueUsageRequest } from '@/utils/usageLoadQueue'
 import { formatCompactNumber, formatRelativeTime } from '@/utils/format'
@@ -934,7 +964,7 @@ let visibilityObserver: IntersectionObserver | null = null
 // Show usage windows for OAuth and Setup Token accounts
 const showUsageWindows = computed(() => {
   // Gemini: we can always compute local usage windows from DB logs (simulated quotas).
-  if (props.account.platform === 'gemini' || props.account.platform === 'adobe' || props.account.platform === 'cursor') return true
+  if (props.account.platform === 'gemini' || props.account.platform === 'adobe' || props.account.platform === 'cursor' || props.account.platform === 'opencode') return true
   return props.account.type === 'oauth' || props.account.type === 'setup-token'
 })
 
@@ -960,7 +990,7 @@ const shouldFetchUsage = computed(() => {
   if (props.account.platform === 'kiro') {
     return props.account.type === 'oauth'
   }
-  if (props.account.platform === 'cursor') {
+  if (props.account.platform === 'cursor' || props.account.platform === 'opencode') {
     return props.account.type === 'apikey'
   }
   return false
@@ -1500,6 +1530,44 @@ const validationURL = computed(() => usageInfo.value?.validation_url || '')
 // 需要重新授权（401）
 const needsReauth = computed(() => !!usageInfo.value?.needs_reauth)
 
+const openCodeQuotaSnapshot = computed(() => usageInfo.value?.open_code_quota ?? null)
+const openCodeQuotaNotConfigured = computed(() => {
+  const snapshot = openCodeQuotaSnapshot.value
+  if (!snapshot) return !props.account.credentials_status?.has_quota_cookie
+  return !snapshot.configured || snapshot.state === 'missing'
+})
+const openCodeQuotaError = computed(() => {
+  const snapshot = openCodeQuotaSnapshot.value
+  if (snapshot?.state !== 'error') return ''
+  return snapshot.message || t('admin.accounts.opencode.quotaError')
+})
+const openCodeQuotaUpdatedAt = computed(() => openCodeQuotaSnapshot.value?.fetched_at || null)
+const resolveOpenCodeResetAt = (window: OpenCodeQuotaWindow, fetchedAt?: string | null): string | null => {
+  if (window.reset_at) return window.reset_at
+  if (!Number.isFinite(window.reset_in_seconds)) return null
+  const fetchedTimestamp = fetchedAt ? Date.parse(fetchedAt) : Number.NaN
+  const baseTimestamp = Number.isFinite(fetchedTimestamp) ? fetchedTimestamp : Date.now()
+  return new Date(baseTimestamp + Math.max(0, window.reset_in_seconds) * 1000).toISOString()
+}
+const openCodeQuotaBars = computed(() => {
+  const snapshot = openCodeQuotaSnapshot.value
+  if (!snapshot) return []
+  const configs = [
+    { key: 'rolling', label: t('admin.accounts.opencode.rolling'), color: 'indigo' as const },
+    { key: 'weekly', label: t('admin.accounts.opencode.weekly'), color: 'emerald' as const },
+    { key: 'monthly', label: t('admin.accounts.opencode.monthly'), color: 'purple' as const }
+  ]
+  return configs.flatMap((config) => {
+    const window = snapshot[config.key as 'rolling' | 'weekly' | 'monthly']
+    if (!window || !Number.isFinite(window.usage_percent)) return []
+    return [{
+      ...config,
+      utilization: Math.max(0, window.usage_percent),
+      resetsAt: resolveOpenCodeResetAt(window, snapshot.fetched_at)
+    }]
+  })
+})
+
 const cursorApiKeyConfigured = computed(() => {
   if (usageInfo.value?.cursor_api_key_configured === true) return true
   if (props.account.credentials_status?.has_api_key != null) {
@@ -1909,7 +1977,7 @@ watch(
     if (!shouldFetchUsage.value) return
 
     const source = isAnthropicOAuthOrSetupToken.value ? 'passive' : undefined
-    const force = props.account.platform === 'cursor'
+    const force = props.account.platform === 'cursor' || props.account.platform === 'opencode'
     _usageCache.delete(props.account.id)
     loadUsage({ source, bypassCache: true, force }).catch((e) => {
       console.error('Failed to refresh usage after manual refresh:', e)

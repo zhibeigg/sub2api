@@ -256,8 +256,14 @@ func isOpenAICompatibleAccountEligibleForRequest(ctx context.Context, account *A
 			return false
 		}
 	}
-	if requestedModel != "" && !account.IsModelSupported(requestedModel) {
-		return false
+	if requestedModel != "" {
+		if account.IsOpenCode() {
+			if !account.IsOpenCodeModelSupported(requestedModel) {
+				return false
+			}
+		} else if !account.IsModelSupported(requestedModel) {
+			return false
+		}
 	}
 	if !account.SupportsOpenAIEndpointCapability(requiredCapability) {
 		if account.IsGrok() && requiredCapability == OpenAIEndpointCapabilityGrokMediaGeneration {

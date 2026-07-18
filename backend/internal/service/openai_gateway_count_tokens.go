@@ -52,6 +52,15 @@ func (s *OpenAIGatewayService) ForwardCountTokensAsAnthropic(
 		writeAnthropicCountTokensError(c, http.StatusServiceUnavailable, "api_error", "No available OpenAI accounts")
 		return fmt.Errorf("count_tokens: missing account")
 	}
+	if account.IsOpenCode() {
+		gateway, err := s.requireOpenCodeGatewayService()
+		if err != nil {
+			writeAnthropicCountTokensError(c, http.StatusBadGateway, "api_error", err.Error())
+			return err
+		}
+		_, err = gateway.CountTokens(ctx, c, account, body)
+		return err
+	}
 
 	prepared, err := prepareOpenAIInputTokensCountRequest(body, account, defaultMappedModel)
 	if err != nil {

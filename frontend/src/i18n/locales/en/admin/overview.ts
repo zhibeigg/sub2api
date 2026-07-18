@@ -516,6 +516,7 @@ export default {
         usageAntigravity: 'Usage (Antigravity)',
         usageAdobe: 'Usage (Adobe)',
         usageCursor: 'Usage (Cursor)',
+        usageOpenCode: 'Usage (OpenCode Go)',
         concurrency: 'Concurrency',
         status: 'Status',
         lastActive: 'Last Active',
@@ -947,6 +948,7 @@ export default {
         grok: 'Grok',
         adobe: 'Adobe',
         cursor: 'Cursor',
+        opencode: 'OpenCode Go',
         kiro: 'Kiro',
       },
       deleteConfirm:

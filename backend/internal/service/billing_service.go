@@ -590,11 +590,47 @@ func (s *BillingService) initFallbackPricing() {
 		CacheReadPricePerToken: 0.2e-6,
 		SupportsCacheBreakdown: false,
 	}
+
+	// OpenCode Go provider-scoped fallback pricing. Keep these keys prefixed so
+	// discounted subscription rates never change the same model on other platforms.
+	openCodeGoPrices := map[string][3]float64{
+		"grok-4.5":          {2.00, 6.00, 0.50},
+		"glm-5.2":           {1.40, 4.40, 0.26},
+		"glm-5.1":           {1.40, 4.40, 0.26},
+		"kimi-k3":           {0.60, 3.00, 0.10},
+		"kimi-k2.7-code":    {0.60, 3.00, 0.10},
+		"kimi-k2.6":         {0.60, 2.50, 0.10},
+		"deepseek-v4-pro":   {0.44, 1.32, 0.036},
+		"deepseek-v4-flash": {0.28, 0.42, 0.028},
+		"mimo-v2.5":         {0.40, 1.20, 0.08},
+		"mimo-v2.5-pro":     {1.00, 3.00, 0.10},
+		"minimax-m3":        {0.30, 1.20, 0.06},
+		"minimax-m2.7":      {0.30, 1.20, 0.06},
+		"minimax-m2.5":      {0.30, 1.20, 0.03},
+		"qwen3.7-max":       {1.20, 3.00, 0.12},
+		"qwen3.7-plus":      {0.40, 2.40, 0.04},
+		"qwen3.6-plus":      {0.40, 2.40, 0.04},
+	}
+	for model, price := range openCodeGoPrices {
+		s.fallbackPrices["opencode-go/"+model] = &ModelPricing{
+			InputPricePerToken:     price[0] * 1e-6,
+			OutputPricePerToken:    price[1] * 1e-6,
+			CacheReadPricePerToken: price[2] * 1e-6,
+			SupportsCacheBreakdown: false,
+		}
+	}
 }
 
 // getFallbackPricing 根据模型系列获取回退价格
 func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	modelLower := strings.ToLower(model)
+
+	// Provider-scoped keys must be resolved before generic substring matching.
+	// Otherwise opencode-go/glm-5.2 would incorrectly fall through to the global
+	// GLM family fallback and lose the OpenCode Go subscription price.
+	if strings.HasPrefix(modelLower, "opencode-go/") {
+		return s.fallbackPrices[modelLower]
+	}
 
 	// 按模型系列匹配
 	if strings.Contains(modelLower, "opus") {

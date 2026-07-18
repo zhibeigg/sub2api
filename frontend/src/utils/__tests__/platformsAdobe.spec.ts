@@ -4,6 +4,25 @@ import { getModelsByPlatform } from '@/composables/useModelWhitelist'
 import { platformBadgeClass, platformLabel } from '@/utils/platformColors'
 import { resolveGroupBrand } from '@/utils/groupBrand'
 
+describe('OpenCode Go platform registry', () => {
+  it('registers OpenCode Go with quota, models and usage capabilities', () => {
+    const opencode = PLATFORM_REGISTRY.opencode
+    expect(PLATFORM_ORDER.indexOf('opencode')).toBeGreaterThan(PLATFORM_ORDER.indexOf('cursor'))
+    expect(PLATFORM_ORDER.indexOf('opencode')).toBeLessThan(PLATFORM_ORDER.indexOf('kiro'))
+    expect(opencode.label).toBe('OpenCode Go')
+    expect(opencode.capabilities).toMatchObject({ quota: true, models: true, usage: true, modelSync: false })
+    expect(QUOTA_PLATFORMS).toContain('opencode')
+    expect(platformLabel('opencode')).toBe('OpenCode Go')
+    expect(platformBadgeClass('opencode')).toContain('teal')
+    expect(getModelsByPlatform('opencode')).toEqual([
+      'grok-4.5', 'glm-5.2', 'glm-5.1', 'kimi-k3', 'kimi-k2.7-code', 'kimi-k2.6',
+      'deepseek-v4-pro', 'deepseek-v4-flash', 'mimo-v2.5', 'mimo-v2.5-pro',
+      'minimax-m3', 'minimax-m2.7', 'minimax-m2.5', 'qwen3.7-max', 'qwen3.7-plus', 'qwen3.6-plus'
+    ])
+    expect(resolveGroupBrand('opencode', 'OpenCode Go').brand).toBe('opencode')
+  })
+})
+
 describe('Cursor platform registry', () => {
   it('registers Cursor between Adobe and Kiro with the requested capabilities', () => {
     const cursor = PLATFORM_REGISTRY.cursor

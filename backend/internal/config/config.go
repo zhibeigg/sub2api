@@ -94,6 +94,7 @@ type Config struct {
 	Timezone                string                        `mapstructure:"timezone"` // e.g. "Asia/Shanghai", "UTC"
 	Gemini                  GeminiConfig                  `mapstructure:"gemini"`
 	Adobe                   AdobeConfig                   `mapstructure:"adobe"`
+	OpenCode                OpenCodeConfig                `mapstructure:"opencode"`
 	Cursor                  CursorConfig                  `mapstructure:"cursor"`
 	Kiro                    KiroConfig                    `mapstructure:"kiro"`
 	Update                  UpdateConfig                  `mapstructure:"update"`
@@ -156,6 +157,15 @@ type AdobeConfig struct {
 	VideoTerminalTTLSeconds  int `mapstructure:"video_terminal_ttl_seconds"`
 	TokenRefreshSkewSeconds  int `mapstructure:"token_refresh_skew_seconds"`
 	CreditsCacheTTLSeconds   int `mapstructure:"credits_cache_ttl_seconds"`
+}
+
+// OpenCodeConfig controls the OpenCode Go inference endpoint and quota lookup cache.
+type OpenCodeConfig struct {
+	BaseURL                    string `mapstructure:"base_url"`
+	InferenceTimeoutSeconds    int    `mapstructure:"inference_timeout_seconds"`
+	QuotaCacheTTLSeconds       int    `mapstructure:"quota_cache_ttl_seconds"`
+	QuotaStaleTTLSeconds       int    `mapstructure:"quota_stale_ttl_seconds"`
+	QuotaRequestTimeoutSeconds int    `mapstructure:"quota_request_timeout_seconds"`
 }
 
 // CursorConfig controls the official Cursor Cloud Agents API adapter.
@@ -1729,6 +1739,7 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 	cfg.OIDC.UserInfoUsernamePath = strings.TrimSpace(cfg.OIDC.UserInfoUsernamePath)
 	cfg.OIDC.UsePKCEExplicit = hasExplicitConfigOrEnv("oidc_connect.use_pkce", "OIDC_CONNECT_USE_PKCE")
 	cfg.OIDC.ValidateIDTokenExplicit = hasExplicitConfigOrEnv("oidc_connect.validate_id_token", "OIDC_CONNECT_VALIDATE_ID_TOKEN")
+	cfg.OpenCode.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.OpenCode.BaseURL), "/")
 	cfg.Dashboard.KeyPrefix = strings.TrimSpace(cfg.Dashboard.KeyPrefix)
 	cfg.CORS.AllowedOrigins = normalizeStringSlice(cfg.CORS.AllowedOrigins)
 	cfg.Security.ResponseHeaders.AdditionalAllowed = normalizeStringSlice(cfg.Security.ResponseHeaders.AdditionalAllowed)
@@ -1873,6 +1884,7 @@ func setDefaults() {
 		"*.ff.adobe.io",
 		"api.cursor.com",
 		"api2.cursor.sh",
+		"opencode.ai",
 		"*.openai.azure.com",
 	})
 	viper.SetDefault("security.url_allowlist.pricing_hosts", []string{
@@ -2074,6 +2086,13 @@ func setDefaults() {
 	viper.SetDefault("adobe.video_terminal_ttl_seconds", 24*60*60)
 	viper.SetDefault("adobe.token_refresh_skew_seconds", 5*60)
 	viper.SetDefault("adobe.credits_cache_ttl_seconds", 5*60)
+
+	// OpenCode Go
+	viper.SetDefault("opencode.base_url", "https://opencode.ai/zen/go")
+	viper.SetDefault("opencode.inference_timeout_seconds", 600)
+	viper.SetDefault("opencode.quota_cache_ttl_seconds", 300)
+	viper.SetDefault("opencode.quota_stale_ttl_seconds", 1800)
+	viper.SetDefault("opencode.quota_request_timeout_seconds", 15)
 
 	// Cursor official Cloud Agents API (user or service-account API Key)
 	viper.SetDefault("cursor.base_url", "https://api.cursor.com")
@@ -2476,6 +2495,22 @@ func (c *Config) Validate() error {
 	}
 	if c.SubscriptionMaintenance.QueueSize < 0 {
 		return fmt.Errorf("subscription_maintenance.queue_size must be non-negative")
+	}
+
+	if err := ValidateAbsoluteHTTPURL(c.OpenCode.BaseURL); err != nil {
+		return fmt.Errorf("opencode.base_url invalid: %w", err)
+	}
+	if c.OpenCode.InferenceTimeoutSeconds <= 0 {
+		return fmt.Errorf("opencode.inference_timeout_seconds must be positive")
+	}
+	if c.OpenCode.QuotaCacheTTLSeconds <= 0 {
+		return fmt.Errorf("opencode.quota_cache_ttl_seconds must be positive")
+	}
+	if c.OpenCode.QuotaStaleTTLSeconds < c.OpenCode.QuotaCacheTTLSeconds {
+		return fmt.Errorf("opencode.quota_stale_ttl_seconds must be greater than or equal to opencode.quota_cache_ttl_seconds")
+	}
+	if c.OpenCode.QuotaRequestTimeoutSeconds <= 0 {
+		return fmt.Errorf("opencode.quota_request_timeout_seconds must be positive")
 	}
 
 	if c.Cursor.AgentModelCacheTTLSeconds <= 0 {

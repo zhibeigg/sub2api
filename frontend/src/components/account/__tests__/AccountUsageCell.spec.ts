@@ -72,6 +72,75 @@ describe('AccountUsageCell', () => {
     })
   })
 
+  it('OpenCode Go 按 open_code_quota schema 展示滚动、周、月窗口并支持刷新', async () => {
+    getUsage.mockResolvedValue({
+      open_code_quota: {
+        configured: true,
+        state: 'verified',
+        workspace_id: 'workspace-1',
+        fetched_at: '2026-07-18T10:00:00Z',
+        rolling: { status: 'active', usage_percent: 25, reset_in_seconds: 7200 },
+        weekly: { status: 'active', usage_percent: 50, reset_in_seconds: 0, reset_at: '2026-07-20T00:00:00Z' },
+        monthly: { status: 'active', usage_percent: 75, reset_in_seconds: 0, reset_at: '2026-08-01T00:00:00Z' }
+      }
+    })
+    const wrapper = mount(AccountUsageCell, {
+      props: { account: makeAccount({ id: 8801, platform: 'opencode', type: 'apikey', credentials_status: { has_quota_cookie: true } }) },
+      global: {
+        stubs: {
+          UsageProgressBar: {
+            props: ['label', 'utilization', 'resetsAt'],
+            template: '<div class="usage-bar">{{ label }}|{{ utilization }}|{{ resetsAt }}</div>'
+          },
+          AccountQuotaInfo: true
+        }
+      }
+    })
+    await flushPromises()
+
+    expect(getUsage).toHaveBeenCalledWith(8801)
+    expect(wrapper.text()).toContain('admin.accounts.opencode.rolling|25|2026-07-18T12:00:00.000Z')
+    expect(wrapper.text()).toContain('admin.accounts.opencode.weekly|50|2026-07-20T00:00:00Z')
+    expect(wrapper.text()).toContain('admin.accounts.opencode.monthly|75|2026-08-01T00:00:00Z')
+
+    await wrapper.get('[data-testid="opencode-usage-refresh"]').trigger('click')
+    await flushPromises()
+    expect(getUsage).toHaveBeenLastCalledWith(8801, 'active', true)
+  })
+
+  it('OpenCode Go 按 configured/state/message 区分未配置与错误状态', async () => {
+    getUsage.mockResolvedValueOnce({
+      open_code_quota: {
+        configured: false,
+        state: 'missing',
+        rolling: { status: 'missing', usage_percent: 0, reset_in_seconds: 0 },
+        weekly: { status: 'missing', usage_percent: 0, reset_in_seconds: 0 }
+      }
+    })
+    const missing = mount(AccountUsageCell, {
+      props: { account: makeAccount({ id: 8802, platform: 'opencode', type: 'apikey' }) },
+      global: { stubs: { UsageProgressBar: true, AccountQuotaInfo: true } }
+    })
+    await flushPromises()
+    expect(missing.get('[data-testid="opencode-quota-not-configured"]').text()).toContain('admin.accounts.opencode.quotaNotConfigured')
+
+    getUsage.mockResolvedValueOnce({
+      open_code_quota: {
+        configured: true,
+        state: 'error',
+        message: 'quota upstream failed',
+        rolling: { status: 'error', usage_percent: 0, reset_in_seconds: 0 },
+        weekly: { status: 'error', usage_percent: 0, reset_in_seconds: 0 }
+      }
+    })
+    const failed = mount(AccountUsageCell, {
+      props: { account: makeAccount({ id: 8803, platform: 'opencode', type: 'apikey', credentials_status: { has_quota_cookie: true } }) },
+      global: { stubs: { UsageProgressBar: true, AccountQuotaInfo: true } }
+    })
+    await flushPromises()
+    expect(failed.get('[data-testid="opencode-quota-error"]').attributes('title')).toBe('quota upstream failed')
+  })
+
   it.each([
     [{ state: 'unknown', unknown: true, available: null }, 'admin.accounts.adobe.creditsUnknown'],
     [{ state: 'available', available: 0, checked_at: '2026-08-01T00:00:00Z' }, '0'],

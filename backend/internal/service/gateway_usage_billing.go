@@ -676,7 +676,10 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	}
 
 	// 先确定计费模型，模型级倍率必须与最终计价所用模型保持一致。
-	billingModel := forwardResultBillingModel(result.Model, result.UpstreamModel)
+	billingModel := strings.TrimSpace(result.BillingModel)
+	if billingModel == "" {
+		billingModel = forwardResultBillingModel(result.Model, result.UpstreamModel)
+	}
 	if input.BillingModelSource == BillingModelSourceChannelMapped && input.ChannelMappedModel != "" {
 		billingModel = input.ChannelMappedModel
 	}

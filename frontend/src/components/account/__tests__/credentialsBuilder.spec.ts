@@ -28,8 +28,56 @@ import {
   buildAdobeCredentialUpdate,
   createAdobeCredentialEditState,
   resetAdobeCredentialEditState,
-  validateAdobeCredentialSource
+  validateAdobeCredentialSource,
+  OPEN_CODE_DEFAULT_BASE_URL,
+  buildOpenCodeCreateCredentials,
+  buildOpenCodeCredentialUpdate,
+  createOpenCodeCredentialEditState,
+  normalizeOpenCodeModelProtocols,
+  resetOpenCodeCredentialEditState
 } from '../credentialsBuilder'
+
+describe('OpenCode Go credentials', () => {
+  it('builds trimmed create credentials with the default endpoint and allowed protocols', () => {
+    expect(buildOpenCodeCreateCredentials({
+      api_key: ' key ', quota_cookie: ' cookie ', quota_workspace_id: ' ws ',
+      model_mapping: { 'grok-4.5': 'grok-4.5' },
+      model_protocols: { 'grok-4.5': 'chat_completions', 'minimax-m3': 'messages', bad: 'responses' }
+    })).toEqual({
+      base_url: OPEN_CODE_DEFAULT_BASE_URL,
+      api_key: 'key',
+      quota_cookie: 'cookie',
+      quota_workspace_id: 'ws',
+      model_mapping: { 'grok-4.5': 'grok-4.5' },
+      model_protocols: { 'grok-4.5': 'chat_completions', 'minimax-m3': 'messages' }
+    })
+  })
+
+  it('keeps secrets by default and emits only explicit replacements or clears', () => {
+    const state = createOpenCodeCredentialEditState()
+    expect(buildOpenCodeCredentialUpdate(state)).toEqual({})
+    state.api_key = { action: 'replace', value: ' new-key ' }
+    state.quota_cookie = { action: 'clear', value: 'ignored' }
+    expect(buildOpenCodeCredentialUpdate(state)).toEqual({
+      credentials: { api_key: 'new-key' },
+      clear_credentials: ['quota_cookie']
+    })
+    resetOpenCodeCredentialEditState(state)
+    expect(state).toEqual({
+      api_key: { action: 'keep', value: '' },
+      quota_cookie: { action: 'keep', value: '' }
+    })
+  })
+
+  it('rejects blank model names and unsupported protocol values', () => {
+    expect(normalizeOpenCodeModelProtocols({
+      ' grok-4.5 ': 'chat_completions',
+      '': 'messages',
+      qwen: 'responses',
+      minimax: 'messages'
+    })).toEqual({ 'grok-4.5': 'chat_completions', minimax: 'messages' })
+  })
+})
 
 describe('Cursor credentials', () => {
   it('builds trimmed Cloud and optional Dashboard credentials', () => {

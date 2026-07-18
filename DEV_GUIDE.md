@@ -310,7 +310,22 @@ go test -tags=integration ./...
 golangci-lint run ./...
 ```
 
-## 六、项目结构速览
+## 六、OpenCode Go 架构触点
+
+OpenCode Go 是独立 `platform=opencode`、仅支持 `apikey` 的文本平台。修改该集成时应同步检查以下触点：
+
+- `backend/internal/pkg/opencode/`：模型目录、`chat_completions` / `messages` 协议解析，以及三种入站协议的请求、响应和 SSE 转换。
+- `backend/internal/service/opencode_gateway_service*.go`：推理转发、上游认证、代理、超时、错误分类和流式处理；`openai_gateway_opencode.go` 负责 OpenAI 分组混合调度桥接。
+- `backend/internal/service/opencode_account.go`、`account.go`、`platform_registry.go`：凭据、`model_mapping`、`model_protocols`、平台能力与 mixed scheduling；OpenCode Go 只能混入 Anthropic / OpenAI 分组。
+- `backend/internal/service/opencode_quota_service.go`：可选 `quota_cookie` / `quota_workspace_id` 的额度快照。该路径必须与推理解耦，额度查询失败不得暂停账号或阻断请求。
+- `backend/internal/handler/gateway_handler*.go` 与 `backend/internal/server/routes/gateway.go`：`/v1/messages`、`/v1/chat/completions`、`/v1/responses` 三个公开入口及故障转移。
+- `backend/internal/config/config.go` 与 `deploy/config.example.yaml`：全局 Base URL、推理超时和配额缓存默认值；账号级 `credentials.base_url` 优先。
+- `frontend/src/components/account/`、`frontend/src/constants/platforms.ts`、`frontend/src/composables/useModelWhitelist.ts` 与 i18n：账号表单、敏感凭据三态编辑、平台能力和离线模型目录。
+- `docs/OPENCODE_GO_INTEGRATION.md`、三个 README、Admin CLI reference：协议、目录、管理 API 与运维文档必须同步。
+
+新增官方模型时不要只改前端白名单：必须确认官方 `GET /v1/models` 结果，为模型设置正确的上游协议，并覆盖 Chat、Messages、Responses 的流式/非流式转换测试。`api_key` 与 `quota_cookie` 都属于敏感凭据，编辑语义为未发送保留、非空替换、`clear_credentials` 显式清除。
+
+## 七、项目结构速览
 
 ```
 sub2api-bmai/
@@ -338,7 +353,7 @@ sub2api-bmai/
     └── CLAUDE.md            # 本文档
 ```
 
-## 七、参考资源
+## 八、参考资源
 
 - [上游仓库](https://github.com/Wei-Shaw/sub2api)
 - [Ent 文档](https://entgo.io/docs/getting-started)

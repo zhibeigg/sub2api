@@ -177,6 +177,7 @@ func ProvideAccountUsageService(
 	grokQuotaFetcher *GrokQuotaFetcher,
 	grokQuotaService *GrokQuotaService,
 	openAIQuotaService *OpenAIQuotaService,
+	openCodeQuotaService *OpenCodeQuotaService,
 	cache *UsageCache,
 	identityCache IdentityCache,
 	tlsFPProfileService *TLSFingerprintProfileService,
@@ -187,6 +188,7 @@ func ProvideAccountUsageService(
 ) *AccountUsageService {
 	service := NewAccountUsageService(accountRepo, usageLogRepo, usageFetcher, geminiQuotaService, antigravityQuotaFetcher, grokQuotaFetcher, grokQuotaService, openAIQuotaService, cache, identityCache, tlsFPProfileService)
 	service.SetAdobeTokenProvider(adobeTokenProvider)
+	service.SetOpenCodeQuotaService(openCodeQuotaService)
 	service.SetCursorUsageProber(cursorGatewayService)
 	service.SetCursorDashboardFetcher(cursorDashboardAuthService)
 	service.SetKiroUsageService(kiroUsageService)
@@ -213,11 +215,13 @@ func ProvideAccountTestService(
 	tlsFPProfileService *TLSFingerprintProfileService,
 	adobeTokenProvider *AdobeTokenProvider,
 	cursorGatewayService *CursorGatewayService,
+	openCodeGatewayService *OpenCodeGatewayService,
 	kiroUsageService *KiroUsageService,
 ) *AccountTestService {
 	service := NewAccountTestService(accountRepo, geminiTokenProvider, claudeTokenProvider, grokTokenProvider, antigravityGatewayService, httpUpstream, cfg, tlsFPProfileService)
 	service.SetAdobeTokenProvider(adobeTokenProvider)
 	service.SetCursorGatewayService(cursorGatewayService)
+	service.SetOpenCodeGatewayService(openCodeGatewayService)
 	service.SetKiroUsageService(kiroUsageService)
 	return service
 }
@@ -233,6 +237,7 @@ func ProvideAccountTestServiceWithAgentIdentity(
 	tlsFPProfileService *TLSFingerprintProfileService,
 	adobeTokenProvider *AdobeTokenProvider,
 	cursorGatewayService *CursorGatewayService,
+	openCodeGatewayService *OpenCodeGatewayService,
 	kiroUsageService *KiroUsageService,
 	openAIGatewayService *OpenAIGatewayService,
 ) *AccountTestService {
@@ -247,6 +252,7 @@ func ProvideAccountTestServiceWithAgentIdentity(
 		tlsFPProfileService,
 		adobeTokenProvider,
 		cursorGatewayService,
+		openCodeGatewayService,
 		kiroUsageService,
 	)
 	service.agentIdentityWS = openAIGatewayService
@@ -885,6 +891,8 @@ var ProviderSet = wire.NewSet(
 	NewCursorDashboardAuthService,
 	ProvideCursorDashboardMaintenanceService,
 	NewKiroGatewayService,
+	NewOpenCodeGatewayService,
+	NewOpenCodeQuotaService,
 	ProvideRateLimitService,
 	ProvideAccountUsageService,
 	ProvideAccountTestServiceWithAgentIdentity,

@@ -134,6 +134,48 @@ async function openCodexImportStep(toggleClicks = 0) {
   return wrapper
 }
 
+describe('CreateAccountModal OpenCode Go', () => {
+  beforeEach(() => {
+    createAccountMock.mockReset().mockResolvedValue({})
+  })
+
+  it('creates an apikey account with quota credentials, official protocols and mixed scheduling', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenCode Go')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('OpenCode account')
+    const passwords = wrapper.findAll('form#create-account-form input[type="password"]')
+    await passwords[0].setValue(' open-code-key ')
+    await passwords[1].setValue(' quota-cookie ')
+    await wrapper.get('[data-testid="opencode-quota-credentials"] input[type="text"]').setValue(' workspace-1 ')
+    await wrapper.get('[data-testid="mixed-scheduling-checkbox"]').setValue(true)
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(createAccountMock).toHaveBeenCalledTimes(1)
+    const payload = createAccountMock.mock.calls[0]?.[0]
+    expect(payload).toMatchObject({
+      platform: 'opencode',
+      type: 'apikey',
+      extra: { mixed_scheduling: true },
+      credentials: {
+        base_url: 'https://opencode.ai/zen/go',
+        api_key: 'open-code-key',
+        quota_cookie: 'quota-cookie',
+        quota_workspace_id: 'workspace-1'
+      }
+    })
+    expect(payload.credentials.model_mapping).toMatchObject({
+      'grok-4.5': 'grok-4.5',
+      'qwen3.7-max': 'qwen3.7-max'
+    })
+    expect(payload.credentials.model_protocols).toMatchObject({
+      'grok-4.5': 'chat_completions',
+      'minimax-m3': 'messages',
+      'qwen3.7-plus': 'messages'
+    })
+  })
+})
+
 describe('CreateAccountModal OpenAI long-context billing', () => {
   beforeEach(() => {
     createAccountMock.mockReset().mockResolvedValue({})

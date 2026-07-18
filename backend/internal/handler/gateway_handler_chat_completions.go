@@ -265,6 +265,12 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 				return
 			}
 			result, err = h.kiroGatewayService.Forward(c.Request.Context(), c, account, forwardBody)
+		} else if account.Platform == service.PlatformOpenCode {
+			if h.openCodeGatewayService == nil {
+				err = errors.New("OpenCode Go gateway service is not configured")
+			} else {
+				result, err = h.openCodeGatewayService.ForwardChatCompletions(c.Request.Context(), c, account, forwardBody)
+			}
 		} else {
 			result, err = h.gatewayService.ForwardAsChatCompletions(c.Request.Context(), c, account, forwardBody, parsedReq)
 		}
@@ -312,6 +318,9 @@ func (h *GatewayHandler) ChatCompletions(c *gin.Context) {
 		requestPayloadHash := service.HashUsageRequestPayload(body)
 		inboundEndpoint := GetInboundEndpoint(c)
 		upstreamEndpoint := GetUpstreamEndpoint(c, account.Platform)
+		if result != nil && result.UpstreamEndpoint != "" {
+			upstreamEndpoint = result.UpstreamEndpoint
+		}
 
 		quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 		h.submitUsageRecordTask(c.Request.Context(), func(ctx context.Context) {

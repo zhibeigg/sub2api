@@ -206,6 +206,24 @@ function buildCursorAccount() {
   } as any
 }
 
+function buildOpenCodeAccount() {
+  return {
+    ...buildAccount(),
+    id: 7,
+    name: 'OpenCode Go',
+    platform: 'opencode',
+    type: 'apikey',
+    credentials: {
+      base_url: 'https://opencode.ai/zen/go',
+      quota_workspace_id: 'workspace-old',
+      model_mapping: { 'grok-4.5': 'grok-4.5' },
+      model_protocols: { 'grok-4.5': 'chat_completions', 'minimax-m3': 'messages' }
+    },
+    credentials_status: { has_api_key: true, has_quota_cookie: true },
+    extra: {}
+  } as any
+}
+
 function buildOpenAISparkShadowAccount() {
   const account = buildAccount()
   return {
@@ -910,6 +928,41 @@ describe('EditAccountModal', () => {
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.openai_oauth_responses_websockets_v2_mode).toBe('http_bridge')
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.openai_oauth_responses_websockets_v2_enabled).toBe(true)
+  })
+
+  it('does not prefill OpenCode secrets and submits explicit replace/clear operations', async () => {
+    const account = buildOpenCodeAccount()
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    const wrapper = mountModal(account)
+    expect(wrapper.get('[data-testid="opencode-api-key-input"]').element).toHaveProperty('value', '')
+    expect(wrapper.get('[data-testid="opencode-quota-cookie-input"]').element).toHaveProperty('value', '')
+
+    const section = wrapper.get('[data-testid="opencode-edit-sensitive-credentials"]')
+    const actions = section.findAll('select')
+    await actions[0].setValue('replace')
+    await wrapper.get('[data-testid="opencode-api-key-input"]').setValue(' new-open-code-key ')
+    await actions[1].setValue('clear')
+    await section.get('input[type="text"]').setValue(' workspace-new ')
+    await wrapper.get('[data-testid="mixed-scheduling-checkbox"]').setValue(true)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    const payload = updateAccountMock.mock.calls[0]?.[1]
+    expect(payload.credentials).toMatchObject({
+      base_url: 'https://opencode.ai/zen/go',
+      api_key: 'new-open-code-key',
+      quota_workspace_id: 'workspace-new',
+      model_mapping: { 'grok-4.5': 'grok-4.5' },
+      model_protocols: { 'grok-4.5': 'chat_completions', 'minimax-m3': 'messages' }
+    })
+    expect(payload.credentials).not.toHaveProperty('quota_cookie')
+    expect(payload.clear_credentials).toEqual(['quota_cookie'])
+    expect(payload.extra).toEqual({ mixed_scheduling: true })
+    confirmSpy.mockRestore()
   })
 
   it('keeps the existing Cursor API Key by default', async () => {

@@ -172,7 +172,9 @@
             :placeholder="
               account.platform === 'openai'
                 ? 'https://api.openai.com'
-                : account.platform === 'gemini'
+                : account.platform === 'opencode'
+                  ? 'https://opencode.ai/zen/go'
+                  : account.platform === 'gemini'
                   ? 'https://generativelanguage.googleapis.com'
                   : account.platform === 'antigravity'
                     ? 'https://cloudcode-pa.googleapis.com'
@@ -188,7 +190,26 @@
             @select="editBaseUrl = $event"
           />
         </div>
-        <div>
+        <div v-if="account.platform === 'opencode'" class="space-y-3" data-testid="opencode-edit-sensitive-credentials">
+          <div v-for="key in openCodeSensitiveCredentialKeys" :key="key" class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(9rem,0.7fr)_minmax(8rem,0.45fr)_minmax(12rem,1fr)] sm:items-end">
+            <div>
+              <span class="input-label">{{ openCodeCredentialLabel(key) }}</span>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ account.credentials_status?.[`has_${key}`] ? t('admin.accounts.opencode.configured') : t('admin.accounts.opencode.notConfigured') }}</p>
+            </div>
+            <select v-model="openCodeCredentialState[key].action" class="input min-h-11" @change="onOpenCodeCredentialActionChange(key)">
+              <option value="keep">{{ t('admin.accounts.opencode.keep') }}</option>
+              <option value="replace">{{ t('admin.accounts.opencode.replace') }}</option>
+              <option value="clear">{{ t('admin.accounts.opencode.clear') }}</option>
+            </select>
+            <input v-model="openCodeCredentialState[key].value" type="password" autocomplete="new-password" class="input min-h-11 font-mono" :disabled="openCodeCredentialState[key].action !== 'replace'" :placeholder="t('admin.accounts.opencode.replacePlaceholder')" :data-testid="`opencode-${key.replace(/_/g, '-')}-input`" data-1p-ignore data-lpignore="true" data-bwignore="true" />
+          </div>
+          <div>
+            <label class="input-label">{{ t('admin.accounts.opencode.quotaWorkspaceId') }}</label>
+            <input v-model="openCodeQuotaWorkspaceId" type="text" class="input font-mono" :placeholder="t('admin.accounts.opencode.quotaWorkspaceIdPlaceholder')" />
+            <p class="input-hint">{{ t('admin.accounts.opencode.quotaWorkspaceIdHint') }}</p>
+          </div>
+        </div>
+        <div v-else>
           <label class="input-label">{{ t('admin.accounts.apiKey') }}</label>
           <input
             v-model="editApiKey"
@@ -397,6 +418,22 @@
               </div>
             </div>
           </template>
+        </div>
+
+        <div v-if="account.platform === 'opencode'" class="border-t border-gray-200 pt-4 dark:border-dark-600" data-testid="opencode-model-protocols">
+          <label class="input-label">{{ t('admin.accounts.opencode.modelProtocols') }}</label>
+          <p class="input-hint mb-3">{{ t('admin.accounts.opencode.modelProtocolsHint') }}</p>
+          <div class="space-y-2">
+            <div v-for="(item, index) in openCodeModelProtocols" :key="`${item.model}-${index}`" class="grid grid-cols-[minmax(0,1fr)_minmax(10rem,0.45fr)_auto] items-center gap-2">
+              <input v-model="item.model" type="text" class="input font-mono" :placeholder="t('admin.accounts.opencode.modelName')" />
+              <select v-model="item.protocol" class="input">
+                <option value="chat_completions">chat_completions</option>
+                <option value="messages">messages</option>
+              </select>
+              <button type="button" class="rounded p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20" @click="removeOpenCodeModelProtocol(index)"><Icon name="trash" size="sm" /></button>
+            </div>
+          </div>
+          <button type="button" class="mt-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-sm text-gray-600 hover:border-teal-400 hover:text-teal-700 dark:border-dark-500 dark:text-gray-400" @click="addOpenCodeModelProtocol">{{ t('admin.accounts.opencode.addModelProtocol') }}</button>
         </div>
 
         <!-- Pool Mode Section -->
@@ -2578,19 +2615,19 @@
           <Select v-model="form.status" :options="statusOptions" />
         </div>
 
-        <!-- Mixed Scheduling: antigravity 编辑态只读；kiro / cursor 允许编辑 -->
-        <div v-if="account?.platform === 'antigravity' || account?.platform === 'kiro' || account?.platform === 'cursor'" class="flex items-center gap-2">
+        <!-- Mixed Scheduling: antigravity 编辑态只读；kiro / cursor / opencode 允许编辑 -->
+        <div v-if="account?.platform === 'antigravity' || account?.platform === 'kiro' || account?.platform === 'cursor' || account?.platform === 'opencode'" class="flex items-center gap-2">
           <label
             class="flex items-center gap-2"
-            :class="account?.platform === 'kiro' || account?.platform === 'cursor' ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'"
+            :class="account?.platform === 'kiro' || account?.platform === 'cursor' || account?.platform === 'opencode' ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'"
           >
             <input
               type="checkbox"
               v-model="mixedScheduling"
-              :disabled="account?.platform !== 'kiro' && account?.platform !== 'cursor'"
+              :disabled="account?.platform !== 'kiro' && account?.platform !== 'cursor' && account?.platform !== 'opencode'"
               data-testid="mixed-scheduling-checkbox"
               class="h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
-              :class="account?.platform === 'kiro' || account?.platform === 'cursor' ? '' : 'cursor-not-allowed'"
+              :class="account?.platform === 'kiro' || account?.platform === 'cursor' || account?.platform === 'opencode' ? '' : 'cursor-not-allowed'"
             />
             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t('admin.accounts.mixedScheduling') }}
@@ -2736,9 +2773,14 @@ import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
 import {
   ADOBE_SENSITIVE_CREDENTIAL_KEYS,
+  OPEN_CODE_SENSITIVE_CREDENTIAL_KEYS,
   CURSOR_DASHBOARD_CREDENTIAL_KEYS,
   CURSOR_SENSITIVE_CREDENTIAL_KEYS,
   applyAntigravityProjectID,
+  buildOpenCodeCredentialUpdate,
+  createOpenCodeCredentialEditState,
+  normalizeOpenCodeModelProtocols,
+  resetOpenCodeCredentialEditState,
   buildCursorCredentialUpdate,
   createCursorCredentialEditState,
   normalizeCursorTransportMode,
@@ -2759,6 +2801,8 @@ import {
   HEADER_OVERRIDE_ENABLED_CREDENTIAL_KEY,
   HEADER_OVERRIDES_CREDENTIAL_KEY,
   type AdobeSensitiveCredentialKey,
+  type OpenCodeSensitiveCredentialKey,
+  type OpenCodeModelProtocol,
   type CursorSensitiveCredentialKey,
   type HeaderOverrideRow
 } from '@/components/account/credentialsBuilder'
@@ -2777,6 +2821,8 @@ import {
 } from '@/utils/openaiWsMode'
 import {
   getPresetMappingsByPlatform,
+  openCodeChatModels,
+  openCodeMessagesModels,
   commonErrorCodes,
   buildModelMappingObject,
   splitModelMappingObject,
@@ -2809,6 +2855,7 @@ const baseUrlHint = computed(() => {
   if (!props.account) return t('admin.accounts.baseUrlHint')
   if (props.account.platform === 'openai') return t('admin.accounts.openai.baseUrlHint')
   if (props.account.platform === 'gemini') return t('admin.accounts.gemini.baseUrlHint')
+  if (props.account.platform === 'opencode') return t('admin.accounts.opencode.baseUrlHint')
   if (props.account.platform === 'grok') return ''
   return t('admin.accounts.baseUrlHint')
 })
@@ -2822,6 +2869,16 @@ interface ModelMapping {
   to: string
 }
 
+interface OpenCodeModelProtocolEntry {
+  model: string
+  protocol: OpenCodeModelProtocol
+}
+
+const createDefaultOpenCodeModelProtocols = (): OpenCodeModelProtocolEntry[] => [
+  ...openCodeChatModels.map((model) => ({ model, protocol: 'chat_completions' as const })),
+  ...openCodeMessagesModels.map((model) => ({ model, protocol: 'messages' as const }))
+]
+
 interface TempUnschedRuleForm {
   error_code: number | null
   keywords: string
@@ -2833,6 +2890,19 @@ interface TempUnschedRuleForm {
 const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
+const openCodeSensitiveCredentialKeys = OPEN_CODE_SENSITIVE_CREDENTIAL_KEYS
+const openCodeCredentialState = reactive(createOpenCodeCredentialEditState())
+const openCodeCredentialLabel = (key: OpenCodeSensitiveCredentialKey) => t(`admin.accounts.opencode.${key}`)
+const onOpenCodeCredentialActionChange = (key: OpenCodeSensitiveCredentialKey) => {
+  if (openCodeCredentialState[key].action !== 'replace') openCodeCredentialState[key].value = ''
+}
+const openCodeQuotaWorkspaceId = ref('')
+const openCodeModelProtocols = ref<OpenCodeModelProtocolEntry[]>(createDefaultOpenCodeModelProtocols())
+const addOpenCodeModelProtocol = () => openCodeModelProtocols.value.push({ model: '', protocol: 'chat_completions' })
+const removeOpenCodeModelProtocol = (index: number) => openCodeModelProtocols.value.splice(index, 1)
+const buildOpenCodeModelProtocols = () => normalizeOpenCodeModelProtocols(
+  Object.fromEntries(openCodeModelProtocols.value.map((item) => [item.model.trim(), item.protocol]))
+)
 const cursorTransportModes: CursorTransportMode[] = ['auto', 'ide_chat', 'cloud_agent']
 const cursorTransportMode = ref<CursorTransportMode>('auto')
 const cursorTransportModeHint = computed(() =>
@@ -3484,6 +3554,7 @@ const defaultBaseUrl = computed(() => {
   if (props.account?.platform === 'openai') return 'https://api.openai.com'
   if (props.account?.platform === 'gemini') return 'https://generativelanguage.googleapis.com'
   if (props.account?.platform === 'grok') return 'https://api.x.ai/v1'
+  if (props.account?.platform === 'opencode') return 'https://opencode.ai/zen/go'
   return 'https://api.anthropic.com'
 })
 
@@ -3581,6 +3652,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   }
   antigravityMixedChannelConfirmed.value = false
   resetAdobeCredentialEditState(adobeCredentialState)
+  resetOpenCodeCredentialEditState(openCodeCredentialState)
   resetCursorCredentialEditState(cursorCredentialState)
   resetCursorDashboardAuthState(Boolean(newAccount.credentials_status?.has_dashboard_access_token))
   showMixedChannelWarning.value = false
@@ -3805,12 +3877,28 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     const platformDefaultUrl =
       newAccount.platform === 'openai'
         ? 'https://api.openai.com'
-        : newAccount.platform === 'gemini'
-          ? 'https://generativelanguage.googleapis.com'
+        : newAccount.platform === 'opencode'
+          ? 'https://opencode.ai/zen/go'
+          : newAccount.platform === 'gemini'
+            ? 'https://generativelanguage.googleapis.com'
           : newAccount.platform === 'grok'
             ? 'https://api.x.ai/v1'
             : 'https://api.anthropic.com'
     editBaseUrl.value = (credentials.base_url as string) || platformDefaultUrl
+    if (newAccount.platform === 'opencode') {
+      openCodeQuotaWorkspaceId.value = typeof credentials.quota_workspace_id === 'string'
+        ? credentials.quota_workspace_id
+        : ''
+      const protocols = normalizeOpenCodeModelProtocols(
+        credentials.model_protocols as Record<string, unknown> | undefined
+      )
+      openCodeModelProtocols.value = Object.keys(protocols).length > 0
+        ? Object.entries(protocols).map(([model, protocol]) => ({ model, protocol }))
+        : createDefaultOpenCodeModelProtocols()
+    } else {
+      openCodeQuotaWorkspaceId.value = ''
+      openCodeModelProtocols.value = createDefaultOpenCodeModelProtocols()
+    }
 
     // Load model mappings and detect mode
     loadModelRestrictionFromMapping(credentials.model_mapping as Record<string, unknown> | undefined)
@@ -3876,8 +3964,10 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     const platformDefaultUrl =
       newAccount.platform === 'openai'
         ? 'https://api.openai.com'
-        : newAccount.platform === 'gemini'
-          ? 'https://generativelanguage.googleapis.com'
+        : newAccount.platform === 'opencode'
+          ? 'https://opencode.ai/zen/go'
+          : newAccount.platform === 'gemini'
+            ? 'https://generativelanguage.googleapis.com'
           : newAccount.platform === 'grok'
             ? 'https://api.x.ai/v1'
             : 'https://api.anthropic.com'
@@ -3899,6 +3989,10 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     selectedErrorCodes.value = []
   }
   editApiKey.value = ''
+  if (newAccount.platform !== 'opencode') {
+    openCodeQuotaWorkspaceId.value = ''
+    openCodeModelProtocols.value = createDefaultOpenCodeModelProtocols()
+  }
 }
 
 async function loadTLSProfiles() {
@@ -4347,6 +4441,7 @@ const parseDateTimeLocal = parseDateTimeLocalInput
 // Methods
 const handleClose = () => {
   resetAdobeCredentialEditState(adobeCredentialState)
+  resetOpenCodeCredentialEditState(openCodeCredentialState)
   resetCursorCredentialEditState(cursorCredentialState)
   resetCursorDashboardAuthState()
   antigravityMixedChannelConfirmed.value = false
@@ -4495,18 +4590,45 @@ const handleSubmit = async () => {
         base_url: newBaseUrl
       }
 
+      if (props.account.platform === 'opencode') {
+        for (const key of OPEN_CODE_SENSITIVE_CREDENTIAL_KEYS) delete newCredentials[key]
+        for (const key of OPEN_CODE_SENSITIVE_CREDENTIAL_KEYS) {
+          const field = openCodeCredentialState[key]
+          if (field.action === 'replace' && !field.value.trim()) {
+            appStore.showError(t('admin.accounts.opencode.replaceRequired', { field: openCodeCredentialLabel(key) }))
+            return
+          }
+        }
+        const sensitiveUpdate = buildOpenCodeCredentialUpdate(openCodeCredentialState)
+        Object.assign(newCredentials, sensitiveUpdate.credentials || {})
+        if (sensitiveUpdate.clear_credentials?.length) {
+          if (!confirm(t('admin.accounts.opencode.clearConfirm', {
+            fields: sensitiveUpdate.clear_credentials.map((key) => openCodeCredentialLabel(key as OpenCodeSensitiveCredentialKey)).join(', ')
+          }))) return
+          updatePayload.clear_credentials = sensitiveUpdate.clear_credentials
+        }
+        const workspaceID = openCodeQuotaWorkspaceId.value.trim()
+        if (workspaceID) newCredentials.quota_workspace_id = workspaceID
+        else delete newCredentials.quota_workspace_id
+        const protocols = buildOpenCodeModelProtocols()
+        if (Object.keys(protocols).length > 0) newCredentials.model_protocols = protocols
+        else delete newCredentials.model_protocols
+      }
+
       // Handle API key
       // 后端响应已脱敏：currentCredentials 不会再包含 api_key 原文。
       // 用户填入新值则覆盖；留空时优先看 credentials_status.has_api_key；
       // 若后端尚未升级（无 credentials_status），回退读旧结构 currentCredentials.api_key。
       // 两者都无才报错。
-      const hasExistingApiKey =
-        props.account.credentials_status?.has_api_key ?? Boolean(currentCredentials.api_key)
-      if (editApiKey.value.trim()) {
-        newCredentials.api_key = editApiKey.value.trim()
-      } else if (!hasExistingApiKey) {
-        appStore.showError(t('admin.accounts.apiKeyIsRequired'))
-        return
+      if (props.account.platform !== 'opencode') {
+        const hasExistingApiKey =
+          props.account.credentials_status?.has_api_key ?? Boolean(currentCredentials.api_key)
+        if (editApiKey.value.trim()) {
+          newCredentials.api_key = editApiKey.value.trim()
+        } else if (!hasExistingApiKey) {
+          appStore.showError(t('admin.accounts.apiKeyIsRequired'))
+          return
+        }
       }
 
       // Add model mapping if configured（OpenAI 开启自动透传时保留现有映射，不再编辑）
@@ -4802,7 +4924,7 @@ const handleSubmit = async () => {
     }
 
     // For /v1/messages-compatible accounts, persist mixed_scheduling in extra.
-    if (props.account.platform === 'antigravity' || props.account.platform === 'kiro' || props.account.platform === 'cursor') {
+    if (props.account.platform === 'antigravity' || props.account.platform === 'kiro' || props.account.platform === 'cursor' || props.account.platform === 'opencode') {
       const currentExtra = (props.account.extra as Record<string, unknown>) || {}
       const newExtra: Record<string, unknown> = { ...currentExtra }
       if (mixedScheduling.value) {

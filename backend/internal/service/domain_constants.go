@@ -45,7 +45,11 @@ const (
 	PlatformGrok        = domain.PlatformGrok
 	PlatformAdobe       = domain.PlatformAdobe
 	PlatformCursor      = domain.PlatformCursor
+	PlatformOpenCode    = domain.PlatformOpenCode
 	PlatformKiro        = domain.PlatformKiro
+
+	PlatformOpenCodeDisplayName = domain.PlatformOpenCodeDisplayName
+	DefaultOpenCodeBaseURL      = domain.DefaultOpenCodeBaseURL
 )
 
 // AllowedQuotaPlatforms 是允许设置 user × platform quota 的平台列表（单一权威来源）。
@@ -59,6 +63,7 @@ var AllowedQuotaPlatforms = []string{
 	PlatformGrok,
 	PlatformAdobe,
 	PlatformCursor,
+	PlatformOpenCode,
 }
 
 // IsAllowedQuotaPlatform 报告 s 是否为合法的 quota platform 标识。

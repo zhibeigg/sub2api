@@ -29,6 +29,10 @@
   <svg v-else-if="platform === 'cursor'" :class="sizeClass" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
     <path d="M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm1 4v12h14V7H5Zm3 2.5 4 2.5-4 2.5V12l2 1.25L8 14.5v-5Zm5 5.5h4v2h-4v-2Z" />
   </svg>
+  <!-- OpenCode Go — terminal/code mark -->
+  <svg v-else-if="platform === 'opencode'" :class="sizeClass" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 4v10h16V8H4Zm2.5 2.2 3.2 2.8-3.2 2.8-1.3-1.5L6.7 13l-1.5-1.3 1.3-1.5ZM11 15h5v2h-5v-2Z" />
+  </svg>
   <!-- Kiro (AWS CodeWhisperer) — stylized cube mark -->
   <svg v-else-if="platform === 'kiro'" :class="sizeClass" viewBox="0 0 24 24" fill="currentColor">
     <path d="M12 2 3 6.5v11L12 22l9-4.5v-11L12 2zm0 2.3 6.2 3.1L12 10.5 5.8 7.4 12 4.3zM5 9.2l6 3v6.6l-6-3V9.2zm8 9.6v-6.6l6-3v6.6l-6 3z" />

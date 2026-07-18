@@ -40,7 +40,7 @@ func TestProvideTimingWheelService_Success(t *testing.T) {
 func TestProvideAccountUsageServiceInjectsKiroUsageService(t *testing.T) {
 	kiroUsageService := &KiroUsageService{}
 	svc := ProvideAccountUsageService(
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, kiroUsageService,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, kiroUsageService,
 	)
 	if svc.kiroUsageService != kiroUsageService {
 		t.Fatal("KiroUsageService was not injected into AccountUsageService")
@@ -50,7 +50,7 @@ func TestProvideAccountUsageServiceInjectsKiroUsageService(t *testing.T) {
 func TestProvideAccountTestServiceInjectsKiroUsageService(t *testing.T) {
 	kiroUsageService := &KiroUsageService{}
 	svc := ProvideAccountTestService(
-		nil, nil, nil, nil, nil, nil, &config.Config{}, nil, nil, nil, kiroUsageService,
+		nil, nil, nil, nil, nil, nil, &config.Config{}, nil, nil, nil, nil, kiroUsageService,
 	)
 	if svc.kiroUsageService != kiroUsageService {
 		t.Fatal("KiroUsageService was not injected into AccountTestService")

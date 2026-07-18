@@ -1260,6 +1260,26 @@ adobe:
   credits_cache_ttl_seconds: 300
 
 # =============================================================================
+# OpenCode Go Configuration / OpenCode Go 平台配置
+# =============================================================================
+opencode:
+  # Default inference base URL; account credentials.base_url may override it.
+  # 默认推理 Base URL；账号 credentials.base_url 可覆盖。
+  base_url: "https://opencode.ai/zen/go"
+  # Maximum duration for one inference request (seconds).
+  # 单次推理请求超时（秒）。
+  inference_timeout_seconds: 600
+  # Fresh quota cache TTL (seconds).
+  # 额度新鲜缓存 TTL（秒）。
+  quota_cache_ttl_seconds: 300
+  # Maximum stale quota cache TTL used when refresh fails (seconds).
+  # 额度刷新失败时可使用旧值的最长 TTL（秒）。
+  quota_stale_ttl_seconds: 1800
+  # Timeout for one quota lookup request (seconds).
+  # 单次额度查询请求超时（秒）。
+  quota_request_timeout_seconds: 15
+
+# =============================================================================
 # Cursor Cloud Agents API Configuration (Cursor Cloud Agents 官方 API 配置)
 # =============================================================================
 # Official Beta endpoint. Create a user API Key or an agent-scoped service-account

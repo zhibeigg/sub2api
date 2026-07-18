@@ -188,6 +188,19 @@
           </button>
           <button
             type="button"
+            @click.stop.prevent="selectPlatform('opencode')"
+            :class="[
+              'flex min-h-11 flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500',
+              form.platform === 'opencode'
+                ? 'bg-white text-teal-700 shadow-sm dark:bg-dark-600 dark:text-teal-300'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
+            ]"
+          >
+            <PlatformIcon platform="opencode" size="sm" />
+            OpenCode Go
+          </button>
+          <button
+            type="button"
             @click.stop.prevent="selectPlatform('kiro')"
             :class="[
               'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
@@ -408,6 +421,22 @@
               <span class="mt-0.5 block text-xs leading-5 text-gray-500 dark:text-gray-400">
                 {{ t('admin.accounts.cursor.cloudAgentsApiKeyHint') }}
               </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Account Type Selection (OpenCode Go) -->
+      <div v-if="form.platform === 'opencode'" data-testid="opencode-account-type">
+        <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
+        <div class="mt-2 grid grid-cols-1 gap-3" data-tour="account-form-type">
+          <div class="flex min-h-16 items-center gap-3 rounded-lg border-2 border-teal-500 bg-teal-50 p-3 text-left dark:bg-teal-900/20">
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-white dark:bg-teal-500">
+              <Icon name="key" size="sm" />
+            </div>
+            <div>
+              <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.accounts.opencode.accountType') }}</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.opencode.accountTypeHint') }}</span>
             </div>
           </div>
         </div>
@@ -1199,11 +1228,13 @@
             :placeholder="
               form.platform === 'openai'
                 ? 'https://api.openai.com'
-                : form.platform === 'gemini'
-                  ? 'https://generativelanguage.googleapis.com'
-                  : form.platform === 'grok'
-                    ? 'https://api.x.ai/v1'
-                    : 'https://api.anthropic.com'
+                : form.platform === 'opencode'
+                  ? 'https://opencode.ai/zen/go'
+                  : form.platform === 'gemini'
+                    ? 'https://generativelanguage.googleapis.com'
+                    : form.platform === 'grok'
+                      ? 'https://api.x.ai/v1'
+                      : 'https://api.anthropic.com'
             "
           />
           <p v-if="baseUrlHint" class="input-hint">{{ baseUrlHint }}</p>
@@ -1223,7 +1254,9 @@
             :placeholder="
               form.platform === 'openai'
                 ? 'sk-proj-...'
-                : form.platform === 'gemini'
+                : form.platform === 'opencode'
+                  ? 'ocg-...'
+                  : form.platform === 'gemini'
                   ? 'AIza...'
                   : form.platform === 'grok'
                     ? 'xai-...'
@@ -1231,6 +1264,19 @@
             "
           />
           <p v-if="apiKeyHint" class="input-hint">{{ apiKeyHint }}</p>
+        </div>
+
+        <div v-if="form.platform === 'opencode'" class="space-y-4 rounded-lg border border-teal-200 bg-teal-50/50 p-4 dark:border-teal-900/40 dark:bg-teal-950/20" data-testid="opencode-quota-credentials">
+          <div>
+            <label class="input-label">{{ t('admin.accounts.opencode.quotaCookie') }}</label>
+            <input v-model="openCodeQuotaCookie" type="password" autocomplete="new-password" class="input font-mono" :placeholder="t('admin.accounts.opencode.quotaCookiePlaceholder')" data-1p-ignore data-lpignore="true" data-bwignore="true" />
+            <p class="input-hint">{{ t('admin.accounts.opencode.quotaCookieHint') }}</p>
+          </div>
+          <div>
+            <label class="input-label">{{ t('admin.accounts.opencode.quotaWorkspaceId') }}</label>
+            <input v-model="openCodeQuotaWorkspaceId" type="text" class="input font-mono" :placeholder="t('admin.accounts.opencode.quotaWorkspaceIdPlaceholder')" />
+            <p class="input-hint">{{ t('admin.accounts.opencode.quotaWorkspaceIdHint') }}</p>
+          </div>
         </div>
 
         <!-- Gemini API Key tier selection -->
@@ -1427,6 +1473,26 @@
               </div>
             </div>
           </template>
+        </div>
+
+        <div v-if="form.platform === 'opencode'" class="border-t border-gray-200 pt-4 dark:border-dark-600" data-testid="opencode-model-protocols">
+          <label class="input-label">{{ t('admin.accounts.opencode.modelProtocols') }}</label>
+          <p class="input-hint mb-3">{{ t('admin.accounts.opencode.modelProtocolsHint') }}</p>
+          <div class="space-y-2">
+            <div v-for="(item, index) in openCodeModelProtocols" :key="`${item.model}-${index}`" class="grid grid-cols-[minmax(0,1fr)_minmax(10rem,0.45fr)_auto] items-center gap-2">
+              <input v-model="item.model" type="text" class="input font-mono" :placeholder="t('admin.accounts.opencode.modelName')" />
+              <select v-model="item.protocol" class="input">
+                <option value="chat_completions">chat_completions</option>
+                <option value="messages">messages</option>
+              </select>
+              <button type="button" class="rounded p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20" @click="removeOpenCodeModelProtocol(index)">
+                <Icon name="trash" size="sm" />
+              </button>
+            </div>
+          </div>
+          <button type="button" class="mt-3 w-full rounded-lg border-2 border-dashed border-gray-300 px-4 py-2 text-sm text-gray-600 hover:border-teal-400 hover:text-teal-700 dark:border-dark-500 dark:text-gray-400" @click="addOpenCodeModelProtocol">
+            {{ t('admin.accounts.opencode.addModelProtocol') }}
+          </button>
         </div>
 
         <!-- Pool Mode Section -->
@@ -3151,7 +3217,7 @@
 
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <!-- Mixed Scheduling (/v1/messages compatible accounts) -->
-        <div v-if="form.platform === 'antigravity' || form.platform === 'kiro' || form.platform === 'cursor'" class="flex items-center gap-2">
+        <div v-if="form.platform === 'antigravity' || form.platform === 'kiro' || form.platform === 'cursor' || form.platform === 'opencode'" class="flex items-center gap-2">
           <label class="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
@@ -3824,6 +3890,8 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import {
   claudeModels,
+  openCodeChatModels,
+  openCodeMessagesModels,
   getPresetMappingsByPlatform,
   getModelsByPlatform,
   commonErrorCodes,
@@ -3872,6 +3940,8 @@ import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
 import {
   applyAntigravityProjectID,
+  buildOpenCodeCreateCredentials,
+  normalizeOpenCodeModelProtocols,
   buildCursorCreateCredentials,
   validateCursorCreateCredentials,
   buildAdobeCreateCredentials,
@@ -3880,7 +3950,8 @@ import {
   applyInterceptWarmup,
   isHeaderOverrideCapable,
   validateHeaderOverrideRows,
-  type HeaderOverrideRow
+  type HeaderOverrideRow,
+  type OpenCodeModelProtocol
 } from '@/components/account/credentialsBuilder'
 import { formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
@@ -3936,6 +4007,7 @@ const firstStepTitle = computed(() =>
 const baseUrlHint = computed(() => {
   if (form.platform === 'openai') return t('admin.accounts.openai.baseUrlHint')
   if (form.platform === 'gemini') return t('admin.accounts.gemini.baseUrlHint')
+  if (form.platform === 'opencode') return t('admin.accounts.opencode.baseUrlHint')
   if (form.platform === 'grok') return ''
   return t('admin.accounts.baseUrlHint')
 })
@@ -3943,6 +4015,7 @@ const baseUrlHint = computed(() => {
 const apiKeyHint = computed(() => {
   if (form.platform === 'openai') return t('admin.accounts.openai.apiKeyHint')
   if (form.platform === 'gemini') return t('admin.accounts.gemini.apiKeyHint')
+  if (form.platform === 'opencode') return t('admin.accounts.opencode.apiKeyHint')
   if (form.platform === 'grok') return ''
   return t('admin.accounts.apiKeyHint')
 })
@@ -4011,6 +4084,16 @@ interface ModelMapping {
   to: string
 }
 
+interface OpenCodeModelProtocolEntry {
+  model: string
+  protocol: OpenCodeModelProtocol
+}
+
+const createDefaultOpenCodeModelProtocols = (): OpenCodeModelProtocolEntry[] => [
+  ...openCodeChatModels.map((model) => ({ model, protocol: 'chat_completions' as const })),
+  ...openCodeMessagesModels.map((model) => ({ model, protocol: 'messages' as const }))
+]
+
 interface TempUnschedRuleForm {
   error_code: number | null
   keywords: string
@@ -4027,6 +4110,14 @@ const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_acco
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
 const apiKeyBaseUrl = ref('https://api.anthropic.com')
 const apiKeyValue = ref('')
+const openCodeQuotaCookie = ref('')
+const openCodeQuotaWorkspaceId = ref('')
+const openCodeModelProtocols = ref<OpenCodeModelProtocolEntry[]>(createDefaultOpenCodeModelProtocols())
+const addOpenCodeModelProtocol = () => openCodeModelProtocols.value.push({ model: '', protocol: 'chat_completions' })
+const removeOpenCodeModelProtocol = (index: number) => openCodeModelProtocols.value.splice(index, 1)
+const buildOpenCodeModelProtocols = () => normalizeOpenCodeModelProtocols(
+  Object.fromEntries(openCodeModelProtocols.value.map((item) => [item.model.trim(), item.protocol]))
+)
 const cursorTransportModes: CursorTransportMode[] = ['auto', 'ide_chat', 'cloud_agent']
 const cursorCredentials = reactive({
   cursor_transport_mode: 'auto' as CursorTransportMode,
@@ -4512,6 +4603,18 @@ const selectPlatform = (platform: AccountPlatform) => {
     form.load_factor = null
   }
 
+  if (platform === 'opencode') {
+    accountCategory.value = 'apikey'
+    addMethod.value = 'oauth'
+    modelRestrictionMode.value = 'whitelist'
+    allowedModels.value = [...getModelsByPlatform('opencode')]
+    modelMappings.value = []
+    openCodeModelProtocols.value = createDefaultOpenCodeModelProtocols()
+    form.type = 'apikey'
+    form.concurrency = 1
+    form.load_factor = null
+  }
+
   if (platform === 'adobe') {
     accountCategory.value = 'oauth-based'
     addMethod.value = 'oauth'
@@ -4593,7 +4696,7 @@ watch(
 watch(
   [accountCategory, addMethod, antigravityAccountType, () => form.platform],
   ([category, method, agType]) => {
-    if (form.platform === 'cursor') {
+    if (form.platform === 'cursor' || form.platform === 'opencode') {
       form.type = 'apikey'
       return
     }
@@ -4626,9 +4729,11 @@ watch(
     apiKeyBaseUrl.value =
       (newPlatform === 'openai')
         ? 'https://api.openai.com'
-        : newPlatform === 'gemini'
-          ? 'https://generativelanguage.googleapis.com'
-          : newPlatform === 'grok'
+        : newPlatform === 'opencode'
+          ? 'https://opencode.ai/zen/go'
+          : newPlatform === 'gemini'
+            ? 'https://generativelanguage.googleapis.com'
+            : newPlatform === 'grok'
             ? 'https://api.x.ai/v1'
             : 'https://api.anthropic.com'
     // Clear model-related settings
@@ -4649,6 +4754,19 @@ watch(
       antigravityWhitelistModels.value = []
       antigravityModelMappings.value = []
       antigravityModelRestrictionMode.value = 'mapping'
+    }
+    if (newPlatform === 'opencode') {
+      accountCategory.value = 'apikey'
+      addMethod.value = 'oauth'
+      modelRestrictionMode.value = 'whitelist'
+      allowedModels.value = [...getModelsByPlatform('opencode')]
+      modelMappings.value = []
+      openCodeQuotaCookie.value = ''
+      openCodeQuotaWorkspaceId.value = ''
+      openCodeModelProtocols.value = createDefaultOpenCodeModelProtocols()
+      form.type = 'apikey'
+      form.concurrency = 1
+      form.load_factor = null
     }
     if (newPlatform === 'cursor') {
       accountCategory.value = 'oauth-based'
@@ -5082,6 +5200,9 @@ const resetForm = () => {
   addMethod.value = 'oauth'
   apiKeyBaseUrl.value = 'https://api.anthropic.com'
   apiKeyValue.value = ''
+  openCodeQuotaCookie.value = ''
+  openCodeQuotaWorkspaceId.value = ''
+  openCodeModelProtocols.value = createDefaultOpenCodeModelProtocols()
   cursorCredentials.cursor_transport_mode = 'auto'
   cursorCredentials.api_key = ''
   cursorCredentials.dashboard_access_token = ''
@@ -5753,10 +5874,18 @@ const handleSubmit = async () => {
           : 'https://api.anthropic.com'
 
   // Build credentials with optional model mapping
-  const credentials: Record<string, unknown> = {
-    base_url: apiKeyBaseUrl.value.trim() || defaultBaseUrl,
-    api_key: apiKeyValue.value.trim()
-  }
+  const credentials: Record<string, unknown> = form.platform === 'opencode'
+    ? buildOpenCodeCreateCredentials({
+        base_url: apiKeyBaseUrl.value,
+        api_key: apiKeyValue.value,
+        quota_cookie: openCodeQuotaCookie.value,
+        quota_workspace_id: openCodeQuotaWorkspaceId.value,
+        model_protocols: buildOpenCodeModelProtocols()
+      })
+    : {
+        base_url: apiKeyBaseUrl.value.trim() || defaultBaseUrl,
+        api_key: apiKeyValue.value.trim()
+      }
   if (form.platform === 'gemini') {
     credentials.tier_id = geminiTierAIStudio.value
   }
@@ -5810,7 +5939,7 @@ const handleSubmit = async () => {
   }
 
   form.credentials = credentials
-  const extra = buildAnthropicExtra(buildOpenAIExtra())
+  const extra = buildAnthropicExtra(buildOpenAIExtra(buildMixedSchedulingExtra()))
 
   await doCreateAccount({
     ...form,

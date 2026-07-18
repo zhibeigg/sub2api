@@ -113,6 +113,7 @@ func ProvideGatewayHandler(
 	antigravityGatewayService *service.AntigravityGatewayService,
 	cursorGatewayService *service.CursorGatewayService,
 	kiroGatewayService *service.KiroGatewayService,
+	openCodeGatewayService *service.OpenCodeGatewayService,
 	userService *service.UserService,
 	concurrencyService *service.ConcurrencyService,
 	billingCacheService *service.BillingCacheService,
@@ -127,7 +128,7 @@ func ProvideGatewayHandler(
 	coordinator *securityaudit.Coordinator,
 ) *GatewayHandler {
 	h := NewGatewayHandler(gatewayService, openAIGatewayService, geminiCompatService, antigravityGatewayService,
-		cursorGatewayService, kiroGatewayService, userService, concurrencyService, billingCacheService, usageService, apiKeyService, usageRecordWorkerPool,
+		cursorGatewayService, kiroGatewayService, openCodeGatewayService, userService, concurrencyService, billingCacheService, usageService, apiKeyService, usageRecordWorkerPool,
 		errorPassthroughService, contentModerationService, userMsgQueueService, cfg, settingService)
 	h.securityAuditCoordinator = coordinator
 	return h

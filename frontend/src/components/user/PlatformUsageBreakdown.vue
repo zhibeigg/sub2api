@@ -96,7 +96,9 @@ const PLATFORM_LABELS: Record<string, string> = {
   gemini: 'Gemini',
   antigravity: 'Antigravity',
   grok: 'Grok',
-  adobe: 'Adobe'
+  adobe: 'Adobe',
+  cursor: 'Cursor',
+  opencode: 'OpenCode Go'
 }
 
 function platformLabel(platform: string): string {
