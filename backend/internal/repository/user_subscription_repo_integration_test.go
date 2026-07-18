@@ -79,6 +79,13 @@ func (s *UserSubscriptionRepoSuite) mustCreateSubscription(userID, groupID int64
 
 	sub, err := create.Save(s.ctx)
 	s.Require().NoError(err, "create user subscription")
+	_, err = s.client.UserSubscriptionGroup.Create().
+		SetSubscriptionID(sub.ID).
+		SetUserID(userID).
+		SetGroupID(groupID).
+		SetEnabled(true).
+		Save(s.ctx)
+	s.Require().NoError(err, "create user subscription group binding")
 	return sub
 }
 
