@@ -21,7 +21,7 @@ const (
 	cursorDashboardLastErrorCodeKey   = "cursor_dashboard_last_error_code"
 )
 
-var errCursorDashboardReauthRequired = errors.New("Cursor Dashboard session requires reauthorization")
+var errCursorDashboardReauthRequired = errors.New("cursor dashboard session requires reauthorization")
 
 type cursorDashboardLoginSession struct {
 	AccountID int64
@@ -120,7 +120,7 @@ func (s *CursorDashboardAuthService) PollLogin(ctx context.Context, sessionID st
 	}
 	if account == nil || !account.IsCursorAPIKey() {
 		s.sessions.Delete(sessionID)
-		return nil, fmt.Errorf("Cursor account is unavailable")
+		return nil, fmt.Errorf("cursor account is unavailable")
 	}
 	client, err := s.gateway.newDashboardAuthClient(ctx, account)
 	if err != nil {
@@ -136,7 +136,7 @@ func (s *CursorDashboardAuthService) PollLogin(ctx context.Context, sessionID st
 	metadata, err := cursorpkg.ParseDashboardTokenMetadata(polled.AccessToken)
 	if err != nil || !metadata.ExpiresAt.After(time.Now().UTC()) {
 		s.sessions.Delete(sessionID)
-		return nil, fmt.Errorf("Cursor returned an invalid or expired Dashboard token")
+		return nil, fmt.Errorf("cursor returned an invalid or expired Dashboard token")
 	}
 	dashboardClient, err := s.gateway.newDashboardClient(ctx, account, polled.AccessToken)
 	if err != nil {
@@ -184,7 +184,7 @@ func (s *CursorDashboardAuthService) FetchDashboardUsage(ctx context.Context, ac
 	}
 	accessToken := strings.TrimSpace(account.GetCredential("dashboard_access_token"))
 	if accessToken == "" {
-		return nil, fmt.Errorf("Cursor Dashboard access token is missing")
+		return nil, fmt.Errorf("cursor Dashboard access token is missing")
 	}
 	client, err := s.gateway.newDashboardClient(ctx, account, accessToken)
 	if err != nil {
@@ -379,7 +379,7 @@ func (r *CursorDashboardTokenRefresher) NeedsRefresh(account *Account, _ time.Du
 
 func (r *CursorDashboardTokenRefresher) Refresh(ctx context.Context, account *Account) (map[string]any, error) {
 	if !r.CanRefresh(account) {
-		return nil, fmt.Errorf("Cursor Dashboard refresh token is missing")
+		return nil, fmt.Errorf("cursor Dashboard refresh token is missing")
 	}
 	client, err := r.gateway.newDashboardAuthClient(ctx, account)
 	if err != nil {

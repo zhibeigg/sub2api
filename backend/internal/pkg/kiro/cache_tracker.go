@@ -265,7 +265,7 @@ func minCacheableTokensForModel(model string) int {
 }
 
 type cacheablePromptBlock struct {
-	value        interface{}
+	value        any
 	tokens       int
 	ttl          time.Duration
 	isMessageEnd bool
@@ -276,7 +276,7 @@ func flattenClaudeCacheBlocks(req *ClaudeRequest) []cacheablePromptBlock {
 	blocks = append(blocks, buildCachePreludeBlock(req))
 
 	for toolIndex, tool := range req.Tools {
-		toolValue := map[string]interface{}{
+		toolValue := map[string]any{
 			"kind":          "tool",
 			"tool_index":    toolIndex,
 			"name":          tool.Name,
@@ -300,7 +300,7 @@ func flattenClaudeCacheBlocks(req *ClaudeRequest) []cacheablePromptBlock {
 }
 
 func buildCachePreludeBlock(req *ClaudeRequest) cacheablePromptBlock {
-	prelude := map[string]interface{}{
+	prelude := map[string]any{
 		"kind":        "request_prelude",
 		"model":       req.Model,
 		"tool_choice": req.ToolChoice,
@@ -311,20 +311,20 @@ func buildCachePreludeBlock(req *ClaudeRequest) cacheablePromptBlock {
 	}
 }
 
-func appendSystemCacheBlocks(blocks *[]cacheablePromptBlock, system interface{}) {
+func appendSystemCacheBlocks(blocks *[]cacheablePromptBlock, system any) {
 	switch value := system.(type) {
 	case string:
-		appendPromptCacheBlock(blocks, map[string]interface{}{
+		appendPromptCacheBlock(blocks, map[string]any{
 			"kind":         "system",
 			"system_index": 0,
-			"block": map[string]interface{}{
+			"block": map[string]any{
 				"type": "text",
 				"text": value,
 			},
 		}, false)
-	case []interface{}:
+	case []any:
 		for index, block := range value {
-			appendPromptCacheBlock(blocks, map[string]interface{}{
+			appendPromptCacheBlock(blocks, map[string]any{
 				"kind":         "system",
 				"system_index": index,
 				"block":        block,
@@ -332,10 +332,10 @@ func appendSystemCacheBlocks(blocks *[]cacheablePromptBlock, system interface{})
 		}
 	case []string:
 		for index, block := range value {
-			appendPromptCacheBlock(blocks, map[string]interface{}{
+			appendPromptCacheBlock(blocks, map[string]any{
 				"kind":         "system",
 				"system_index": index,
-				"block": map[string]interface{}{
+				"block": map[string]any{
 					"type": "text",
 					"text": block,
 				},
@@ -347,20 +347,20 @@ func appendSystemCacheBlocks(blocks *[]cacheablePromptBlock, system interface{})
 func appendMessageCacheBlocks(blocks *[]cacheablePromptBlock, messageIndex int, message ClaudeMessage) {
 	switch content := message.Content.(type) {
 	case string:
-		appendPromptCacheBlock(blocks, map[string]interface{}{
+		appendPromptCacheBlock(blocks, map[string]any{
 			"kind":          "message",
 			"message_index": messageIndex,
 			"role":          message.Role,
 			"block_index":   0,
-			"block": map[string]interface{}{
+			"block": map[string]any{
 				"type": "text",
 				"text": content,
 			},
 		}, true)
-	case []interface{}:
+	case []any:
 		lastIndex := len(content) - 1
 		for blockIndex, block := range content {
-			appendPromptCacheBlock(blocks, map[string]interface{}{
+			appendPromptCacheBlock(blocks, map[string]any{
 				"kind":          "message",
 				"message_index": messageIndex,
 				"role":          message.Role,
@@ -370,7 +370,7 @@ func appendMessageCacheBlocks(blocks *[]cacheablePromptBlock, messageIndex int, 
 		}
 	default:
 		if content != nil {
-			appendPromptCacheBlock(blocks, map[string]interface{}{
+			appendPromptCacheBlock(blocks, map[string]any{
 				"kind":          "message",
 				"message_index": messageIndex,
 				"role":          message.Role,
@@ -381,7 +381,7 @@ func appendMessageCacheBlocks(blocks *[]cacheablePromptBlock, messageIndex int, 
 	}
 }
 
-func appendPromptCacheBlock(blocks *[]cacheablePromptBlock, wrapper map[string]interface{}, isMessageEnd bool) {
+func appendPromptCacheBlock(blocks *[]cacheablePromptBlock, wrapper map[string]any, isMessageEnd bool) {
 	blockValue := wrapper["block"]
 	if isAnthropicBillingHeaderBlock(blockValue) {
 		return
@@ -397,8 +397,8 @@ func appendPromptCacheBlock(blocks *[]cacheablePromptBlock, wrapper map[string]i
 	})
 }
 
-func stripCachePositionKeys(value map[string]interface{}) map[string]interface{} {
-	cloned := make(map[string]interface{}, len(value))
+func stripCachePositionKeys(value map[string]any) map[string]any {
+	cloned := make(map[string]any, len(value))
 	for key, item := range value {
 		if isCachePositionKey(key) {
 			continue
@@ -417,7 +417,7 @@ func isCachePositionKey(key string) bool {
 	}
 }
 
-func isAnthropicBillingHeaderBlock(value interface{}) bool {
+func isAnthropicBillingHeaderBlock(value any) bool {
 	block, ok := cacheValueMap(value)
 	if !ok {
 		return false
@@ -433,7 +433,7 @@ func isAnthropicBillingHeaderBlock(value interface{}) bool {
 	return strings.HasPrefix(strings.ToLower(trimmed), "x-anthropic-billing-header:")
 }
 
-func extractPromptCacheTTL(value interface{}) time.Duration {
+func extractPromptCacheTTL(value any) time.Duration {
 	block, ok := cacheValueMap(value)
 	if !ok {
 		return 0
@@ -456,25 +456,25 @@ func extractPromptCacheTTL(value interface{}) time.Duration {
 	return defaultPromptCacheTTL
 }
 
-func cacheValueMap(value interface{}) (map[string]interface{}, bool) {
+func cacheValueMap(value any) (map[string]any, bool) {
 	if value == nil {
 		return nil, false
 	}
-	if block, ok := value.(map[string]interface{}); ok {
+	if block, ok := value.(map[string]any); ok {
 		return block, true
 	}
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return nil, false
 	}
-	var decoded map[string]interface{}
+	var decoded map[string]any
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		return nil, false
 	}
 	return decoded, true
 }
 
-func parsePromptCacheTTLValue(value interface{}) (time.Duration, bool) {
+func parsePromptCacheTTLValue(value any) (time.Duration, bool) {
 	switch typed := value.(type) {
 	case string:
 		trimmed := strings.TrimSpace(strings.ToLower(typed))
@@ -551,56 +551,56 @@ func computePromptCacheTTLBreakdown(profile *PromptCacheProfile, startTokens, en
 	return cache5m, cache1h
 }
 
-func canonicalizeCacheValue(value interface{}) string {
+func canonicalizeCacheValue(value any) string {
 	var buffer bytes.Buffer
 	writeCanonicalCacheJSON(&buffer, normalizeCacheJSONValue(value))
 	return buffer.String()
 }
 
-func normalizeCacheJSONValue(value interface{}) interface{} {
+func normalizeCacheJSONValue(value any) any {
 	switch value.(type) {
 	case nil, string, bool, float64, float32, int, int8, int16, int32, int64,
-		uint, uint8, uint16, uint32, uint64, json.Number, []interface{}, map[string]interface{}:
+		uint, uint8, uint16, uint32, uint64, json.Number, []any, map[string]any:
 		return value
 	}
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return value
 	}
-	var decoded interface{}
+	var decoded any
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		return value
 	}
 	return decoded
 }
 
-func writeCanonicalCacheJSON(buffer *bytes.Buffer, value interface{}) {
+func writeCanonicalCacheJSON(buffer *bytes.Buffer, value any) {
 	switch typed := value.(type) {
 	case nil:
-		buffer.WriteString("null")
+		_, _ = buffer.WriteString("null")
 	case string:
 		encoded, _ := json.Marshal(typed)
-		buffer.Write(encoded)
+		_, _ = buffer.Write(encoded)
 	case bool:
 		if typed {
-			buffer.WriteString("true")
+			_, _ = buffer.WriteString("true")
 		} else {
-			buffer.WriteString("false")
+			_, _ = buffer.WriteString("false")
 		}
 	case float64, float32, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, json.Number:
 		encoded, _ := json.Marshal(typed)
-		buffer.Write(encoded)
-	case []interface{}:
-		buffer.WriteByte('[')
+		_, _ = buffer.Write(encoded)
+	case []any:
+		_ = buffer.WriteByte('[')
 		for index, item := range typed {
 			if index > 0 {
-				buffer.WriteByte(',')
+				_ = buffer.WriteByte(',')
 			}
 			writeCanonicalCacheJSON(buffer, normalizeCacheJSONValue(item))
 		}
-		buffer.WriteByte(']')
-	case map[string]interface{}:
-		buffer.WriteByte('{')
+		_ = buffer.WriteByte(']')
+	case map[string]any:
+		_ = buffer.WriteByte('{')
 		keys := make([]string, 0, len(typed))
 		for key := range typed {
 			if key == "cache_control" {
@@ -611,31 +611,31 @@ func writeCanonicalCacheJSON(buffer *bytes.Buffer, value interface{}) {
 		sort.Strings(keys)
 		for index, key := range keys {
 			if index > 0 {
-				buffer.WriteByte(',')
+				_ = buffer.WriteByte(',')
 			}
 			encoded, _ := json.Marshal(key)
-			buffer.Write(encoded)
-			buffer.WriteByte(':')
+			_, _ = buffer.Write(encoded)
+			_ = buffer.WriteByte(':')
 			writeCanonicalCacheJSON(buffer, normalizeCacheJSONValue(typed[key]))
 		}
-		buffer.WriteByte('}')
+		_ = buffer.WriteByte('}')
 	default:
 		normalized := normalizeCacheJSONValue(typed)
 		switch normalized.(type) {
-		case []interface{}, map[string]interface{}:
+		case []any, map[string]any:
 			writeCanonicalCacheJSON(buffer, normalized)
 		default:
 			encoded, _ := json.Marshal(normalized)
-			buffer.Write(encoded)
+			_, _ = buffer.Write(encoded)
 		}
 	}
 }
 
 func writeCacheHashChunk(hasher hash.Hash, chunk string) {
-	hasher.Write([]byte(strconv.Itoa(len(chunk))))
-	hasher.Write([]byte{0})
-	hasher.Write([]byte(chunk))
-	hasher.Write([]byte{0})
+	_, _ = hasher.Write([]byte(strconv.Itoa(len(chunk))))
+	_, _ = hasher.Write([]byte{0})
+	_, _ = hasher.Write([]byte(chunk))
+	_, _ = hasher.Write([]byte{0})
 }
 
 func minCacheInt(left, right int) int {

@@ -189,10 +189,6 @@ func (s *SubscriptionService) StartSubCacheInvalidationSubscriber(ctx context.Co
 	}
 }
 
-func (s *SubscriptionService) invalidateSubscriptionCaches(userID, groupID int64) error {
-	return s.invalidateSubscriptionGroupCaches(userID, []int64{groupID})
-}
-
 func (s *SubscriptionService) invalidateSubscriptionGroupCaches(userID int64, groupIDs []int64) error {
 	groupIDs = uniqueSubscriptionGroupIDs(groupIDs)
 	for _, groupID := range groupIDs {

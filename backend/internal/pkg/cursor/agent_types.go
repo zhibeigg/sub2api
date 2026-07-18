@@ -2,7 +2,6 @@ package cursor
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"sync"
 	"time"
@@ -181,5 +180,3 @@ type AgentStream struct {
 	maxToolBytes int
 	toolBytes    int
 }
-
-type agentJSONValue = json.RawMessage

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"testing"
 )
 
@@ -96,24 +97,24 @@ func TestCloneClaudeRequestForThinkingMatchesUpstreamPrompt(t *testing.T) {
 
 func TestCloneClaudeRequestForThinkingPreservesCacheControl(t *testing.T) {
 	req := &ClaudeRequest{
-		System: []interface{}{
-			map[string]interface{}{
+		System: []any{
+			map[string]any{
 				"type":          "text",
 				"text":          "cached system",
-				"cache_control": map[string]interface{}{"type": "ephemeral", "ttl": "5m"},
+				"cache_control": map[string]any{"type": "ephemeral", "ttl": "5m"},
 			},
 		},
 	}
 	cloned := CloneClaudeRequestForThinking(req, true)
-	blocks, ok := cloned.System.([]interface{})
+	blocks, ok := cloned.System.([]any)
 	if !ok || len(blocks) != 2 {
 		t.Fatalf("expected thinking and original blocks, got %#v", cloned.System)
 	}
-	originalBlock, ok := blocks[1].(map[string]interface{})
+	originalBlock, ok := blocks[1].(map[string]any)
 	if !ok {
 		t.Fatalf("expected original structured block, got %T", blocks[1])
 	}
-	cacheControl, ok := originalBlock["cache_control"].(map[string]interface{})
+	cacheControl, ok := originalBlock["cache_control"].(map[string]any)
 	if !ok || cacheControl["type"] != "ephemeral" {
 		t.Fatalf("cache_control was not preserved: %#v", originalBlock["cache_control"])
 	}
@@ -157,7 +158,7 @@ func TestKiroToClaudeResponse(t *testing.T) {
 		t.Errorf("usage wrong: %+v", resp.Usage)
 	}
 
-	withTool := KiroToClaudeResponse("", "", false, []KiroToolUse{{ToolUseID: "t1", Name: "search", Input: map[string]interface{}{"q": "x"}}}, 1, 1, "m")
+	withTool := KiroToClaudeResponse("", "", false, []KiroToolUse{{ToolUseID: "t1", Name: "search", Input: map[string]any{"q": "x"}}}, 1, 1, "m")
 	if withTool.StopReason != "tool_use" {
 		t.Errorf("stop reason with tool = %q, want tool_use", withTool.StopReason)
 	}
@@ -181,27 +182,99 @@ func TestClaudeStreamStateEmitsCacheAwareUsage(t *testing.T) {
 	})
 	state.Finish()
 
-	var startUsage, deltaUsage map[string]interface{}
+	var startUsage, deltaUsage map[string]any
 	for index, event := range writer.events {
-		var payload map[string]interface{}
+		var payload map[string]any
 		if err := json.Unmarshal([]byte(writer.datas[index]), &payload); err != nil {
 			t.Fatalf("unmarshal %s payload: %v", event, err)
 		}
 		switch event {
 		case "message_start":
-			message, _ := payload["message"].(map[string]interface{})
-			startUsage, _ = message["usage"].(map[string]interface{})
+			message, ok := payload["message"].(map[string]any)
+			if !ok {
+				t.Fatalf("message_start message has type %T", payload["message"])
+			}
+			startUsage, ok = message["usage"].(map[string]any)
+			if !ok {
+				t.Fatalf("message_start usage has type %T", message["usage"])
+			}
 		case "message_delta":
-			deltaUsage, _ = payload["usage"].(map[string]interface{})
+			var ok bool
+			deltaUsage, ok = payload["usage"].(map[string]any)
+			if !ok {
+				t.Fatalf("message_delta usage has type %T", payload["usage"])
+			}
 		}
 	}
 
-	if startUsage == nil || int(startUsage["input_tokens"].(float64)) != 100 || int(startUsage["cache_creation_input_tokens"].(float64)) != 50 {
+	if startUsage == nil || requireFloatField(t, startUsage, "input_tokens") != 100 || requireFloatField(t, startUsage, "cache_creation_input_tokens") != 50 {
 		t.Fatalf("unexpected message_start usage: %#v", startUsage)
 	}
-	if deltaUsage == nil || int(deltaUsage["input_tokens"].(float64)) != 90 || int(deltaUsage["output_tokens"].(float64)) != 7 || int(deltaUsage["cache_read_input_tokens"].(float64)) != 80 {
+	if deltaUsage == nil || requireFloatField(t, deltaUsage, "input_tokens") != 90 || requireFloatField(t, deltaUsage, "output_tokens") != 7 || requireFloatField(t, deltaUsage, "cache_read_input_tokens") != 80 {
 		t.Fatalf("unexpected message_delta usage: %#v", deltaUsage)
 	}
+}
+
+func requireFloatField(t *testing.T, values map[string]any, key string) int {
+	t.Helper()
+	value, ok := values[key].(float64)
+	if !ok {
+		t.Fatalf("field %q has type %T", key, values[key])
+	}
+	return int(value)
+}
+
+func TestStreamStatesRetainFirstWriteError(t *testing.T) {
+	writeErr := errors.New("write failed")
+
+	t.Run("Claude", func(t *testing.T) {
+		writer := &failingSSEWriter{err: writeErr}
+		state := NewClaudeStreamState(writer, "claude-sonnet-4.5")
+		state.OnText("hello", false)
+		state.Finish()
+
+		if !errors.Is(state.Err(), writeErr) {
+			t.Fatalf("stream error = %v, want %v", state.Err(), writeErr)
+		}
+		if writer.writes != 1 {
+			t.Fatalf("writes after first failure = %d, want 1", writer.writes)
+		}
+		if writer.flushes != 0 {
+			t.Fatalf("flushes after failed write = %d, want 0", writer.flushes)
+		}
+	})
+
+	t.Run("OpenAI", func(t *testing.T) {
+		writer := &failingSSEWriter{err: writeErr}
+		state := NewOpenAIStreamState(writer, "claude-sonnet-4.5")
+		state.OnText("hello", false)
+		state.Finish()
+
+		if !errors.Is(state.Err(), writeErr) {
+			t.Fatalf("stream error = %v, want %v", state.Err(), writeErr)
+		}
+		if writer.writes != 1 {
+			t.Fatalf("writes after first failure = %d, want 1", writer.writes)
+		}
+		if writer.flushes != 0 {
+			t.Fatalf("flushes after failed write = %d, want 0", writer.flushes)
+		}
+	})
+}
+
+type failingSSEWriter struct {
+	err     error
+	writes  int
+	flushes int
+}
+
+func (w *failingSSEWriter) WriteSSE(string, []byte) error {
+	w.writes++
+	return w.err
+}
+
+func (w *failingSSEWriter) Flush() {
+	w.flushes++
 }
 
 func TestSanitizeToolName(t *testing.T) {
@@ -233,19 +306,19 @@ func TestNormalizeChunk(t *testing.T) {
 
 // buildEventStreamFrame builds one AWS event-stream frame with a :event-type
 // header and a JSON payload, matching the wire format parseEventStream expects.
-func buildEventStreamFrame(eventType string, payload map[string]interface{}) []byte {
+func buildEventStreamFrame(eventType string, payload map[string]any) []byte {
 	payloadBytes, _ := json.Marshal(payload)
 
 	// Header: nameLen(1) + name + valueType(1=7 String) + valueLen(2) + value
 	name := ":event-type"
 	var headers bytes.Buffer
-	headers.WriteByte(byte(len(name)))
-	headers.WriteString(name)
-	headers.WriteByte(7) // string
+	_ = headers.WriteByte(byte(len(name)))
+	_, _ = headers.WriteString(name)
+	_ = headers.WriteByte(7) // string
 	valLen := make([]byte, 2)
 	binary.BigEndian.PutUint16(valLen, uint16(len(eventType)))
-	headers.Write(valLen)
-	headers.WriteString(eventType)
+	_, _ = headers.Write(valLen)
+	_, _ = headers.WriteString(eventType)
 
 	headerBytes := headers.Bytes()
 	totalLength := 12 + len(headerBytes) + len(payloadBytes) + 4
@@ -255,18 +328,18 @@ func buildEventStreamFrame(eventType string, payload map[string]interface{}) []b
 	binary.BigEndian.PutUint32(prelude[0:4], uint32(totalLength))
 	binary.BigEndian.PutUint32(prelude[4:8], uint32(len(headerBytes)))
 	// preludeCRC (bytes 8-12) left zero; parser ignores it.
-	frame.Write(prelude)
-	frame.Write(headerBytes)
-	frame.Write(payloadBytes)
-	frame.Write([]byte{0, 0, 0, 0}) // messageCRC, ignored
+	_, _ = frame.Write(prelude)
+	_, _ = frame.Write(headerBytes)
+	_, _ = frame.Write(payloadBytes)
+	_, _ = frame.Write([]byte{0, 0, 0, 0}) // messageCRC, ignored
 	return frame.Bytes()
 }
 
 func TestParseEventStream(t *testing.T) {
 	var buf bytes.Buffer
-	buf.Write(buildEventStreamFrame("assistantResponseEvent", map[string]interface{}{"content": "Hello"}))
-	buf.Write(buildEventStreamFrame("assistantResponseEvent", map[string]interface{}{"content": "Hello, world"}))
-	buf.Write(buildEventStreamFrame("meteringEvent", map[string]interface{}{"usage": 1.5}))
+	_, _ = buf.Write(buildEventStreamFrame("assistantResponseEvent", map[string]any{"content": "Hello"}))
+	_, _ = buf.Write(buildEventStreamFrame("assistantResponseEvent", map[string]any{"content": "Hello, world"}))
+	_, _ = buf.Write(buildEventStreamFrame("meteringEvent", map[string]any{"usage": 1.5}))
 
 	var text string
 	var credits float64
@@ -292,7 +365,7 @@ func TestParseEventStream(t *testing.T) {
 
 func TestParseEventStreamToolUse(t *testing.T) {
 	var buf bytes.Buffer
-	buf.Write(buildEventStreamFrame("toolUseEvent", map[string]interface{}{
+	_, _ = buf.Write(buildEventStreamFrame("toolUseEvent", map[string]any{
 		"toolUseId": "tool_1", "name": "search", "input": `{"q":"golang"}`, "stop": true,
 	}))
 

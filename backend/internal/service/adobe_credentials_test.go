@@ -91,31 +91,6 @@ func TestAdobeCreditsInfoDistinguishesUnknownZeroAndPositive(t *testing.T) {
 	require.Equal(t, 12.5, *positive.Available)
 }
 
-type adobeTokenRepoStub struct {
-	account      *Account
-	getByIDCalls int
-}
-
-func (r *adobeTokenRepoStub) GetByID(context.Context, int64) (*Account, error) {
-	r.getByIDCalls++
-	return r.account, nil
-}
-
-func (r *adobeTokenRepoStub) Update(_ context.Context, account *Account) error {
-	r.account = account
-	return nil
-}
-
-func (r *adobeTokenRepoStub) UpdateExtra(_ context.Context, _ int64, updates map[string]any) error {
-	if r.account.Extra == nil {
-		r.account.Extra = make(map[string]any)
-	}
-	for key, value := range updates {
-		r.account.Extra[key] = value
-	}
-	return nil
-}
-
 func TestAdobeTokenProviderUsesFreshTokenAndFiveMinuteSkew(t *testing.T) {
 	t.Parallel()
 	expiresAt := time.Now().Add(10 * time.Minute).UTC().Format(time.RFC3339)
@@ -273,7 +248,7 @@ func TestAdobeTokenProviderVerifyCredentialsDoesNotPersist(t *testing.T) {
 
 		summary, err := provider.VerifyCredentials(context.Background(), account)
 		require.Nil(t, summary)
-		require.EqualError(t, err, "Adobe credential verification failed")
+		require.EqualError(t, err, "adobe credential verification failed")
 		require.NotContains(t, err.Error(), token)
 		require.Zero(t, repo.getCalls.Load())
 		require.Zero(t, repo.updateCalls.Load())

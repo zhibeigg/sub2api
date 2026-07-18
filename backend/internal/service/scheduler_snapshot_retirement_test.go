@@ -176,7 +176,7 @@ func TestSchedulerFullRebuildCapturesAllRegistryTokensBeforeDBLoad(t *testing.T)
 	}
 
 	captures, reopens := cache.captureAndReopenCounts()
-	require.Equal(t, 24, captures, "group0 and active-group canonical tokens must be captured before the first DB load")
+	require.Equal(t, 2*schedulerCanonicalBucketCountForTest(), captures, "group0 and active-group canonical tokens must be captured before the first DB load")
 	require.Zero(t, reopens)
 	require.NoError(t, cache.RetireBucket(context.Background(), queued))
 	_, err := cache.ReopenBucket(context.Background(), queued)
@@ -239,9 +239,7 @@ func TestSchedulerRebuildRetireAfterDBLoadFencesPublish(t *testing.T) {
 }
 
 func TestSchedulerFallbackReturnsDBAccountsWhenBucketRetired(t *testing.T) {
-	bucket := SchedulerBucket{GroupID: 63, Platform: PlatformOpenAI, Mode: SchedulerModeSingle}
 	cache := newRetirementRaceCache()
-	require.NoError(t, cache.RetireBucket(context.Background(), bucket))
 	repo := &mockAccountRepoForPlatform{
 		accounts: []Account{{ID: 6301, Platform: PlatformOpenAI, Status: StatusActive, Schedulable: true}},
 	}
@@ -251,11 +249,13 @@ func TestSchedulerFallbackReturnsDBAccountsWhenBucketRetired(t *testing.T) {
 			DbFallbackEnabled: true,
 		}},
 	})
+	bucket := SchedulerBucket{GroupID: 63, Platform: PlatformOpenAI, Mode: svc.resolveMode(PlatformOpenAI, false)}
+	require.NoError(t, cache.RetireBucket(context.Background(), bucket))
 	groupID := bucket.GroupID
 
 	accounts, useMixed, err := svc.ListSchedulableAccounts(context.Background(), &groupID, bucket.Platform, false)
 	require.NoError(t, err)
-	require.False(t, useMixed)
+	require.Equal(t, bucket.Mode == SchedulerModeMixed, useMixed)
 	require.Len(t, accounts, 1)
 	setAttempts, published := cache.counts(bucket)
 	require.Zero(t, setAttempts)

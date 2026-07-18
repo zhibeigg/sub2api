@@ -29,11 +29,11 @@ func TestPromptCacheTrackerTTLClassificationAndMaximum(t *testing.T) {
 	tracker := NewPromptCacheTracker()
 	req := &ClaudeRequest{
 		Model: "claude-sonnet-4.5",
-		System: []interface{}{
-			map[string]interface{}{
+		System: []any{
+			map[string]any{
 				"type": "text",
 				"text": cacheTestText(1200),
-				"cache_control": map[string]interface{}{
+				"cache_control": map[string]any{
 					"type": "ephemeral",
 					"ttl":  "90m",
 				},
@@ -41,8 +41,8 @@ func TestPromptCacheTrackerTTLClassificationAndMaximum(t *testing.T) {
 		},
 		Messages: []ClaudeMessage{{
 			Role: "user",
-			Content: []interface{}{
-				map[string]interface{}{
+			Content: []any{
+				map[string]any{
 					"type":          "text",
 					"text":          cacheTestText(1200),
 					"cache_control": defaultPromptCacheControl(),
@@ -112,9 +112,9 @@ func TestPromptCacheTrackerIgnoresBillingHeaderDrift(t *testing.T) {
 	build := func(header string) *ClaudeRequest {
 		return &ClaudeRequest{
 			Model: "claude-sonnet-4.5",
-			System: []interface{}{
-				map[string]interface{}{"type": "text", "text": header},
-				map[string]interface{}{
+			System: []any{
+				map[string]any{"type": "text", "text": header},
+				map[string]any{
 					"type":          "text",
 					"text":          cacheTestText(1200),
 					"cache_control": defaultPromptCacheControl(),
@@ -134,8 +134,8 @@ func TestPromptCacheTrackerIgnoresBillingHeaderDrift(t *testing.T) {
 
 func TestPromptCacheTrackerAddsImplicitMessageEndBreakpoints(t *testing.T) {
 	tracker := NewPromptCacheTracker()
-	system := []interface{}{
-		map[string]interface{}{
+	system := []any{
+		map[string]any{
 			"type":          "text",
 			"text":          cacheTestText(1200),
 			"cache_control": defaultPromptCacheControl(),
@@ -198,22 +198,22 @@ func TestPromptCacheUsagePreservesTotalInput(t *testing.T) {
 }
 
 func TestPromptCacheTrackerIgnoresCacheControlAndWrapperPositions(t *testing.T) {
-	first := canonicalizeCacheValue(stripCachePositionKeys(map[string]interface{}{
+	first := canonicalizeCacheValue(stripCachePositionKeys(map[string]any{
 		"kind":         "system",
 		"system_index": 0,
-		"block": map[string]interface{}{
+		"block": map[string]any{
 			"type":          "text",
 			"text":          "stable",
-			"cache_control": map[string]interface{}{"type": "ephemeral", "ttl": "5m"},
+			"cache_control": map[string]any{"type": "ephemeral", "ttl": "5m"},
 		},
 	}))
-	second := canonicalizeCacheValue(stripCachePositionKeys(map[string]interface{}{
+	second := canonicalizeCacheValue(stripCachePositionKeys(map[string]any{
 		"kind":         "system",
 		"system_index": 9,
-		"block": map[string]interface{}{
+		"block": map[string]any{
 			"type":          "text",
 			"text":          "stable",
-			"cache_control": map[string]interface{}{"type": "ephemeral", "ttl": "1h"},
+			"cache_control": map[string]any{"type": "ephemeral", "ttl": "1h"},
 		},
 	}))
 	if first != second {
@@ -228,7 +228,7 @@ func TestPromptCacheTrackerSupportsToolCacheControl(t *testing.T) {
 		Tools: []ClaudeTool{{
 			Name:         "large_tool",
 			Description:  cacheTestText(1200),
-			InputSchema:  map[string]interface{}{"type": "object"},
+			InputSchema:  map[string]any{"type": "object"},
 			CacheControl: defaultPromptCacheControl(),
 		}},
 		Messages: []ClaudeMessage{{Role: "user", Content: "hello"}},
@@ -245,11 +245,11 @@ func TestPromptCacheTrackerSupportsToolCacheControl(t *testing.T) {
 	}
 }
 
-func cacheTestRequest(model string, cacheControl interface{}) *ClaudeRequest {
+func cacheTestRequest(model string, cacheControl any) *ClaudeRequest {
 	return &ClaudeRequest{
 		Model: model,
-		System: []interface{}{
-			map[string]interface{}{
+		System: []any{
+			map[string]any{
 				"type":          "text",
 				"text":          cacheTestText(1200),
 				"cache_control": cacheControl,
@@ -263,6 +263,6 @@ func cacheTestText(repetitions int) string {
 	return strings.Repeat("cache ", repetitions)
 }
 
-func defaultPromptCacheControl() map[string]interface{} {
-	return map[string]interface{}{"type": "ephemeral"}
+func defaultPromptCacheControl() map[string]any {
+	return map[string]any{"type": "ephemeral"}
 }

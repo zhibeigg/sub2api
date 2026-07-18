@@ -21,7 +21,7 @@ func (s *AgentStream) Response() *http.Response {
 
 func (s *AgentStream) SendClientMessage(payload []byte) error {
 	if s == nil {
-		return errors.New("Agent stream is nil")
+		return errors.New("agent stream is nil")
 	}
 	message := append([]byte(nil), payload...)
 	s.sendMu.RLock()

@@ -99,11 +99,6 @@ func (s *CursorGatewayService) cachedIDEModelCatalogState(account *Account) ([]c
 	return nil, cursorIDEModelCatalogMiss
 }
 
-func (s *CursorGatewayService) cachedIDEModelCatalog(account *Account) ([]cursorIDEModel, bool) {
-	models, state := s.cachedIDEModelCatalogState(account)
-	return models, state != cursorIDEModelCatalogMiss
-}
-
 func (s *CursorGatewayService) invalidateIDEModelCatalog(account *Account) {
 	if s == nil || account == nil || account.ID <= 0 {
 		return
@@ -135,7 +130,7 @@ func (s *CursorGatewayService) storeIDEModelCatalog(account *Account, models []c
 
 func (s *CursorGatewayService) refreshIDEModelCatalog(ctx context.Context, account *Account, loader cursorIDEModelCatalogLoader) ([]cursorIDEModel, error) {
 	if s == nil || account == nil || loader == nil {
-		return nil, errors.New("Cursor Agent model catalog loader is unavailable")
+		return nil, errors.New("cursor Agent model catalog loader is unavailable")
 	}
 	key := cursorIDEModelCatalogKey(account)
 	value, err, _ := s.ideModelRefresh.Do(key, func() (any, error) {
@@ -144,7 +139,7 @@ func (s *CursorGatewayService) refreshIDEModelCatalog(ctx context.Context, accou
 			return nil, loadErr
 		}
 		if len(models) == 0 {
-			return nil, errors.New("Cursor Agent returned no supported models")
+			return nil, errors.New("cursor Agent returned no supported models")
 		}
 		s.storeIDEModelCatalog(account, models)
 		return append([]cursorIDEModel(nil), models...), nil
@@ -154,7 +149,7 @@ func (s *CursorGatewayService) refreshIDEModelCatalog(ctx context.Context, accou
 	}
 	models, ok := value.([]cursorIDEModel)
 	if !ok || len(models) == 0 {
-		return nil, errors.New("Cursor Agent returned an invalid model catalog")
+		return nil, errors.New("cursor Agent returned an invalid model catalog")
 	}
 	return append([]cursorIDEModel(nil), models...), nil
 }
@@ -211,7 +206,7 @@ func (s *CursorGatewayService) FetchIDEModels(ctx context.Context, account *Acco
 		models = append(models, name)
 	}
 	if len(models) == 0 {
-		return nil, errors.New("Cursor IDE returned no supported models")
+		return nil, errors.New("cursor IDE returned no supported models")
 	}
 	sort.Strings(models)
 	return models, nil
@@ -247,7 +242,7 @@ func (s *CursorGatewayService) FetchIDELogicalModels(ctx context.Context, accoun
 		}
 	}
 	if len(models) == 0 {
-		return nil, errors.New("Cursor IDE returned no logical models")
+		return nil, errors.New("cursor IDE returned no logical models")
 	}
 	sort.Strings(models)
 	return models, nil
@@ -958,7 +953,7 @@ func (s *cursorAgentEventAdapter) PendingMCP() *cursorAgentPendingMCP {
 
 func (s *cursorAgentEventAdapter) SendPendingResult(pending *cursorAgentPendingMCP, result cursorpkg.DialogueMessage) error {
 	if s == nil || s.stream == nil || pending == nil {
-		return errors.New("Cursor Agent tool resume state is unavailable")
+		return errors.New("cursor Agent tool resume state is unavailable")
 	}
 	kind := strings.TrimSpace(pending.Kind)
 	if kind == "" {
@@ -1553,7 +1548,7 @@ func (s *CursorGatewayService) openCursorAgentStream(ctx, runCtx context.Context
 	if err == nil || !cursorpkg.IsKind(err, cursorpkg.ErrorUnauthorized) || s.dashboardAuth == nil || activeAccount.ID <= 0 {
 		if agentStream == nil {
 			if err == nil {
-				err = errors.New("Cursor Agent stream is unavailable")
+				err = errors.New("cursor Agent stream is unavailable")
 			}
 			return activeAccount, resp, nil, err
 		}
@@ -1570,47 +1565,16 @@ func (s *CursorGatewayService) openCursorAgentStream(ctx, runCtx context.Context
 	resp, agentStream, err = s.runCursorAgentWithOpenRetry(runCtx, refreshed, client, credential, dialogue, options)
 	if agentStream == nil {
 		if err == nil {
-			err = errors.New("Cursor Agent stream is unavailable")
+			err = errors.New("cursor Agent stream is unavailable")
 		}
 		return refreshed, resp, nil, err
 	}
 	return refreshed, resp, newCursorAgentEventAdapter(agentStream, blobs, dialogue.Tools), err
 }
 
-func (s *CursorGatewayService) openCursorIDEStream(ctx context.Context, account *Account, dialogue *cursorpkg.Dialogue, options cursorpkg.IDEChatOptions) (*Account, *http.Response, *cursorpkg.IDEEventStream, error) {
-	activeAccount := account
-	if s.dashboardAuth != nil && activeAccount != nil && activeAccount.ID > 0 {
-		refreshed, _, err := s.dashboardAuth.RefreshIfNeeded(ctx, activeAccount)
-		if err != nil {
-			return activeAccount, nil, nil, err
-		}
-		if refreshed != nil {
-			activeAccount = refreshed
-		}
-	}
-	client, credential, err := s.newCursorIDEClient(ctx, activeAccount)
-	if err != nil {
-		return activeAccount, nil, nil, err
-	}
-	resp, stream, err := client.StreamUnifiedChatWithTools(ctx, credential, dialogue, options)
-	if err == nil || !cursorpkg.IsKind(err, cursorpkg.ErrorUnauthorized) || s.dashboardAuth == nil || activeAccount.ID <= 0 {
-		return activeAccount, resp, stream, err
-	}
-	refreshed, refreshErr := s.dashboardAuth.forceRefresh(ctx, activeAccount)
-	if refreshErr != nil {
-		return activeAccount, resp, stream, refreshErr
-	}
-	client, credential, err = s.newCursorIDEClient(ctx, refreshed)
-	if err != nil {
-		return refreshed, nil, nil, err
-	}
-	resp, stream, err = client.StreamUnifiedChatWithTools(ctx, credential, dialogue, options)
-	return refreshed, resp, stream, err
-}
-
 func (s *CursorGatewayService) newCursorAgentClient(ctx context.Context, account *Account) (*cursorpkg.AgentClient, cursorpkg.IDECredential, error) {
 	if account == nil {
-		return nil, cursorpkg.IDECredential{}, errors.New("Cursor account is required")
+		return nil, cursorpkg.IDECredential{}, errors.New("cursor account is required")
 	}
 	accessToken := strings.TrimSpace(account.GetCredential("dashboard_access_token"))
 	if accessToken == "" {
@@ -1634,38 +1598,6 @@ func (s *CursorGatewayService) newCursorAgentClient(ctx context.Context, account
 		NewOnboardingCompleted: cfg.NewOnboardingCompleted,
 		MaxFrameSize:           cfg.MaxFrameBytes, MaxBufferedBytes: cfg.MaxBufferedBytes, MaxErrorBody: 8 << 10,
 	}})
-	if err != nil {
-		return nil, cursorpkg.IDECredential{}, err
-	}
-	return client, cursorpkg.IDECredential{AccessToken: accessToken, MachineID: cursorAccountSetting(account, "cursor_machine_id")}, nil
-}
-
-func (s *CursorGatewayService) newCursorIDEClient(ctx context.Context, account *Account) (*cursorpkg.IDEClient, cursorpkg.IDECredential, error) {
-	if account == nil {
-		return nil, cursorpkg.IDECredential{}, errors.New("Cursor account is required")
-	}
-	accessToken := strings.TrimSpace(account.GetCredential("dashboard_access_token"))
-	if accessToken == "" {
-		return nil, cursorpkg.IDECredential{}, cursorpkg.HTTPError(http.StatusUnauthorized, "create IDE client", "Cursor Dashboard access token is missing")
-	}
-	cfg := s.cursorConfig()
-	baseURL, err := cursorChatEndpoint(cfg.ChatBaseURL)
-	if err != nil {
-		return nil, cursorpkg.IDECredential{}, err
-	}
-	clientVersion := cursorAccountSetting(account, "cursor_client_version")
-	if clientVersion == "" {
-		clientVersion = cfg.ClientVersion
-	}
-	client, err := cursorpkg.NewIDEClient(s.newCursorIDEHTTPClient(ctx, account), cursorpkg.IDEClientConfig{
-		BaseURL: baseURL, ClientVersion: clientVersion,
-		ClientOS: runtime.GOOS, ClientArch: cursorIDEClientArch(runtime.GOARCH),
-		ClientOSVersion: cursorAccountSetting(account, "cursor_client_os_version"),
-		ConfigVersion:   cursorAccountSetting(account, "cursor_config_version"),
-		Timezone:        time.Now().Location().String(), GhostMode: cfg.GhostMode,
-		NewOnboardingCompleted: cfg.NewOnboardingCompleted,
-		MaxFrameSize:           cfg.MaxFrameBytes, MaxBufferedBytes: cfg.MaxBufferedBytes, MaxErrorBody: 8 << 10,
-	})
 	if err != nil {
 		return nil, cursorpkg.IDECredential{}, err
 	}
@@ -1777,7 +1709,7 @@ type cursorIDENextResult struct {
 
 func nextCursorIDEEvent(stream cursorIDEEventSource, idle time.Duration) (cursorpkg.IDEEvent, error) {
 	if stream == nil {
-		return cursorpkg.IDEEvent{}, errors.New("Cursor IDE event stream is unavailable")
+		return cursorpkg.IDEEvent{}, errors.New("cursor IDE event stream is unavailable")
 	}
 	if idle <= 0 {
 		return stream.Next()

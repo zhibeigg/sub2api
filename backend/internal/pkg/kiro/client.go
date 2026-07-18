@@ -52,7 +52,10 @@ var httpClientCache sync.Map
 func GetHTTPClientForProxy(proxyURL string, timeout time.Duration) *http.Client {
 	key := fmt.Sprintf("%s|%s", proxyURL, timeout)
 	if cached, ok := httpClientCache.Load(key); ok {
-		return cached.(*http.Client)
+		if client, typeOK := cached.(*http.Client); typeOK {
+			return client
+		}
+		httpClientCache.Delete(key)
 	}
 	client := &http.Client{
 		Timeout:   timeout,
@@ -134,7 +137,11 @@ func CallKiroAPI(ctx context.Context, cred *Credential, payload *KiroPayload, ca
 		payload.ConversationState.CurrentMessage.UserInputMessage.Origin = ep.Origin
 		epURL := regionalizeURLForProfile(ep.URL, cred, payload.ProfileArn)
 
-		reqBody, _ := json.Marshal(payload)
+		reqBody, err := json.Marshal(payload)
+		if err != nil {
+			lastErr = fmt.Errorf("kiro: marshal request payload: %w", err)
+			continue
+		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, epURL, bytes.NewReader(reqBody))
 		if err != nil {
 			lastErr = err
@@ -165,15 +172,24 @@ func CallKiroAPI(ctx context.Context, cred *Credential, payload *KiroPayload, ca
 		}
 
 		if resp.StatusCode == 429 {
-			resp.Body.Close()
-			lastErr = &APIError{StatusCode: 429, Endpoint: ep.Name, Body: "quota exhausted"}
+			body := "quota exhausted"
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				body = fmt.Sprintf("%s; close response body: %v", body, closeErr)
+			}
+			lastErr = &APIError{StatusCode: 429, Endpoint: ep.Name, Body: body}
 			continue
 		}
 
 		if resp.StatusCode != 200 {
-			errBody, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
-			resp.Body.Close()
-			apiErr := &APIError{StatusCode: resp.StatusCode, Endpoint: ep.Name, Body: string(errBody)}
+			errBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 8192))
+			body := string(errBody)
+			if readErr != nil {
+				body = fmt.Sprintf("%s; read response body: %v", body, readErr)
+			}
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				body = fmt.Sprintf("%s; close response body: %v", body, closeErr)
+			}
+			apiErr := &APIError{StatusCode: resp.StatusCode, Endpoint: ep.Name, Body: body}
 			lastErr = apiErr
 			// Auth and payment errors are not retried across endpoints.
 			if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 402 {
@@ -182,9 +198,15 @@ func CallKiroAPI(ctx context.Context, cred *Credential, payload *KiroPayload, ca
 			continue
 		}
 
-		err = parseEventStream(resp.Body, callback)
-		resp.Body.Close()
-		return err
+		parseErr := parseEventStream(resp.Body, callback)
+		closeErr := resp.Body.Close()
+		if parseErr != nil {
+			return parseErr
+		}
+		if closeErr != nil {
+			return fmt.Errorf("kiro: close streaming response body: %w", closeErr)
+		}
+		return nil
 	}
 
 	if lastErr != nil {

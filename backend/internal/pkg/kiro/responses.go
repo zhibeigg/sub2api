@@ -116,7 +116,7 @@ func ParseResponsesInput(raw json.RawMessage) ([]OpenAIMessage, error) {
 
 func convertResponsesInputItems(items []json.RawMessage) ([]OpenAIMessage, error) {
 	messages := make([]OpenAIMessage, 0, len(items))
-	var pendingUserParts []interface{}
+	var pendingUserParts []any
 
 	flushPendingUser := func() {
 		if len(pendingUserParts) == 0 {
@@ -127,7 +127,7 @@ func convertResponsesInputItems(items []json.RawMessage) ([]OpenAIMessage, error
 	}
 
 	for _, item := range items {
-		var obj map[string]interface{}
+		var obj map[string]any
 		if err := json.Unmarshal(item, &obj); err != nil {
 			continue
 		}
@@ -166,7 +166,7 @@ func convertResponsesInputItems(items []json.RawMessage) ([]OpenAIMessage, error
 			}
 		case typ == "input_text" || typ == "text":
 			if text, _ := obj["text"].(string); text != "" {
-				pendingUserParts = append(pendingUserParts, map[string]interface{}{"type": "input_text", "text": text})
+				pendingUserParts = append(pendingUserParts, map[string]any{"type": "input_text", "text": text})
 			}
 		case typ == "input_image" || typ == "image" || typ == "image_url":
 			pendingUserParts = append(pendingUserParts, obj)
@@ -188,7 +188,7 @@ func convertResponsesInputItems(items []json.RawMessage) ([]OpenAIMessage, error
 	return messages, nil
 }
 
-func buildMessageFromInputItem(obj map[string]interface{}, role string) *OpenAIMessage {
+func buildMessageFromInputItem(obj map[string]any, role string) *OpenAIMessage {
 	if role == "" {
 		role = "user"
 	}
@@ -196,12 +196,12 @@ func buildMessageFromInputItem(obj map[string]interface{}, role string) *OpenAIM
 		switch v := content.(type) {
 		case string:
 			return &OpenAIMessage{Role: role, Content: v}
-		case []interface{}:
-			parts := make([]interface{}, 0, len(v))
+		case []any:
+			parts := make([]any, 0, len(v))
 			var textOnly strings.Builder
 			anyNonText := false
 			for _, p := range v {
-				part, ok := p.(map[string]interface{})
+				part, ok := p.(map[string]any)
 				if !ok {
 					continue
 				}
@@ -209,16 +209,16 @@ func buildMessageFromInputItem(obj map[string]interface{}, role string) *OpenAIM
 				switch ptype {
 				case "input_text", "text", "output_text":
 					if t, ok := part["text"].(string); ok {
-						textOnly.WriteString(t)
-						parts = append(parts, map[string]interface{}{"type": "input_text", "text": t})
+						_, _ = textOnly.WriteString(t)
+						parts = append(parts, map[string]any{"type": "input_text", "text": t})
 					}
 				case "input_image", "image", "image_url":
 					anyNonText = true
 					parts = append(parts, part)
 				default:
 					if t, ok := part["text"].(string); ok && t != "" {
-						textOnly.WriteString(t)
-						parts = append(parts, map[string]interface{}{"type": "input_text", "text": t})
+						_, _ = textOnly.WriteString(t)
+						parts = append(parts, map[string]any{"type": "input_text", "text": t})
 					}
 				}
 			}
@@ -226,7 +226,7 @@ func buildMessageFromInputItem(obj map[string]interface{}, role string) *OpenAIM
 				return &OpenAIMessage{Role: role, Content: textOnly.String()}
 			}
 			return &OpenAIMessage{Role: role, Content: parts}
-		case map[string]interface{}:
+		case map[string]any:
 			return buildMessageFromInputItem(v, role)
 		}
 	}
@@ -236,7 +236,7 @@ func buildMessageFromInputItem(obj map[string]interface{}, role string) *OpenAIM
 	return nil
 }
 
-func stringifyArbitrary(v interface{}) string {
+func stringifyArbitrary(v any) string {
 	switch t := v.(type) {
 	case nil:
 		return ""
@@ -251,7 +251,7 @@ func stringifyArbitrary(v interface{}) string {
 	}
 }
 
-func stringField(obj map[string]interface{}, keys ...string) string {
+func stringField(obj map[string]any, keys ...string) string {
 	for _, k := range keys {
 		if v, ok := obj[k].(string); ok && v != "" {
 			return v
@@ -402,7 +402,7 @@ func joinTextParts(parts []ResponseContentPart) string {
 	var b strings.Builder
 	for _, p := range parts {
 		if p.Type == "output_text" || p.Type == "text" || p.Type == "input_text" {
-			b.WriteString(p.Text)
+			_, _ = b.WriteString(p.Text)
 		}
 	}
 	return b.String()

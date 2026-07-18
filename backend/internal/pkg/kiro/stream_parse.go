@@ -61,7 +61,7 @@ func parseEventStream(body io.Reader, callback *StreamCallback) error {
 			continue
 		}
 
-		var event map[string]interface{}
+		var event map[string]any
 		if err := json.Unmarshal(payloadBytes, &event); err != nil {
 			continue
 		}
@@ -110,8 +110,8 @@ func parseEventStream(body io.Reader, callback *StreamCallback) error {
 	return nil
 }
 
-func updateTokensFromEvent(event map[string]interface{}, currentInputTokens, currentOutputTokens int) (int, int) {
-	candidates := []map[string]interface{}{event}
+func updateTokensFromEvent(event map[string]any, currentInputTokens, currentOutputTokens int) (int, int) {
+	candidates := []map[string]any{event}
 	collectUsageMaps(event, &candidates)
 
 	inputTokens := currentInputTokens
@@ -158,19 +158,19 @@ func updateTokensFromEvent(event map[string]interface{}, currentInputTokens, cur
 	return inputTokens, outputTokens
 }
 
-func collectUsageMaps(v interface{}, out *[]map[string]interface{}) {
+func collectUsageMaps(v any, out *[]map[string]any) {
 	switch t := v.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		for k, child := range t {
 			lk := strings.ToLower(k)
 			if lk == "usage" || lk == "tokenusage" || lk == "token_usage" {
-				if m, ok := child.(map[string]interface{}); ok {
+				if m, ok := child.(map[string]any); ok {
 					*out = append(*out, m)
 				}
 			}
 			collectUsageMaps(child, out)
 		}
-	case []interface{}:
+	case []any:
 		for _, child := range t {
 			collectUsageMaps(child, out)
 		}
@@ -216,7 +216,7 @@ func normalizeChunk(chunk string, previous *string) string {
 	return chunk
 }
 
-func readTokenNumber(m map[string]interface{}, keys ...string) (int, bool) {
+func readTokenNumber(m map[string]any, keys ...string) (int, bool) {
 	for _, k := range keys {
 		v, ok := m[k]
 		if !ok {
@@ -254,15 +254,17 @@ type toolUseState struct {
 	GeneratedID bool
 }
 
-func handleToolUseEvent(event map[string]interface{}, current *toolUseState, callback *StreamCallback) *toolUseState {
+func handleToolUseEvent(event map[string]any, current *toolUseState, callback *StreamCallback) *toolUseState {
 	toolUseID := firstStringField(event, "toolUseId", "toolUseID", "tool_use_id", "id")
 	name := firstStringField(event, "name", "toolName", "tool_name")
 	isStop := firstBoolField(event, "stop", "isStop", "done")
 
-	if toolUseID != "" && name != "" {
-		if current == nil {
+	switch {
+	case toolUseID != "" && name != "":
+		switch {
+		case current == nil:
 			current = &toolUseState{ToolUseID: toolUseID, Name: name}
-		} else if current.ToolUseID != toolUseID {
+		case current.ToolUseID != toolUseID:
 			if current.GeneratedID && current.Name == name {
 				current.ToolUseID = toolUseID
 				current.GeneratedID = false
@@ -271,20 +273,20 @@ func handleToolUseEvent(event map[string]interface{}, current *toolUseState, cal
 				current = &toolUseState{ToolUseID: toolUseID, Name: name}
 			}
 		}
-	} else if name != "" && current == nil {
+	case name != "" && current == nil:
 		current = &toolUseState{ToolUseID: "toolu_" + uuid.New().String(), Name: name, GeneratedID: true}
-	} else if name != "" && current != nil && current.Name != name {
+	case name != "" && current.Name != name:
 		finishToolUse(current, callback)
 		current = &toolUseState{ToolUseID: "toolu_" + uuid.New().String(), Name: name, GeneratedID: true}
 	}
 
 	if current != nil {
 		if input, ok := event["input"].(string); ok {
-			current.InputBuffer.WriteString(input)
-		} else if inputObj, ok := event["input"].(map[string]interface{}); ok {
+			_, _ = current.InputBuffer.WriteString(input)
+		} else if inputObj, ok := event["input"].(map[string]any); ok {
 			data, _ := json.Marshal(inputObj)
 			current.InputBuffer.Reset()
-			current.InputBuffer.Write(data)
+			_, _ = current.InputBuffer.Write(data)
 		}
 	}
 
@@ -302,12 +304,12 @@ func finishToolUse(state *toolUseState, callback *StreamCallback) {
 	if state.ToolUseID == "" {
 		state.ToolUseID = "toolu_" + uuid.New().String()
 	}
-	var input map[string]interface{}
+	var input map[string]any
 	if state.InputBuffer.Len() > 0 {
 		_ = json.Unmarshal([]byte(state.InputBuffer.String()), &input)
 	}
 	if input == nil {
-		input = make(map[string]interface{})
+		input = make(map[string]any)
 	}
 	callback.OnToolUse(KiroToolUse{
 		ToolUseID: state.ToolUseID,
@@ -316,7 +318,7 @@ func finishToolUse(state *toolUseState, callback *StreamCallback) {
 	})
 }
 
-func firstStringField(m map[string]interface{}, keys ...string) string {
+func firstStringField(m map[string]any, keys ...string) string {
 	for _, key := range keys {
 		if v, ok := m[key].(string); ok && v != "" {
 			return v
@@ -325,7 +327,7 @@ func firstStringField(m map[string]interface{}, keys ...string) string {
 	return ""
 }
 
-func firstBoolField(m map[string]interface{}, keys ...string) bool {
+func firstBoolField(m map[string]any, keys ...string) bool {
 	for _, key := range keys {
 		if v, ok := m[key].(bool); ok {
 			return v

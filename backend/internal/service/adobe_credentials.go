@@ -63,7 +63,7 @@ func credentialReplacementPresent(value any) bool {
 
 func ValidateAdobeAccountCredentials(accountType string, credentials map[string]any) error {
 	if strings.TrimSpace(accountType) != AccountTypeOAuth {
-		return fmt.Errorf("Adobe accounts must use type %q", AccountTypeOAuth)
+		return fmt.Errorf("adobe accounts must use type %q", AccountTypeOAuth)
 	}
 	for key := range credentials {
 		if _, allowed := adobeCredentialKeys[key]; allowed {
@@ -82,14 +82,14 @@ func ValidateAdobeAccountCredentials(accountType string, credentials map[string]
 	hasDeviceToken := strings.TrimSpace(credentialString(credentials, "device_token")) != ""
 	hasDeviceID := strings.TrimSpace(credentialString(credentials, "device_id")) != ""
 	if hasDeviceToken != hasDeviceID {
-		return fmt.Errorf("Adobe device_token and device_id must be provided or cleared together")
+		return fmt.Errorf("adobe device_token and device_id must be provided or cleared together")
 	}
-	if !hasAccessToken && !hasCookie && !(hasDeviceToken && hasDeviceID) {
-		return fmt.Errorf("Adobe credentials require access_token, cookie, or a complete device_token/device_id pair")
+	if !hasAccessToken && !hasCookie && (!hasDeviceToken || !hasDeviceID) {
+		return fmt.Errorf("adobe credentials require access_token, cookie, or a complete device_token/device_id pair")
 	}
 	if raw, ok := credentials["expires_at"]; ok && credentialReplacementPresent(raw) {
 		if normalizeAdobeExpiresAt(raw) == "" {
-			return fmt.Errorf("Adobe expires_at must be an RFC3339 time or Unix timestamp")
+			return fmt.Errorf("adobe expires_at must be an RFC3339 time or Unix timestamp")
 		}
 	}
 	return nil

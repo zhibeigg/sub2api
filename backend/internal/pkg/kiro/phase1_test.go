@@ -135,25 +135,43 @@ func TestExtractThinkingFromContent(t *testing.T) {
 func TestKiroToOpenAIResponseWithReasoning(t *testing.T) {
 	// reasoning_content format
 	resp := KiroToOpenAIResponseWithReasoning("answer", "why", nil, 10, 5, "claude-sonnet-4.5", "reasoning_content")
-	choices := resp["choices"].([]map[string]interface{})
-	msg := choices[0]["message"].(map[string]interface{})
+	choices, ok := resp["choices"].([]map[string]any)
+	if !ok || len(choices) == 0 {
+		t.Fatalf("choices has unexpected value: %#v", resp["choices"])
+	}
+	msg, ok := choices[0]["message"].(map[string]any)
+	if !ok {
+		t.Fatalf("message has unexpected value: %#v", choices[0]["message"])
+	}
 	if msg["reasoning_content"] != "why" || msg["content"] != "answer" {
 		t.Errorf("reasoning_content format wrong: %#v", msg)
 	}
 	// thinking format inlines
 	resp2 := KiroToOpenAIResponseWithReasoning("answer", "why", nil, 10, 5, "m", "thinking")
-	msg2 := resp2["choices"].([]map[string]interface{})[0]["message"].(map[string]interface{})
-	if c, _ := msg2["content"].(string); !strings.Contains(c, "<thinking>why</thinking>answer") {
+	choices2, ok := resp2["choices"].([]map[string]any)
+	if !ok || len(choices2) == 0 {
+		t.Fatalf("thinking choices has unexpected value: %#v", resp2["choices"])
+	}
+	msg2, ok := choices2[0]["message"].(map[string]any)
+	if !ok {
+		t.Fatalf("thinking message has unexpected value: %#v", choices2[0]["message"])
+	}
+	content, ok := msg2["content"].(string)
+	if !ok || !strings.Contains(content, "<thinking>why</thinking>answer") {
 		t.Errorf("thinking format wrong: %#v", msg2)
 	}
 }
 
 func TestGenerateCodeChallengeDeterministic(t *testing.T) {
 	verifier := "test-verifier"
-	if generateCodeChallenge(verifier) != generateCodeChallenge(verifier) {
+	firstChallenge := generateCodeChallenge(verifier)
+	secondChallenge := generateCodeChallenge(verifier)
+	if firstChallenge != secondChallenge {
 		t.Error("code challenge should be deterministic for the same verifier")
 	}
-	if generateCodeVerifier() == generateCodeVerifier() {
+	firstVerifier := generateCodeVerifier()
+	secondVerifier := generateCodeVerifier()
+	if firstVerifier == secondVerifier {
 		t.Error("code verifiers should be random")
 	}
 }

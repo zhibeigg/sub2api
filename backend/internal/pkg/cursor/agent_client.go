@@ -111,7 +111,7 @@ func (c *AgentClient) writeAgentRequest(ctx context.Context, writer *io.PipeWrit
 			return err
 		}
 		if len(frame)-5 > c.config.MaxFrameSize {
-			return fmt.Errorf("Agent frame size %d exceeds %d bytes", len(frame)-5, c.config.MaxFrameSize)
+			return fmt.Errorf("agent frame size %d exceeds %d bytes", len(frame)-5, c.config.MaxFrameSize)
 		}
 		_, err = writer.Write(frame)
 		return err

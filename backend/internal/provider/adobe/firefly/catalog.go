@@ -1,7 +1,5 @@
 package firefly
 
-import "sort"
-
 type ModelType string
 
 const (
@@ -83,13 +81,4 @@ func IsImageAlias(model string) bool {
 func IsVideoAlias(model string) bool {
 	def, ok := aliases[model]
 	return ok && def.kind == ModelTypeVideo
-}
-
-func knownAliasIDs() []string {
-	out := make([]string, 0, len(aliases))
-	for id := range aliases {
-		out = append(out, id)
-	}
-	sort.Strings(out)
-	return out
 }

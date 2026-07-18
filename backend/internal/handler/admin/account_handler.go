@@ -1051,8 +1051,8 @@ func (h *AccountHandler) ValidateCredentials(c *gin.Context) {
 
 	platform := service.NormalizePlatform(req.Platform)
 	accountType := strings.ToLower(strings.TrimSpace(req.Type))
-	if !((platform == service.PlatformAdobe && accountType == service.AccountTypeOAuth) ||
-		(platform == service.PlatformCursor && accountType == service.AccountTypeAPIKey)) {
+	if (platform != service.PlatformAdobe || accountType != service.AccountTypeOAuth) &&
+		(platform != service.PlatformCursor || accountType != service.AccountTypeAPIKey) {
 		response.BadRequest(c, "Unsupported platform or account type")
 		return
 	}

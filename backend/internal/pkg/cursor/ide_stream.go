@@ -261,7 +261,7 @@ func parseConnectEndStream(payload []byte) (*IDEStreamError, error) {
 	if envelope.Error == nil {
 		return nil, nil
 	}
-	return &IDEStreamError{Code: envelope.Error.Code, Message: envelope.Error.Message, Details: envelope.Error.Details}, nil
+	return (*IDEStreamError)(envelope.Error), nil
 }
 
 func parseIDEResponse(payload []byte) []IDEEvent {
@@ -571,7 +571,7 @@ func DecodeIDEAvailableModels(body []byte, maxFrameSize, maxBufferedBytes int) (
 		return nil, protocolError("decode IDE models response", errors.New("response ended before Connect end-stream envelope"))
 	}
 	if len(models) == 0 {
-		return nil, protocolError("decode IDE models response", errors.New("Cursor returned no IDE models"))
+		return nil, protocolError("decode IDE models response", errors.New("cursor returned no IDE models"))
 	}
 	return models, nil
 }

@@ -53,7 +53,7 @@ func DownloadAdobeReferenceImage(ctx context.Context, rawURL string) ([]byte, st
 	if err != nil {
 		return nil, "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, "", fmt.Errorf("reference image download failed: status %d", resp.StatusCode)
 	}
@@ -78,7 +78,7 @@ func DownloadAdobeReferenceImage(ctx context.Context, rawURL string) ([]byte, st
 	if contentType != "image/png" && contentType != "image/jpeg" && contentType != "image/webp" {
 		return nil, "", fmt.Errorf("unsupported reference image MIME type")
 	}
-	if detected != contentType && !(contentType == "image/jpeg" && detected == "image/jpeg") {
+	if detected != contentType {
 		return nil, "", fmt.Errorf("reference image MIME mismatch")
 	}
 	return body, contentType, nil
@@ -90,7 +90,7 @@ func DownloadAdobePNG(ctx context.Context, rawURL string) ([]byte, error) {
 		return nil, err
 	}
 	if contentType != "image/png" {
-		return nil, fmt.Errorf("Adobe output is not PNG")
+		return nil, fmt.Errorf("adobe output is not PNG")
 	}
 	return body, nil
 }

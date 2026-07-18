@@ -44,7 +44,7 @@ func ToolInstructions(tools []ToolDefinition, choice ToolChoice) (string, error)
 		if strings.TrimSpace(tool.Name) == "" {
 			return "", fmt.Errorf("tool name is required")
 		}
-		wire = append(wire, toolWire{Name: tool.Name, Description: tool.Description, InputSchema: tool.InputSchema})
+		wire = append(wire, toolWire(tool))
 	}
 	encoded, err := json.Marshal(wire)
 	if err != nil {
@@ -159,56 +159,56 @@ func repairJSON(input string) string {
 		ch := input[i]
 		if inString {
 			if escaped {
-				out.WriteByte(ch)
+				_ = out.WriteByte(ch)
 				escaped = false
 				continue
 			}
 			if ch == '\\' {
-				out.WriteByte(ch)
+				_ = out.WriteByte(ch)
 				escaped = true
 				continue
 			}
 			if ch == '"' {
 				inString = false
-				out.WriteByte(ch)
+				_ = out.WriteByte(ch)
 				continue
 			}
 			switch ch {
 			case '\n':
-				out.WriteString(`\n`)
+				_, _ = out.WriteString(`\n`)
 			case '\r':
-				out.WriteString(`\r`)
+				_, _ = out.WriteString(`\r`)
 			case '\t':
-				out.WriteString(`\t`)
+				_, _ = out.WriteString(`\t`)
 			default:
-				out.WriteByte(ch)
+				_ = out.WriteByte(ch)
 			}
 			continue
 		}
 		switch ch {
 		case '"':
 			inString = true
-			out.WriteByte(ch)
+			_ = out.WriteByte(ch)
 		case '{':
 			stack = append(stack, '}')
-			out.WriteByte(ch)
+			_ = out.WriteByte(ch)
 		case '[':
 			stack = append(stack, ']')
-			out.WriteByte(ch)
+			_ = out.WriteByte(ch)
 		case '}', ']':
 			if len(stack) > 0 && stack[len(stack)-1] == ch {
 				stack = stack[:len(stack)-1]
 			}
-			out.WriteByte(ch)
+			_ = out.WriteByte(ch)
 		default:
-			out.WriteByte(ch)
+			_ = out.WriteByte(ch)
 		}
 	}
 	if inString {
-		out.WriteByte('"')
+		_ = out.WriteByte('"')
 	}
 	for i := len(stack) - 1; i >= 0; i-- {
-		out.WriteByte(stack[i])
+		_ = out.WriteByte(stack[i])
 	}
 	fixed := bytes.TrimSpace([]byte(out.String()))
 	fixed = bytes.ReplaceAll(fixed, []byte(",}"), []byte("}"))

@@ -150,7 +150,7 @@ const eligibleAnnouncementEmailRecipientsSQL = `FROM users u WHERE u.status='act
 		AND ai.provider_key='email' AND ai.verified_at IS NOT NULL
 		AND LOWER(BTRIM(ai.provider_subject))=LOWER(BTRIM(u.email)))`
 
-func (r *announcementEmailRepository) PrepareRecipients(ctx context.Context, job *service.AnnouncementEmailJob, batchSize, maxAttempts int) (bool, error) {
+func (r *announcementEmailRepository) PrepareRecipients(ctx context.Context, job *service.AnnouncementEmailJob, batchSize, maxAttempts int) (done bool, err error) {
 	if job == nil {
 		return false, errors.New("nil announcement email job")
 	}
@@ -178,7 +178,7 @@ func (r *announcementEmailRepository) PrepareRecipients(ctx context.Context, job
 	if err != nil {
 		return false, err
 	}
-	defer rows.Close()
+	defer func() { err = errors.Join(err, rows.Close()) }()
 	last := job.PreparationCursorID
 	recipients := make([]service.AnnouncementEmailRecipient, 0, batchSize)
 	for rows.Next() {
@@ -206,7 +206,7 @@ func (r *announcementEmailRepository) PrepareRecipients(ctx context.Context, job
 			inserted++
 		}
 	}
-	done := last >= cutoff || inserted < batchSize
+	done = last >= cutoff || inserted < batchSize
 	status := "preparing"
 	if done {
 		status = "sending"
@@ -226,7 +226,7 @@ func (r *announcementEmailRepository) PrepareRecipients(ctx context.Context, job
 	return done, nil
 }
 
-func (r *announcementEmailRepository) ClaimDeliveries(ctx context.Context, jobID int64, owner string, now time.Time, lease time.Duration, limit int) ([]service.AnnouncementEmailDelivery, error) {
+func (r *announcementEmailRepository) ClaimDeliveries(ctx context.Context, jobID int64, owner string, now time.Time, lease time.Duration, limit int) (deliveries []service.AnnouncementEmailDelivery, err error) {
 	if limit < 1 {
 		return nil, nil
 	}
@@ -244,7 +244,7 @@ func (r *announcementEmailRepository) ClaimDeliveries(ctx context.Context, jobID
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { err = errors.Join(err, rows.Close()) }()
 	out := make([]service.AnnouncementEmailDelivery, 0, limit)
 	for rows.Next() {
 		var d service.AnnouncementEmailDelivery
@@ -254,6 +254,9 @@ func (r *announcementEmailRepository) ClaimDeliveries(ctx context.Context, jobID
 		out = append(out, d)
 	}
 	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	if err = rows.Close(); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(); err != nil {

@@ -64,7 +64,7 @@ func CursorAccountUsesIDEChat(account *Account) bool {
 // the low-latency IDE chat session and the official Cloud Agents API.
 func ValidateCursorAccountCredentials(accountType string, credentials map[string]any) error {
 	if strings.TrimSpace(accountType) != AccountTypeAPIKey {
-		return fmt.Errorf("Cursor accounts must use type %q", AccountTypeAPIKey)
+		return fmt.Errorf("cursor accounts must use type %q", AccountTypeAPIKey)
 	}
 	for key := range credentials {
 		if _, allowed := cursorCredentialKeys[key]; allowed {
@@ -80,22 +80,22 @@ func ValidateCursorAccountCredentials(accountType string, credentials map[string
 	modeRaw := credentialString(credentials, "cursor_transport_mode")
 	mode := NormalizeCursorTransportMode(modeRaw)
 	if mode == "" {
-		return fmt.Errorf("Cursor transport mode must be %q, %q, or %q", CursorTransportAuto, CursorTransportIDEChat, CursorTransportCloudAgent)
+		return fmt.Errorf("cursor transport mode must be %q, %q, or %q", CursorTransportAuto, CursorTransportIDEChat, CursorTransportCloudAgent)
 	}
 	apiKey := strings.TrimSpace(credentialString(credentials, "api_key"))
 	accessToken := strings.TrimSpace(credentialString(credentials, "dashboard_access_token"))
 	switch mode {
 	case CursorTransportIDEChat:
 		if accessToken == "" {
-			return fmt.Errorf("Cursor IDE chat credentials require a Dashboard access token")
+			return fmt.Errorf("cursor IDE chat credentials require a Dashboard access token")
 		}
 	case CursorTransportCloudAgent:
 		if apiKey == "" {
-			return fmt.Errorf("Cursor Cloud Agent credentials require a non-empty API key")
+			return fmt.Errorf("cursor Cloud Agent credentials require a non-empty API key")
 		}
 	default:
 		if apiKey == "" && accessToken == "" {
-			return fmt.Errorf("Cursor credentials require an IDE access token or Cloud Agent API key")
+			return fmt.Errorf("cursor credentials require an IDE access token or Cloud Agent API key")
 		}
 	}
 
@@ -120,10 +120,10 @@ func validateCursorCredentialText(label, value string, maxLength int) error {
 		return nil
 	}
 	if len(value) > maxLength {
-		return fmt.Errorf("Cursor %s exceeds %d characters", label, maxLength)
+		return fmt.Errorf("cursor %s exceeds %d characters", label, maxLength)
 	}
 	if strings.ContainsAny(value, "\r\n\x00") {
-		return fmt.Errorf("Cursor %s contains invalid control characters", label)
+		return fmt.Errorf("cursor %s contains invalid control characters", label)
 	}
 	return nil
 }

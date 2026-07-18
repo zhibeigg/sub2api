@@ -604,12 +604,15 @@ func maskQQBotEmail(email string) string {
 		return "***"
 	}
 	local := []rune(parts[0])
-	masked := "*"
-	if len(local) == 1 {
+	var masked string
+	switch len(local) {
+	case 0:
+		masked = "***"
+	case 1:
 		masked = string(local[0]) + "***"
-	} else if len(local) == 2 {
+	case 2:
 		masked = string(local[0]) + "***" + string(local[1])
-	} else {
+	default:
 		masked = string(local[0]) + "***" + string(local[len(local)-1])
 	}
 	return masked + "@" + parts[1]

@@ -954,12 +954,12 @@ func (h *AdobeMediaHandler) VideoStatus(c *gin.Context) {
 		if errors.Is(err, service.ErrAdobeVideoTaskImmutableConflict) || errors.Is(err, service.ErrAdobeMediaSnapshotInvalid) || errors.Is(err, service.ErrAdobeMediaSnapshotConflict) || errors.Is(err, service.ErrUsageBillingRequestConflict) {
 			h.recordCriticalTaskOps(c, apiKey, nil, taskID, "", "adobe_video_integrity_conflict", "Adobe task identity or pricing snapshot conflict; settlement blocked")
 		}
-		switch {
-		case err == service.ErrAdobeVideoTaskNotFound:
+		switch err {
+		case service.ErrAdobeVideoTaskNotFound:
 			writeAdobeGatewayError(c, http.StatusNotFound, "not_found_error", "Video task not found")
-		case err == service.ErrAdobeVideoTaskOwnerMismatch:
+		case service.ErrAdobeVideoTaskOwnerMismatch:
 			writeAdobeGatewayError(c, http.StatusForbidden, "permission_error", "Video task does not belong to this user and group")
-		case err == service.ErrAdobeMediaInsufficientFunds:
+		case service.ErrAdobeMediaInsufficientFunds:
 			writeAdobeGatewayError(c, http.StatusPaymentRequired, "billing_error", "Insufficient balance or quota to settle completed video")
 		default:
 			writeAdobeGatewayError(c, http.StatusServiceUnavailable, "service_unavailable", "Video status or settlement is temporarily unavailable")

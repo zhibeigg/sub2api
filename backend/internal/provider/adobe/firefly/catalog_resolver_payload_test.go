@@ -58,7 +58,10 @@ func TestPayloadCandidates(t *testing.T) {
 	if len(items) != 5 {
 		t.Fatalf("candidates=%d", len(items))
 	}
-	m := items[0]["modelSpecificPayload"].(map[string]any)
+	m, ok := items[0]["modelSpecificPayload"].(map[string]any)
+	if !ok {
+		t.Fatalf("modelSpecificPayload has type %T", items[0]["modelSpecificPayload"])
+	}
 	if m["aspectRatio"] != "16:9" {
 		t.Fatalf("aspect=%v", m["aspectRatio"])
 	}
@@ -67,7 +70,10 @@ func TestPayloadCandidates(t *testing.T) {
 	if len(gptItems) != 2 || gptItems[0]["modelId"] != "gpt-image" {
 		t.Fatalf("bad gpt-image candidates: %#v", gptItems)
 	}
-	gptSpecific := gptItems[1]["modelSpecificPayload"].(map[string]any)
+	gptSpecific, ok := gptItems[1]["modelSpecificPayload"].(map[string]any)
+	if !ok {
+		t.Fatalf("modelSpecificPayload has type %T", gptItems[1]["modelSpecificPayload"])
+	}
 	if gptSpecific["size"] != "3328x1872" {
 		t.Fatalf("bad gpt-image size: %v", gptSpecific["size"])
 	}

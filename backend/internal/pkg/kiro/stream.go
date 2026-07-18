@@ -24,9 +24,9 @@ func (a *Aggregator) Callback() *StreamCallback {
 	return &StreamCallback{
 		OnText: func(text string, isThinking bool) {
 			if isThinking {
-				a.Thinking.WriteString(text)
+				_, _ = a.Thinking.WriteString(text)
 			} else {
-				a.Text.WriteString(text)
+				_, _ = a.Text.WriteString(text)
 			}
 		},
 		OnToolUse: func(tu KiroToolUse) {
@@ -59,6 +59,7 @@ type ClaudeStreamState struct {
 	openBlockType string // "thinking" | "text"
 	toolUses      []KiroToolUse
 	usage         ClaudeUsage
+	writeErr      error
 }
 
 // NewClaudeStreamState creates a Claude SSE assembler.
@@ -73,14 +74,14 @@ func (s *ClaudeStreamState) ensureStarted() {
 	s.started = true
 	startUsage := s.usage
 	startUsage.OutputTokens = 0
-	start := map[string]interface{}{
+	start := map[string]any{
 		"type": "message_start",
-		"message": map[string]interface{}{
+		"message": map[string]any{
 			"id":            s.messageID,
 			"type":          "message",
 			"role":          "assistant",
 			"model":         s.model,
-			"content":       []interface{}{},
+			"content":       []any{},
 			"stop_reason":   nil,
 			"stop_sequence": nil,
 			"usage":         startUsage,
@@ -91,7 +92,7 @@ func (s *ClaudeStreamState) ensureStarted() {
 
 func (s *ClaudeStreamState) closeBlock() {
 	if s.blockOpen {
-		s.emit("content_block_stop", map[string]interface{}{"type": "content_block_stop", "index": s.blockIndex})
+		s.emit("content_block_stop", map[string]any{"type": "content_block_stop", "index": s.blockIndex})
 		s.blockOpen = false
 		s.openBlockType = ""
 	}
@@ -116,22 +117,22 @@ func (s *ClaudeStreamState) OnText(text string, isThinking bool) {
 		s.blockIndex++
 		s.blockOpen = true
 		s.openBlockType = wantType
-		blockStart := map[string]interface{}{"type": wantType}
+		blockStart := map[string]any{"type": wantType}
 		if isThinking {
 			blockStart["thinking"] = ""
 		} else {
 			blockStart["text"] = ""
 		}
-		s.emit("content_block_start", map[string]interface{}{
+		s.emit("content_block_start", map[string]any{
 			"type":          "content_block_start",
 			"index":         s.blockIndex,
 			"content_block": blockStart,
 		})
 	}
-	s.emit("content_block_delta", map[string]interface{}{
+	s.emit("content_block_delta", map[string]any{
 		"type":  "content_block_delta",
 		"index": s.blockIndex,
-		"delta": map[string]interface{}{"type": deltaType, deltaField: text},
+		"delta": map[string]any{"type": deltaType, deltaField: text},
 	})
 }
 
@@ -155,6 +156,14 @@ func (s *ClaudeStreamState) SetUsage(usage ClaudeUsage) {
 	s.usage = usage
 }
 
+// Err returns the first SSE serialization or write error observed by the state.
+func (s *ClaudeStreamState) Err() error {
+	if s == nil {
+		return nil
+	}
+	return s.writeErr
+}
+
 // Finish writes tool_use blocks (if any), message_delta and message_stop.
 func (s *ClaudeStreamState) Finish() {
 	s.ensureStarted()
@@ -163,34 +172,34 @@ func (s *ClaudeStreamState) Finish() {
 	for _, tu := range s.toolUses {
 		s.blockIndex++
 		inputJSON, _ := json.Marshal(tu.Input)
-		s.emit("content_block_start", map[string]interface{}{
+		s.emit("content_block_start", map[string]any{
 			"type":  "content_block_start",
 			"index": s.blockIndex,
-			"content_block": map[string]interface{}{
+			"content_block": map[string]any{
 				"type":  "tool_use",
 				"id":    tu.ToolUseID,
 				"name":  tu.Name,
-				"input": map[string]interface{}{},
+				"input": map[string]any{},
 			},
 		})
-		s.emit("content_block_delta", map[string]interface{}{
+		s.emit("content_block_delta", map[string]any{
 			"type":  "content_block_delta",
 			"index": s.blockIndex,
-			"delta": map[string]interface{}{"type": "input_json_delta", "partial_json": string(inputJSON)},
+			"delta": map[string]any{"type": "input_json_delta", "partial_json": string(inputJSON)},
 		})
-		s.emit("content_block_stop", map[string]interface{}{"type": "content_block_stop", "index": s.blockIndex})
+		s.emit("content_block_stop", map[string]any{"type": "content_block_stop", "index": s.blockIndex})
 	}
 
 	stopReason := "end_turn"
 	if len(s.toolUses) > 0 {
 		stopReason = "tool_use"
 	}
-	s.emit("message_delta", map[string]interface{}{
+	s.emit("message_delta", map[string]any{
 		"type":  "message_delta",
-		"delta": map[string]interface{}{"stop_reason": stopReason, "stop_sequence": nil},
+		"delta": map[string]any{"stop_reason": stopReason, "stop_sequence": nil},
 		"usage": s.usage,
 	})
-	s.emit("message_stop", map[string]interface{}{"type": "message_stop"})
+	s.emit("message_stop", map[string]any{"type": "message_stop"})
 }
 
 // Callback binds this state to a StreamCallback.
@@ -202,12 +211,23 @@ func (s *ClaudeStreamState) Callback() *StreamCallback {
 	}
 }
 
-func (s *ClaudeStreamState) emit(event string, payload interface{}) {
-	data, err := json.Marshal(payload)
-	if err != nil {
+func (s *ClaudeStreamState) emit(event string, payload any) {
+	if s == nil || s.writeErr != nil {
 		return
 	}
-	_ = s.w.WriteSSE(event, data)
+	data, err := json.Marshal(payload)
+	if err != nil {
+		s.writeErr = err
+		return
+	}
+	if s.w == nil {
+		s.writeErr = fmt.Errorf("kiro: nil Claude SSE writer")
+		return
+	}
+	if err := s.w.WriteSSE(event, data); err != nil {
+		s.writeErr = err
+		return
+	}
 	s.w.Flush()
 }
 
@@ -223,6 +243,7 @@ type OpenAIStreamState struct {
 	toolUses     []KiroToolUse
 	inputTokens  int
 	outputTokens int
+	writeErr     error
 }
 
 // NewOpenAIStreamState creates an OpenAI SSE assembler.
@@ -235,7 +256,7 @@ func (s *OpenAIStreamState) OnText(text string, isThinking bool) {
 	if text == "" {
 		return
 	}
-	delta := map[string]interface{}{}
+	delta := map[string]any{}
 	if !s.roleSent {
 		delta["role"] = "assistant"
 		s.roleSent = true
@@ -259,15 +280,23 @@ func (s *OpenAIStreamState) OnComplete(in, out int) {
 	s.outputTokens = out
 }
 
+// Err returns the first SSE serialization or write error observed by the state.
+func (s *OpenAIStreamState) Err() error {
+	if s == nil {
+		return nil
+	}
+	return s.writeErr
+}
+
 // Finish emits tool calls (if any), the finish_reason chunk and the [DONE] marker.
 func (s *OpenAIStreamState) Finish() {
 	finishReason := "stop"
 	if len(s.toolUses) > 0 {
 		finishReason = "tool_calls"
-		toolCalls := make([]map[string]interface{}, len(s.toolUses))
+		toolCalls := make([]map[string]any, len(s.toolUses))
 		for i, tu := range s.toolUses {
 			args, _ := json.Marshal(tu.Input)
-			toolCalls[i] = map[string]interface{}{
+			toolCalls[i] = map[string]any{
 				"index": i,
 				"id":    tu.ToolUseID,
 				"type":  "function",
@@ -277,7 +306,7 @@ func (s *OpenAIStreamState) Finish() {
 				},
 			}
 		}
-		delta := map[string]interface{}{}
+		delta := map[string]any{}
 		if !s.roleSent {
 			delta["role"] = "assistant"
 			s.roleSent = true
@@ -285,9 +314,8 @@ func (s *OpenAIStreamState) Finish() {
 		delta["tool_calls"] = toolCalls
 		s.emitChunk(delta, nil)
 	}
-	s.emitChunk(map[string]interface{}{}, &finishReason)
-	s.w.WriteSSE("", []byte("[DONE]"))
-	s.w.Flush()
+	s.emitChunk(map[string]any{}, &finishReason)
+	s.emit("", []byte("[DONE]"))
 }
 
 // Callback binds this state to a StreamCallback.
@@ -299,8 +327,11 @@ func (s *OpenAIStreamState) Callback() *StreamCallback {
 	}
 }
 
-func (s *OpenAIStreamState) emitChunk(delta map[string]interface{}, finishReason *string) {
-	choice := map[string]interface{}{
+func (s *OpenAIStreamState) emitChunk(delta map[string]any, finishReason *string) {
+	if s == nil || s.writeErr != nil {
+		return
+	}
+	choice := map[string]any{
 		"index": 0,
 		"delta": delta,
 	}
@@ -309,18 +340,35 @@ func (s *OpenAIStreamState) emitChunk(delta map[string]interface{}, finishReason
 	} else {
 		choice["finish_reason"] = nil
 	}
-	chunk := map[string]interface{}{
+	chunk := map[string]any{
 		"id":      s.id,
 		"object":  "chat.completion.chunk",
 		"created": s.created,
 		"model":   s.model,
-		"choices": []interface{}{choice},
+		"choices": []any{choice},
 	}
 	data, err := json.Marshal(chunk)
 	if err != nil {
+		if s.writeErr == nil {
+			s.writeErr = err
+		}
 		return
 	}
-	_ = s.w.WriteSSE("", data)
+	s.emit("", data)
+}
+
+func (s *OpenAIStreamState) emit(event string, data []byte) {
+	if s == nil || s.writeErr != nil {
+		return
+	}
+	if s.w == nil {
+		s.writeErr = fmt.Errorf("kiro: nil OpenAI SSE writer")
+		return
+	}
+	if err := s.w.WriteSSE(event, data); err != nil {
+		s.writeErr = err
+		return
+	}
 	s.w.Flush()
 }
 
@@ -329,18 +377,18 @@ func (s *OpenAIStreamState) emitChunk(delta map[string]interface{}, finishReason
 func FormatSSE(event string, data []byte) string {
 	var b strings.Builder
 	if event != "" {
-		b.WriteString("event: ")
-		b.WriteString(event)
-		b.WriteString("\n")
+		_, _ = b.WriteString("event: ")
+		_, _ = b.WriteString(event)
+		_, _ = b.WriteString("\n")
 	}
-	b.WriteString("data: ")
-	b.Write(data)
-	b.WriteString("\n\n")
+	_, _ = b.WriteString("data: ")
+	_, _ = b.Write(data)
+	_, _ = b.WriteString("\n\n")
 	return b.String()
 }
 
 // DebugString is a helper for logging a payload compactly.
-func DebugString(v interface{}) string {
+func DebugString(v any) string {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return fmt.Sprintf("%v", v)

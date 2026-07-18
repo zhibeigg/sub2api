@@ -150,7 +150,7 @@ func encodeIDEChatRequest(dialogue *Dialogue, options IDEChatOptions, uuidFn fun
 
 func encodeIDEHistoryMessage(message DialogueMessage) (string, uint64, error) {
 	var content strings.Builder
-	content.WriteString(message.Text)
+	_, _ = content.WriteString(message.Text)
 	for _, call := range message.ToolCalls {
 		if strings.TrimSpace(call.Name) == "" {
 			return "", 0, fmt.Errorf("tool call name is required")
@@ -160,14 +160,14 @@ func encodeIDEHistoryMessage(message DialogueMessage) (string, uint64, error) {
 			return "", 0, fmt.Errorf("tool call %q arguments: %w", call.Name, err)
 		}
 		if content.Len() > 0 {
-			content.WriteString("\n\n")
+			_, _ = content.WriteString("\n\n")
 		}
-		content.WriteString("[tool_call id=")
-		content.WriteString(call.ID)
-		content.WriteString(" name=")
-		content.WriteString(call.Name)
-		content.WriteString("]\n")
-		content.Write(args)
+		_, _ = content.WriteString("[tool_call id=")
+		_, _ = content.WriteString(call.ID)
+		_, _ = content.WriteString(" name=")
+		_, _ = content.WriteString(call.Name)
+		_, _ = content.WriteString("]\n")
+		_, _ = content.Write(args)
 	}
 	switch message.Role {
 	case "user":

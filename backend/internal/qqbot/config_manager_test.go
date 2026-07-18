@@ -114,7 +114,12 @@ func TestConfigManagerSaveRetainsEmptySecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	t.Cleanup(func() {
+		mock.ExpectClose()
+		if err := db.Close(); err != nil {
+			t.Errorf("close database: %v", err)
+		}
+	})
 	mock.MatchExpectationsInOrder(false)
 	current := defaultStorageConfig("https://qq.example.com")
 	current.Enabled = true

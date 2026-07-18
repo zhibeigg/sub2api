@@ -512,7 +512,7 @@ func (m *ConfigManager) refreshLoop(ctx context.Context) {
 func (m *ConfigManager) subscribeLoop(ctx context.Context) {
 	defer m.wg.Done()
 	pubsub := m.redis.Subscribe(ctx, ConfigInvalidationChannel)
-	defer pubsub.Close()
+	defer func() { _ = pubsub.Close() }()
 	channel := pubsub.Channel()
 	for {
 		select {

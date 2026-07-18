@@ -95,19 +95,19 @@ func EstimateClaudeOutputTokens(content, thinkingContent string, toolUses []Kiro
 	return total
 }
 
-func estimateClaudeValueTokens(v interface{}) int {
+func estimateClaudeValueTokens(v any) int {
 	switch value := v.(type) {
 	case nil:
 		return 0
 	case string:
 		return estimateApproxTokens(value)
-	case []interface{}:
+	case []any:
 		total := 0
 		for _, part := range value {
 			total += estimateClaudeValueTokens(part)
 		}
 		return total
-	case map[string]interface{}:
+	case map[string]any:
 		typeName, _ := value["type"].(string)
 		switch typeName {
 		case "text":
@@ -155,7 +155,7 @@ func estimateClaudeValueTokens(v interface{}) int {
 	}
 }
 
-func estimateJSONTokens(v interface{}) int {
+func estimateJSONTokens(v any) int {
 	if v == nil {
 		return 0
 	}
@@ -193,7 +193,7 @@ func EstimateOpenAIRequestInputTokens(req *OpenAIRequest) int {
 	return total
 }
 
-func estimateOpenAIContentTokens(content interface{}) int {
+func estimateOpenAIContentTokens(content any) int {
 	switch value := content.(type) {
 	case nil:
 		return 0

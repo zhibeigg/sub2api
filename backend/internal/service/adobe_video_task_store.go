@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/provider/adobe/firefly"
-	"github.com/redis/go-redis/v9"
 )
 
 const adobeVideoTaskKeyPrefix = "adobe:video:task:"
@@ -131,13 +130,22 @@ type AdobeVideoTaskStore interface {
 	AcquireSettlementLock(ctx context.Context, taskID string, ttl time.Duration) (func(context.Context) error, error)
 }
 
+type adobeVideoTaskCache interface {
+	Ping(ctx context.Context) error
+	SetNX(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error)
+	Get(ctx context.Context, key string) ([]byte, error)
+	Watch(ctx context.Context, key string, update func([]byte, time.Duration) ([]byte, time.Duration, error)) error
+	TryLock(ctx context.Context, key, token string, ttl time.Duration) (bool, error)
+	Unlock(ctx context.Context, key, token string) error
+}
+
 type RedisAdobeVideoTaskStore struct {
-	client      *redis.Client
+	client      adobeVideoTaskCache
 	activeTTL   time.Duration
 	terminalTTL time.Duration
 }
 
-func NewAdobeVideoTaskStore(client *redis.Client, activeTTL, terminalTTL time.Duration) *RedisAdobeVideoTaskStore {
+func newAdobeVideoTaskStore(client adobeVideoTaskCache, activeTTL, terminalTTL time.Duration) *RedisAdobeVideoTaskStore {
 	if activeTTL <= 0 {
 		activeTTL = 72 * time.Hour
 	}
@@ -151,7 +159,7 @@ func (s *RedisAdobeVideoTaskStore) Healthy(ctx context.Context) error {
 	if s == nil || s.client == nil {
 		return errors.New("adobe video task redis is unavailable")
 	}
-	return s.client.Ping(ctx).Err()
+	return s.client.Ping(ctx)
 }
 
 func adobeVideoTaskKey(taskID string) string {
@@ -174,7 +182,7 @@ func (s *RedisAdobeVideoTaskStore) Create(ctx context.Context, task *AdobeVideoT
 	if err != nil {
 		return err
 	}
-	created, err := s.client.SetNX(ctx, adobeVideoTaskKey(task.TaskID), body, s.activeTTL).Result()
+	created, err := s.client.SetNX(ctx, adobeVideoTaskKey(task.TaskID), body, s.activeTTL)
 	if err != nil {
 		return err
 	}
@@ -194,10 +202,7 @@ func (s *RedisAdobeVideoTaskStore) Get(ctx context.Context, taskID string) (*Ado
 	if s == nil || s.client == nil {
 		return nil, errors.New("adobe video task redis is unavailable")
 	}
-	body, err := s.client.Get(ctx, adobeVideoTaskKey(taskID)).Bytes()
-	if errors.Is(err, redis.Nil) {
-		return nil, ErrAdobeVideoTaskNotFound
-	}
+	body, err := s.client.Get(ctx, adobeVideoTaskKey(taskID))
 	if err != nil {
 		return nil, err
 	}
@@ -221,20 +226,13 @@ func (s *RedisAdobeVideoTaskStore) Update(ctx context.Context, task *AdobeVideoT
 		return errors.New("adobe video task redis is unavailable")
 	}
 	key := adobeVideoTaskKey(task.TaskID)
-	return s.client.Watch(ctx, func(tx *redis.Tx) error {
-		body, err := tx.Get(ctx, key).Bytes()
-		if errors.Is(err, redis.Nil) {
-			return ErrAdobeVideoTaskNotFound
-		}
-		if err != nil {
-			return err
-		}
+	return s.client.Watch(ctx, key, func(body []byte, remainingTTL time.Duration) ([]byte, time.Duration, error) {
 		var existing AdobeVideoTask
 		if err := json.Unmarshal(body, &existing); err != nil {
-			return err
+			return nil, 0, err
 		}
 		if existing.SnapshotHash != task.SnapshotHash || existing.AccountID != task.AccountID || existing.UserID != task.UserID || existing.APIKeyID != task.APIKeyID || existing.GroupID != task.GroupID || existing.PollURL != task.PollURL {
-			return ErrAdobeVideoTaskImmutableConflict
+			return nil, 0, ErrAdobeVideoTaskImmutableConflict
 		}
 		// A stale poll result must not undo any terminal state or a completed settlement.
 		if existing.IsTerminal() {
@@ -250,9 +248,8 @@ func (s *RedisAdobeVideoTaskStore) Update(ctx context.Context, task *AdobeVideoT
 			task.SettlementStatus = existing.SettlementStatus
 			task.SettledAt = existing.SettledAt
 		}
-		remainingTTL, err := tx.PTTL(ctx, key).Result()
-		if err != nil || remainingTTL <= 0 {
-			return ErrAdobeVideoTaskNotFound
+		if remainingTTL <= 0 {
+			return nil, 0, ErrAdobeVideoTaskNotFound
 		}
 		ttl := remainingTTL
 		if !existing.IsTerminal() && task.IsTerminal() {
@@ -261,14 +258,10 @@ func (s *RedisAdobeVideoTaskStore) Update(ctx context.Context, task *AdobeVideoT
 		task.UpdatedAt = time.Now().UTC()
 		encoded, err := json.Marshal(task)
 		if err != nil {
-			return err
+			return nil, 0, err
 		}
-		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
-			pipe.Set(ctx, key, encoded, ttl)
-			return nil
-		})
-		return err
-	}, key)
+		return encoded, ttl, nil
+	})
 }
 
 func (s *RedisAdobeVideoTaskStore) AcquireSettlementLock(ctx context.Context, taskID string, ttl time.Duration) (func(context.Context) error, error) {
@@ -280,7 +273,7 @@ func (s *RedisAdobeVideoTaskStore) AcquireSettlementLock(ctx context.Context, ta
 	}
 	lockKey := adobeVideoTaskKey(taskID) + ":settle-lock"
 	token := fmt.Sprintf("%d", time.Now().UnixNano())
-	ok, err := s.client.SetNX(ctx, lockKey, token, ttl).Result()
+	ok, err := s.client.TryLock(ctx, lockKey, token, ttl)
 	if err != nil {
 		return nil, err
 	}
@@ -288,8 +281,7 @@ func (s *RedisAdobeVideoTaskStore) AcquireSettlementLock(ctx context.Context, ta
 		return nil, ErrAdobeVideoTaskSettlementLocked
 	}
 	unlock := func(unlockCtx context.Context) error {
-		const script = `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end`
-		return s.client.Eval(unlockCtx, script, []string{lockKey}, token).Err()
+		return s.client.Unlock(unlockCtx, lockKey, token)
 	}
 	return unlock, nil
 }

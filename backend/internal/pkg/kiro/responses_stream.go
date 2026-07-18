@@ -13,10 +13,10 @@ import (
 //	   response.output_text.delta / response.function_call_* ...) →
 //	response.completed → [DONE]
 type ResponsesStreamState struct {
-	w     SSEWriter
-	model string
+	w      SSEWriter
+	model  string
 	respID string
-	req   *ResponsesRequest
+	req    *ResponsesRequest
 
 	fullText      strings.Builder
 	reasoningText strings.Builder
@@ -45,8 +45,8 @@ func NewResponsesStreamState(w SSEWriter, model, respID string, req *ResponsesRe
 		createdAt:     createdAt,
 	}
 	initial := s.envelope("in_progress", nil)
-	s.send("response.created", map[string]interface{}{"type": "response.created", "response": initial})
-	s.send("response.in_progress", map[string]interface{}{"type": "response.in_progress", "response": initial})
+	s.send("response.created", map[string]any{"type": "response.created", "response": initial})
+	s.send("response.in_progress", map[string]any{"type": "response.in_progress", "response": initial})
 	return s
 }
 
@@ -70,7 +70,7 @@ func (s *ResponsesStreamState) envelope(status string, output []ResponseOutputIt
 	return obj
 }
 
-func (s *ResponsesStreamState) send(event string, payload interface{}) {
+func (s *ResponsesStreamState) send(event string, payload any) {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return
@@ -95,23 +95,23 @@ func (s *ResponsesStreamState) ensureMessageStarted() {
 		return
 	}
 	s.messageStarted = true
-	s.send("response.output_item.added", map[string]interface{}{
+	s.send("response.output_item.added", map[string]any{
 		"type":         "response.output_item.added",
 		"output_index": s.outputIndex,
-		"item": map[string]interface{}{
+		"item": map[string]any{
 			"id":      s.messageItemID,
 			"type":    "message",
 			"role":    "assistant",
 			"status":  "in_progress",
-			"content": []map[string]interface{}{},
+			"content": []map[string]any{},
 		},
 	})
-	s.send("response.content_part.added", map[string]interface{}{
+	s.send("response.content_part.added", map[string]any{
 		"type":          "response.content_part.added",
 		"item_id":       s.messageItemID,
 		"output_index":  s.outputIndex,
 		"content_index": s.contentIndex,
-		"part":          map[string]interface{}{"type": "output_text", "text": ""},
+		"part":          map[string]any{"type": "output_text", "text": ""},
 	})
 }
 
@@ -120,13 +120,13 @@ func (s *ResponsesStreamState) onText(text string, isThinking bool) {
 		return
 	}
 	if isThinking {
-		s.reasoningText.WriteString(text)
+		_, _ = s.reasoningText.WriteString(text)
 		return
 	}
-	s.fullText.WriteString(text)
+	_, _ = s.fullText.WriteString(text)
 	s.started = true
 	s.ensureMessageStarted()
-	s.send("response.output_text.delta", map[string]interface{}{
+	s.send("response.output_text.delta", map[string]any{
 		"type":          "response.output_text.delta",
 		"item_id":       s.messageItemID,
 		"output_index":  s.outputIndex,
@@ -136,22 +136,22 @@ func (s *ResponsesStreamState) onText(text string, isThinking bool) {
 }
 
 func (s *ResponsesStreamState) closeMessage(text string) {
-	s.send("response.content_part.done", map[string]interface{}{
+	s.send("response.content_part.done", map[string]any{
 		"type":          "response.content_part.done",
 		"item_id":       s.messageItemID,
 		"output_index":  s.outputIndex,
 		"content_index": s.contentIndex,
-		"part":          map[string]interface{}{"type": "output_text", "text": text},
+		"part":          map[string]any{"type": "output_text", "text": text},
 	})
-	s.send("response.output_item.done", map[string]interface{}{
+	s.send("response.output_item.done", map[string]any{
 		"type":         "response.output_item.done",
 		"output_index": s.outputIndex,
-		"item": map[string]interface{}{
+		"item": map[string]any{
 			"id":      s.messageItemID,
 			"type":    "message",
 			"role":    "assistant",
 			"status":  "completed",
-			"content": []map[string]interface{}{{"type": "output_text", "text": text}},
+			"content": []map[string]any{{"type": "output_text", "text": text}},
 		},
 	})
 	s.messageStarted = false
@@ -165,10 +165,10 @@ func (s *ResponsesStreamState) onToolUse(tu KiroToolUse) {
 	s.toolUses = append(s.toolUses, tu)
 	args, _ := json.Marshal(tu.Input)
 	fcID := generateOutputItemID("fc")
-	s.send("response.output_item.added", map[string]interface{}{
+	s.send("response.output_item.added", map[string]any{
 		"type":         "response.output_item.added",
 		"output_index": s.outputIndex,
-		"item": map[string]interface{}{
+		"item": map[string]any{
 			"id":        fcID,
 			"type":      "function_call",
 			"status":    "in_progress",
@@ -177,16 +177,16 @@ func (s *ResponsesStreamState) onToolUse(tu KiroToolUse) {
 			"arguments": "",
 		},
 	})
-	s.send("response.function_call_arguments.delta", map[string]interface{}{
+	s.send("response.function_call_arguments.delta", map[string]any{
 		"type":         "response.function_call_arguments.delta",
 		"item_id":      fcID,
 		"output_index": s.outputIndex,
 		"delta":        string(args),
 	})
-	s.send("response.output_item.done", map[string]interface{}{
+	s.send("response.output_item.done", map[string]any{
 		"type":         "response.output_item.done",
 		"output_index": s.outputIndex,
-		"item": map[string]interface{}{
+		"item": map[string]any{
 			"id":        fcID,
 			"type":      "function_call",
 			"status":    "completed",
@@ -219,7 +219,7 @@ func (s *ResponsesStreamState) Finish(thinking bool, estimatedInputTokens int) (
 
 	obj := BuildResponsesObject(s.respID, s.model, finalContent, s.toolUses, inputTokens, outputTokens, s.req)
 	obj.CreatedAt = s.createdAt
-	s.send("response.completed", map[string]interface{}{"type": "response.completed", "response": obj})
+	s.send("response.completed", map[string]any{"type": "response.completed", "response": obj})
 	_ = s.w.WriteSSE("", []byte("[DONE]"))
 	s.w.Flush()
 	return obj, inputTokens, outputTokens, s.credits
@@ -228,9 +228,9 @@ func (s *ResponsesStreamState) Finish(thinking bool, estimatedInputTokens int) (
 // EmitFailed sends a response.failed event (used when the upstream errors after
 // the stream has started).
 func (s *ResponsesStreamState) EmitFailed(message string) {
-	s.send("response.failed", map[string]interface{}{
+	s.send("response.failed", map[string]any{
 		"type": "response.failed",
-		"response": map[string]interface{}{
+		"response": map[string]any{
 			"id":     s.respID,
 			"status": "failed",
 			"error":  map[string]string{"type": "server_error", "message": message},

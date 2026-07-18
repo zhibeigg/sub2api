@@ -53,6 +53,92 @@ func ProvideBatchImageModelPricingResolver(resolver *ModelPricingResolver) *Batc
 	return &BatchImageModelPricingResolver{Resolver: resolver}
 }
 
+type redisAdobeVideoTaskCache struct {
+	client *redis.Client
+}
+
+func (c *redisAdobeVideoTaskCache) Ping(ctx context.Context) error {
+	return c.client.Ping(ctx).Err()
+}
+
+func (c *redisAdobeVideoTaskCache) SetNX(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
+	return c.client.SetNX(ctx, key, value, ttl).Result()
+}
+
+func (c *redisAdobeVideoTaskCache) Get(ctx context.Context, key string) ([]byte, error) {
+	value, err := c.client.Get(ctx, key).Bytes()
+	if err == redis.Nil {
+		return nil, ErrAdobeVideoTaskNotFound
+	}
+	return value, err
+}
+
+func (c *redisAdobeVideoTaskCache) Watch(ctx context.Context, key string, update func([]byte, time.Duration) ([]byte, time.Duration, error)) error {
+	return c.client.Watch(ctx, func(tx *redis.Tx) error {
+		current, err := tx.Get(ctx, key).Bytes()
+		if err == redis.Nil {
+			return ErrAdobeVideoTaskNotFound
+		}
+		if err != nil {
+			return err
+		}
+		remainingTTL, err := tx.PTTL(ctx, key).Result()
+		if err != nil || remainingTTL <= 0 {
+			return ErrAdobeVideoTaskNotFound
+		}
+		next, ttl, err := update(current, remainingTTL)
+		if err != nil {
+			return err
+		}
+		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+			pipe.Set(ctx, key, next, ttl)
+			return nil
+		})
+		return err
+	}, key)
+}
+
+func (c *redisAdobeVideoTaskCache) TryLock(ctx context.Context, key, token string, ttl time.Duration) (bool, error) {
+	return c.client.SetNX(ctx, key, token, ttl).Result()
+}
+
+func (c *redisAdobeVideoTaskCache) Unlock(ctx context.Context, key, token string) error {
+	const script = `if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end`
+	return c.client.Eval(ctx, script, []string{key}, token).Err()
+}
+
+func NewAdobeVideoTaskStore(client *redis.Client, activeTTL, terminalTTL time.Duration) *RedisAdobeVideoTaskStore {
+	var cache adobeVideoTaskCache
+	if client != nil {
+		cache = &redisAdobeVideoTaskCache{client: client}
+	}
+	return newAdobeVideoTaskStore(cache, activeTTL, terminalTTL)
+}
+
+type redisCursorResponseStore struct {
+	client *redis.Client
+}
+
+func (s *redisCursorResponseStore) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+	return s.client.Set(ctx, key, value, ttl).Err()
+}
+
+func (s *redisCursorResponseStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
+	value, err := s.client.Get(ctx, key).Bytes()
+	if err == redis.Nil {
+		return nil, false, nil
+	}
+	return value, err == nil, err
+}
+
+func NewCursorGatewayService(httpUpstream HTTPUpstream, proxyRepo ProxyRepository, _ *TLSFingerprintProfileService, redisClient *redis.Client, cfg *config.Config) *CursorGatewayService {
+	var responseStore cursorResponseStore
+	if redisClient != nil {
+		responseStore = &redisCursorResponseStore{client: redisClient}
+	}
+	return newCursorGatewayService(httpUpstream, proxyRepo, responseStore, cfg)
+}
+
 // ProvideAdobeVideoTaskStore applies the configured absolute active/terminal TTLs.
 func ProvideAdobeVideoTaskStore(client *redis.Client, cfg *config.Config) AdobeVideoTaskStore {
 	activeTTL := 72 * time.Hour

@@ -413,7 +413,7 @@ INSERT INTO qqbot_binding_audit_logs (
 	}, nil
 }
 
-func (r *qqBotBindingRepository) ListBindings(ctx context.Context, filter service.QQBotBindingListFilter) (service.QQBotBindingPage, error) {
+func (r *qqBotBindingRepository) ListBindings(ctx context.Context, filter service.QQBotBindingListFilter) (pageResult service.QQBotBindingPage, err error) {
 	page := filter.Page
 	if page < 1 {
 		page = 1
@@ -433,15 +433,14 @@ func (r *qqBotBindingRepository) ListBindings(ctx context.Context, filter servic
 		return "$" + strconv.Itoa(len(args))
 	}
 	status := strings.ToLower(strings.TrimSpace(filter.Status))
-	if status != "" {
-		placeholder := addArg(status)
-		if status == service.QQBotBindingStatusExpired {
-			conditions = append(conditions, "(q.status = 'expired' OR (q.status = 'pending' AND q.expires_at <= NOW()))")
-		} else if status == service.QQBotBindingStatusPending {
-			conditions = append(conditions, "q.status = 'pending' AND q.expires_at > NOW()")
-		} else {
-			conditions = append(conditions, "q.status = "+placeholder)
-		}
+	switch status {
+	case "":
+	case service.QQBotBindingStatusExpired:
+		conditions = append(conditions, "(q.status = 'expired' OR (q.status = 'pending' AND q.expires_at <= NOW()))")
+	case service.QQBotBindingStatusPending:
+		conditions = append(conditions, "q.status = 'pending' AND q.expires_at > NOW()")
+	default:
+		conditions = append(conditions, "q.status = "+addArg(status))
 	}
 	if scene := strings.ToLower(strings.TrimSpace(filter.Scene)); scene != "" {
 		conditions = append(conditions, "q.scene = "+addArg(scene))
@@ -483,7 +482,11 @@ LIMIT ` + limitArg + ` OFFSET ` + offsetArg
 	if err != nil {
 		return service.QQBotBindingPage{}, err
 	}
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}()
 	items := make([]service.QQBotBindingRecord, 0, pageSize)
 	for rows.Next() {
 		record, _, err := scanQQBotRecord(rows)

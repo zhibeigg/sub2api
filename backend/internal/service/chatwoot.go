@@ -126,9 +126,10 @@ func (s *SettingService) GetDynamicCSPSources(ctx context.Context) (DynamicCSPSo
 		add("frame-src", origin)
 		add("connect-src", origin)
 		if u, parseErr := url.Parse(origin); parseErr == nil && u.Host != "" {
-			if u.Scheme == "https" {
+			switch u.Scheme {
+			case "https":
 				add("connect-src", "wss://"+u.Host)
-			} else if u.Scheme == "http" {
+			case "http":
 				add("connect-src", "ws://"+u.Host)
 			}
 		}

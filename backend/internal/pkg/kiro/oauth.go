@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -209,7 +210,7 @@ func StartIAMSSOLogin(ctx context.Context, startURL, region, proxyURL string) (*
 
 // ExchangeAuthCode exchanges an authorization code for tokens using the stored
 // PKCE code verifier.
-func ExchangeAuthCode(ctx context.Context, region, clientID, clientSecret, code, codeVerifier, redirectURI, proxyURL string) (*AuthCodeTokenResult, error) {
+func ExchangeAuthCode(ctx context.Context, region, clientID, clientSecret, code, codeVerifier, redirectURI, proxyURL string) (authResult *AuthCodeTokenResult, err error) {
 	base := oidcBaseURL(region)
 	payload := map[string]string{
 		"clientId":     clientID,
@@ -230,7 +231,7 @@ func ExchangeAuthCode(ctx context.Context, region, clientID, clientSecret, code,
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { err = errors.Join(err, resp.Body.Close()) }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
@@ -385,7 +386,7 @@ func registerAuthCodeClient(ctx context.Context, client *http.Client, base, star
 	return doRegisterClient(ctx, client, base, payload)
 }
 
-func doRegisterClient(ctx context.Context, client *http.Client, base string, payload map[string]any) (string, string, error) {
+func doRegisterClient(ctx context.Context, client *http.Client, base string, payload map[string]any) (clientID, clientSecret string, err error) {
 	body, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/client/register", bytes.NewReader(body))
 	if err != nil {
@@ -397,7 +398,7 @@ func doRegisterClient(ctx context.Context, client *http.Client, base string, pay
 	if err != nil {
 		return "", "", err
 	}
-	defer resp.Body.Close()
+	defer func() { err = errors.Join(err, resp.Body.Close()) }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
@@ -414,7 +415,7 @@ func doRegisterClient(ctx context.Context, client *http.Client, base string, pay
 	return result.ClientID, result.ClientSecret, nil
 }
 
-func startDeviceAuthorization(ctx context.Context, client *http.Client, base, clientID, clientSecret string) (*deviceAuthResponse, error) {
+func startDeviceAuthorization(ctx context.Context, client *http.Client, base, clientID, clientSecret string) (authResult *deviceAuthResponse, err error) {
 	payload := map[string]string{
 		"clientId":     clientID,
 		"clientSecret": clientSecret,
@@ -431,7 +432,7 @@ func startDeviceAuthorization(ctx context.Context, client *http.Client, base, cl
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { err = errors.Join(err, resp.Body.Close()) }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
@@ -460,7 +461,7 @@ func doTokenPoll(ctx context.Context, client *http.Client, base string, payload 
 	if err != nil {
 		return "", nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { err = errors.Join(err, resp.Body.Close()) }()
 
 	if resp.StatusCode == http.StatusOK {
 		var result oidcTokenResponse
@@ -531,7 +532,7 @@ func pollForTokenBounded(ctx context.Context, client *http.Client, base, clientI
 	}
 }
 
-func verifyBearerToken(ctx context.Context, client *http.Client, bearerToken string) error {
+func verifyBearerToken(ctx context.Context, client *http.Client, bearerToken string) (err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ssoPortalBase+"/token/whoAmI", nil)
 	if err != nil {
 		return err
@@ -543,14 +544,14 @@ func verifyBearerToken(ctx context.Context, client *http.Client, bearerToken str
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { err = errors.Join(err, resp.Body.Close()) }()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	return nil
 }
 
-func getDeviceSessionToken(ctx context.Context, client *http.Client, bearerToken string) (string, error) {
+func getDeviceSessionToken(ctx context.Context, client *http.Client, bearerToken string) (token string, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ssoPortalBase+"/session/device", bytes.NewReader([]byte("{}")))
 	if err != nil {
 		return "", err
@@ -562,7 +563,7 @@ func getDeviceSessionToken(ctx context.Context, client *http.Client, bearerToken
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { err = errors.Join(err, resp.Body.Close()) }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
@@ -584,7 +585,7 @@ type deviceContextInfo struct {
 	ClientType      string `json:"clientType"`
 }
 
-func acceptUserCode(ctx context.Context, client *http.Client, base, userCode, deviceSessionToken string) (*deviceContextInfo, error) {
+func acceptUserCode(ctx context.Context, client *http.Client, base, userCode, deviceSessionToken string) (deviceContext *deviceContextInfo, err error) {
 	payload := map[string]string{
 		"userCode":      userCode,
 		"userSessionId": deviceSessionToken,
@@ -601,7 +602,7 @@ func acceptUserCode(ctx context.Context, client *http.Client, base, userCode, de
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { err = errors.Join(err, resp.Body.Close()) }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
@@ -617,7 +618,7 @@ func acceptUserCode(ctx context.Context, client *http.Client, base, userCode, de
 	return result.DeviceContext, nil
 }
 
-func approveAuth(ctx context.Context, client *http.Client, base string, deviceContext *deviceContextInfo, deviceSessionToken string) error {
+func approveAuth(ctx context.Context, client *http.Client, base string, deviceContext *deviceContextInfo, deviceSessionToken string) (err error) {
 	payload := map[string]any{
 		"deviceContext": map[string]string{
 			"deviceContextId": deviceContext.DeviceContextID,
@@ -638,7 +639,7 @@ func approveAuth(ctx context.Context, client *http.Client, base string, deviceCo
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { err = errors.Join(err, resp.Body.Close()) }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))

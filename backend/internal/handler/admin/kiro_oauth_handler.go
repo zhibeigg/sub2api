@@ -147,12 +147,12 @@ func (h *KiroOAuthHandler) ImportSSOToken(c *gin.Context) {
 // ---- Account creation from resolved credentials ----
 
 type kiroCreateAccountRequest struct {
-	Credentials map[string]any `json:"credentials" binding:"required"`
-	Name        string         `json:"name"`
-	ProxyID     *int64         `json:"proxy_id"`
-	Concurrency int            `json:"concurrency"`
-	Priority    int            `json:"priority"`
-	GroupIDs    []int64        `json:"group_ids"`
+	Credentials  map[string]any    `json:"credentials" binding:"required"`
+	Name         string            `json:"name"`
+	ProxyID      *int64            `json:"proxy_id"`
+	Concurrency  int               `json:"concurrency"`
+	Priority     int               `json:"priority"`
+	GroupIDs     []int64           `json:"group_ids"`
 	ModelMapping map[string]string `json:"model_mapping"`
 }
 

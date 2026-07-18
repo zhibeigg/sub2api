@@ -423,15 +423,20 @@ func TestAPIContracts(t *testing.T) {
 						"id": 501,
 						"user_id": 1,
 						"group_id": 10,
+						"group_ids": null,
 						"starts_at": "2025-01-02T03:04:05Z",
 						"expires_at": "2099-01-02T03:04:05Z",
 						"status": "active",
 						"daily_window_start": null,
 						"weekly_window_start": null,
 						"monthly_window_start": null,
+						"daily_limit_usd": null,
+						"weekly_limit_usd": null,
+						"monthly_limit_usd": null,
 						"daily_usage_usd": 1.23,
 						"weekly_usage_usd": 2.34,
 						"monthly_usage_usd": 3.45,
+						"quota_snapshotted": false,
 						"created_at": "2025-01-02T03:04:05Z",
 						"updated_at": "2025-01-02T03:04:05Z"
 					}
@@ -729,6 +734,7 @@ func TestAPIContracts(t *testing.T) {
 					"smtp_from_name": "Sub2API",
 					"smtp_use_tls": true,
 					"turnstile_enabled": true,
+					"turnstile_endpoint": "",
 					"turnstile_site_key": "site-key",
 					"turnstile_secret_key_configured": true,
 						"linuxdo_connect_enabled": false,
@@ -832,7 +838,7 @@ func TestAPIContracts(t *testing.T) {
 					"force_email_on_third_party_signup": false,
 					"default_concurrency": 5,
 					"default_balance": 1.25,
-					"default_platform_quotas": {"anthropic":{"daily":null,"weekly":null,"monthly":null},"antigravity":{"daily":null,"weekly":null,"monthly":null},"gemini":{"daily":null,"weekly":null,"monthly":null},"grok":{"daily":null,"weekly":null,"monthly":null},"openai":{"daily":null,"weekly":null,"monthly":null}},
+					"default_platform_quotas": {"adobe":{"daily":null,"weekly":null,"monthly":null},"anthropic":{"daily":null,"weekly":null,"monthly":null},"antigravity":{"daily":null,"weekly":null,"monthly":null},"cursor":{"daily":null,"weekly":null,"monthly":null},"gemini":{"daily":null,"weekly":null,"monthly":null},"grok":{"daily":null,"weekly":null,"monthly":null},"openai":{"daily":null,"weekly":null,"monthly":null}},
 					"auth_source_default_email_platform_quotas": null,
 					"auth_source_default_github_platform_quotas": null,
 					"auth_source_default_google_platform_quotas": null,
@@ -865,6 +871,7 @@ func TestAPIContracts(t *testing.T) {
 					"max_claude_code_version": "",
 					"min_codex_version": "",
 					"max_codex_version": "",
+					"notice_bar": "",
 					"codex_cli_only_blacklist": "",
 					"codex_cli_only_whitelist": "",
 					"codex_cli_only_allow_app_server_clients": false,
@@ -929,6 +936,7 @@ func TestAPIContracts(t *testing.T) {
 					"payment_max_pending_orders": 0,
 					"payment_balance_disabled": false,
 					"payment_balance_recharge_multiplier": 0,
+					"payment_subscription_disabled": false,
 					"payment_subscription_usd_to_cny_rate": 0,
 					"payment_recharge_fee_rate": 0,
 					"payment_load_balance_strategy": "",
@@ -951,6 +959,10 @@ func TestAPIContracts(t *testing.T) {
 					"account_quota_notify_emails": [],
 					"channel_monitor_enabled": true,
 					"channel_monitor_default_interval_seconds": 60,
+					"chatwoot_enabled": false,
+					"chatwoot_base_url": "",
+					"chatwoot_website_token": "",
+					"chatwoot_identity_validation_secret_configured": false,
 					"available_channels_enabled": false,
 					"risk_control_enabled": false,
 					"cyber_session_block_enabled": false,
@@ -1045,6 +1057,7 @@ func TestAPIContracts(t *testing.T) {
 					"smtp_from_name": "",
 					"smtp_use_tls": false,
 					"turnstile_enabled": false,
+					"turnstile_endpoint": "",
 					"turnstile_site_key": "",
 					"turnstile_secret_key_configured": false,
 					"linuxdo_connect_enabled": false,
@@ -1112,7 +1125,7 @@ func TestAPIContracts(t *testing.T) {
 					"purchase_subscription_url": "",
 					"table_default_page_size": 20,
 					"table_page_size_options": [10, 20, 50],
-					"default_platform_quotas": {"anthropic":{"daily":null,"weekly":null,"monthly":null},"antigravity":{"daily":null,"weekly":null,"monthly":null},"gemini":{"daily":null,"weekly":null,"monthly":null},"grok":{"daily":null,"weekly":null,"monthly":null},"openai":{"daily":null,"weekly":null,"monthly":null}},
+					"default_platform_quotas": {"adobe":{"daily":null,"weekly":null,"monthly":null},"anthropic":{"daily":null,"weekly":null,"monthly":null},"antigravity":{"daily":null,"weekly":null,"monthly":null},"cursor":{"daily":null,"weekly":null,"monthly":null},"gemini":{"daily":null,"weekly":null,"monthly":null},"grok":{"daily":null,"weekly":null,"monthly":null},"openai":{"daily":null,"weekly":null,"monthly":null}},
 					"auth_source_default_email_platform_quotas": null,
 					"auth_source_default_github_platform_quotas": null,
 					"auth_source_default_google_platform_quotas": null,
@@ -1158,6 +1171,7 @@ func TestAPIContracts(t *testing.T) {
 					"antigravity_user_agent_version": "",
 					"min_codex_version": "",
 					"max_codex_version": "",
+					"notice_bar": "",
 					"codex_cli_only_blacklist": "",
 					"codex_cli_only_whitelist": "",
 					"codex_cli_only_allow_app_server_clients": false,
@@ -1209,6 +1223,7 @@ func TestAPIContracts(t *testing.T) {
 					"payment_enabled_types": null,
 					"payment_balance_disabled": false,
 					"payment_balance_recharge_multiplier": 0,
+					"payment_subscription_disabled": false,
 					"payment_subscription_usd_to_cny_rate": 0,
 					"payment_recharge_fee_rate": 0,
 					"payment_load_balance_strategy": "",
@@ -1230,6 +1245,10 @@ func TestAPIContracts(t *testing.T) {
 					"account_quota_notify_emails": [],
 					"channel_monitor_enabled": true,
 					"channel_monitor_default_interval_seconds": 60,
+					"chatwoot_enabled": false,
+					"chatwoot_base_url": "",
+					"chatwoot_website_token": "",
+					"chatwoot_identity_validation_secret_configured": false,
 					"available_channels_enabled": false,
 					"risk_control_enabled": false,
 					"cyber_session_block_enabled": false,
@@ -1555,6 +1574,10 @@ func (r *stubUserRepo) UpdateBalance(ctx context.Context, id int64, amount float
 
 func (r *stubUserRepo) DeductBalance(ctx context.Context, id int64, amount float64) error {
 	return errors.New("not implemented")
+}
+
+func (r *stubUserRepo) BindPromoCode(context.Context, int64, int64) error {
+	return nil
 }
 
 func (r *stubUserRepo) UpdateConcurrency(ctx context.Context, id int64, amount int) error {

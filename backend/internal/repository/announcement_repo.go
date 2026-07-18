@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 	"time"
 
@@ -289,7 +290,7 @@ func announcementEntityToService(m *dbent.Announcement) *service.Announcement {
 	}
 }
 
-func queryAnnouncementEmailSummary(ctx context.Context, client *dbent.Client, announcementID int64) (*service.AnnouncementEmailNotification, error) {
+func queryAnnouncementEmailSummary(ctx context.Context, client *dbent.Client, announcementID int64) (result *service.AnnouncementEmailNotification, err error) {
 	rows, err := client.QueryContext(ctx, `SELECT id, announcement_id, status, scheduled_at,
 		recipient_count, pending_count, sending_count, sent_count, failed_count, ambiguous_count,
 		skipped_count, attempt_count, created_by, last_error_code,
@@ -298,7 +299,7 @@ func queryAnnouncementEmailSummary(ctx context.Context, client *dbent.Client, an
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { err = errors.Join(err, rows.Close()) }()
 	if !rows.Next() {
 		return nil, sql.ErrNoRows
 	}

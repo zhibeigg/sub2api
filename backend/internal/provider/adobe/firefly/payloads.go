@@ -27,18 +27,20 @@ func buildImagePayloadCandidates(params *ResolvedParams, prompt string, referenc
 	prompt = firstRunes(prompt, maxPromptRunes)
 	seed := int(time.Now().UnixMilli() % 999999)
 	placeholder := sizeSpec{Width: 2048, Height: 2048}
-	if params.Quality == "1k" {
+	switch params.Quality {
+	case "1k":
 		placeholder = sizeSpec{1024, 1024}
-	} else if params.Quality == "4k" {
+	case "4k":
 		placeholder = sizeSpec{4096, 4096}
 	}
 	// nano-banana-v2 的 HAR 固定使用 1024 方形占位，真正比例仍由 modelSpecificPayload 决定。
 	if params.UpstreamModelVersion == "nano-banana-3" {
 		placeholder = sizeSpec{1024, 1024}
 	}
-	base := Payload{"modelId": params.UpstreamModelID, "modelVersion": params.UpstreamModelVersion, "n": 1, "prompt": prompt, "size": placeholder, "seeds": []int{seed}, "groundSearch": false, "output": map[string]any{"storeInputs": true}, "generationMetadata": map[string]string{"module": "text2image", "submodule": "ff-image-generate"}, "modelSpecificPayload": map[string]any{"parameters": map[string]any{"addWatermark": false}}}
+	modelSpecificPayload := map[string]any{"parameters": map[string]any{"addWatermark": false}}
+	base := Payload{"modelId": params.UpstreamModelID, "modelVersion": params.UpstreamModelVersion, "n": 1, "prompt": prompt, "size": placeholder, "seeds": []int{seed}, "groundSearch": false, "output": map[string]any{"storeInputs": true}, "generationMetadata": map[string]string{"module": "text2image", "submodule": "ff-image-generate"}, "modelSpecificPayload": modelSpecificPayload}
 	if params.AspectRatio != "auto" {
-		base["modelSpecificPayload"].(map[string]any)["aspectRatio"] = params.AspectRatio
+		modelSpecificPayload["aspectRatio"] = params.AspectRatio
 	}
 	blobs := make([]referenceBlob, 0, len(referenceIDs))
 	for _, id := range referenceIDs {

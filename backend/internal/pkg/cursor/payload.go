@@ -86,21 +86,21 @@ func RenderAgentPrompt(request *Request) string {
 		return ""
 	}
 	var builder strings.Builder
-	builder.WriteString("You are serving a chat-completion compatibility request through Cursor Cloud Agents. Answer the final user request directly. Do not create, edit, delete, commit, or push repository files unless the user explicitly asks for those actions in the transcript. Preserve requested tool-call JSON fences exactly.\n\nConversation transcript:\n")
+	_, _ = builder.WriteString("You are serving a chat-completion compatibility request through Cursor Cloud Agents. Answer the final user request directly. Do not create, edit, delete, commit, or push repository files unless the user explicitly asks for those actions in the transcript. Preserve requested tool-call JSON fences exactly.\n\nConversation transcript:\n")
 	for _, message := range request.Messages {
 		role := strings.ToUpper(strings.TrimSpace(message.Role))
 		if role == "" {
 			role = "USER"
 		}
-		builder.WriteString("\n[")
-		builder.WriteString(role)
-		builder.WriteString("]\n")
+		_, _ = builder.WriteString("\n[")
+		_, _ = builder.WriteString(role)
+		_, _ = builder.WriteString("]\n")
 		for _, part := range message.Parts {
-			builder.WriteString(part.Text)
+			_, _ = builder.WriteString(part.Text)
 		}
-		builder.WriteByte('\n')
+		_ = builder.WriteByte('\n')
 	}
-	builder.WriteString("\n[ASSISTANT]\n")
+	_, _ = builder.WriteString("\n[ASSISTANT]\n")
 	return builder.String()
 }
 

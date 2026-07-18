@@ -18,8 +18,8 @@ const kiroQAPIBase = "https://q.us-east-1.amazonaws.com"
 
 // OverageSnapshot captures the upstream Overages state for an account.
 type OverageSnapshot struct {
-	Status            string  `json:"status"`            // "ENABLED" | "DISABLED" | "UNKNOWN"
-	Capability        string  `json:"capability"`        // "OVERAGE_CAPABLE" | ...
+	Status            string  `json:"status"`             // "ENABLED" | "DISABLED" | "UNKNOWN"
+	Capability        string  `json:"capability"`         // "OVERAGE_CAPABLE" | ...
 	SubscriptionTitle string  `json:"subscription_title"` // e.g. "KIRO PRO+"
 	OverageCap        float64 `json:"overage_cap"`        // USD upper bound
 	OverageRate       float64 `json:"overage_rate"`       // per-invocation USD
@@ -67,7 +67,7 @@ func FetchOverageStatus(ctx context.Context, cred *Credential) (*OverageSnapshot
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
@@ -139,7 +139,7 @@ func SetOverageStatus(ctx context.Context, cred *Credential, enabled bool) (*Ove
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
 	if resp.StatusCode != http.StatusOK {

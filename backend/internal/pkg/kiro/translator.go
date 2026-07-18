@@ -121,7 +121,8 @@ func ClaudeToKiro(req *ClaudeRequest, thinking bool) *KiroPayload {
 	for i, msg := range req.Messages {
 		isLast := i == len(req.Messages)-1
 
-		if msg.Role == "user" {
+		switch msg.Role {
+		case "user":
 			content, images, toolResults := extractClaudeUserContent(msg.Content)
 			content = normalizeUserContent(content, len(images) > 0)
 
@@ -145,7 +146,7 @@ func ClaudeToKiro(req *ClaudeRequest, thinking bool) *KiroPayload {
 				}
 				history = append(history, KiroHistoryMessage{UserInputMessage: &userMsg})
 			}
-		} else if msg.Role == "assistant" {
+		case "assistant":
 			content, toolUses := extractClaudeAssistantContent(msg.Content)
 			history = append(history, KiroHistoryMessage{
 				AssistantResponseMessage: &KiroAssistantResponseMessage{
@@ -228,7 +229,7 @@ func ClaudeToKiro(req *ClaudeRequest, thinking bool) *KiroPayload {
 	return payload
 }
 
-func buildClaudeSystemPrompt(system interface{}, thinking bool) string {
+func buildClaudeSystemPrompt(system any, thinking bool) string {
 	systemPrompt := applyPromptFilters(extractSystemPrompt(system))
 	if !thinking {
 		return systemPrompt
@@ -256,57 +257,57 @@ func CloneClaudeRequestForThinking(req *ClaudeRequest, thinking bool) *ClaudeReq
 
 // PrependThinkingSystem returns a structured Claude system prompt with the
 // Kiro thinking-mode priming inserted before the original system content.
-func PrependThinkingSystem(system interface{}) interface{} {
+func PrependThinkingSystem(system any) any {
 	thinkingText := ThinkingModePrompt
 	if hasClaudeSystemContent(system) {
 		thinkingText += "\n"
 	}
-	thinkingBlock := map[string]interface{}{
+	thinkingBlock := map[string]any{
 		"type": "text",
 		"text": thinkingText,
 	}
 
 	switch value := system.(type) {
 	case nil:
-		return []interface{}{thinkingBlock}
+		return []any{thinkingBlock}
 	case string:
 		if value == "" {
-			return []interface{}{thinkingBlock}
+			return []any{thinkingBlock}
 		}
-		return []interface{}{
+		return []any{
 			thinkingBlock,
-			map[string]interface{}{
+			map[string]any{
 				"type": "text",
 				"text": value,
 			},
 		}
-	case []interface{}:
-		blocks := make([]interface{}, 0, len(value)+1)
+	case []any:
+		blocks := make([]any, 0, len(value)+1)
 		blocks = append(blocks, thinkingBlock)
 		blocks = append(blocks, value...)
 		return blocks
 	case []string:
-		blocks := make([]interface{}, 0, len(value)+1)
+		blocks := make([]any, 0, len(value)+1)
 		blocks = append(blocks, thinkingBlock)
 		for _, block := range value {
-			blocks = append(blocks, map[string]interface{}{
+			blocks = append(blocks, map[string]any{
 				"type": "text",
 				"text": block,
 			})
 		}
 		return blocks
 	default:
-		return []interface{}{thinkingBlock}
+		return []any{thinkingBlock}
 	}
 }
 
-func hasClaudeSystemContent(system interface{}) bool {
+func hasClaudeSystemContent(system any) bool {
 	switch value := system.(type) {
 	case nil:
 		return false
 	case string:
 		return value != ""
-	case []interface{}:
+	case []any:
 		return len(value) > 0
 	case []string:
 		return len(value) > 0
@@ -315,17 +316,17 @@ func hasClaudeSystemContent(system interface{}) bool {
 	}
 }
 
-func extractSystemPrompt(system interface{}) string {
+func extractSystemPrompt(system any) string {
 	if system == nil {
 		return ""
 	}
 	if s, ok := system.(string); ok {
 		return s
 	}
-	if blocks, ok := system.([]interface{}); ok {
+	if blocks, ok := system.([]any); ok {
 		var parts []string
 		for _, b := range blocks {
-			if block, ok := b.(map[string]interface{}); ok {
+			if block, ok := b.(map[string]any); ok {
 				if text, ok := block["text"].(string); ok {
 					parts = append(parts, text)
 				}
@@ -336,7 +337,7 @@ func extractSystemPrompt(system interface{}) string {
 	return ""
 }
 
-func extractClaudeUserContent(content interface{}) (string, []KiroImage, []KiroToolResult) {
+func extractClaudeUserContent(content any) (string, []KiroImage, []KiroToolResult) {
 	var text string
 	var images []KiroImage
 	var toolResults []KiroToolResult
@@ -345,9 +346,9 @@ func extractClaudeUserContent(content interface{}) (string, []KiroImage, []KiroT
 		return s, nil, nil
 	}
 
-	if blocks, ok := content.([]interface{}); ok {
+	if blocks, ok := content.([]any); ok {
 		for _, b := range blocks {
-			block, ok := b.(map[string]interface{})
+			block, ok := b.(map[string]any)
 			if !ok {
 				continue
 			}
@@ -381,8 +382,8 @@ func extractClaudeUserContent(content interface{}) (string, []KiroImage, []KiroT
 	return text, images, toolResults
 }
 
-func extractImageFromClaudeBlock(block map[string]interface{}) *KiroImage {
-	if source, ok := block["source"].(map[string]interface{}); ok {
+func extractImageFromClaudeBlock(block map[string]any) *KiroImage {
+	if source, ok := block["source"].(map[string]any); ok {
 		if data, ok := source["data"].(string); ok {
 			if img := parseDataURL(data); img != nil {
 				return img
@@ -416,15 +417,15 @@ func extractImageFromClaudeBlock(block map[string]interface{}) *KiroImage {
 	return nil
 }
 
-func extractToolResultContent(content interface{}) (string, []KiroImage) {
+func extractToolResultContent(content any) (string, []KiroImage) {
 	if s, ok := content.(string); ok {
 		return s, nil
 	}
-	if blocks, ok := content.([]interface{}); ok {
+	if blocks, ok := content.([]any); ok {
 		var parts []string
 		var images []KiroImage
 		for _, b := range blocks {
-			block, ok := b.(map[string]interface{})
+			block, ok := b.(map[string]any)
 			if !ok {
 				continue
 			}
@@ -449,16 +450,16 @@ func extractToolResultContent(content interface{}) (string, []KiroImage) {
 	return "", nil
 }
 
-func extractClaudeAssistantContent(content interface{}) (string, []KiroToolUse) {
+func extractClaudeAssistantContent(content any) (string, []KiroToolUse) {
 	var text string
 	var toolUses []KiroToolUse
 
 	if s, ok := content.(string); ok {
 		return s, nil
 	}
-	if blocks, ok := content.([]interface{}); ok {
+	if blocks, ok := content.([]any); ok {
 		for _, b := range blocks {
-			block, ok := b.(map[string]interface{})
+			block, ok := b.(map[string]any)
 			if !ok {
 				continue
 			}
@@ -471,9 +472,9 @@ func extractClaudeAssistantContent(content interface{}) (string, []KiroToolUse) 
 			case "tool_use":
 				id, _ := block["id"].(string)
 				name, _ := block["name"].(string)
-				input, _ := block["input"].(map[string]interface{})
+				input, _ := block["input"].(map[string]any)
 				if input == nil {
-					input = make(map[string]interface{})
+					input = make(map[string]any)
 				}
 				toolUses = append(toolUses, KiroToolUse{ToolUseID: id, Name: name, Input: input})
 			}
@@ -506,10 +507,10 @@ func convertClaudeTools(tools []ClaudeTool) ([]KiroToolWrapper, map[string]strin
 	return result, nameMap
 }
 
-func ensureObjectSchema(schema interface{}) interface{} {
-	m, ok := schema.(map[string]interface{})
+func ensureObjectSchema(schema any) any {
+	m, ok := schema.(map[string]any)
 	if !ok {
-		return map[string]interface{}{"type": "object"}
+		return map[string]any{"type": "object"}
 	}
 	cleaned := cloneSchemaMap(m)
 	cleanSchema(cleaned)
@@ -519,20 +520,20 @@ func ensureObjectSchema(schema interface{}) interface{} {
 	return cleaned
 }
 
-func cloneSchemaMap(m map[string]interface{}) map[string]interface{} {
-	cloned := make(map[string]interface{}, len(m))
+func cloneSchemaMap(m map[string]any) map[string]any {
+	cloned := make(map[string]any, len(m))
 	for k, v := range m {
 		cloned[k] = cloneSchemaValue(v)
 	}
 	return cloned
 }
 
-func cloneSchemaValue(v interface{}) interface{} {
+func cloneSchemaValue(v any) any {
 	switch val := v.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		return cloneSchemaMap(val)
-	case []interface{}:
-		cloned := make([]interface{}, 0, len(val))
+	case []any:
+		cloned := make([]any, 0, len(val))
 		for _, item := range val {
 			cloned = append(cloned, cloneSchemaValue(item))
 		}
@@ -542,13 +543,13 @@ func cloneSchemaValue(v interface{}) interface{} {
 	}
 }
 
-func cleanSchema(m map[string]interface{}) {
+func cleanSchema(m map[string]any) {
 	delete(m, "additionalProperties")
 	if req, exists := m["required"]; exists {
 		switch arr := req.(type) {
 		case nil:
 			delete(m, "required")
-		case []interface{}:
+		case []any:
 			if len(arr) == 0 {
 				delete(m, "required")
 			}
@@ -562,11 +563,11 @@ func cleanSchema(m map[string]interface{}) {
 	}
 	for _, v := range m {
 		switch val := v.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			cleanSchema(val)
-		case []interface{}:
+		case []any:
 			for _, item := range val {
-				if sub, ok := item.(map[string]interface{}); ok {
+				if sub, ok := item.(map[string]any); ok {
 					cleanSchema(sub)
 				}
 			}
@@ -596,9 +597,9 @@ func sanitizeToolName(name string) string {
 			continue
 		}
 		if i == 0 {
-			b.WriteString(strings.ToLower(part[:1]) + part[1:])
+			_, _ = b.WriteString(strings.ToLower(part[:1]) + part[1:])
 		} else {
-			b.WriteString(strings.ToUpper(part[:1]) + part[1:])
+			_, _ = b.WriteString(strings.ToUpper(part[:1]) + part[1:])
 		}
 	}
 	result := b.String()
@@ -710,10 +711,10 @@ func OpenAIToKiro(req *OpenAIRequest, thinking bool) *KiroPayload {
 			content := extractOpenAIMessageText(msg.Content)
 			var toolUses []KiroToolUse
 			for _, tc := range msg.ToolCalls {
-				var input map[string]interface{}
+				var input map[string]any
 				_ = json.Unmarshal([]byte(tc.Function.Arguments), &input)
 				if input == nil {
-					input = make(map[string]interface{})
+					input = make(map[string]any)
 				}
 				toolUses = append(toolUses, KiroToolUse{ToolUseID: tc.ID, Name: tc.Function.Name, Input: input})
 			}
@@ -817,13 +818,13 @@ func OpenAIToKiro(req *OpenAIRequest, thinking bool) *KiroPayload {
 	return payload
 }
 
-func extractOpenAIUserContent(content interface{}) (string, []KiroImage) {
+func extractOpenAIUserContent(content any) (string, []KiroImage) {
 	if s, ok := content.(string); ok {
 		return s, nil
 	}
 	var text string
 	var images []KiroImage
-	if part, ok := content.(map[string]interface{}); ok {
+	if part, ok := content.(map[string]any); ok {
 		if t, ok := extractOpenAITextPart(part); ok {
 			text += t
 		}
@@ -831,9 +832,9 @@ func extractOpenAIUserContent(content interface{}) (string, []KiroImage) {
 			images = append(images, *img)
 		}
 	}
-	if parts, ok := content.([]interface{}); ok {
+	if parts, ok := content.([]any); ok {
 		for _, p := range parts {
-			part, ok := p.(map[string]interface{})
+			part, ok := p.(map[string]any)
 			if !ok {
 				continue
 			}
@@ -851,7 +852,7 @@ func extractOpenAIUserContent(content interface{}) (string, []KiroImage) {
 	return text, images
 }
 
-func extractOpenAIMessageText(content interface{}) string {
+func extractOpenAIMessageText(content any) string {
 	if content == nil {
 		return ""
 	}
@@ -862,7 +863,7 @@ func extractOpenAIMessageText(content interface{}) string {
 		return text
 	}
 	switch v := content.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		if nested, ok := v["content"]; ok {
 			if nestedText := extractOpenAIMessageText(nested); strings.TrimSpace(nestedText) != "" {
 				return nestedText
@@ -871,7 +872,7 @@ func extractOpenAIMessageText(content interface{}) string {
 		if raw, err := json.Marshal(v); err == nil {
 			return string(raw)
 		}
-	case []interface{}:
+	case []any:
 		parts := make([]string, 0, len(v))
 		for _, item := range v {
 			partText := extractOpenAIMessageText(item)
@@ -1254,7 +1255,7 @@ func isSyntheticConversationAnchor(anchor string) bool {
 	}
 }
 
-func extractOpenAITextPart(part map[string]interface{}) (string, bool) {
+func extractOpenAITextPart(part map[string]any) (string, bool) {
 	partType, _ := part["type"].(string)
 	switch partType {
 	case "text", "input_text":
@@ -1268,7 +1269,7 @@ func extractOpenAITextPart(part map[string]interface{}) (string, bool) {
 	return "", false
 }
 
-func extractImageFromOpenAIPart(part map[string]interface{}) *KiroImage {
+func extractImageFromOpenAIPart(part map[string]any) *KiroImage {
 	partType, _ := part["type"].(string)
 	if partType != "" {
 		switch partType {
@@ -1277,12 +1278,12 @@ func extractImageFromOpenAIPart(part map[string]interface{}) *KiroImage {
 			return nil
 		}
 	}
-	if fileObj, ok := part["file"].(map[string]interface{}); ok {
+	if fileObj, ok := part["file"].(map[string]any); ok {
 		if img := extractImageFromOpenAIPart(fileObj); img != nil {
 			return img
 		}
 	}
-	if sourceObj, ok := part["source"].(map[string]interface{}); ok {
+	if sourceObj, ok := part["source"].(map[string]any); ok {
 		if img := extractImageFromOpenAIPart(sourceObj); img != nil {
 			return img
 		}
@@ -1312,7 +1313,7 @@ func extractImageFromOpenAIPart(part map[string]interface{}) *KiroImage {
 			if img := parseDataURL(v); img != nil {
 				return img
 			}
-		case map[string]interface{}:
+		case map[string]any:
 			if u, ok := v["url"].(string); ok {
 				if img := parseDataURL(u); img != nil {
 					return img
@@ -1483,16 +1484,16 @@ func extractThinkingFromContent(content string) (string, string) {
 // output, formatted per thinkingFormat ("reasoning_content" | "thinking" |
 // "think"). Returns a generic map so the reasoning field can be emitted without
 // polluting the strongly-typed OpenAIResponse.
-func KiroToOpenAIResponseWithReasoning(content, reasoningContent string, toolUses []KiroToolUse, inputTokens, outputTokens int, model, thinkingFormat string) map[string]interface{} {
+func KiroToOpenAIResponseWithReasoning(content, reasoningContent string, toolUses []KiroToolUse, inputTokens, outputTokens int, model, thinkingFormat string) map[string]any {
 	finishReason := "stop"
-	message := map[string]interface{}{"role": "assistant"}
+	message := map[string]any{"role": "assistant"}
 
 	if len(toolUses) > 0 {
 		message["content"] = nil
-		toolCalls := make([]map[string]interface{}, len(toolUses))
+		toolCalls := make([]map[string]any, len(toolUses))
 		for i, tu := range toolUses {
 			args, _ := json.Marshal(tu.Input)
-			toolCalls[i] = map[string]interface{}{
+			toolCalls[i] = map[string]any{
 				"id":   tu.ToolUseID,
 				"type": "function",
 				"function": map[string]string{
@@ -1517,12 +1518,12 @@ func KiroToOpenAIResponseWithReasoning(content, reasoningContent string, toolUse
 		message["content"] = content
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"id":      "chatcmpl-" + uuid.New().String(),
 		"object":  "chat.completion",
 		"created": nowUnix(),
 		"model":   model,
-		"choices": []map[string]interface{}{{
+		"choices": []map[string]any{{
 			"index":         0,
 			"message":       message,
 			"finish_reason": finishReason,

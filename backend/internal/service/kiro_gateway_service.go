@@ -419,9 +419,9 @@ func (s *KiroGatewayService) forwardStream(
 		cb.OnText = func(t string, thinking bool) {
 			markFirst()
 			if thinking {
-				thinkingBuf.WriteString(t)
+				_, _ = thinkingBuf.WriteString(t)
 			} else {
-				textBuf.WriteString(t)
+				_, _ = textBuf.WriteString(t)
 			}
 			wrapText(t, thinking)
 		}

@@ -119,7 +119,7 @@ func (s *AccountTestService) SetCursorGatewayService(gateway *CursorGatewayServi
 
 func (s *AccountTestService) RefreshAdobeCredentials(ctx context.Context, account *Account) (*Account, error) {
 	if s == nil || s.adobeTokenProvider == nil {
-		return nil, errors.New("Adobe token provider not configured")
+		return nil, errors.New("adobe token provider not configured")
 	}
 	if _, err := s.adobeTokenProvider.ForceRefresh(ctx, account); err != nil {
 		return nil, err

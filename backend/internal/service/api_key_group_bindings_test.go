@@ -1,6 +1,9 @@
 package service
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 // Round-trip: a key with multi-group priority bindings survives snapshot
 // serialization (snapshotFromAPIKey → snapshotToAPIKey) with order + fields.
@@ -20,7 +23,7 @@ func TestAPIKeyService_SnapshotRoundTripPreservesGroupBindings(t *testing.T) {
 		},
 	}
 
-	snap := svc.snapshotFromAPIKey(nil, apiKey)
+	snap := svc.snapshotFromAPIKey(context.TODO(), apiKey)
 	if snap == nil {
 		t.Fatal("expected snapshot, got nil")
 	}
@@ -62,7 +65,7 @@ func TestAPIKeyService_SnapshotSingleGroupNoBindings(t *testing.T) {
 		User:    &User{ID: 2, Status: StatusActive, Role: RoleUser},
 		Group:   &Group{ID: gid, Name: "solo", Platform: PlatformOpenAI, Status: StatusActive, SubscriptionType: SubscriptionTypeStandard, RateMultiplier: 1},
 	}
-	snap := svc.snapshotFromAPIKey(nil, apiKey)
+	snap := svc.snapshotFromAPIKey(context.TODO(), apiKey)
 	if len(snap.GroupBindings) != 0 {
 		t.Fatalf("expected no bindings for single-group key, got %d", len(snap.GroupBindings))
 	}

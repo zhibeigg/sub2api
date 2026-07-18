@@ -14,7 +14,8 @@ func TestParseActionsToleratesControlCharactersAndTruncation(t *testing.T) {
 	if len(actions) != 1 || actions[0].Name != "write" {
 		t.Fatalf("unexpected actions: %+v", actions)
 	}
-	if actions[0].Arguments["path"] != "a.txt" || !strings.Contains(actions[0].Arguments["content"].(string), "line 2") {
+	content, ok := actions[0].Arguments["content"].(string)
+	if actions[0].Arguments["path"] != "a.txt" || !ok || !strings.Contains(content, "line 2") {
 		t.Fatalf("arguments were not preserved: %+v", actions[0].Arguments)
 	}
 	if clean != "before" {

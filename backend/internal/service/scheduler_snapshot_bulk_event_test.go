@@ -85,19 +85,41 @@ func bulkEventPayload(accountIDs []int64, groupIDs []int64) map[string]any {
 }
 
 func schedulerBucketsForTest(groupIDs []int64, platforms ...string) []SchedulerBucket {
-	buckets := make([]SchedulerBucket, 0, len(groupIDs)*len(platforms)*3)
+	platformSet := make(map[string]struct{}, len(platforms))
 	for _, platform := range platforms {
-		for _, groupID := range groupIDs {
-			buckets = append(buckets,
-				SchedulerBucket{GroupID: groupID, Platform: platform, Mode: SchedulerModeSingle},
-				SchedulerBucket{GroupID: groupID, Platform: platform, Mode: SchedulerModeForced},
-			)
-			if platform == PlatformAnthropic || platform == PlatformGemini {
-				buckets = append(buckets, SchedulerBucket{GroupID: groupID, Platform: platform, Mode: SchedulerModeMixed})
+		platformSet[platform] = struct{}{}
+	}
+
+	bucketCountPerGroup := 2 * len(platforms)
+	for _, platform := range platforms {
+		if GroupPlatformSupportsMixedScheduling(platform) {
+			bucketCountPerGroup++
+		}
+	}
+	buckets := make([]SchedulerBucket, 0, len(groupIDs)*bucketCountPerGroup)
+	for _, groupID := range groupIDs {
+		for _, bucket := range schedulerCanonicalBuckets(groupID) {
+			if _, ok := platformSet[bucket.Platform]; ok {
+				buckets = append(buckets, bucket)
 			}
 		}
 	}
 	return buckets
+}
+
+func schedulerCanonicalBucketCountForTest() int {
+	return len(schedulerCanonicalBuckets(0))
+}
+
+func schedulerSnapshotQueryCountForTest() int {
+	platforms := schedulerSnapshotPlatforms()
+	count := len(platforms)
+	for _, platform := range platforms {
+		if GroupPlatformSupportsMixedScheduling(platform) {
+			count++
+		}
+	}
+	return count
 }
 
 func TestSchedulerBulkAccountEventScopesOpenAIRebuildToFreshPlatform(t *testing.T) {

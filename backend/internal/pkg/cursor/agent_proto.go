@@ -3,7 +3,6 @@ package cursor
 import (
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -41,13 +40,16 @@ func encodeAgentRunRequest(dialogue *Dialogue, options AgentRunOptions, uuidFn f
 	} else {
 		actionIndex := len(dialogue.Messages)
 		actionText := ""
-		if actionIndex > 0 && dialogue.Messages[actionIndex-1].Role == "user" {
-			actionIndex--
-			actionText = dialogue.Messages[actionIndex].Text
-		} else if actionIndex > 0 && dialogue.Messages[actionIndex-1].Role == "tool" {
-			// A rebuilt tool-result turn still needs a non-empty user action after
-			// the assistant/tool history, otherwise Agent treats it as an empty prompt.
-			actionText = "Continue the conversation using the latest tool result."
+		if actionIndex > 0 {
+			switch dialogue.Messages[actionIndex-1].Role {
+			case "user":
+				actionIndex--
+				actionText = dialogue.Messages[actionIndex].Text
+			case "tool":
+				// A rebuilt tool-result turn still needs a non-empty user action after
+				// the assistant/tool history, otherwise Agent treats it as an empty prompt.
+				actionText = "Continue the conversation using the latest tool result."
+			}
 		}
 		userMessage := appendString(nil, 1, actionText)
 		userMessage = appendString(userMessage, 2, uuidFn())
@@ -814,11 +816,6 @@ func decodeProtoValue(payload []byte) any {
 		payload = payload[size:]
 	}
 	return nil
-}
-
-func appendFixed64(dst []byte, field protowire.Number, value uint64) []byte {
-	dst = protowire.AppendTag(dst, field, protowire.Fixed64Type)
-	return binary.LittleEndian.AppendUint64(dst, value)
 }
 
 func decodeAgentConversationState(payload []byte) *AgentConversationState {

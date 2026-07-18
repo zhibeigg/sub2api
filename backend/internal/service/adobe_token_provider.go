@@ -61,10 +61,10 @@ type AdobeCredentialVerificationSummary struct {
 // mutating a persisted account. It intentionally never calls persistResult.
 func (p *AdobeTokenProvider) VerifyCredentials(ctx context.Context, account *Account) (*AdobeCredentialVerificationSummary, error) {
 	if p == nil || p.fetchOnly == nil || p.refreshViaDevice == nil || p.refreshViaCookie == nil {
-		return nil, errors.New("Adobe token provider is not configured")
+		return nil, errors.New("adobe token provider is not configured")
 	}
 	if account == nil || !account.IsAdobeOAuth() {
-		return nil, errors.New("Adobe OAuth account is required")
+		return nil, errors.New("adobe OAuth account is required")
 	}
 	if err := ValidateAdobeAccountCredentials(account.Type, account.Credentials); err != nil {
 		return nil, err
@@ -82,13 +82,13 @@ func (p *AdobeTokenProvider) VerifyCredentials(ctx context.Context, account *Acc
 		}
 	}
 	if result == nil || strings.TrimSpace(result.AccessToken) == "" {
-		return nil, errors.New("Adobe credential verification failed")
+		return nil, errors.New("adobe credential verification failed")
 	}
 	if strings.TrimSpace(result.DisplayName) == "" &&
 		strings.TrimSpace(result.Email) == "" &&
 		strings.TrimSpace(result.UserID) == "" &&
 		result.Credits < 0 {
-		return nil, errors.New("Adobe credential verification failed")
+		return nil, errors.New("adobe credential verification failed")
 	}
 
 	summary := &AdobeCredentialVerificationSummary{
@@ -124,7 +124,7 @@ func (p *AdobeTokenProvider) InvalidateToken(_ context.Context, account *Account
 
 func (p *AdobeTokenProvider) RefreshProfileAndCredits(ctx context.Context, account *Account, force bool) (*AdobeCreditsInfo, error) {
 	if account == nil || !account.IsAdobeOAuth() {
-		return nil, errors.New("Adobe OAuth account is required")
+		return nil, errors.New("adobe OAuth account is required")
 	}
 	if !force {
 		if cached := AdobeCreditsInfoFromExtra(account.Extra); cached != nil && !p.creditsCacheExpired(cached.UpdatedAt) {
@@ -137,7 +137,7 @@ func (p *AdobeTokenProvider) RefreshProfileAndCredits(ctx context.Context, accou
 	}
 	result := p.fetchOnly(ctx, token, p.refreshOptions(ctx, account))
 	if result == nil {
-		return nil, errors.New("Adobe IMS profile request failed")
+		return nil, errors.New("adobe IMS profile request failed")
 	}
 	if err := p.persistResult(ctx, account, result, false); err != nil {
 		return nil, err
@@ -147,10 +147,10 @@ func (p *AdobeTokenProvider) RefreshProfileAndCredits(ctx context.Context, accou
 
 func (p *AdobeTokenProvider) getAccessToken(ctx context.Context, account *Account, force bool) (string, error) {
 	if p == nil || p.accountRepo == nil {
-		return "", errors.New("Adobe token provider is not configured")
+		return "", errors.New("adobe token provider is not configured")
 	}
 	if account == nil || !account.IsAdobeOAuth() {
-		return "", errors.New("Adobe OAuth account is required")
+		return "", errors.New("adobe OAuth account is required")
 	}
 	_, invalidated := p.invalidated.Load(account.ID)
 	if !force && !invalidated {
@@ -166,7 +166,7 @@ func (p *AdobeTokenProvider) getAccessToken(ctx context.Context, account *Accoun
 			return "", loadErr
 		}
 		if current == nil || !current.IsAdobeOAuth() {
-			return "", errors.New("Adobe OAuth account is required")
+			return "", errors.New("adobe OAuth account is required")
 		}
 		if !force {
 			if token := strings.TrimSpace(current.GetCredential("access_token")); token != "" && !p.tokenNeedsRefresh(current) {
@@ -193,7 +193,7 @@ func (p *AdobeTokenProvider) getAccessToken(ctx context.Context, account *Accoun
 	}
 	token, _ := value.(string)
 	if strings.TrimSpace(token) == "" {
-		return "", errors.New("Adobe IMS returned an empty access token")
+		return "", errors.New("adobe IMS returned an empty access token")
 	}
 	return token, nil
 }
@@ -218,19 +218,19 @@ func (p *AdobeTokenProvider) refresh(ctx context.Context, account *Account) (*im
 			return result, nil
 		}
 		if deviceErr != nil {
-			return nil, fmt.Errorf("Adobe credential refresh failed for device and cookie sources")
+			return nil, fmt.Errorf("adobe credential refresh failed for device and cookie sources")
 		}
-		return nil, fmt.Errorf("Adobe cookie credential refresh failed")
+		return nil, fmt.Errorf("adobe cookie credential refresh failed")
 	}
 	if deviceErr != nil {
-		return nil, fmt.Errorf("Adobe device credential refresh failed")
+		return nil, fmt.Errorf("adobe device credential refresh failed")
 	}
-	return nil, errors.New("Adobe account has no refresh source")
+	return nil, errors.New("adobe account has no refresh source")
 }
 
 func (p *AdobeTokenProvider) persistResult(ctx context.Context, account *Account, result *ims.FullResult, persistToken bool) error {
 	if result == nil {
-		return errors.New("Adobe IMS returned no result")
+		return errors.New("adobe IMS returned no result")
 	}
 	if persistToken {
 		credentials := shallowCopyMap(account.Credentials)

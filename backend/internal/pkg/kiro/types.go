@@ -70,7 +70,7 @@ type KiroToolWrapper struct {
 }
 
 type InputSchema struct {
-	JSON interface{} `json:"json"`
+	JSON any `json:"json"`
 }
 
 type KiroToolResult struct {
@@ -101,9 +101,9 @@ type KiroAssistantResponseMessage struct {
 }
 
 type KiroToolUse struct {
-	ToolUseID string                 `json:"toolUseId"`
-	Name      string                 `json:"name"`
-	Input     map[string]interface{} `json:"input"`
+	ToolUseID string         `json:"toolUseId"`
+	Name      string         `json:"name"`
+	Input     map[string]any `json:"input"`
 }
 
 type InferenceConfig struct {
@@ -121,10 +121,10 @@ type ClaudeRequest struct {
 	Temperature float64               `json:"temperature,omitempty"`
 	TopP        float64               `json:"top_p,omitempty"`
 	Stream      bool                  `json:"stream,omitempty"`
-	System      interface{}           `json:"system,omitempty"` // string or []SystemBlock
+	System      any                   `json:"system,omitempty"` // string or []SystemBlock
 	Thinking    *ClaudeThinkingConfig `json:"thinking,omitempty"`
 	Tools       []ClaudeTool          `json:"tools,omitempty"`
-	ToolChoice  interface{}           `json:"tool_choice,omitempty"`
+	ToolChoice  any                   `json:"tool_choice,omitempty"`
 }
 
 type ClaudeThinkingConfig struct {
@@ -134,8 +134,8 @@ type ClaudeThinkingConfig struct {
 }
 
 type ClaudeMessage struct {
-	Role    string      `json:"role"`
-	Content interface{} `json:"content"` // string or []ContentBlock
+	Role    string `json:"role"`
+	Content any    `json:"content"` // string or []ContentBlock
 }
 
 type ClaudeContentBlock struct {
@@ -145,9 +145,9 @@ type ClaudeContentBlock struct {
 	Signature string       `json:"signature,omitempty"`
 	ID        string       `json:"id,omitempty"`
 	Name      string       `json:"name,omitempty"`
-	Input     interface{}  `json:"input,omitempty"`
+	Input     any          `json:"input,omitempty"`
 	ToolUseID string       `json:"tool_use_id,omitempty"`
-	Content   interface{}  `json:"content,omitempty"` // for tool_result
+	Content   any          `json:"content,omitempty"` // for tool_result
 	Source    *ImageSource `json:"source,omitempty"`
 }
 
@@ -158,10 +158,10 @@ type ImageSource struct {
 }
 
 type ClaudeTool struct {
-	Name         string      `json:"name"`
-	Description  string      `json:"description"`
-	InputSchema  interface{} `json:"input_schema"`
-	CacheControl interface{} `json:"cache_control,omitempty"`
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	InputSchema  any    `json:"input_schema"`
+	CacheControl any    `json:"cache_control,omitempty"`
 }
 
 type ClaudeResponse struct {
@@ -201,10 +201,10 @@ type OpenAIRequest struct {
 }
 
 type OpenAIMessage struct {
-	Role       string      `json:"role"`
-	Content    interface{} `json:"content"`
-	ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
-	ToolCallID string      `json:"tool_call_id,omitempty"`
+	Role       string     `json:"role"`
+	Content    any        `json:"content"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
 }
 
 type ToolCall struct {
@@ -219,9 +219,9 @@ type ToolCall struct {
 type OpenAITool struct {
 	Type     string `json:"type"`
 	Function struct {
-		Name        string      `json:"name"`
-		Description string      `json:"description"`
-		Parameters  interface{} `json:"parameters"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Parameters  any    `json:"parameters"`
 	} `json:"function"`
 }
 
@@ -231,14 +231,14 @@ type OpenAITool struct {
 // rejects with HTTP 400).
 func (t *OpenAITool) UnmarshalJSON(data []byte) error {
 	var raw struct {
-		Type        string      `json:"type"`
-		Name        string      `json:"name"`
-		Description string      `json:"description"`
-		Parameters  interface{} `json:"parameters"`
+		Type        string `json:"type"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Parameters  any    `json:"parameters"`
 		Function    *struct {
-			Name        string      `json:"name"`
-			Description string      `json:"description"`
-			Parameters  interface{} `json:"parameters"`
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			Parameters  any    `json:"parameters"`
 		} `json:"function"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {

@@ -566,7 +566,12 @@ func TestAgentClientHTTP2TrueDuplexAndIdempotentClose(t *testing.T) {
 		message := appendBytes(nil, 1, interaction)
 		response, _ := EncodeConnectFrame(message, false)
 		_, _ = w.Write(response)
-		w.(http.Flusher).Flush()
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Error("response writer does not support flushing")
+			return
+		}
+		flusher.Flush()
 		second, err := readConnectFrame(r.Body)
 		if err != nil || firstProtoBytes(second.Payload, 7) == nil {
 			t.Errorf("second frame is not heartbeat: %#v %v", second, err)
@@ -631,7 +636,12 @@ func TestAgentClientHTTP2KVMetadataRoundTrip(t *testing.T) {
 		message := appendBytes(nil, 4, kvRequest)
 		response, _ := EncodeConnectFrame(message, false)
 		_, _ = w.Write(response)
-		w.(http.Flusher).Flush()
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Error("response writer does not support flushing")
+			return
+		}
+		flusher.Flush()
 
 		result, err := readConnectFrame(r.Body)
 		if err != nil {
@@ -686,7 +696,12 @@ func TestAgentStreamCancellationCleansRequest(t *testing.T) {
 		_, _ = readConnectFrame(r.Body)
 		w.Header().Set("Content-Type", "application/connect+proto")
 		w.WriteHeader(http.StatusOK)
-		w.(http.Flusher).Flush()
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Error("response writer does not support flushing")
+			return
+		}
+		flusher.Flush()
 		<-r.Context().Done()
 		cancelled.Store(true)
 	}))

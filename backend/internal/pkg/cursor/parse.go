@@ -322,7 +322,9 @@ func parseTextContent(raw json.RawMessage, allowEmpty bool) (string, error) {
 	for _, part := range parts {
 		switch part.Type {
 		case "text", "input_text", "output_text":
-			result.WriteString(part.Text)
+			if _, err := result.WriteString(part.Text); err != nil {
+				return "", fmt.Errorf("append text content: %w", err)
+			}
 		case "image", "image_url", "input_image", "output_image", "audio", "input_audio", "file", "input_file", "document":
 			return "", fmt.Errorf("unsupported multimodal content type %q", part.Type)
 		default:

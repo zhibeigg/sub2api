@@ -15,8 +15,8 @@ func TestEstimateApproxTokens(t *testing.T) {
 		t.Errorf("non-empty text should be >= 1 token, got %d", got)
 	}
 	// CJK text is weighted more heavily than ASCII.
-	ascii := estimateApproxTokens("aaaaaaaaaaaaaaaaaaaa")   // 20 ASCII
-	cjk := estimateApproxTokens("你好世界你好世界你好世界你好世界你好世界") // 20 CJK
+	ascii := estimateApproxTokens("aaaaaaaaaaaaaaaaaaaa") // 20 ASCII
+	cjk := estimateApproxTokens("你好世界你好世界你好世界你好世界你好世界")   // 20 CJK
 	if cjk <= ascii {
 		t.Errorf("CJK (%d) should weigh more than ASCII (%d)", cjk, ascii)
 	}

@@ -20,15 +20,19 @@ import (
 	cursorpkg "github.com/Wei-Shaw/sub2api/internal/pkg/cursor"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 )
 
 // CursorGatewayService adapts Anthropic Messages, OpenAI Chat Completions and
 // OpenAI Responses requests to Cursor's asynchronous Cloud Agents API.
+type cursorResponseStore interface {
+	Set(ctx context.Context, key string, value []byte, ttl time.Duration) error
+	Get(ctx context.Context, key string) ([]byte, bool, error)
+}
+
 type CursorGatewayService struct {
 	httpUpstream    HTTPUpstream
 	proxyRepo       ProxyRepository
-	redisClient     *redis.Client
+	responseStore   cursorResponseStore
 	cfg             *config.Config
 	dashboardAuth   *CursorDashboardAuthService
 	ideModelMu      sync.RWMutex
@@ -39,9 +43,9 @@ type CursorGatewayService struct {
 	agentSessions  map[string]*cursorAgentActiveSession
 }
 
-func NewCursorGatewayService(httpUpstream HTTPUpstream, proxyRepo ProxyRepository, _ *TLSFingerprintProfileService, redisClient *redis.Client, cfg *config.Config) *CursorGatewayService {
+func newCursorGatewayService(httpUpstream HTTPUpstream, proxyRepo ProxyRepository, responseStore cursorResponseStore, cfg *config.Config) *CursorGatewayService {
 	return &CursorGatewayService{
-		httpUpstream: httpUpstream, proxyRepo: proxyRepo, redisClient: redisClient, cfg: cfg,
+		httpUpstream: httpUpstream, proxyRepo: proxyRepo, responseStore: responseStore, cfg: cfg,
 		ideModelCache: make(map[int64]cursorIDEModelCatalogCache),
 		agentSessions: make(map[string]*cursorAgentActiveSession),
 	}
@@ -436,7 +440,7 @@ func (s *CursorGatewayService) Probe(ctx context.Context, account *Account, _, _
 			rawMode = s.cursorConfig().DefaultTransportMode
 		}
 		if NormalizeCursorTransportMode(rawMode) != CursorTransportAuto || strings.TrimSpace(account.GetCredential("api_key")) == "" {
-			return "", errors.New("Cursor Agent RPC is disabled")
+			return "", errors.New("cursor Agent RPC is disabled")
 		}
 	}
 	client, err := s.newCloudClient(ctx, account)
@@ -465,7 +469,7 @@ func (s *CursorGatewayService) FetchDashboardUsage(ctx context.Context, account 
 	}
 	accessToken := strings.TrimSpace(account.GetCredential("dashboard_access_token"))
 	if accessToken == "" {
-		return nil, errors.New("Cursor Dashboard access token is missing")
+		return nil, errors.New("cursor Dashboard access token is missing")
 	}
 	client, err := s.newDashboardClient(ctx, account, accessToken)
 	if err != nil {
@@ -910,10 +914,10 @@ func cursorEndpoint(raw string) (string, error) {
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
-		return "", fmt.Errorf("Cursor base_url must be a valid HTTPS URL")
+		return "", fmt.Errorf("cursor base_url must be a valid HTTPS URL")
 	}
 	if !strings.EqualFold(parsed.Hostname(), "api.cursor.com") {
-		return "", fmt.Errorf("Cursor base_url host must be api.cursor.com")
+		return "", fmt.Errorf("cursor base_url host must be api.cursor.com")
 	}
 	parsed.Path = strings.TrimRight(parsed.Path, "/")
 	parsed.RawQuery = ""
@@ -936,10 +940,10 @@ func cursorAPI2Endpoint(raw, configKey string) (string, error) {
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
-		return "", fmt.Errorf("Cursor %s must be a valid HTTPS URL", configKey)
+		return "", fmt.Errorf("cursor %s must be a valid HTTPS URL", configKey)
 	}
 	if !strings.EqualFold(parsed.Hostname(), "api2.cursor.sh") {
-		return "", fmt.Errorf("Cursor %s host must be api2.cursor.sh", configKey)
+		return "", fmt.Errorf("cursor %s host must be api2.cursor.sh", configKey)
 	}
 	parsed.Path = strings.TrimRight(parsed.Path, "/")
 	parsed.RawQuery = ""
@@ -954,10 +958,10 @@ func cursorDashboardWebsiteEndpoint(raw string) (string, error) {
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
-		return "", fmt.Errorf("Cursor dashboard_auth_website_url must be a valid HTTPS URL")
+		return "", fmt.Errorf("cursor dashboard_auth_website_url must be a valid HTTPS URL")
 	}
 	if !strings.EqualFold(parsed.Hostname(), "cursor.com") {
-		return "", fmt.Errorf("Cursor dashboard_auth_website_url host must be cursor.com")
+		return "", fmt.Errorf("cursor dashboard_auth_website_url host must be cursor.com")
 	}
 	parsed.Path = strings.TrimRight(parsed.Path, "/")
 	parsed.RawQuery = ""
@@ -1011,12 +1015,12 @@ func collectCloudResponse(ctx context.Context, client *cursorpkg.CloudClient, cr
 					ms := int(time.Since(start).Milliseconds())
 					firstTokenMs = &ms
 				}
-				streamed.WriteString(text)
+				_, _ = streamed.WriteString(text)
 			}
 		case "assistant":
 			if streamed.Len() == 0 {
 				if text := cloudEventText(event.Data); text != "" {
-					streamed.WriteString(text)
+					_, _ = streamed.WriteString(text)
 				}
 			}
 		}
@@ -1198,7 +1202,7 @@ func completeCursorCloudModelRef(ref *cursorpkg.ModelRef, models []cursorpkg.Clo
 			return &cursorpkg.ModelRef{ID: selectedModel.ID, Params: append([]cursorpkg.ModelParam(nil), variant.Params...)}, nil
 		}
 	}
-	return nil, fmt.Errorf("Cursor model %q has no variant matching the requested parameters", ref.ID)
+	return nil, fmt.Errorf("cursor model %q has no variant matching the requested parameters", ref.ID)
 }
 
 func cursorModelParamMap(params []cursorpkg.ModelParam) map[string]string {
@@ -1292,7 +1296,7 @@ func cloudTextValue(value any) string {
 	case []any:
 		var builder strings.Builder
 		for _, item := range typed {
-			builder.WriteString(cloudTextValue(item))
+			_, _ = builder.WriteString(cloudTextValue(item))
 		}
 		return builder.String()
 	case map[string]any:
@@ -1397,16 +1401,16 @@ func validateCursorToolResult(dialogue *cursorpkg.Dialogue, actions []cursorpkg.
 	}
 	for _, action := range actions {
 		if _, ok := allowed[action.Name]; !ok {
-			return fmt.Errorf("Cursor compatibility mode returned unknown tool %q", action.Name)
+			return fmt.Errorf("cursor compatibility mode returned unknown tool %q", action.Name)
 		}
 	}
 	if (dialogue.ToolChoice.Mode == "any" || dialogue.ToolChoice.Mode == "required" || dialogue.ToolChoice.Mode == "tool" || dialogue.ToolChoice.Mode == "function") && len(actions) == 0 {
-		return errors.New("Cursor compatibility mode did not return the required tool call")
+		return errors.New("cursor compatibility mode did not return the required tool call")
 	}
 	if (dialogue.ToolChoice.Mode == "tool" || dialogue.ToolChoice.Mode == "function") && dialogue.ToolChoice.Name != "" {
 		for _, action := range actions {
 			if action.Name != dialogue.ToolChoice.Name {
-				return fmt.Errorf("Cursor compatibility mode returned tool %q instead of required tool %q", action.Name, dialogue.ToolChoice.Name)
+				return fmt.Errorf("cursor compatibility mode returned tool %q instead of required tool %q", action.Name, dialogue.ToolChoice.Name)
 			}
 		}
 	}
@@ -1435,9 +1439,10 @@ func estimateCursorActionTokens(actions []cursorpkg.Action) int {
 
 func cursorResponseID(protocol cursorpkg.Protocol) string {
 	prefix := "msg"
-	if protocol == cursorpkg.ProtocolOpenAIChat {
+	switch protocol {
+	case cursorpkg.ProtocolOpenAIChat:
 		prefix = "chatcmpl"
-	} else if protocol == cursorpkg.ProtocolResponses {
+	case cursorpkg.ProtocolResponses:
 		prefix = "resp"
 	}
 	return prefix + "_" + strings.ReplaceAll(uuid.NewString(), "-", "")
@@ -1500,11 +1505,11 @@ func cloneCursorAgentBlobs(blobs map[string][]byte) map[string][]byte {
 }
 
 func (s *CursorGatewayService) saveCursorStoredResponse(ctx context.Context, c *gin.Context, responseID string, stored *cursorStoredResponse) error {
-	if s == nil || s.redisClient == nil {
-		return errors.New("Redis is not configured")
+	if s == nil || s.responseStore == nil {
+		return errors.New("redis is not configured")
 	}
 	if stored == nil {
-		return errors.New("Cursor response state is unavailable")
+		return errors.New("cursor response state is unavailable")
 	}
 	owner, err := cursorResponseOwner(c)
 	if err != nil {
@@ -1516,7 +1521,7 @@ func (s *CursorGatewayService) saveCursorStoredResponse(ctx context.Context, c *
 		return err
 	}
 	ttl := durationSeconds(s.cursorConfig().ResponsesTTLSeconds, 86400)
-	return s.redisClient.Set(ctx, "cursor:responses:"+responseID, encoded, ttl).Err()
+	return s.responseStore.Set(ctx, "cursor:responses:"+responseID, encoded, ttl)
 }
 
 func (s *CursorGatewayService) loadCursorResponse(ctx context.Context, c *gin.Context, responseID string) (*cursorpkg.Dialogue, error) {
@@ -1531,19 +1536,19 @@ func (s *CursorGatewayService) loadCursorResponse(ctx context.Context, c *gin.Co
 }
 
 func (s *CursorGatewayService) loadCursorStoredResponse(ctx context.Context, c *gin.Context, responseID string) (*cursorStoredResponse, error) {
-	if s == nil || s.redisClient == nil {
-		return nil, errors.New("Redis is not configured")
+	if s == nil || s.responseStore == nil {
+		return nil, errors.New("redis is not configured")
 	}
 	owner, err := cursorResponseOwner(c)
 	if err != nil {
 		return nil, err
 	}
-	encoded, err := s.redisClient.Get(ctx, "cursor:responses:"+strings.TrimSpace(responseID)).Bytes()
-	if errors.Is(err, redis.Nil) {
-		return nil, fmt.Errorf("previous_response_id %q was not found or expired", responseID)
-	}
+	encoded, found, err := s.responseStore.Get(ctx, "cursor:responses:"+strings.TrimSpace(responseID))
 	if err != nil {
 		return nil, err
+	}
+	if !found {
+		return nil, fmt.Errorf("previous_response_id %q was not found or expired", responseID)
 	}
 	var stored cursorStoredResponse
 	if err := json.Unmarshal(encoded, &stored); err != nil {
@@ -1578,10 +1583,4 @@ func cursorResponseOwner(c *gin.Context) (string, error) {
 		return "", errors.New("authenticated API key is invalid")
 	}
 	return fmt.Sprintf("user:%d:key:%d", apiKey.UserID, apiKey.ID), nil
-}
-
-func sortedCursorActions(actions []cursorpkg.Action) []cursorpkg.Action {
-	out := append([]cursorpkg.Action(nil), actions...)
-	sort.SliceStable(out, func(i, j int) bool { return out[i].ID < out[j].ID })
-	return out
 }

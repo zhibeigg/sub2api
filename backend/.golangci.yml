@@ -24,6 +24,11 @@ linters:
             - "!**/internal/service/ops_cleanup_service.go"
             - "!**/internal/service/ops_metrics_collector.go"
             - "!**/internal/service/ops_scheduled_report_service.go"
+            # Redis-backed service tests use miniredis clients as test fixtures.
+            - "!**/internal/service/adobe_video_task_store_test.go"
+            # Cursor gateway tests use miniredis-backed Redis clients as test fixtures.
+            - "!**/internal/service/cursor_gateway_ide_test.go"
+            - "!**/internal/service/cursor_gateway_service_test.go"
             - "!**/internal/service/wire.go"
           deny:
             - pkg: github.com/Wei-Shaw/sub2api/internal/repository

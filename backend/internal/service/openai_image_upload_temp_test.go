@@ -298,7 +298,7 @@ func TestOpenAIImagesMultipartStreamRebuildsFromFiles(t *testing.T) {
 
 	body, contentType, err := newOpenAIImagesMultipartStream(parsed, "gpt-image-2")
 	require.NoError(t, err)
-	defer body.Close()
+	t.Cleanup(func() { require.NoError(t, body.Close()) })
 	_, params, err := mime.ParseMediaType(contentType)
 	require.NoError(t, err)
 	reader := multipart.NewReader(body, params["boundary"])

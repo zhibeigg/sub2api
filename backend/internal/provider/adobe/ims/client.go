@@ -48,7 +48,7 @@ type FullResult struct {
 	Credits     float64
 }
 
-var ErrNoCookie = errors.New("Adobe IMS cookie is required")
+var ErrNoCookie = errors.New("adobe IMS cookie is required")
 
 func (o *RefreshOptions) defaults() {
 	if o.ClientID == "" {
@@ -86,13 +86,13 @@ func do(ctx context.Context, opt RefreshOptions, method, endpoint string, header
 	if err != nil {
 		return 0, nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	b, err := io.ReadAll(io.LimitReader(resp.Body, maxIMSBody+1))
 	if err != nil {
 		return 0, nil, err
 	}
 	if len(b) > maxIMSBody {
-		return 0, nil, fmt.Errorf("Adobe IMS response exceeds size limit")
+		return 0, nil, fmt.Errorf("adobe IMS response exceeds size limit")
 	}
 	return resp.StatusCode, b, nil
 }
@@ -105,25 +105,25 @@ func RefreshAccessTokenViaCookie(ctx context.Context, cookie string, opt Refresh
 	form := url.Values{"client_id": {opt.ClientID}, "guest_allowed": {"true"}, "scope": {opt.Scope}}
 	status, b, err := do(ctx, opt, http.MethodPost, imsTokenURL, map[string]string{"cookie": cookie, "content-type": "application/x-www-form-urlencoded;charset=UTF-8", "accept": "*/*", "origin": opt.Origin, "referer": opt.Origin + "/", "user-agent": opt.UserAgent}, form.Encode())
 	if err != nil {
-		return nil, fmt.Errorf("Adobe IMS cookie refresh failed")
+		return nil, fmt.Errorf("adobe IMS cookie refresh failed")
 	}
 	if status != 200 {
-		return nil, fmt.Errorf("Adobe IMS cookie refresh HTTP %d", status)
+		return nil, fmt.Errorf("adobe IMS cookie refresh HTTP %d", status)
 	}
 	return parseTokenResult(b)
 }
 func RefreshAccessTokenViaDeviceToken(ctx context.Context, deviceToken, deviceID string, opt RefreshOptions) (*RefreshTokenResult, error) {
 	if strings.TrimSpace(deviceToken) == "" || strings.TrimSpace(deviceID) == "" {
-		return nil, errors.New("Adobe IMS device credentials are required")
+		return nil, errors.New("adobe IMS device credentials are required")
 	}
 	opt.defaults()
 	form := url.Values{"client_id": {"FF-iOS"}, "grant_type": {"device"}, "device_token": {deviceToken}, "device_id": {deviceID}}
 	status, b, err := do(ctx, opt, http.MethodPost, imsDeviceTokenURL, map[string]string{"content-type": "application/x-www-form-urlencoded", "accept": "application/json", "user-agent": "Firefly/26.10.0 (AdobeCreativeSDK 11.0.2434;Apple;iPhone;iOS;26.6)", "x-ims-clientid": "FF-iOS"}, form.Encode())
 	if err != nil {
-		return nil, fmt.Errorf("Adobe IMS device refresh failed")
+		return nil, fmt.Errorf("adobe IMS device refresh failed")
 	}
 	if status != 200 {
-		return nil, fmt.Errorf("Adobe IMS device refresh HTTP %d", status)
+		return nil, fmt.Errorf("adobe IMS device refresh HTTP %d", status)
 	}
 	return parseTokenResult(b)
 }
@@ -133,7 +133,7 @@ func parseTokenResult(b []byte) (*RefreshTokenResult, error) {
 		ExpiresIn   any    `json:"expires_in"`
 	}
 	if json.Unmarshal(b, &v) != nil || v.AccessToken == "" {
-		return nil, errors.New("Adobe IMS returned an invalid token response")
+		return nil, errors.New("adobe IMS returned an invalid token response")
 	}
 	ttl := toInt64(v.ExpiresIn)
 	if ttl > 172800 {

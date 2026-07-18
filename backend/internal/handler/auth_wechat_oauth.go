@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -469,7 +470,7 @@ func (h *AuthHandler) WeChatPaymentOAuthCallback(c *gin.Context) {
 	}
 
 	rawContext, _ := readCookieDecoded(c, wechatPaymentOAuthContextName)
-	if strings.Contains(rawContext, ".") {
+	if looksLikeSignedWeChatPaymentOAuthContext(rawContext) {
 		h.completeSignedWeChatPaymentOAuth(c, frontendCallback, rawContext, code)
 		return
 	}
@@ -1409,6 +1410,19 @@ func encodeWeChatPaymentOAuthContext(ctx wechatPaymentOAuthContext) (string, err
 		return "", err
 	}
 	return string(data), nil
+}
+
+func looksLikeSignedWeChatPaymentOAuthContext(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	payload, signature, ok := strings.Cut(raw, ".")
+	if !ok || payload == "" || signature == "" || strings.Contains(signature, ".") {
+		return false
+	}
+	if _, err := base64.RawURLEncoding.DecodeString(payload); err != nil {
+		return false
+	}
+	_, err := base64.RawURLEncoding.DecodeString(signature)
+	return err == nil
 }
 
 func decodeWeChatPaymentOAuthContext(raw string) (wechatPaymentOAuthContext, error) {

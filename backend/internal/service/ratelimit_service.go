@@ -252,7 +252,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 		if authAccount.Platform == PlatformOpenAI && (openai401Code == "token_invalidated" || openai401Code == "token_revoked") {
 			msg := "Token revoked (401): account authentication permanently revoked"
 			if upstreamMsg != "" {
-				msg = "Token revoked (401): " + upstreamMsg
+				msg += ": " + upstreamMsg
 			}
 			s.handleAuthError(ctx, authAccount, msg)
 			shouldDisable = true
@@ -262,7 +262,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 		if authAccount.Platform == PlatformOpenAI && gjson.GetBytes(responseBody, "detail").String() == "Unauthorized" {
 			msg := "Unauthorized (401): account authentication failed permanently"
 			if upstreamMsg != "" {
-				msg = "Unauthorized (401): " + upstreamMsg
+				msg += ": " + upstreamMsg
 			}
 			s.handleAuthError(ctx, authAccount, msg)
 			shouldDisable = true
@@ -281,7 +281,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			if strings.TrimSpace(authAccount.GetCredential("refresh_token")) == "" {
 				msg := "Authentication failed (401): refresh_token missing, cannot recover"
 				if upstreamMsg != "" {
-					msg = "OAuth 401 (no refresh_token): " + upstreamMsg
+					msg += ": " + upstreamMsg
 				}
 				s.handleAuthError(ctx, authAccount, msg)
 				shouldDisable = true
@@ -298,7 +298,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			// 冷却结束后由 token_provider 的 NeedsRefresh / token_refresh_service 走带分布式锁的正路刷新。
 			msg := "Authentication failed (401): invalid or expired credentials"
 			if upstreamMsg != "" {
-				msg = "OAuth 401: " + upstreamMsg
+				msg += ": " + upstreamMsg
 			}
 			if authAccount.Platform == PlatformAntigravity {
 				extraUpdates := antigravityForceTokenRefreshExtra("401_invalid")
@@ -328,7 +328,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			// 非 OAuth：保持 SetError 行为
 			msg := "Authentication failed (401): invalid or expired credentials"
 			if upstreamMsg != "" {
-				msg = "Authentication failed (401): " + upstreamMsg
+				msg += ": " + upstreamMsg
 			}
 			s.handleAuthError(ctx, authAccount, msg)
 			shouldDisable = true

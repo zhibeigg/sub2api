@@ -127,7 +127,7 @@ func TestBuildResponsesObject(t *testing.T) {
 }
 
 func TestBuildResponsesObjectWithToolCalls(t *testing.T) {
-	toolUses := []KiroToolUse{{ToolUseID: "t1", Name: "search", Input: map[string]interface{}{"q": "x"}}}
+	toolUses := []KiroToolUse{{ToolUseID: "t1", Name: "search", Input: map[string]any{"q": "x"}}}
 	obj := BuildResponsesObject("resp_y", "m", "", toolUses, 1, 1, nil)
 	// one function_call output item (no empty message when content is empty but tools present)
 	if len(obj.Output) != 1 || obj.Output[0].Type != "function_call" || obj.Output[0].Name != "search" {

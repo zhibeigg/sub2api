@@ -165,7 +165,7 @@ func (f *PlaygroundURLFetcher) fetch(ctx context.Context, rawURL string, maxByte
 		}
 		return PlaygroundFetchedURL{}, ErrPlaygroundFetchFailed.WithCause(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	contentType := resp.Header.Get("Content-Type")
 	mediaType, _, err := mime.ParseMediaType(contentType)
@@ -328,9 +328,9 @@ func readableHTMLText(body []byte) (string, error) {
 			text := strings.TrimSpace(node.Data)
 			if text != "" {
 				if builder.Len() > 0 {
-					builder.WriteByte(' ')
+					_ = builder.WriteByte(' ')
 				}
-				builder.WriteString(text)
+				_, _ = builder.WriteString(text)
 			}
 		}
 		for child := node.FirstChild; child != nil; child = child.NextSibling {
