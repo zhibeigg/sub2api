@@ -11,25 +11,33 @@ import (
 //
 // 用户侧「可用渠道」页面据此展示：专属分组 vs 公开分组（IsExclusive）、
 // 订阅 vs 标准（SubscriptionType）、默认倍率（RateMultiplier）与高峰倍率规则。
-// 用户专属倍率不在这里暴露，前端自己通过 /groups/rates 拉取，和 API 密钥页面保持一致。
+// 用户专属、模型级、高峰和媒体独立倍率由 handler 按模型生成 group_rates 快照。
 type AvailableGroupRef struct {
-	ID                   int64
-	Name                 string
-	Platform             string
-	SubscriptionType     string
-	RateMultiplier       float64
-	PeakRateEnabled      bool
-	PeakStart            string
-	PeakEnd              string
-	PeakRateMultiplier   float64
-	IsExclusive          bool
-	AllowImageGeneration bool
-	ImageBillingEnabled  bool
-	ImageRateIndependent bool
-	ImageRateMultiplier  float64
-	ImagePrice1K         *float64
-	ImagePrice2K         *float64
-	ImagePrice4K         *float64
+	ID                    int64
+	Name                  string
+	Platform              string
+	SubscriptionType      string
+	RateMultiplier        float64
+	PeakRateEnabled       bool
+	PeakStart             string
+	PeakEnd               string
+	PeakRateMultiplier    float64
+	IsExclusive           bool
+	AllowImageGeneration  bool
+	AllowVideoGeneration  bool
+	AllowMessagesDispatch bool
+	ImageBillingEnabled   bool
+	ImageRateIndependent  bool
+	ImageRateMultiplier   float64
+	ImagePrice1K          *float64
+	ImagePrice2K          *float64
+	ImagePrice4K          *float64
+	VideoBillingEnabled   bool
+	VideoRateIndependent  bool
+	VideoRateMultiplier   float64
+	VideoPrice480P        *float64
+	VideoPrice720P        *float64
+	VideoPrice1080P       *float64
 }
 
 // AvailableChannel 可用渠道视图：用于「可用渠道」页面展示渠道基础信息 +
@@ -81,12 +89,21 @@ func (s *ChannelService) ListAvailable(ctx context.Context) ([]AvailableChannel,
 			PeakRateMultiplier:   g.PeakRateMultiplier,
 			IsExclusive:          g.IsExclusive,
 			AllowImageGeneration: g.AllowImageGeneration,
-			ImageBillingEnabled:  g.HasImageBillingPrice(),
-			ImageRateIndependent: g.ImageRateIndependent,
-			ImageRateMultiplier:  g.ImageRateMultiplier,
-			ImagePrice1K:         g.ImagePrice1K,
-			ImagePrice2K:         g.ImagePrice2K,
-			ImagePrice4K:         g.ImagePrice4K,
+			AllowVideoGeneration: GroupAllowsVideoGeneration(&g) &&
+				(NormalizePlatform(g.Platform) != PlatformAdobe || g.VideoPrice720P != nil || g.VideoPrice1080P != nil),
+			AllowMessagesDispatch: g.AllowMessagesDispatch,
+			ImageBillingEnabled:   g.HasImageBillingPrice(),
+			ImageRateIndependent:  g.ImageRateIndependent,
+			ImageRateMultiplier:   g.ImageRateMultiplier,
+			ImagePrice1K:          g.ImagePrice1K,
+			ImagePrice2K:          g.ImagePrice2K,
+			ImagePrice4K:          g.ImagePrice4K,
+			VideoBillingEnabled:   g.VideoPrice480P != nil || g.VideoPrice720P != nil || g.VideoPrice1080P != nil,
+			VideoRateIndependent:  g.VideoRateIndependent,
+			VideoRateMultiplier:   g.VideoRateMultiplier,
+			VideoPrice480P:        g.VideoPrice480P,
+			VideoPrice720P:        g.VideoPrice720P,
+			VideoPrice1080P:       g.VideoPrice1080P,
 		}
 	}
 
@@ -105,6 +122,7 @@ func (s *ChannelService) ListAvailable(ctx context.Context) ([]AvailableChannel,
 
 		supported := ch.SupportedModels()
 		s.fillGlobalPricingFallback(supported)
+		s.fillDefaultVideoPricing(supported)
 
 		out = append(out, AvailableChannel{
 			ID:                 ch.ID,
@@ -137,8 +155,12 @@ func (s *ChannelService) fillGlobalPricingFallback(models []SupportedModel) {
 		if !pricingNeedsFallback(models[i].Pricing) {
 			continue
 		}
+		billingModel := strings.TrimSpace(models[i].BillingModel)
+		if billingModel == "" {
+			billingModel = models[i].Name
+		}
 		if strings.EqualFold(models[i].Platform, PlatformCursor) {
-			if pricing := cursorModelPricing(models[i].Name); pricing != nil {
+			if pricing := cursorModelPricing(billingModel); pricing != nil {
 				models[i].Pricing = synthesizePricingFromModelPricing(pricing, models[i].Pricing)
 				continue
 			}
@@ -146,11 +168,38 @@ func (s *ChannelService) fillGlobalPricingFallback(models []SupportedModel) {
 		if s.pricingService == nil {
 			continue
 		}
-		lp := s.pricingService.GetModelPricing(models[i].Name)
+		lp := s.pricingService.GetModelPricing(billingModel)
 		if lp == nil {
 			continue
 		}
 		models[i].Pricing = synthesizePricingFromLiteLLM(lp, models[i].Pricing)
+	}
+}
+
+// fillDefaultVideoPricing exposes the same per-second fallback rate card used by
+// OpenAI/Grok settlement when a group has not configured a resolution price.
+// Adobe is excluded because Firefly settlement requires an explicit group tier
+// (and may then replace it with a channel interval price).
+func (s *ChannelService) fillDefaultVideoPricing(models []SupportedModel) {
+	billing := &BillingService{pricingService: s.pricingService}
+	for i := range models {
+		platform := NormalizePlatform(models[i].Platform)
+		if platform == PlatformAdobe {
+			continue
+		}
+		billingModel := strings.TrimSpace(models[i].BillingModel)
+		if billingModel == "" {
+			billingModel = strings.TrimSpace(models[i].Name)
+		}
+		if ModelMediaType(billingModel) != PlaygroundCapabilityVideo {
+			continue
+		}
+		price480P := billing.getDefaultVideoPrice(billingModel, VideoBillingResolution480P)
+		price720P := billing.getDefaultVideoPrice(billingModel, VideoBillingResolution720P)
+		price1080P := billing.getDefaultVideoPrice(billingModel, VideoBillingResolution1080P)
+		models[i].DefaultVideoPrice480P = &price480P
+		models[i].DefaultVideoPrice720P = &price720P
+		models[i].DefaultVideoPrice1080P = &price1080P
 	}
 }
 
@@ -162,7 +211,7 @@ func pricingNeedsFallback(p *ChannelModelPricing) bool {
 	}
 	if p.InputPrice != nil || p.OutputPrice != nil ||
 		p.CacheWritePrice != nil || p.CacheReadPrice != nil ||
-		p.ImageOutputPrice != nil || p.PerRequestPrice != nil {
+		p.ImageInputPrice != nil || p.ImageOutputPrice != nil || p.PerRequestPrice != nil {
 		return false
 	}
 	for _, iv := range p.Intervals {

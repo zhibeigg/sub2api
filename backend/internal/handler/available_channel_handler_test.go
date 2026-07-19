@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -31,7 +32,7 @@ func TestFilterUserVisibleGroups_IntersectionOnly(t *testing.T) {
 	// 渠道挂在 {g1, g2, g3}，用户只允许 {g1, g3} —— 响应必须仅含 g1/g3。
 	imagePrice1K := 0.12
 	groups := []service.AvailableGroupRef{
-		{ID: 1, Name: "g1", Platform: "anthropic", AllowImageGeneration: true, ImageBillingEnabled: true, ImageRateIndependent: true, ImageRateMultiplier: 0.8, ImagePrice1K: &imagePrice1K},
+		{ID: 1, Name: "g1", Platform: "anthropic", AllowImageGeneration: true, AllowMessagesDispatch: true, ImageBillingEnabled: true, ImageRateIndependent: true, ImageRateMultiplier: 0.8, ImagePrice1K: &imagePrice1K},
 		{ID: 2, Name: "g2", Platform: "anthropic"},
 		{ID: 3, Name: "g3", Platform: "openai"},
 	}
@@ -42,6 +43,7 @@ func TestFilterUserVisibleGroups_IntersectionOnly(t *testing.T) {
 	ids := []int64{visible[0].ID, visible[1].ID}
 	require.ElementsMatch(t, []int64{1, 3}, ids)
 	require.True(t, visible[0].AllowImageGeneration)
+	require.True(t, visible[0].AllowMessagesDispatch)
 	require.True(t, visible[0].ImageBillingEnabled)
 	require.True(t, visible[0].ImageRateIndependent)
 	require.InDelta(t, 0.8, visible[0].ImageRateMultiplier, 1e-12)
@@ -75,6 +77,18 @@ func TestToUserSupportedModels_MapsMediaType(t *testing.T) {
 	require.Empty(t, out[2].MediaType)
 }
 
+func TestToUserSupportedModels_UsesBillingModelForMediaType(t *testing.T) {
+	out := toUserSupportedModels([]service.SupportedModel{{
+		Name:         "public-image-alias",
+		BillingModel: "gpt-image-2",
+		Platform:     service.PlatformOpenAI,
+	}}, nil)
+
+	require.Len(t, out, 1)
+	require.Equal(t, "public-image-alias", out[0].Name)
+	require.Equal(t, "image", out[0].MediaType)
+}
+
 func TestToUserSupportedModels_NilAllowedPlatformsKeepsAll(t *testing.T) {
 	// 显式传 nil allowedPlatforms 表示不做过滤。
 	src := []service.SupportedModel{
@@ -88,6 +102,7 @@ func TestUserAvailableChannel_FieldWhitelist(t *testing.T) {
 	// 通过序列化 userAvailableChannel 结构体验证响应形状：
 	// 只有 name / description / platforms；不含管理端字段。
 	imagePrice2K := 0.23
+	videoPrice720P := 0.12
 	row := userAvailableChannel{
 		Name:        "ch",
 		Description: "d",
@@ -96,13 +111,23 @@ func TestUserAvailableChannel_FieldWhitelist(t *testing.T) {
 				Platform: "anthropic",
 				Groups: []userAvailableGroup{{
 					ID: 1, Name: "g1", Platform: "anthropic",
-					AllowImageGeneration: true,
-					ImageBillingEnabled:  true,
-					ImageRateIndependent: true,
-					ImageRateMultiplier:  0.75,
-					ImagePrice2K:         &imagePrice2K,
+					AllowImageGeneration:  true,
+					AllowMessagesDispatch: true,
+					ImageBillingEnabled:   true,
+					ImageRateIndependent:  true,
+					ImageRateMultiplier:   0.75,
+					ImagePrice2K:          &imagePrice2K,
+					VideoBillingEnabled:   true,
+					VideoRateIndependent:  true,
+					VideoRateMultiplier:   0.4,
+					VideoPrice720P:        &videoPrice720P,
 				}},
-				SupportedModels: []userSupportedModel{{Name: "claude-sonnet-4-6", Platform: "anthropic"}},
+				SupportedModels: []userSupportedModel{{
+					Name: "claude-sonnet-4-6", Platform: "anthropic",
+					GroupRates: []userSupportedModelGroupRate{{
+						GroupID: 1, TokenRateMultiplier: 0.9, ImageRateMultiplier: 0.75, VideoRateMultiplier: 0.4,
+					}},
+				}},
 			},
 		},
 	}
@@ -139,20 +164,35 @@ func TestUserAvailableChannel_FieldWhitelist(t *testing.T) {
 	for _, key := range []string{
 		"id", "name", "platform", "subscription_type", "rate_multiplier",
 		"peak_rate_enabled", "peak_start", "peak_end", "peak_rate_multiplier", "is_exclusive",
-		"allow_image_generation", "image_billing_enabled", "image_rate_independent",
+		"allow_image_generation", "allow_video_generation", "allow_messages_dispatch", "image_billing_enabled", "image_rate_independent",
 		"image_rate_multiplier", "image_price_1k", "image_price_2k", "image_price_4k",
+		"video_billing_enabled", "video_rate_independent", "video_rate_multiplier",
+		"video_price_480p", "video_price_720p", "video_price_1080p",
 	} {
 		_, exists := groupDecoded[key]
 		require.Truef(t, exists, "group DTO must expose %q", key)
 	}
+	require.Equal(t, true, groupDecoded["allow_messages_dispatch"])
 
 	rawModel, err := json.Marshal(row.Platforms[0].SupportedModels[0])
 	require.NoError(t, err)
 	var modelDecoded map[string]any
 	require.NoError(t, json.Unmarshal(rawModel, &modelDecoded))
-	for _, key := range []string{"name", "platform", "media_type", "pricing"} {
+	for _, key := range []string{
+		"name", "platform", "media_type", "pricing",
+		"default_video_price_480p", "default_video_price_720p", "default_video_price_1080p", "group_rates",
+	} {
 		_, exists := modelDecoded[key]
 		require.Truef(t, exists, "supported model DTO must expose %q", key)
+	}
+	groupRates, ok := modelDecoded["group_rates"].([]any)
+	require.True(t, ok)
+	require.Len(t, groupRates, 1)
+	rateDecoded, ok := groupRates[0].(map[string]any)
+	require.True(t, ok)
+	for _, key := range []string{"group_id", "token_rate_multiplier", "image_rate_multiplier", "video_rate_multiplier"} {
+		_, exists := rateDecoded[key]
+		require.Truef(t, exists, "model group rate DTO must expose %q", key)
 	}
 
 	// pricing interval 白名单：不应暴露 id / sort_order。
@@ -197,4 +237,55 @@ func TestBuildPlatformSections_GroupsByPlatform(t *testing.T) {
 	require.Equal(t, int64(2), sections[0].Groups[0].ID)
 	require.Len(t, sections[0].SupportedModels, 1)
 	require.Equal(t, "claude-sonnet-4-6", sections[0].SupportedModels[0].Name)
+}
+
+func TestBuildPlatformSectionsWithRates_UsesEffectiveModelAndMediaMultipliers(t *testing.T) {
+	ch := service.AvailableChannel{
+		SupportedModels: []service.SupportedModel{{Name: "kimi-k3", Platform: service.PlatformOpenCode}},
+	}
+	visible := []userAvailableGroup{{ID: 7, Name: "Kimi", Platform: service.PlatformOpenCode}}
+	groups := map[int64]service.Group{7: {
+		ID:                   7,
+		Platform:             service.PlatformOpenCode,
+		RateMultiplier:       1.2,
+		ModelRateMultipliers: map[string]float64{"kimi-*": 0.8},
+		ImageRateIndependent: true,
+		ImageRateMultiplier:  0.5,
+		VideoRateIndependent: true,
+		VideoRateMultiplier:  0.25,
+	}}
+	userRates := map[int64]float64{7: 0.6}
+
+	sections := buildPlatformSectionsWithRates(ch, visible, groups, userRates, time.Time{})
+	require.Len(t, sections, 1)
+	require.Len(t, sections[0].SupportedModels, 1)
+	require.Len(t, sections[0].SupportedModels[0].GroupRates, 1)
+	rate := sections[0].SupportedModels[0].GroupRates[0]
+	require.InDelta(t, 0.6, rate.TokenRateMultiplier, 1e-12)
+	require.InDelta(t, 0.5, rate.ImageRateMultiplier, 1e-12)
+	require.InDelta(t, 0.25, rate.VideoRateMultiplier, 1e-12)
+}
+
+func TestBuildPlatformSectionsWithRates_UsesBillingModelForModelMultiplier(t *testing.T) {
+	ch := service.AvailableChannel{
+		SupportedModels: []service.SupportedModel{{
+			Name:         "public-alias",
+			BillingModel: "served-model",
+			Platform:     service.PlatformOpenCode,
+		}},
+	}
+	visible := []userAvailableGroup{{ID: 9, Name: "Alias", Platform: service.PlatformOpenCode}}
+	groups := map[int64]service.Group{9: {
+		ID:                   9,
+		Platform:             service.PlatformOpenCode,
+		RateMultiplier:       1.2,
+		ModelRateMultipliers: map[string]float64{"served-*": 0.75},
+	}}
+
+	sections := buildPlatformSectionsWithRates(ch, visible, groups, nil, time.Time{})
+
+	require.Len(t, sections, 1)
+	require.Len(t, sections[0].SupportedModels, 1)
+	require.Len(t, sections[0].SupportedModels[0].GroupRates, 1)
+	require.InDelta(t, 0.75, sections[0].SupportedModels[0].GroupRates[0].TokenRateMultiplier, 1e-12)
 }

@@ -197,7 +197,17 @@
             <article
               v-for="model in filteredModels"
               :key="model.key"
-              class="group flex flex-col rounded-xl border border-gray-200 bg-white p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-lg dark:border-dark-700 dark:bg-dark-800/60 dark:hover:border-dark-600"
+              class="group flex cursor-pointer flex-col rounded-xl border bg-white p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 dark:bg-dark-800/60"
+              tabindex="0"
+              :aria-label="t('modelSquare.openDetails', { model: model.name })"
+              :class="
+                selectedModel?.key === model.key
+                  ? 'border-primary-400 ring-2 ring-primary-500/15 dark:border-primary-600'
+                  : 'border-gray-200 hover:border-gray-300 dark:border-dark-700 dark:hover:border-dark-600'
+              "
+              @click="openModelDetails(model)"
+              @keydown.enter.self="openModelDetails(model)"
+              @keydown.space.self.prevent="openModelDetails(model)"
             >
               <!-- Header -->
               <div class="mb-3">
@@ -214,7 +224,7 @@
                 <button
                   class="group/name flex w-full items-start gap-1.5 text-left"
                   :title="model.name + ' · ' + t('modelSquare.clickToCopy')"
-                  @click="copyModel(model.name)"
+                  @click.stop="copyModel(model.name)"
                 >
                   <span class="min-w-0 flex-1 break-words font-semibold leading-snug text-gray-900 dark:text-white">
                     {{ model.name }}
@@ -228,17 +238,19 @@
                 </button>
               </div>
 
-              <!-- Providers -->
+              <!-- Model brand (not the internal account platform) -->
               <div class="mb-4 flex flex-wrap gap-1.5">
-                <span
-                  v-for="p in model.platforms"
-                  :key="`${model.key}-${p}`"
-                  class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium uppercase"
-                  :class="platformBadgeClass(p)"
+                <button
+                  type="button"
+                  class="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium transition-colors hover:border-primary-300 hover:bg-primary-50/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40 dark:border-dark-700 dark:bg-dark-800 dark:hover:border-primary-700 dark:hover:bg-dark-700"
+                  :class="modelBrand(model).colorClass"
+                  :aria-label="t('modelSquare.openDetails', { model: model.name })"
+                  @click.stop="openModelDetails(model)"
                 >
-                  <PlatformIcon :platform="p as GroupPlatform" size="xs" />
-                  {{ platformLabel(p) }}
-                </span>
+                  <ModelIcon :model="modelBrand(model).keyword" size="14px" />
+                  {{ modelBrand(model).label }}
+                  <Icon name="chevronRight" size="xs" class="text-gray-400 dark:text-gray-500" />
+                </button>
               </div>
 
               <!-- Pricing -->
@@ -406,41 +418,52 @@
         </div>
       </div>
     </div>
+
+    <ModelDetailsDrawer
+      :show="selectedModel != null"
+      :model="selectedModel"
+      :copied="selectedModel != null && copiedName === selectedModel.name"
+      @close="closeModelDetails"
+      @copy="copyModel"
+    />
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { computed, h, onBeforeUnmount, onMounted, ref, type VNode } from 'vue'
+import { computed, h, onBeforeUnmount, onMounted, ref, watch, type VNode } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ModelIcon from '@/components/common/ModelIcon.vue'
-import PlatformIcon from '@/components/common/PlatformIcon.vue'
+import ModelDetailsDrawer from '@/components/channels/ModelDetailsDrawer.vue'
 import userChannelsAPI, {
   type UserAvailableChannel,
   type UserSupportedModelPricing
 } from '@/api/channels'
-import userGroupsAPI from '@/api/groups'
 import { useAppStore } from '@/stores/app'
 import { extractApiErrorMessage } from '@/utils/apiError'
 import { formatScaled } from '@/utils/pricing'
-import { platformBadgeClass, platformLabel } from '@/utils/platformColors'
 import { resolveGroupBrand, BRAND_LABEL } from '@/utils/groupBrand'
 import { useVisibleAutoRefresh } from '@/composables/useVisibleAutoRefresh'
 import {
-  effectiveImageGroupRate,
   effectiveModelBillingMode,
   formatImagePriceRange,
-  resolveImageTierPrices,
-  type ModelSquareImageTierPrice
+  resolveImageTierPrices
 } from './modelSquarePricing'
 import {
   BILLING_MODE_TOKEN,
   BILLING_MODE_PER_REQUEST,
   BILLING_MODE_IMAGE,
+  BILLING_MODE_VIDEO,
   type BillingMode
 } from '@/constants/channel'
-import type { GroupPlatform } from '@/types'
+import {
+  endpointFilterKeys,
+  resolveModelEndpoints,
+  type ModelSquareGroup,
+  type ModelSquareModel,
+  type ModelSquareRoute
+} from './modelSquareDetails'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -449,16 +472,6 @@ const PER_M = 1_000_000
 const mediaPrice = (pricing: UserSupportedModelPricing): number | null =>
   pricing.per_request_price ?? pricing.image_output_price ?? null
 const AUTO_REFRESH_INTERVAL_MS = 60_000
-
-// Platform → endpoint protocol family.
-const ENDPOINT_OF: Record<string, string> = {
-  anthropic: 'anthropic',
-  openai: 'openai',
-  grok: 'openai',
-  gemini: 'gemini',
-  antigravity: 'gemini',
-  adobe: 'openai'
-}
 
 // Lightweight filter section wrapper (title + slotted list).
 const FilterSection = (props: { title: string; columns?: 1 | 2 }, ctx: { slots: { default?: () => VNode[] } }) =>
@@ -475,37 +488,7 @@ const FilterSection = (props: { title: string; columns?: 1 | 2 }, ctx: { slots: 
     )
   ])
 
-interface SquareGroup {
-  id: number
-  name: string
-  rate: number
-  isExclusive: boolean
-  platform: string
-  allowImageGeneration: boolean
-  imageBillingEnabled: boolean
-  imageRateIndependent: boolean
-  imageRateMultiplier: number
-  imagePrice1K: number | null
-  imagePrice2K: number | null
-  imagePrice4K: number | null
-}
-
-interface SquareModel {
-  key: string
-  name: string
-  platforms: string[]
-  brand: string
-  mediaType: string
-  billingMode: BillingMode
-  pricing: UserSupportedModelPricing | null
-  imageTiers: ModelSquareImageTierPrice[]
-  groups: SquareGroup[]
-  groupIds: number[]
-  endpoints: string[]
-}
-
 const channels = ref<UserAvailableChannel[]>([])
-const userGroupRates = ref<Record<number, number>>({})
 const loading = ref(false)
 const searchQuery = ref('')
 const activeProvider = ref<string>('all')
@@ -513,6 +496,7 @@ const activeGroup = ref<string>('all')
 const activeEndpoint = ref<string>('all')
 const activeBilling = ref<string>('all')
 const copiedName = ref('')
+const selectedModel = ref<ModelSquareModel | null>(null)
 let copyTimer: ReturnType<typeof setTimeout> | null = null
 let abortController: AbortController | null = null
 let isFetching = false
@@ -545,38 +529,56 @@ function shouldPreferPricing(
 }
 
 /** Flatten channels → platforms → supported_models into cards split by effective billing mode. */
-const allModels = computed<SquareModel[]>(() => {
-  const map = new Map<string, SquareModel>()
+const allModels = computed<ModelSquareModel[]>(() => {
+  const map = new Map<string, ModelSquareModel>()
   for (const ch of channels.value) {
     for (const section of ch.platforms) {
-      const sectionGroups: SquareGroup[] = section.groups.map((g) => ({
+      const sectionGroups: ModelSquareGroup[] = section.groups.map((g) => ({
         id: g.id,
         name: g.name,
-        rate: userGroupRates.value[g.id] ?? g.rate_multiplier,
+        rate: g.rate_multiplier,
         isExclusive: g.is_exclusive,
         platform: g.platform || section.platform,
+        allowMessagesDispatch: g.allow_messages_dispatch ?? false,
         allowImageGeneration: g.allow_image_generation ?? false,
+        allowVideoGeneration: g.allow_video_generation ?? false,
         imageBillingEnabled: g.image_billing_enabled ?? false,
         imageRateIndependent: g.image_rate_independent ?? false,
         imageRateMultiplier: g.image_rate_multiplier ?? 1,
         imagePrice1K: g.image_price_1k ?? null,
         imagePrice2K: g.image_price_2k ?? null,
-        imagePrice4K: g.image_price_4k ?? null
+        imagePrice4K: g.image_price_4k ?? null,
+        videoBillingEnabled: g.video_billing_enabled ?? false,
+        videoRateIndependent: g.video_rate_independent ?? false,
+        videoRateMultiplier: g.video_rate_multiplier ?? 1,
+        videoPrice480P: g.video_price_480p ?? null,
+        videoPrice720P: g.video_price_720p ?? null,
+        videoPrice1080P: g.video_price_1080p ?? null
       }))
 
       for (const m of section.supported_models) {
         const mediaType = m.media_type ?? ''
-        const eligibleGroups = mediaType === 'image'
-          ? sectionGroups.filter((group) => group.allowImageGeneration)
-          : sectionGroups
+        const eligibleGroups =
+          mediaType === 'image'
+            ? sectionGroups.filter((group) => group.allowImageGeneration)
+            : mediaType === 'video'
+              ? sectionGroups.filter((group) => group.allowVideoGeneration)
+              : sectionGroups
         if (eligibleGroups.length === 0) continue
 
-        const groupsByMode = new Map<BillingMode, SquareGroup[]>()
+        const rateByGroupID = new Map((m.group_rates ?? []).map((rate) => [rate.group_id, rate]))
+        const groupsByMode = new Map<BillingMode, ModelSquareGroup[]>()
         for (const group of eligibleGroups) {
           const mode = effectiveModelBillingMode(mediaType, m.pricing, group)
-          const displayGroup = mode === BILLING_MODE_IMAGE
-            ? { ...group, rate: effectiveImageGroupRate(group, group.rate) }
-            : group
+          const rateSnapshot = rateByGroupID.get(group.id)
+          if (!rateSnapshot) continue
+          let effectiveRate = rateSnapshot.token_rate_multiplier
+          if (mode === BILLING_MODE_IMAGE) {
+            effectiveRate = rateSnapshot.image_rate_multiplier
+          } else if (mode === BILLING_MODE_VIDEO) {
+            effectiveRate = rateSnapshot.video_rate_multiplier
+          }
+          const displayGroup = { ...group, rate: effectiveRate }
           const bucket = groupsByMode.get(mode) ?? []
           bucket.push(displayGroup)
           groupsByMode.set(mode, bucket)
@@ -598,7 +600,9 @@ const allModels = computed<SquareModel[]>(() => {
               imageTiers: [],
               groups: [],
               groupIds: [],
-              endpoints: []
+              routes: [],
+              endpoints: [],
+              endpointDetails: []
             }
             map.set(key, entry)
           } else if (shouldPreferPricing(entry.pricing, m.pricing, billingMode)) {
@@ -607,13 +611,26 @@ const allModels = computed<SquareModel[]>(() => {
 
           const platform = m.platform || section.platform
           if (platform && !entry.platforms.includes(platform)) entry.platforms.push(platform)
-          if (platform && ENDPOINT_OF[platform] && !entry.endpoints.includes(ENDPOINT_OF[platform])) {
-            entry.endpoints.push(ENDPOINT_OF[platform])
-          }
           for (const group of modeGroups) {
             if (!entry.groups.some((item) => item.id === group.id)) {
               entry.groups.push(group)
               entry.groupIds.push(group.id)
+            }
+
+            const routeKey = `${ch.name}|${platform}|${group.id}|${billingMode}`
+            if (!entry.routes.some((route) => route.key === routeKey)) {
+              const route: ModelSquareRoute = {
+                key: routeKey,
+                channelName: ch.name,
+                platform,
+                group,
+                billingMode,
+                pricing: m.pricing,
+                defaultVideoPrice480P: m.default_video_price_480p ?? null,
+                defaultVideoPrice720P: m.default_video_price_720p ?? null,
+                defaultVideoPrice1080P: m.default_video_price_1080p ?? null
+              }
+              entry.routes.push(route)
             }
           }
         }
@@ -624,6 +641,8 @@ const allModels = computed<SquareModel[]>(() => {
   const list = Array.from(map.values())
   for (const model of list) {
     model.groups.sort((a, b) => Number(b.isExclusive) - Number(a.isExclusive))
+    model.endpointDetails = resolveModelEndpoints(model)
+    model.endpoints = endpointFilterKeys(model.endpointDetails)
     if (model.billingMode === BILLING_MODE_IMAGE) {
       model.imageTiers = resolveImageTierPrices(model.pricing, model.groups)
     }
@@ -631,10 +650,15 @@ const allModels = computed<SquareModel[]>(() => {
   return list.sort((a, b) => a.name.localeCompare(b.name) || a.billingMode.localeCompare(b.billingMode))
 })
 
+watch(allModels, (models) => {
+  if (!selectedModel.value) return
+  selectedModel.value = models.find((model) => model.key === selectedModel.value?.key) ?? null
+})
+
 const totalModels = computed(() => allModels.value.length)
 
 /** Count models passing every *other* active filter (so counts reflect AND context). */
-function countWith(pred: (m: SquareModel) => boolean, exclude: 'provider' | 'group' | 'endpoint' | 'billing'): number {
+function countWith(pred: (m: ModelSquareModel) => boolean, exclude: 'provider' | 'group' | 'endpoint' | 'billing'): number {
   return allModels.value.filter((m) => {
     if (exclude !== 'provider' && activeProvider.value !== 'all' && m.brand !== activeProvider.value) return false
     if (exclude !== 'group' && activeGroup.value !== 'all' && !m.groupIds.includes(Number(activeGroup.value))) return false
@@ -721,7 +745,8 @@ const billingOptions = computed(() => {
   const modes: { v: BillingMode; k: string }[] = [
     { v: BILLING_MODE_TOKEN, k: 'billingModeToken' },
     { v: BILLING_MODE_PER_REQUEST, k: 'billingModePerRequest' },
-    { v: BILLING_MODE_IMAGE, k: 'billingModeImage' }
+    { v: BILLING_MODE_IMAGE, k: 'billingModeImage' },
+    { v: BILLING_MODE_VIDEO, k: 'billingModeVideo' }
   ]
   for (const { v, k } of modes) {
     const count = countWith((m) => m.billingMode === v, 'billing')
@@ -788,6 +813,8 @@ function billingLabel(mode: BillingMode): string {
       return t('availableChannels.pricing.billingModePerRequest')
     case BILLING_MODE_IMAGE:
       return t('availableChannels.pricing.billingModeImage')
+    case BILLING_MODE_VIDEO:
+      return t('availableChannels.pricing.billingModeVideo')
     default:
       return t('availableChannels.pricing.billingModeToken')
   }
@@ -808,6 +835,18 @@ function groupBrand(platform: string, name: string) {
     brandCache.set(key, cached)
   }
   return cached
+}
+
+function modelBrand(model: ModelSquareModel) {
+  return groupBrand('', model.name)
+}
+
+function openModelDetails(model: ModelSquareModel): void {
+  selectedModel.value = model
+}
+
+function closeModelDetails(): void {
+  selectedModel.value = null
 }
 
 // Discount-aware multiplier badge: <1 reads as a discount (green), =1 neutral,
@@ -851,18 +890,10 @@ async function loadData(options: LoadDataOptions = {}) {
   if (controlsLoading) loading.value = true
 
   try {
-    const [list, rates] = await Promise.all([
-      userChannelsAPI.getAvailable({ signal }),
-      userGroupsAPI.getUserGroupRates({ signal }).catch((err: unknown) => {
-        if (signal.aborted || isAbortError(err)) return userGroupRates.value
-        console.error('Failed to load user group rates:', err)
-        return userGroupRates.value
-      })
-    ])
+    const list = await userChannelsAPI.getAvailable({ signal })
 
     if (signal.aborted || abortController !== currentController) return
     channels.value = list
-    userGroupRates.value = rates
   } catch (err: unknown) {
     if (signal.aborted || isAbortError(err)) return
     if (options.silent) {

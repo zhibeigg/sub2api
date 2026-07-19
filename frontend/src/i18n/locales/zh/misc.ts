@@ -179,6 +179,50 @@ export default {
     allGroups: '全部分组',
     filterRegion: '模型筛选',
     resultsRegion: '模型结果',
+    openDetails: '查看 {model} 的端点与价格详情',
+    details: {
+      copyModel: '复制模型名称',
+      close: '关闭模型详情',
+      overview: '基本信息',
+      provider: '模型供应商',
+      billing: '计费类型',
+      availableGroups: '可用分组',
+      apiEndpoints: 'API 端点',
+      apiEndpointsHint: '仅展示至少有一个当前可用分组支持的公开入口。',
+      endpointGroups: '{count} 个分组可用',
+      noEndpoints: '暂无可展示的公开端点',
+      groupPricing: '分组价格',
+      groupPricingHint: '后端已按用户专属、模型级、当前高峰与媒体独立倍率计算。',
+      noGroupPricing: '暂无可用分组价格',
+      noConfiguredPrice: '当前渠道未提供可完整解析的价格。',
+      priceUnit: '价格均为倍率后的当前配置价；区间表示该渠道启用了阶梯定价。动态上游映射变化时以实际账单为准。',
+      units: {
+        perSecond: 'USD / 秒'
+      },
+      endpoints: {
+        chatCompletions: 'OpenAI Chat Completions',
+        messages: 'Anthropic Messages',
+        responses: 'OpenAI Responses',
+        gemini: 'Gemini Generate Content',
+        images: 'OpenAI Images 生成',
+        imageEdits: 'OpenAI Images 编辑',
+        videos: 'OpenAI Videos 提交',
+        videoEdits: 'OpenAI Videos 编辑',
+        videoExtensions: 'OpenAI Videos 续写',
+        videoStatus: 'OpenAI Videos 状态查询',
+        videoContent: 'OpenAI Videos 内容获取'
+      },
+      table: {
+        group: '分组',
+        channel: '渠道',
+        billing: '计费',
+        input: '输入',
+        output: '输出',
+        cacheWrite: '缓存写入',
+        cacheRead: '缓存读取',
+        rate: '倍率'
+      }
+    },
     filters: {
       all: '全部',
       platform: '供应商',

@@ -18,7 +18,11 @@ OpenCode Go 账号可启用 `extra.mixed_scheduling=true`，但只会加入 **An
 
 ## 渠道与模型广场配置
 
-OpenCode Go 的账号平台值统一为 `opencode`，但不同模型家族不应合并到同一个渠道。用户侧可用渠道接口会把一个渠道内同平台的分组和该渠道全部支持模型聚合成同一个 section；如果六个 `opencode` 分组共用一个渠道，模型广场会把渠道内所有模型同时关联到每个分组，导致各分组显示相同的模型数量。
+OpenCode Go 的账号平台值统一为 `opencode`，但不同模型家族不应合并到同一个渠道。用户侧 `GET /api/v1/channels/available` 返回的每个 `group` 增加 `allow_messages_dispatch` 字段；该字段仅控制 OpenAI 分组是否开放 Anthropic `/v1/messages` 兼容调度。OpenCode Go 分组自身固定支持 `/v1/chat/completions`、`/v1/messages` 与 `/v1/responses` 三个公开入口，不依赖此开关。模型广场详情按平台、媒体类型与分组能力矩阵展示真实可用端点。
+
+同一接口的 `supported_models[].group_rates[]` 返回按当前用户、模型级倍率、当前高峰和媒体独立倍率解析后的 Token / 图片 / 视频倍率快照；分组同时公开视频独立倍率及 480p/720p/1080p 配置价。模型详情使用这些后端快照计算倍率后价格，避免前端复刻计费优先级。
+
+用户侧可用渠道接口会把一个渠道内同平台的分组和该渠道全部支持模型聚合成同一个 section；如果六个 `opencode` 分组共用一个渠道，模型广场会把渠道内所有模型同时关联到每个分组，导致各分组显示相同的模型数量。
 
 生产配置应保持 **一个模型家族、一个分组、一个渠道**：
 

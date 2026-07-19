@@ -469,3 +469,47 @@ func computePeakAwareMultipliers(apiKey *APIKey, base float64, now time.Time) (t
 	text = base * peak
 	return
 }
+
+// GroupAllowsVideoGeneration mirrors the public video submission gates.
+// OpenAI and Grok reuse the legacy image-generation switch; Adobe's direct
+// Firefly video route is not controlled by that switch.
+func GroupAllowsVideoGeneration(group *Group) bool {
+	if group == nil {
+		return false
+	}
+	switch NormalizePlatform(group.Platform) {
+	case PlatformOpenAI, PlatformGrok:
+		return GroupAllowsImageGeneration(group)
+	case PlatformAdobe:
+		return true
+	default:
+		return false
+	}
+}
+
+// EffectiveGroupMultipliers 是某个用户、分组和计费模型在指定时刻的真实倍率快照。
+type EffectiveGroupMultipliers struct {
+	Token float64
+	Image float64
+	Video float64
+}
+
+// ResolveEffectiveGroupMultipliers 复用网关计费优先级，供只读展示接口生成倍率快照。
+// userRate 非 nil 时优先于分组模型级倍率；Token 倍率包含当前高峰因子，图片/视频
+// 分别遵循独立媒体倍率配置且不叠加高峰因子。
+func ResolveEffectiveGroupMultipliers(group *Group, model string, userRate *float64, now time.Time) EffectiveGroupMultipliers {
+	base := 1.0
+	if group != nil {
+		base = group.RateMultiplierForModel(model)
+	}
+	if userRate != nil {
+		base = *userRate
+	}
+	if base < 0 {
+		base = 0
+	}
+	apiKey := &APIKey{Group: group}
+	token, image := computePeakAwareMultipliers(apiKey, base, now)
+	video := resolveVideoRateMultiplier(apiKey, base)
+	return EffectiveGroupMultipliers{Token: token, Image: image, Video: video}
+}

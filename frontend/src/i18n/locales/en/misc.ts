@@ -179,6 +179,50 @@ export default {
     allGroups: 'All groups',
     filterRegion: 'Model filters',
     resultsRegion: 'Model results',
+    openDetails: 'View endpoints and pricing for {model}',
+    details: {
+      copyModel: 'Copy model name',
+      close: 'Close model details',
+      overview: 'Overview',
+      provider: 'Model provider',
+      billing: 'Billing type',
+      availableGroups: 'Available groups',
+      apiEndpoints: 'API endpoints',
+      apiEndpointsHint: 'Only public endpoints supported by at least one currently available group are shown.',
+      endpointGroups: 'Available in {count} group(s)',
+      noEndpoints: 'No public endpoints available',
+      groupPricing: 'Group pricing',
+      groupPricingHint: 'Resolved by the backend using user, model, current peak, and media-specific multipliers.',
+      noGroupPricing: 'No group pricing available',
+      noConfiguredPrice: 'This channel does not expose a fully resolvable price.',
+      priceUnit: 'All values are current configured prices after multipliers. A range indicates tiered pricing; dynamic upstream mapping is finalized on the bill.',
+      units: {
+        perSecond: 'USD / second'
+      },
+      endpoints: {
+        chatCompletions: 'OpenAI Chat Completions',
+        messages: 'Anthropic Messages',
+        responses: 'OpenAI Responses',
+        gemini: 'Gemini Generate Content',
+        images: 'OpenAI Images generation',
+        imageEdits: 'OpenAI Images edits',
+        videos: 'OpenAI Videos submission',
+        videoEdits: 'OpenAI Videos edits',
+        videoExtensions: 'OpenAI Videos extensions',
+        videoStatus: 'OpenAI Videos status',
+        videoContent: 'OpenAI Videos content'
+      },
+      table: {
+        group: 'Group',
+        channel: 'Channel',
+        billing: 'Billing',
+        input: 'Input',
+        output: 'Output',
+        cacheWrite: 'Cache write',
+        cacheRead: 'Cache read',
+        rate: 'Rate'
+      }
+    },
     filters: {
       all: 'All',
       platform: 'Provider',

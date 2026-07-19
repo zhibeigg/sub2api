@@ -114,15 +114,20 @@ func TestListAvailable_InactiveGroupIDSilentlyDropped(t *testing.T) {
 
 func TestListAvailable_MapsImageBillingFields(t *testing.T) {
 	price2K := 0.23
+	videoPrice720P := 0.12
 	channels := []Channel{{ID: 1, Name: "chA", GroupIDs: []int64{1}}}
 	groupRepo := &stubGroupRepoForAvailable{activeGroups: []Group{{
-		ID:                   1,
-		Name:                 "g1",
-		Platform:             PlatformOpenAI,
-		AllowImageGeneration: true,
-		ImageRateIndependent: true,
-		ImageRateMultiplier:  0.75,
-		ImagePrice2K:         &price2K,
+		ID:                    1,
+		Name:                  "g1",
+		Platform:              PlatformOpenAI,
+		AllowImageGeneration:  true,
+		AllowMessagesDispatch: true,
+		ImageRateIndependent:  true,
+		ImageRateMultiplier:   0.75,
+		ImagePrice2K:          &price2K,
+		VideoRateIndependent:  true,
+		VideoRateMultiplier:   0.4,
+		VideoPrice720P:        &videoPrice720P,
 	}}}
 
 	out, err := newAvailableChannelService(channels, groupRepo).ListAvailable(context.Background())
@@ -131,12 +136,56 @@ func TestListAvailable_MapsImageBillingFields(t *testing.T) {
 	require.Len(t, out[0].Groups, 1)
 	group := out[0].Groups[0]
 	require.True(t, group.AllowImageGeneration)
+	require.True(t, group.AllowVideoGeneration)
+	require.True(t, group.AllowMessagesDispatch)
 	require.True(t, group.ImageBillingEnabled)
 	require.True(t, group.ImageRateIndependent)
 	require.InDelta(t, 0.75, group.ImageRateMultiplier, 1e-12)
 	require.Nil(t, group.ImagePrice1K)
 	require.Same(t, &price2K, group.ImagePrice2K)
 	require.Nil(t, group.ImagePrice4K)
+	require.True(t, group.VideoBillingEnabled)
+	require.True(t, group.VideoRateIndependent)
+	require.InDelta(t, 0.4, group.VideoRateMultiplier, 1e-12)
+	require.Nil(t, group.VideoPrice480P)
+	require.Same(t, &videoPrice720P, group.VideoPrice720P)
+	require.Nil(t, group.VideoPrice1080P)
+}
+
+func TestFillDefaultVideoPricing_MatchesSettlementFallback(t *testing.T) {
+	models := []SupportedModel{
+		{Name: "grok-video", BillingModel: "grok-imagine-video-1.5", Platform: PlatformGrok},
+		{Name: "firefly-video", BillingModel: "firefly-video", Platform: PlatformAdobe},
+	}
+
+	(&ChannelService{}).fillDefaultVideoPricing(models)
+
+	require.NotNil(t, models[0].DefaultVideoPrice480P)
+	require.InDelta(t, 0.08, *models[0].DefaultVideoPrice480P, 1e-12)
+	require.InDelta(t, 0.14, *models[0].DefaultVideoPrice720P, 1e-12)
+	require.InDelta(t, 0.25, *models[0].DefaultVideoPrice1080P, 1e-12)
+	require.Nil(t, models[1].DefaultVideoPrice480P)
+	require.Nil(t, models[1].DefaultVideoPrice720P)
+	require.Nil(t, models[1].DefaultVideoPrice1080P)
+}
+
+func TestListAvailable_AdobeVideoRequiresConfiguredGroupTier(t *testing.T) {
+	price720P := 0.3
+	channels := []Channel{{ID: 1, Name: "adobe", GroupIDs: []int64{1, 2}}}
+	groupRepo := &stubGroupRepoForAvailable{activeGroups: []Group{
+		{ID: 1, Name: "missing-price", Platform: PlatformAdobe},
+		{ID: 2, Name: "priced", Platform: PlatformAdobe, VideoPrice720P: &price720P},
+	}}
+
+	out, err := newAvailableChannelService(channels, groupRepo).ListAvailable(context.Background())
+	require.NoError(t, err)
+	require.Len(t, out[0].Groups, 2)
+	byName := map[string]AvailableGroupRef{}
+	for _, group := range out[0].Groups {
+		byName[group.Name] = group
+	}
+	require.False(t, byName["missing-price"].AllowVideoGeneration)
+	require.True(t, byName["priced"].AllowVideoGeneration)
 }
 
 func TestListAvailable_SortedByName(t *testing.T) {
@@ -216,6 +265,7 @@ func TestPricingNeedsFallback(t *testing.T) {
 			Intervals:   []PricingInterval{{TierLabel: "1K"}, {TierLabel: "2K"}},
 		}, true},
 		{"flat input set", &ChannelModelPricing{InputPrice: testPtrFloat64(3e-6)}, false},
+		{"image input set", &ChannelModelPricing{BillingMode: BillingModeImage, ImageInputPrice: testPtrFloat64(0.01)}, false},
 		{"flat per_request set", &ChannelModelPricing{PerRequestPrice: testPtrFloat64(0.04)}, false},
 		{"interval with price", &ChannelModelPricing{
 			Intervals: []PricingInterval{{TierLabel: "1K", PerRequestPrice: testPtrFloat64(0.04)}},
@@ -286,6 +336,20 @@ func TestFillGlobalPricingFallback_NilPricing(t *testing.T) {
 	require.NotNil(t, models[0].Pricing)
 	require.NotNil(t, models[0].Pricing.InputPrice)
 	require.InDelta(t, 5e-6, *models[0].Pricing.InputPrice, 1e-12)
+}
+
+func TestFillGlobalPricingFallback_UsesMappedBillingModel(t *testing.T) {
+	pricingSvc := newStubPricingServiceFromMap(map[string]*LiteLLMModelPricing{
+		"served-model": {Mode: "chat", InputCostPerToken: 7e-6},
+	})
+	svc := &ChannelService{pricingService: pricingSvc}
+	models := []SupportedModel{{Name: "public-alias", BillingModel: "served-model", Platform: PlatformAnthropic}}
+
+	svc.fillGlobalPricingFallback(models)
+
+	require.NotNil(t, models[0].Pricing)
+	require.NotNil(t, models[0].Pricing.InputPrice)
+	require.InDelta(t, 7e-6, *models[0].Pricing.InputPrice, 1e-12)
 }
 
 func TestFillGlobalPricingFallback_CursorUsesPlatformPricingWithoutLiteLLM(t *testing.T) {

@@ -12,7 +12,7 @@ export interface UserAvailableGroup {
   platform: string
   /** 'standard' | 'subscription' — 订阅分组视觉加深，和 API 密钥页保持一致。 */
   subscription_type: string
-  /** 分组默认倍率。用户专属倍率（若有）通过 /groups/rates 获取后在前端 join。 */
+  /** 分组基础倍率；详情价格优先使用 supported_models[].group_rates 的后端快照。 */
   rate_multiplier: number
   peak_rate_enabled: boolean
   peak_start: string
@@ -22,6 +22,10 @@ export interface UserAvailableGroup {
   is_exclusive: boolean
   /** 是否允许调用图片生成能力。 */
   allow_image_generation: boolean
+  /** 是否允许调用视频生成能力。 */
+  allow_video_generation: boolean
+  allow_messages_dispatch: boolean
+
   /** 是否因分组图片价格覆盖而采用按图片计费。 */
   image_billing_enabled: boolean
   /** 图片生成是否使用独立倍率。 */
@@ -30,6 +34,14 @@ export interface UserAvailableGroup {
   image_price_1k: number | null
   image_price_2k: number | null
   image_price_4k: number | null
+  /** 是否存在分组级视频分辨率价格。 */
+  video_billing_enabled?: boolean
+  /** 视频生成是否使用独立倍率。 */
+  video_rate_independent?: boolean
+  video_rate_multiplier?: number
+  video_price_480p?: number | null
+  video_price_720p?: number | null
+  video_price_1080p?: number | null
 }
 
 export interface UserPricingInterval {
@@ -55,12 +67,28 @@ export interface UserSupportedModelPricing {
   intervals: UserPricingInterval[]
 }
 
+export interface UserSupportedModelGroupRate {
+  group_id: number
+  /** 已应用用户专属、模型级和当前高峰规则的 Token 倍率。 */
+  token_rate_multiplier: number
+  /** 已应用用户专属/模型级规则与图片独立倍率配置的图片倍率。 */
+  image_rate_multiplier: number
+  /** 已应用用户专属/模型级规则与视频独立倍率配置的视频倍率。 */
+  video_rate_multiplier: number
+}
+
 export interface UserSupportedModel {
   name: string
   platform: string
   /** 后端统一识别的媒体类型；空字符串表示普通文本模型。 */
   media_type?: '' | 'image' | 'video'
   pricing: UserSupportedModelPricing | null
+  /** 与真实结算回退一致的默认视频每秒价；Adobe 无默认价时为 null。 */
+  default_video_price_480p: number | null
+  default_video_price_720p: number | null
+  default_video_price_1080p: number | null
+  /** 后端按真实计费优先级计算出的分组倍率快照。 */
+  group_rates?: UserSupportedModelGroupRate[]
 }
 
 /**

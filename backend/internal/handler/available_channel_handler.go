@@ -2,8 +2,11 @@ package handler
 
 import (
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -50,26 +53,34 @@ func (h *AvailableChannelHandler) featureEnabled(c *gin.Context) bool {
 // userAvailableGroup 用户可见的分组概要（白名单字段）。
 //
 // 前端据此区分专属 vs 公开分组（IsExclusive）、订阅 vs 标准分组（SubscriptionType，
-// 订阅视觉加深），并展示默认倍率与高峰倍率规则；用户专属倍率前端走
-// /groups/rates，和 API 密钥页面保持一致。
+// 订阅视觉加深），并展示分组基础配置；模型级、用户专属、高峰和媒体独立倍率
+// 由 supported_models[].group_rates 提供同一时刻的后端快照。
 type userAvailableGroup struct {
-	ID                   int64    `json:"id"`
-	Name                 string   `json:"name"`
-	Platform             string   `json:"platform"`
-	SubscriptionType     string   `json:"subscription_type"`
-	RateMultiplier       float64  `json:"rate_multiplier"`
-	PeakRateEnabled      bool     `json:"peak_rate_enabled"`
-	PeakStart            string   `json:"peak_start"`
-	PeakEnd              string   `json:"peak_end"`
-	PeakRateMultiplier   float64  `json:"peak_rate_multiplier"`
-	IsExclusive          bool     `json:"is_exclusive"`
-	AllowImageGeneration bool     `json:"allow_image_generation"`
-	ImageBillingEnabled  bool     `json:"image_billing_enabled"`
-	ImageRateIndependent bool     `json:"image_rate_independent"`
-	ImageRateMultiplier  float64  `json:"image_rate_multiplier"`
-	ImagePrice1K         *float64 `json:"image_price_1k"`
-	ImagePrice2K         *float64 `json:"image_price_2k"`
-	ImagePrice4K         *float64 `json:"image_price_4k"`
+	ID                    int64    `json:"id"`
+	Name                  string   `json:"name"`
+	Platform              string   `json:"platform"`
+	SubscriptionType      string   `json:"subscription_type"`
+	RateMultiplier        float64  `json:"rate_multiplier"`
+	PeakRateEnabled       bool     `json:"peak_rate_enabled"`
+	PeakStart             string   `json:"peak_start"`
+	PeakEnd               string   `json:"peak_end"`
+	PeakRateMultiplier    float64  `json:"peak_rate_multiplier"`
+	IsExclusive           bool     `json:"is_exclusive"`
+	AllowImageGeneration  bool     `json:"allow_image_generation"`
+	AllowVideoGeneration  bool     `json:"allow_video_generation"`
+	AllowMessagesDispatch bool     `json:"allow_messages_dispatch"`
+	ImageBillingEnabled   bool     `json:"image_billing_enabled"`
+	ImageRateIndependent  bool     `json:"image_rate_independent"`
+	ImageRateMultiplier   float64  `json:"image_rate_multiplier"`
+	ImagePrice1K          *float64 `json:"image_price_1k"`
+	ImagePrice2K          *float64 `json:"image_price_2k"`
+	ImagePrice4K          *float64 `json:"image_price_4k"`
+	VideoBillingEnabled   bool     `json:"video_billing_enabled"`
+	VideoRateIndependent  bool     `json:"video_rate_independent"`
+	VideoRateMultiplier   float64  `json:"video_rate_multiplier"`
+	VideoPrice480P        *float64 `json:"video_price_480p"`
+	VideoPrice720P        *float64 `json:"video_price_720p"`
+	VideoPrice1080P       *float64 `json:"video_price_1080p"`
 }
 
 // userSupportedModelPricing 用户可见的定价字段白名单。
@@ -97,12 +108,24 @@ type userPricingIntervalDTO struct {
 	PerRequestPrice *float64 `json:"per_request_price"`
 }
 
+// userSupportedModelGroupRate 是按真实计费优先级解析出的当前倍率快照。
+type userSupportedModelGroupRate struct {
+	GroupID             int64   `json:"group_id"`
+	TokenRateMultiplier float64 `json:"token_rate_multiplier"`
+	ImageRateMultiplier float64 `json:"image_rate_multiplier"`
+	VideoRateMultiplier float64 `json:"video_rate_multiplier"`
+}
+
 // userSupportedModel 用户可见的支持模型条目。
 type userSupportedModel struct {
-	Name      string                     `json:"name"`
-	Platform  string                     `json:"platform"`
-	MediaType string                     `json:"media_type"`
-	Pricing   *userSupportedModelPricing `json:"pricing"`
+	Name                   string                        `json:"name"`
+	Platform               string                        `json:"platform"`
+	MediaType              string                        `json:"media_type"`
+	Pricing                *userSupportedModelPricing    `json:"pricing"`
+	DefaultVideoPrice480P  *float64                      `json:"default_video_price_480p"`
+	DefaultVideoPrice720P  *float64                      `json:"default_video_price_720p"`
+	DefaultVideoPrice1080P *float64                      `json:"default_video_price_1080p"`
+	GroupRates             []userSupportedModelGroupRate `json:"group_rates"`
 }
 
 // userChannelPlatformSection 单渠道内某个平台的子视图：用户可见的分组 + 该平台
@@ -146,8 +169,15 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 		return
 	}
 	allowedGroupIDs := make(map[int64]struct{}, len(userGroups))
+	userGroupByID := make(map[int64]service.Group, len(userGroups))
 	for i := range userGroups {
 		allowedGroupIDs[userGroups[i].ID] = struct{}{}
+		userGroupByID[userGroups[i].ID] = userGroups[i]
+	}
+	userGroupRates, err := h.apiKeyService.GetUserGroupRates(c.Request.Context(), subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
 	}
 
 	channels, err := h.channelService.ListAvailable(c.Request.Context())
@@ -156,6 +186,7 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 		return
 	}
 
+	rateSnapshotAt := timezone.Now()
 	out := make([]userAvailableChannel, 0, len(channels))
 	for _, ch := range channels {
 		if ch.Status != service.StatusActive {
@@ -165,7 +196,7 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 		if len(visibleGroups) == 0 {
 			continue
 		}
-		sections := buildPlatformSections(ch, visibleGroups)
+		sections := buildPlatformSectionsWithRates(ch, visibleGroups, userGroupByID, userGroupRates, rateSnapshotAt)
 		if len(sections) == 0 {
 			continue
 		}
@@ -179,12 +210,21 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 	response.Success(c, out)
 }
 
-// buildPlatformSections 把一个渠道按 visibleGroups 的平台集合拆成有序的 section 列表：
-// 每个 section 对应一个平台，只包含该平台的 groups 和 supported_models。
-// 输出按 platform 字母序稳定排序，便于前端等效比较与回归测试。
+// buildPlatformSections 把一个渠道按 visibleGroups 的平台集合拆成有序的 section 列表。
+// 测试和无用户倍率上下文的调用使用此兼容包装；线上 List 使用 WithRates 版本。
 func buildPlatformSections(
 	ch service.AvailableChannel,
 	visibleGroups []userAvailableGroup,
+) []userChannelPlatformSection {
+	return buildPlatformSectionsWithRates(ch, visibleGroups, nil, nil, time.Time{})
+}
+
+func buildPlatformSectionsWithRates(
+	ch service.AvailableChannel,
+	visibleGroups []userAvailableGroup,
+	groupByID map[int64]service.Group,
+	userRates map[int64]float64,
+	now time.Time,
 ) []userChannelPlatformSection {
 	groupsByPlatform := make(map[string][]userAvailableGroup, 4)
 	for _, g := range visibleGroups {
@@ -206,10 +246,18 @@ func buildPlatformSections(
 	sections := make([]userChannelPlatformSection, 0, len(platforms))
 	for _, platform := range platforms {
 		platformSet := map[string]struct{}{platform: {}}
+		platformGroups := groupsByPlatform[platform]
 		sections = append(sections, userChannelPlatformSection{
-			Platform:        platform,
-			Groups:          groupsByPlatform[platform],
-			SupportedModels: toUserSupportedModels(ch.SupportedModels, platformSet),
+			Platform: platform,
+			Groups:   platformGroups,
+			SupportedModels: toUserSupportedModelsWithRates(
+				ch.SupportedModels,
+				platformSet,
+				platformGroups,
+				groupByID,
+				userRates,
+				now,
+			),
 		})
 	}
 	return sections
@@ -226,23 +274,31 @@ func filterUserVisibleGroups(
 			continue
 		}
 		visible = append(visible, userAvailableGroup{
-			ID:                   g.ID,
-			Name:                 g.Name,
-			Platform:             g.Platform,
-			SubscriptionType:     g.SubscriptionType,
-			RateMultiplier:       g.RateMultiplier,
-			PeakRateEnabled:      g.PeakRateEnabled,
-			PeakStart:            g.PeakStart,
-			PeakEnd:              g.PeakEnd,
-			PeakRateMultiplier:   g.PeakRateMultiplier,
-			IsExclusive:          g.IsExclusive,
-			AllowImageGeneration: g.AllowImageGeneration,
-			ImageBillingEnabled:  g.ImageBillingEnabled,
-			ImageRateIndependent: g.ImageRateIndependent,
-			ImageRateMultiplier:  g.ImageRateMultiplier,
-			ImagePrice1K:         g.ImagePrice1K,
-			ImagePrice2K:         g.ImagePrice2K,
-			ImagePrice4K:         g.ImagePrice4K,
+			ID:                    g.ID,
+			Name:                  g.Name,
+			Platform:              g.Platform,
+			SubscriptionType:      g.SubscriptionType,
+			RateMultiplier:        g.RateMultiplier,
+			PeakRateEnabled:       g.PeakRateEnabled,
+			PeakStart:             g.PeakStart,
+			PeakEnd:               g.PeakEnd,
+			PeakRateMultiplier:    g.PeakRateMultiplier,
+			IsExclusive:           g.IsExclusive,
+			AllowImageGeneration:  g.AllowImageGeneration,
+			AllowVideoGeneration:  g.AllowVideoGeneration,
+			AllowMessagesDispatch: g.AllowMessagesDispatch,
+			ImageBillingEnabled:   g.ImageBillingEnabled,
+			ImageRateIndependent:  g.ImageRateIndependent,
+			ImageRateMultiplier:   g.ImageRateMultiplier,
+			ImagePrice1K:          g.ImagePrice1K,
+			ImagePrice2K:          g.ImagePrice2K,
+			ImagePrice4K:          g.ImagePrice4K,
+			VideoBillingEnabled:   g.VideoBillingEnabled,
+			VideoRateIndependent:  g.VideoRateIndependent,
+			VideoRateMultiplier:   g.VideoRateMultiplier,
+			VideoPrice480P:        g.VideoPrice480P,
+			VideoPrice720P:        g.VideoPrice720P,
+			VideoPrice1080P:       g.VideoPrice1080P,
 		})
 	}
 	return visible
@@ -255,6 +311,17 @@ func toUserSupportedModels(
 	src []service.SupportedModel,
 	allowedPlatforms map[string]struct{},
 ) []userSupportedModel {
+	return toUserSupportedModelsWithRates(src, allowedPlatforms, nil, nil, nil, time.Time{})
+}
+
+func toUserSupportedModelsWithRates(
+	src []service.SupportedModel,
+	allowedPlatforms map[string]struct{},
+	visibleGroups []userAvailableGroup,
+	groupByID map[int64]service.Group,
+	userRates map[int64]float64,
+	now time.Time,
+) []userSupportedModel {
 	out := make([]userSupportedModel, 0, len(src))
 	for i := range src {
 		m := src[i]
@@ -263,11 +330,39 @@ func toUserSupportedModels(
 				continue
 			}
 		}
+		billingModel := strings.TrimSpace(m.BillingModel)
+		if billingModel == "" {
+			billingModel = m.Name
+		}
+		groupRates := make([]userSupportedModelGroupRate, 0, len(visibleGroups))
+		for _, visibleGroup := range visibleGroups {
+			group, ok := groupByID[visibleGroup.ID]
+			if !ok || group.Platform != m.Platform {
+				continue
+			}
+			var userRate *float64
+			if rate, exists := userRates[group.ID]; exists {
+				rateCopy := rate
+				userRate = &rateCopy
+			}
+			multipliers := service.ResolveEffectiveGroupMultipliers(&group, billingModel, userRate, now)
+			groupRates = append(groupRates, userSupportedModelGroupRate{
+				GroupID:             group.ID,
+				TokenRateMultiplier: multipliers.Token,
+				ImageRateMultiplier: multipliers.Image,
+				VideoRateMultiplier: multipliers.Video,
+			})
+		}
+		sort.SliceStable(groupRates, func(i, j int) bool { return groupRates[i].GroupID < groupRates[j].GroupID })
 		out = append(out, userSupportedModel{
-			Name:      m.Name,
-			Platform:  m.Platform,
-			MediaType: service.ModelMediaType(m.Name),
-			Pricing:   toUserPricing(m.Pricing),
+			Name:                   m.Name,
+			Platform:               m.Platform,
+			MediaType:              service.ModelMediaType(billingModel),
+			Pricing:                toUserPricing(m.Pricing),
+			DefaultVideoPrice480P:  m.DefaultVideoPrice480P,
+			DefaultVideoPrice720P:  m.DefaultVideoPrice720P,
+			DefaultVideoPrice1080P: m.DefaultVideoPrice1080P,
+			GroupRates:             groupRates,
 		})
 	}
 	return out

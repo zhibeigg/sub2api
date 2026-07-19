@@ -694,6 +694,9 @@ func TestSupportedModels_AsteriskOnlyMappingExpandsAllPriced(t *testing.T) {
 	require.Len(t, got, 2)
 	names := []string{got[0].Name, got[1].Name}
 	require.ElementsMatch(t, []string{"gpt-4o", "gpt-4o-mini"}, names)
+	for _, model := range got {
+		require.Equal(t, "gpt-4o", model.BillingModel)
+	}
 }
 
 func TestSupportedModels_PricingOnlyNoMapping(t *testing.T) {
@@ -731,6 +734,7 @@ func TestSupportedModels_ExactMappingUsesTargetPricing(t *testing.T) {
 	got := ch.SupportedModels()
 	require.Len(t, got, 2)
 	require.Equal(t, "req-model", got[0].Name)
+	require.Equal(t, "served-model", got[0].BillingModel)
 	require.NotNil(t, got[0].Pricing)
 	require.Equal(t, int64(200), got[0].Pricing.ID, "req-model 显示但定价是 served-model 的（mapping target）")
 	require.Equal(t, "served-model", got[1].Name)
@@ -753,6 +757,7 @@ func TestSupportedModels_ExactMappingTargetMissingFromPricing(t *testing.T) {
 	got := ch.SupportedModels()
 	require.Len(t, got, 2)
 	require.Equal(t, "missing-src", got[0].Name)
+	require.Equal(t, "missing-target", got[0].BillingModel)
 	require.Nil(t, got[0].Pricing, "target 在渠道定价中缺失时不虚假填充，留给 ListAvailable 走 LiteLLM 回落")
 	require.Equal(t, "some-priced-model", got[1].Name)
 	require.NotNil(t, got[1].Pricing)
