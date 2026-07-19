@@ -1,8 +1,8 @@
 <template>
-  <AppLayout>
-    <div class="space-y-6">
+  <AppLayout full-height>
+    <div class="space-y-6 lg:flex lg:h-full lg:min-h-0 lg:flex-col lg:gap-6 lg:space-y-0">
       <!-- Top bar: count + search + refresh -->
-      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between lg:flex-none">
         <div class="flex flex-wrap items-center gap-3">
           <span
             class="inline-flex items-center gap-1.5 rounded-full bg-primary-500/10 px-3 py-1 text-sm font-medium text-primary-600 dark:text-primary-400"
@@ -75,16 +75,21 @@
         </div>
       </div>
 
-      <div class="flex flex-col gap-6 lg:flex-row">
+      <div class="flex flex-col gap-6 lg:min-h-0 lg:flex-1 lg:flex-row lg:overflow-hidden">
         <!-- Left filter rail -->
-        <aside class="hidden w-60 flex-shrink-0 lg:block">
-          <div class="sticky top-6 space-y-6">
+        <aside
+          class="model-square-scroll-pane hidden flex-shrink-0 overflow-y-auto overscroll-contain lg:block lg:h-full lg:min-h-0 lg:w-80 xl:w-[22rem]"
+          tabindex="0"
+          data-testid="model-filter-scroll-region"
+          :aria-label="t('modelSquare.filterRegion')"
+        >
+          <div class="space-y-5 pr-2">
             <!-- Provider -->
-            <FilterSection :title="t('modelSquare.filters.provider')">
+            <FilterSection :title="t('modelSquare.filters.provider')" :columns="2">
               <button
                 v-for="opt in providerOptions"
                 :key="`prov-${opt.value}`"
-                class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors"
+                class="flex min-w-0 w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-colors"
                 :class="railClass(activeProvider === opt.value, opt.count === 0)"
                 :disabled="opt.count === 0"
                 @click="activeProvider = opt.value"
@@ -96,16 +101,16 @@
                     {{ opt.label }}
                   </span>
                 </span>
-                <span class="text-xs text-gray-400 dark:text-gray-500">{{ opt.count }}</span>
+                <span class="flex-shrink-0 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-gray-500 dark:bg-dark-700 dark:text-gray-400">{{ opt.count }}</span>
               </button>
             </FilterSection>
 
             <!-- Group -->
-            <FilterSection v-if="groupOptions.length > 1" :title="t('modelSquare.filters.group')">
+            <FilterSection v-if="groupOptions.length > 1" :title="t('modelSquare.filters.group')" :columns="2">
               <button
                 v-for="opt in groupOptions"
                 :key="`grp-${opt.value}`"
-                class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors"
+                class="flex min-w-0 w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-colors"
                 :class="railClass(activeGroup === opt.value, false)"
                 @click="activeGroup = opt.value"
               >
@@ -130,43 +135,48 @@
                     class="flex-shrink-0 text-purple-500"
                   />
                 </span>
-                <span class="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">{{ opt.count }}</span>
+                <span class="flex-shrink-0 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-gray-500 dark:bg-dark-700 dark:text-gray-400">{{ opt.count }}</span>
               </button>
             </FilterSection>
 
             <!-- Endpoint -->
-            <FilterSection v-if="endpointOptions.length > 2" :title="t('modelSquare.filters.endpoint')">
+            <FilterSection v-if="endpointOptions.length > 2" :title="t('modelSquare.filters.endpoint')" :columns="2">
               <button
                 v-for="opt in endpointOptions"
                 :key="`ep-${opt.value}`"
-                class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors"
+                class="flex min-w-0 w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-colors"
                 :class="railClass(activeEndpoint === opt.value, false)"
                 @click="activeEndpoint = opt.value"
               >
                 <span>{{ opt.label }}</span>
-                <span class="text-xs text-gray-400 dark:text-gray-500">{{ opt.count }}</span>
+                <span class="flex-shrink-0 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-gray-500 dark:bg-dark-700 dark:text-gray-400">{{ opt.count }}</span>
               </button>
             </FilterSection>
 
             <!-- Billing -->
-            <FilterSection :title="t('modelSquare.filters.billing')">
+            <FilterSection :title="t('modelSquare.filters.billing')" :columns="2">
               <button
                 v-for="opt in billingOptions"
                 :key="`bill-${opt.value}`"
-                class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors"
+                class="flex min-w-0 w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-colors"
                 :class="railClass(activeBilling === opt.value, false)"
                 @click="activeBilling = opt.value"
               >
                 <span>{{ opt.label }}</span>
-                <span class="text-xs text-gray-400 dark:text-gray-500">{{ opt.count }}</span>
+                <span class="flex-shrink-0 rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-gray-500 dark:bg-dark-700 dark:text-gray-400">{{ opt.count }}</span>
               </button>
             </FilterSection>
           </div>
         </aside>
 
         <!-- Card grid -->
-        <div class="min-w-0 flex-1">
-          <div v-if="loading" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div
+          class="model-square-scroll-pane min-w-0 flex-1 overflow-y-auto overscroll-contain lg:h-full lg:min-h-0 lg:pr-1"
+          tabindex="0"
+          data-testid="model-results-scroll-region"
+          :aria-label="t('modelSquare.resultsRegion')"
+        >
+          <div v-if="loading" class="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
             <div v-for="n in 6" :key="`sk-${n}`" class="h-56 animate-pulse rounded-xl bg-gray-100 dark:bg-dark-800"></div>
           </div>
 
@@ -183,7 +193,7 @@
             </button>
           </div>
 
-          <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
             <article
               v-for="model in filteredModels"
               :key="model.key"
@@ -451,14 +461,18 @@ const ENDPOINT_OF: Record<string, string> = {
 }
 
 // Lightweight filter section wrapper (title + slotted list).
-const FilterSection = (props: { title: string }, ctx: { slots: { default?: () => VNode[] } }) =>
+const FilterSection = (props: { title: string; columns?: 1 | 2 }, ctx: { slots: { default?: () => VNode[] } }) =>
   h('div', {}, [
     h(
       'h3',
       { class: 'mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500' },
       props.title
     ),
-    h('div', { class: 'space-y-0.5' }, ctx.slots.default?.() ?? [])
+    h(
+      'div',
+      { class: props.columns === 2 ? 'grid grid-cols-2 gap-2' : 'space-y-0.5' },
+      ctx.slots.default?.() ?? []
+    )
   ])
 
 interface SquareGroup {
@@ -643,7 +657,7 @@ const providerOptions = computed(() => {
     })
   }
   const opts = [
-    { value: 'all', label: t('modelSquare.filters.all'), keyword: '', colorClass: '', count: countWith(() => true, 'provider') }
+    { value: 'all', label: t('modelSquare.allProviders'), keyword: '', colorClass: '', count: countWith(() => true, 'provider') }
   ]
   for (const [brand, info] of brands) {
     opts.push({
@@ -671,7 +685,7 @@ const groupOptions = computed(() => {
     }
   }
   const opts: { value: string; label: string; count: number; exclusive: boolean; platform: string }[] = [
-    { value: 'all', label: t('modelSquare.filters.all'), count: countWith(() => true, 'group'), exclusive: false, platform: '' }
+    { value: 'all', label: t('modelSquare.allGroups'), count: countWith(() => true, 'group'), exclusive: false, platform: '' }
   ]
   for (const [id, info] of seen) {
     opts.push({
@@ -753,10 +767,12 @@ function clearFilters(): void {
 }
 
 function railClass(active: boolean, disabled: boolean): string {
-  if (disabled) return 'cursor-not-allowed text-gray-300 dark:text-gray-600'
+  if (disabled) {
+    return 'cursor-not-allowed border-gray-100 bg-gray-50/60 text-gray-300 dark:border-dark-700 dark:bg-dark-800/40 dark:text-gray-600'
+  }
   return active
-    ? 'bg-primary-500/10 font-medium text-primary-600 dark:text-primary-400'
-    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-dark-800'
+    ? 'border-primary-400 bg-primary-500/10 font-medium text-primary-600 dark:border-primary-600 dark:text-primary-400'
+    : 'border-gray-200 bg-white text-gray-600 hover:border-primary-300 hover:bg-primary-50/50 dark:border-dark-700 dark:bg-dark-900/30 dark:text-gray-300 dark:hover:border-primary-700 dark:hover:bg-dark-800'
 }
 
 function chipClass(active: boolean, disabled: boolean): string {
@@ -880,3 +896,11 @@ onBeforeUnmount(() => {
   if (copyTimer) clearTimeout(copyTimer)
 })
 </script>
+
+<style scoped>
+@media (min-width: 1024px) {
+  .model-square-scroll-pane {
+    scrollbar-gutter: stable;
+  }
+}
+</style>

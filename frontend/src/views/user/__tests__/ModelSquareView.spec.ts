@@ -27,6 +27,10 @@ const messages: Record<string, string> = {
   'modelSquare.noPricing': 'No pricing',
   'modelSquare.clickToCopy': 'Copy',
   'modelSquare.availableGroups': 'Available groups',
+  'modelSquare.allProviders': 'All providers',
+  'modelSquare.allGroups': 'All groups',
+  'modelSquare.filterRegion': 'Model filters',
+  'modelSquare.resultsRegion': 'Model results',
   'modelSquare.filters.all': 'All',
   'modelSquare.filters.provider': 'Provider',
   'modelSquare.filters.group': 'Group',
@@ -282,5 +286,32 @@ describe('ModelSquareView image model cards', () => {
     expect(imageText).not.toContain('No image access')
 
     expect(tokenCard!.text()).toContain('Token image group0.6x')
+  })
+
+  it('keeps desktop filters and results in separate scroll regions', async () => {
+    const wrapper = mount(ModelSquareView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          Icon: true,
+          ModelIcon: true,
+          PlatformIcon: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    const filterRegion = wrapper.get('[data-testid="model-filter-scroll-region"]')
+    const resultsRegion = wrapper.get('[data-testid="model-results-scroll-region"]')
+
+    expect(filterRegion.element).not.toBe(resultsRegion.element)
+    expect(filterRegion.classes()).toEqual(expect.arrayContaining(['overflow-y-auto', 'overscroll-contain']))
+    expect(resultsRegion.classes()).toEqual(expect.arrayContaining(['overflow-y-auto', 'overscroll-contain']))
+    expect(filterRegion.attributes('tabindex')).toBe('0')
+    expect(resultsRegion.attributes('tabindex')).toBe('0')
+    expect(filterRegion.attributes('aria-label')).toBe('Model filters')
+    expect(resultsRegion.attributes('aria-label')).toBe('Model results')
+    expect(filterRegion.find('.grid-cols-2').exists()).toBe(true)
   })
 })

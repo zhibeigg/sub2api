@@ -16,6 +16,23 @@ OpenCode Go 上游只有两类模型级协议：`chat_completions` 与 `messages
 
 OpenCode Go 账号可启用 `extra.mixed_scheduling=true`，但只会加入 **Anthropic** 或 **OpenAI** 分组的候选池，不会加入 Gemini、Grok 或其他原生分组。独立 OpenCode Go 分组仍只调度 `platform=opencode` 的账号。
 
+## 渠道与模型广场配置
+
+OpenCode Go 的账号平台值统一为 `opencode`，但不同模型家族不应合并到同一个渠道。用户侧可用渠道接口会把一个渠道内同平台的分组和该渠道全部支持模型聚合成同一个 section；如果六个 `opencode` 分组共用一个渠道，模型广场会把渠道内所有模型同时关联到每个分组，导致各分组显示相同的模型数量。
+
+生产配置应保持 **一个模型家族、一个分组、一个渠道**：
+
+| 渠道 / 分组 | 模型 |
+|---|---|
+| GLM 低价渠道 | `glm-5.2`、`glm-5.1` |
+| Kimi 低价渠道 | `kimi-k3`、`kimi-k2.7-code`、`kimi-k2.6` |
+| MIMO 低价渠道 | `mimo-v2.5`、`mimo-v2.5-pro` |
+| MiniMax 低价渠道 | `minimax-m3`、`minimax-m2.7` |
+| Qwen 低价渠道 | `qwen3.7-max`、`qwen3.7-plus`、`qwen3.6-plus` |
+| DeepSeek 低价渠道 | `deepseek-v4-pro`、`deepseek-v4-flash` |
+
+每个渠道必须启用 `restrict_models=true`，只保留本家族定价，并使用 `billing_model_source=requested`。渠道服务要求一个分组只能属于一个渠道；拆分历史聚合渠道时，应先备份配置，再将聚合渠道原地转换为其中一个独立渠道，随后创建其余渠道，避免分组冲突或同时失去计价来源。
+
 ## 账号凭据
 
 `credentials` 支持以下字段：

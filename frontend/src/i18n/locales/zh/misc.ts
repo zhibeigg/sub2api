@@ -175,6 +175,10 @@ export default {
     copied: '已复制',
     clearFilters: '清除筛选',
     availableGroups: '可用分组',
+    allProviders: '全部供应商',
+    allGroups: '全部分组',
+    filterRegion: '模型筛选',
+    resultsRegion: '模型结果',
     filters: {
       all: '全部',
       platform: '供应商',

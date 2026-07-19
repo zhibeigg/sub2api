@@ -12,7 +12,7 @@
 
 **AI API Gateway Platform for Subscription Quota Distribution**
 
-Supports two subscription plan modes: one native subscription group using its own limits, or one or more standard balance groups sharing plan-level daily/weekly/monthly limits, with administrator assignment and independent purchase visibility controls. The API Keys page includes browser-side latency checks for multiple endpoints, automatic refresh every 3 seconds, node details, and the built-in `www.pokeapi.top` backup route; when payment is enabled, users can jump to top-up directly from the header balance. The Model Square distinguishes token, per-request, and per-image billing, and shows accessible groups' effective image multipliers plus configured 1K/2K/4K per-image prices.
+Supports two subscription plan modes: one native subscription group using its own limits, or one or more standard balance groups sharing plan-level daily/weekly/monthly limits, with administrator assignment and independent purchase visibility controls. The API Keys page includes browser-side latency checks for multiple endpoints, automatic refresh every 3 seconds, node details, and the built-in `www.pokeapi.top` backup route; when payment is enabled, users can jump to top-up directly from the header balance. The Model Square distinguishes token, per-request, and per-image billing, shows accessible groups' effective image multipliers plus configured 1K/2K/4K per-image prices, and uses an independently scrolling two-column filter rail beside the model results on desktop.
 
 English | [中文](README_CN.md) | [日本語](README_JA.md)
 

@@ -175,6 +175,10 @@ export default {
     copied: 'Copied',
     clearFilters: 'Clear filters',
     availableGroups: 'Available groups',
+    allProviders: 'All providers',
+    allGroups: 'All groups',
+    filterRegion: 'Model filters',
+    resultsRegion: 'Model results',
     filters: {
       all: 'All',
       platform: 'Provider',
