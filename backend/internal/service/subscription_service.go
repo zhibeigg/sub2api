@@ -713,6 +713,29 @@ func (s *SubscriptionService) assignSubscriptionWithReuse(ctx context.Context, i
 		return nil, false, err
 	}
 	if existing != nil {
+		now := time.Now()
+		if existing.Status == SubscriptionStatusExpired ||
+			(existing.Status != SubscriptionStatusSuspended && !existing.ExpiresAt.After(now)) {
+			validityDays := normalizeAssignValidityDays(input.ValidityDays)
+			newExpiresAt := now.AddDate(0, 0, validityDays)
+			if newExpiresAt.After(MaxExpiresAt) {
+				newExpiresAt = MaxExpiresAt
+			}
+
+			renewalInput := *input
+			if strings.TrimSpace(existing.Notes) == strings.TrimSpace(input.Notes) {
+				renewalInput.Notes = ""
+			}
+			if err := s.updateExistingSubscriptionTerm(ctx, existing, &renewalInput, now, newExpiresAt, true); err != nil {
+				return nil, false, err
+			}
+
+			affectedGroupIDs := append([]int64(nil), subscriptionGroupIDs(existing)...)
+			affectedGroupIDs = append(affectedGroupIDs, input.GroupIDs...)
+			s.maybeInvalidateAssignmentGroupCaches(input.UserID, affectedGroupIDs, false)
+			renewed, getErr := s.userSubRepo.GetByID(ctx, existing.ID)
+			return renewed, true, getErr
+		}
 		if conflictReason, conflict := detectAssignSemanticConflict(existing, input); conflict {
 			return nil, false, ErrSubscriptionAssignConflict.WithMetadata(map[string]string{"conflict_reason": conflictReason})
 		}

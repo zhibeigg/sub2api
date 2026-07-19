@@ -10,7 +10,7 @@ describe('OpenCode Go platform registry', () => {
     expect(PLATFORM_ORDER.indexOf('opencode')).toBeGreaterThan(PLATFORM_ORDER.indexOf('cursor'))
     expect(PLATFORM_ORDER.indexOf('opencode')).toBeLessThan(PLATFORM_ORDER.indexOf('kiro'))
     expect(opencode.label).toBe('OpenCode Go')
-    expect(opencode.capabilities).toMatchObject({ quota: true, models: true, usage: true, modelSync: false })
+    expect(opencode.capabilities).toMatchObject({ quota: true, models: true, usage: true, modelSync: true })
     expect(QUOTA_PLATFORMS).toContain('opencode')
     expect(platformLabel('opencode')).toBe('OpenCode Go')
     expect(platformBadgeClass('opencode')).toContain('teal')

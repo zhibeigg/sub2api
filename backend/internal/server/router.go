@@ -35,6 +35,7 @@ func SetupRouter(
 	cfg *config.Config,
 	redisClient *redis.Client,
 ) *gin.Engine {
+	middleware2.SetIngressRejectRecorder(opsService)
 	// 缓存动态 CSP 来源；保留自定义 iframe，并按 Chatwoot 配置扩展脚本、frame 与连接来源。
 	var cachedDynamicCSPSources atomic.Pointer[service.DynamicCSPSources]
 	emptySources := service.DynamicCSPSources{}
@@ -54,7 +55,7 @@ func SetupRouter(
 	// 应用中间件
 	r.Use(middleware2.RequestLogger())
 	// 将客户端 IP + UA 注入 request context，供 token 签发/会话绑定/审计日志统一读取。
-	// IP 取值与 API Key IP 限制共用「信任反代传递的客户端 IP」系统开关。
+	// IP 取值与 API Key IP 限制共用 server.trusted_proxies 信任链。
 	r.Use(middleware2.SessionBindingContext(cfg))
 	r.Use(middleware2.Logger())
 	r.Use(middleware2.CORS(cfg.CORS))

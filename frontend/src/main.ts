@@ -4,6 +4,7 @@ import App from './App.vue'
 import router from './router'
 import i18n, { initI18n } from './i18n'
 import { useAppStore } from '@/stores/app'
+import { updateFavicon } from '@/utils/branding'
 import './style.css'
 import './styles/monolog.css'
 
@@ -27,6 +28,9 @@ async function bootstrap() {
   // This must happen after pinia is installed but before router and i18n
   const appStore = useAppStore()
   appStore.initFromInjectedConfig()
+
+  // Apply favicon before mount; route SEO owns the document title.
+  updateFavicon(appStore.siteLogo)
 
   await initI18n()
 
