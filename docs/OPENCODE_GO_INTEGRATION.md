@@ -22,7 +22,7 @@ OpenCode Go 账号可启用 `extra.mixed_scheduling=true`，但只会加入 **An
 
 | 字段 | 必需 | 说明 |
 |---|---|---|
-| `api_key` | 是 | OpenCode Go API Key；上游固定使用 `Authorization: Bearer` |
+| `api_key` | 是 | OpenCode Go API Key；Chat Completions 与模型目录使用 `Authorization: Bearer`，Anthropic Messages 使用 `x-api-key` 并发送 `anthropic-version: 2023-06-01` |
 | `base_url` | 否 | 账号级上游地址，优先于全局 `opencode.base_url` |
 | `model_mapping` | 否 | 入站模型到上游模型的字符串映射 |
 | `model_protocols` | 否 | 模型到 `chat_completions` / `messages` 的协议映射 |

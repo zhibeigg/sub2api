@@ -56,7 +56,9 @@ func TestOpenCodeForwardURLAuthenticationProxyAndProtocolOverride(t *testing.T) 
 	result, err := service.ForwardChatCompletions(t.Context(), c, account, []byte(`{"model":"opencode-go/grok-4.5","messages":[{"role":"user","content":"hi"}]}`))
 	require.NoError(t, err)
 	require.Equal(t, "https://relay.example.com/opencode/v1/messages", gotRequest.URL.String())
-	require.Equal(t, "Bearer secret", gotRequest.Header.Get("Authorization"))
+	require.Empty(t, gotRequest.Header.Get("Authorization"))
+	require.Equal(t, "secret", gotRequest.Header.Get("X-Api-Key"))
+	require.Equal(t, "2023-06-01", gotRequest.Header.Get("Anthropic-Version"))
 	require.Equal(t, "application/json", gotRequest.Header.Get("Content-Type"))
 	require.Equal(t, "application/json", gotRequest.Header.Get("Accept"))
 	require.Equal(t, "http://127.0.0.1:8080", gotProxy)
@@ -72,8 +74,14 @@ func TestOpenCodeForwardURLAuthenticationProxyAndProtocolOverride(t *testing.T) 
 func TestOpenCodeModelMappingThenProtocolOverride(t *testing.T) {
 	var gotPath string
 	var gotBody string
+	var gotAuthorization string
+	var gotAPIKey string
+	var gotAnthropicVersion string
 	upstream := &openCodeHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
 		gotPath = req.URL.Path
+		gotAuthorization = req.Header.Get("Authorization")
+		gotAPIKey = req.Header.Get("X-Api-Key")
+		gotAnthropicVersion = req.Header.Get("Anthropic-Version")
 		body, err := io.ReadAll(req.Body)
 		require.NoError(t, err)
 		gotBody = string(body)
@@ -88,6 +96,9 @@ func TestOpenCodeModelMappingThenProtocolOverride(t *testing.T) {
 	result, err := service.ForwardMessages(t.Context(), c, account, []byte(`{"model":"opencode-go/alias","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}`))
 	require.NoError(t, err)
 	require.Equal(t, "/v1/chat/completions", gotPath)
+	require.Equal(t, "Bearer key", gotAuthorization)
+	require.Empty(t, gotAPIKey)
+	require.Empty(t, gotAnthropicVersion)
 	require.Contains(t, gotBody, `"model":"custom-upstream"`)
 	require.Equal(t, "opencode-go/alias", result.BillingModel)
 	require.Equal(t, "custom-upstream", result.UpstreamModel)

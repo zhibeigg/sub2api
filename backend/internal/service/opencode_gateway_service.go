@@ -71,9 +71,18 @@ func (s *OpenCodeGatewayService) forward(ctx context.Context, c *gin.Context, ac
 	if account != nil {
 		account.ApplyHeaderOverrides(request.Header)
 	}
-	// Authentication is authoritative and cannot be replaced by a client/header override.
-	request.Header.Set("Authorization", "Bearer "+opencodeAPIKey(account))
+	// Authentication is authoritative and follows the selected upstream protocol.
+	// OpenCode's Chat Completions endpoint accepts Bearer auth, while its Anthropic
+	// Messages endpoint follows the Anthropic SDK contract (x-api-key + version).
+	request.Header.Del("Authorization")
 	request.Header.Del("X-Api-Key")
+	request.Header.Del("Anthropic-Version")
+	if meta.UpstreamProtocol == opencodepkg.ProtocolMessages {
+		request.Header.Set("X-Api-Key", opencodeAPIKey(account))
+		request.Header.Set("Anthropic-Version", "2023-06-01")
+	} else {
+		request.Header.Set("Authorization", "Bearer "+opencodeAPIKey(account))
+	}
 	if meta.Stream {
 		request.Header.Set("Accept", "text/event-stream")
 	} else {
