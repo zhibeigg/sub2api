@@ -52,6 +52,32 @@ func TestWebhookValidationAndHeartbeat(t *testing.T) {
 	}
 }
 
+func TestWebhookValidationDoesNotRejectMismatchedAppIDHeader(t *testing.T) {
+	cfg := ActiveConfig{Enabled: true, AppID: "123456", WebhookSecret: "0123456789abcdef0123456789abcdef", ConfigVersion: 2}
+	runtime := testRuntimeWithConfig(cfg)
+	body := []byte(`{"d":{"plain_token":"plain-token","event_ts":"1720000000"},"op":13}`)
+	request := httptest.NewRequest(http.MethodPost, "/webhooks/qq", bytes.NewReader(body))
+	request.Header.Set("X-Bot-Appid", "654321")
+	recorder := httptest.NewRecorder()
+
+	runtime.ServeWebhook(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("validation status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		PlainToken string `json:"plain_token"`
+		Signature  string `json:"signature"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	verified, err := verifySignature(cfg.WebhookSecret, "1720000000", response.Signature, []byte(response.PlainToken))
+	if err != nil || !verified {
+		t.Fatalf("validation signature rejected: %v", err)
+	}
+}
+
 func TestWebhookDispatchFailsClosedWhenQueueUnavailable(t *testing.T) {
 	cfg := ActiveConfig{Enabled: true, AppID: "123456", WebhookSecret: "0123456789abcdef0123456789abcdef", ConfigVersion: 2, QueueCapacity: 64}
 	runtime := testRuntimeWithConfig(cfg)

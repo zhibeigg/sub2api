@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 )
@@ -45,8 +46,10 @@ func (r *Runtime) ServeWebhook(writer http.ResponseWriter, request *http.Request
 	}
 	if payload.OPCode == 13 {
 		if appID := strings.TrimSpace(request.Header.Get("X-Bot-Appid")); appID != "" && appID != cfg.AppID {
-			http.Error(writer, `{"error":"invalid bot app id"}`, http.StatusUnauthorized)
-			return
+			// Tencent's validation protocol authenticates the callback by checking the
+			// Ed25519 signature generated from the configured Bot Secret. Keep the
+			// header mismatch observable, but do not reject before that proof can run.
+			slog.Warn("qqbot webhook validation app id mismatch", "expected_app_id", cfg.AppID, "received_app_id", appID)
 		}
 		var validation struct {
 			PlainToken string `json:"plain_token"`
