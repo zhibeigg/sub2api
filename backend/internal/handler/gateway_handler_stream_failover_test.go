@@ -139,3 +139,116 @@ func TestHandleFailoverExhaustedReturnsCursorBadRequestDetail(t *testing.T) {
 	require.Contains(t, w.Body.String(), `unsupported content type \"thinking\"`)
 	require.Contains(t, w.Body.String(), `"type":"invalid_request_error"`)
 }
+
+func TestOpenCodeRequestErrorPreservedAcrossCompatibilityEndpoints(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := &GatewayHandler{}
+	tests := []struct {
+		name   string
+		path   string
+		invoke func(*gin.Context, *service.UpstreamFailoverError)
+	}{
+		{name: "messages", path: "/v1/messages", invoke: func(c *gin.Context, failure *service.UpstreamFailoverError) {
+			h.handleFailoverExhausted(c, failure, service.PlatformOpenCode, false)
+		}},
+		{name: "chat_completions", path: "/v1/chat/completions", invoke: func(c *gin.Context, failure *service.UpstreamFailoverError) {
+			h.handleCCFailoverExhausted(c, failure, false)
+		}},
+		{name: "responses", path: "/v1/responses", invoke: func(c *gin.Context, failure *service.UpstreamFailoverError) {
+			h.handleResponsesFailoverExhausted(c, failure, false)
+		}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, test.path, nil)
+			c.Set(service.OpsUpstreamErrorDetailKey, `{"response_body":"full diagnostic"}`)
+			failure := &service.UpstreamFailoverError{
+				StatusCode:        http.StatusBadRequest,
+				Stage:             service.GatewayFailureStageInference,
+				Scope:             service.GatewayFailureScopeRequest,
+				NextAccountAction: service.NextAccountStop,
+				ClientStatusCode:  http.StatusBadRequest,
+				ClientMessage:     "request body is too large for kimi-k3",
+				ResponseBody:      []byte(`{"error":"request body is too large for kimi-k3"}`),
+			}
+
+			test.invoke(c, failure)
+
+			require.Equal(t, http.StatusBadRequest, recorder.Code)
+			require.Contains(t, recorder.Body.String(), "request body is too large for kimi-k3")
+			require.NotContains(t, recorder.Body.String(), "All available accounts exhausted")
+			require.Equal(t, http.StatusBadRequest, c.GetInt(service.OpsUpstreamStatusCodeKey))
+			require.Equal(t, "request body is too large for kimi-k3", c.GetString(service.OpsUpstreamErrorMessageKey))
+			require.Equal(t, `{"response_body":"full diagnostic"}`, c.GetString(service.OpsUpstreamErrorDetailKey))
+		})
+	}
+}
+
+func TestRateLimitedFailoverDoesNotExposeRawBodyWithoutClientMessage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+
+	(&GatewayHandler{}).handleCCFailoverExhausted(c, &service.UpstreamFailoverError{
+		StatusCode:      http.StatusTooManyRequests,
+		ResponseBody:    []byte(`{"error":"api_key=must-not-leak"}`),
+		ResponseHeaders: http.Header{"Retry-After": []string{"5"}},
+	}, false)
+
+	require.Equal(t, http.StatusTooManyRequests, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "Upstream rate limit exceeded")
+	require.NotContains(t, recorder.Body.String(), "must-not-leak")
+}
+
+func TestOpenCodeRateLimitExhaustionReturns429AcrossCompatibilityEndpoints(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := &GatewayHandler{}
+	tests := []struct {
+		name   string
+		path   string
+		invoke func(*gin.Context, *service.UpstreamFailoverError)
+	}{
+		{name: "messages", path: "/v1/messages", invoke: func(c *gin.Context, failure *service.UpstreamFailoverError) {
+			h.handleFailoverExhausted(c, failure, service.PlatformOpenCode, false)
+		}},
+		{name: "chat_completions", path: "/v1/chat/completions", invoke: func(c *gin.Context, failure *service.UpstreamFailoverError) {
+			h.handleCCFailoverExhausted(c, failure, false)
+		}},
+		{name: "responses", path: "/v1/responses", invoke: func(c *gin.Context, failure *service.UpstreamFailoverError) {
+			h.handleResponsesFailoverExhausted(c, failure, false)
+		}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, test.path, nil)
+			c.Set(service.OpsUpstreamStatusCodeKey, http.StatusTooManyRequests)
+			c.Set(service.OpsUpstreamErrorMessageKey, "provider raw quota diagnostic")
+			c.Set(service.OpsUpstreamErrorDetailKey, `{"error":"full rate limit detail"}`)
+			failure := &service.UpstreamFailoverError{
+				StatusCode:        http.StatusTooManyRequests,
+				Stage:             service.GatewayFailureStageInference,
+				Scope:             service.GatewayFailureScopeAccount,
+				NextAccountAction: service.NextAccountRetry,
+				ClientStatusCode:  http.StatusTooManyRequests,
+				ClientMessage:     "upstream quota reached",
+				ResponseBody:      []byte(`{"error":"upstream quota reached"}`),
+				ResponseHeaders:   http.Header{"Retry-After": []string{"7"}},
+			}
+
+			test.invoke(c, failure)
+
+			require.Equal(t, http.StatusTooManyRequests, recorder.Code)
+			require.Equal(t, "7", recorder.Header().Get("Retry-After"))
+			require.NotContains(t, recorder.Body.String(), "All available accounts exhausted")
+			require.Equal(t, "provider raw quota diagnostic", c.GetString(service.OpsUpstreamErrorMessageKey))
+			require.Equal(t, `{"error":"full rate limit detail"}`, c.GetString(service.OpsUpstreamErrorDetailKey))
+		})
+	}
+}

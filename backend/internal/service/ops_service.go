@@ -830,6 +830,8 @@ func redactSensitiveJSON(v any) any {
 			out = append(out, redactSensitiveJSON(vv))
 		}
 		return out
+	case string:
+		return sanitizeUpstreamErrorMessage(t)
 	default:
 		return v
 	}

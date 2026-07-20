@@ -124,7 +124,7 @@ func opencodeHTTPFailure(response *http.Response) *UpstreamFailoverError {
 	headers := response.Header.Clone()
 	failure := &UpstreamFailoverError{
 		StatusCode: response.StatusCode, ResponseBody: body, ResponseHeaders: headers,
-		ClientStatusCode: response.StatusCode,
+		Stage: GatewayFailureStageInference, ClientStatusCode: response.StatusCode,
 	}
 	switch {
 	case response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden:
@@ -132,10 +132,13 @@ func opencodeHTTPFailure(response *http.Response) *UpstreamFailoverError {
 		failure.Scope = GatewayFailureScopeAccount
 		failure.Reason = GatewayFailureReason("opencode_credentials_rejected")
 		failure.NextAccountAction = NextAccountRetry
+		failure.ClientStatusCode = http.StatusServiceUnavailable
+		failure.ClientMessage = "OpenCode Go account credentials are unavailable"
 	case response.StatusCode == http.StatusTooManyRequests:
 		failure.Scope = GatewayFailureScopeAccount
 		failure.Reason = GatewayFailureReason("opencode_rate_limited")
 		failure.NextAccountAction = NextAccountRetry
+		failure.ClientMessage = "OpenCode Go upstream rate limit exceeded, please retry later"
 	case response.StatusCode >= http.StatusInternalServerError:
 		failure.Scope = GatewayFailureScopeProvider
 		failure.Reason = GatewayFailureReason("opencode_upstream_unavailable")
@@ -144,6 +147,7 @@ func opencodeHTTPFailure(response *http.Response) *UpstreamFailoverError {
 		failure.Scope = GatewayFailureScopeRequest
 		failure.Reason = GatewayFailureReason("opencode_request_rejected")
 		failure.NextAccountAction = NextAccountStop
+		failure.ClientMessage = openCodeSafeErrorMessage(response.StatusCode, body, "OpenCode Go rejected the request")
 	default:
 		failure.Scope = GatewayFailureScopeProvider
 		failure.NextAccountAction = NextAccountRetry
@@ -166,8 +170,10 @@ func opencodeNetworkFailure(err error) *UpstreamFailoverError {
 func opencodeRequestError(status int, body []byte) *UpstreamFailoverError {
 	return &UpstreamFailoverError{
 		StatusCode: status, ResponseBody: append([]byte(nil), body...),
-		Scope: GatewayFailureScopeRequest, Reason: GatewayFailureReason("opencode_invalid_request"),
+		Stage: GatewayFailureStageInference, Scope: GatewayFailureScopeRequest,
+		Reason:            GatewayFailureReason("opencode_invalid_request"),
 		NextAccountAction: NextAccountStop, ClientStatusCode: status,
+		ClientMessage: openCodeSafeErrorMessage(status, body, "Invalid OpenCode Go request"),
 	}
 }
 
@@ -176,6 +182,22 @@ func opencodeAccountFailure(status int, body []byte, headers http.Header) *Upstr
 		StatusCode: status, ResponseBody: append([]byte(nil), body...), ResponseHeaders: headers,
 		Stage: GatewayFailureStageAccountAuth, Scope: GatewayFailureScopeAccount,
 		Reason:            GatewayFailureReason("opencode_account_configuration"),
-		NextAccountAction: NextAccountRetry, ClientStatusCode: status,
+		NextAccountAction: NextAccountRetry, ClientStatusCode: http.StatusServiceUnavailable,
+		ClientMessage: "OpenCode Go account configuration is unavailable",
 	}
+}
+
+func openCodeSafeErrorMessage(status int, body []byte, fallback string) string {
+	message := strings.TrimSpace(extractUpstreamErrorMessage(body))
+	message = sanitizeUpstreamErrorMessage(message)
+	if message != "" {
+		return message
+	}
+	if fallback = strings.TrimSpace(fallback); fallback != "" {
+		return fallback
+	}
+	if statusText := http.StatusText(status); statusText != "" {
+		return statusText
+	}
+	return "OpenCode Go upstream request failed"
 }

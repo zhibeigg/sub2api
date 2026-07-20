@@ -144,6 +144,26 @@ func TestHandleFailoverError_BasicSwitch(t *testing.T) {
 		require.Equal(t, err, fs.LastFailoverErr)
 	})
 
+	t.Run("OpenCode请求错误不切换账号", func(t *testing.T) {
+		mock := &mockTempUnscheduler{}
+		fs := NewFailoverState(3, false)
+		requestErr := &service.UpstreamFailoverError{
+			StatusCode:        http.StatusBadRequest,
+			Stage:             service.GatewayFailureStageInference,
+			Scope:             service.GatewayFailureScopeRequest,
+			NextAccountAction: service.NextAccountStop,
+			ClientStatusCode:  http.StatusBadRequest,
+			ClientMessage:     "request rejected",
+		}
+
+		action := fs.HandleFailoverError(context.Background(), mock, 940, service.PlatformOpenCode, maxSameAccountRetries, requestErr)
+
+		require.Equal(t, FailoverExhausted, action)
+		require.Zero(t, fs.SwitchCount)
+		require.Empty(t, fs.FailedAccountIDs)
+		require.Same(t, requestErr, fs.LastFailoverErr)
+	})
+
 	t.Run("显式停止不切换账号且旧错误默认仍切换", func(t *testing.T) {
 		mock := &mockTempUnscheduler{}
 		fs := NewFailoverState(3, false)

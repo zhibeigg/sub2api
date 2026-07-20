@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
@@ -33,6 +35,29 @@ func (s *openCodeProxyRepositoryStub) GetByID(context.Context, int64) (*Proxy, e
 	return s.proxy, s.err
 }
 
+type openCodeRateLimitRepositoryStub struct {
+	AccountRepository
+	mu        sync.Mutex
+	accountID int64
+	resetAt   time.Time
+	calls     int
+}
+
+func (s *openCodeRateLimitRepositoryStub) SetRateLimited(_ context.Context, accountID int64, resetAt time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.accountID = accountID
+	s.resetAt = resetAt
+	s.calls++
+	return nil
+}
+
+func (s *openCodeRateLimitRepositoryStub) snapshot() (int, int64, time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.calls, s.accountID, s.resetAt
+}
+
 func TestOpenCodeForwardURLAuthenticationProxyAndProtocolOverride(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	proxyID := int64(9)
@@ -44,7 +69,7 @@ func TestOpenCodeForwardURLAuthenticationProxyAndProtocolOverride(t *testing.T) 
 		gotRequest, gotProxy, gotAccountID, gotConcurrency = req, proxyURL, accountID, concurrency
 		return openCodeResponse(http.StatusOK, `{"id":"msg-1","type":"message","role":"assistant","model":"grok-4.5","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":2,"output_tokens":1}}`, nil), nil
 	}}
-	service := NewOpenCodeGatewayService(upstream, &openCodeProxyRepositoryStub{proxy: &Proxy{ID: proxyID, Protocol: "http", Host: "127.0.0.1", Port: 8080}}, &config.Config{})
+	service := NewOpenCodeGatewayService(upstream, &openCodeProxyRepositoryStub{proxy: &Proxy{ID: proxyID, Protocol: "http", Host: "127.0.0.1", Port: 8080}}, &config.Config{}, nil)
 	account := &Account{
 		ID: 42, Platform: PlatformOpenCode, Type: AccountTypeAPIKey, ProxyID: &proxyID, Concurrency: 7,
 		Credentials: map[string]any{
@@ -87,7 +112,7 @@ func TestOpenCodeModelMappingThenProtocolOverride(t *testing.T) {
 		gotBody = string(body)
 		return openCodeResponse(http.StatusOK, `{"id":"chat-1","object":"chat.completion","model":"custom-upstream","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}`, nil), nil
 	}}
-	service := NewOpenCodeGatewayService(upstream, nil, &config.Config{})
+	service := NewOpenCodeGatewayService(upstream, nil, &config.Config{}, nil)
 	account := openCodeAccount(map[string]any{
 		"base_url": "https://relay.example.com", "model_mapping": map[string]any{"alias": "custom-upstream"},
 		"model_protocols": map[string]any{"custom-upstream": "openai"},
@@ -108,7 +133,7 @@ func TestOpenCodeUnknownProtocolFailsClosed(t *testing.T) {
 	service := NewOpenCodeGatewayService(&openCodeHTTPUpstreamStub{do: func(*http.Request, string, int64, int) (*http.Response, error) {
 		t.Fatal("upstream must not be called")
 		return nil, nil
-	}}, nil, &config.Config{})
+	}}, nil, &config.Config{}, nil)
 	account := openCodeAccount(map[string]any{"model_protocols": map[string]any{"grok-4.5": "future_protocol"}})
 	_, c := openCodeTestContext()
 	_, err := service.ForwardChatCompletions(t.Context(), c, account, []byte(`{"model":"grok-4.5","messages":[{"role":"user","content":"hi"}]}`))
@@ -124,7 +149,7 @@ func TestOpenCodeFetchModelsUsesBearerGET(t *testing.T) {
 		method, target, auth = req.Method, req.URL.String(), req.Header.Get("Authorization")
 		return openCodeResponse(http.StatusOK, `{"object":"list","data":[]}`, http.Header{"X-Request-Id": []string{"req-models"}}), nil
 	}}
-	service := NewOpenCodeGatewayService(upstream, nil, &config.Config{})
+	service := NewOpenCodeGatewayService(upstream, nil, &config.Config{}, nil)
 	account := openCodeAccount(map[string]any{"base_url": "https://relay.example.com/v1"})
 	recorder, c := openCodeTestContext()
 	result, err := service.FetchModels(t.Context(), c, account)
@@ -150,7 +175,7 @@ func TestOpenCodeStreamTracksFirstTokenUsageAndRequestID(t *testing.T) {
 	upstream := &openCodeHTTPUpstreamStub{do: func(*http.Request, string, int64, int) (*http.Response, error) {
 		return openCodeResponse(http.StatusOK, stream, http.Header{"Content-Type": []string{"text/event-stream"}}), nil
 	}}
-	service := NewOpenCodeGatewayService(upstream, nil, &config.Config{})
+	service := NewOpenCodeGatewayService(upstream, nil, &config.Config{}, nil)
 	recorder, c := openCodeTestContext()
 	result, err := service.ForwardMessages(t.Context(), c, openCodeAccount(nil), []byte(`{"model":"grok-4.5","max_tokens":16,"stream":true,"messages":[{"role":"user","content":"hi"}]}`))
 	require.NoError(t, err)
@@ -165,25 +190,27 @@ func TestOpenCodeStreamTracksFirstTokenUsageAndRequestID(t *testing.T) {
 
 func TestOpenCodeErrorClassification(t *testing.T) {
 	tests := []struct {
-		name       string
-		status     int
-		stage      GatewayFailureStage
-		scope      GatewayFailureScope
-		next       NextAccountAction
-		credential bool
+		name          string
+		status        int
+		stage         GatewayFailureStage
+		scope         GatewayFailureScope
+		next          NextAccountAction
+		credential    bool
+		clientStatus  int
+		clientMessage string
 	}{
-		{name: "unauthorized", status: 401, stage: GatewayFailureStageAccountAuth, scope: GatewayFailureScopeAccount, next: NextAccountRetry, credential: true},
-		{name: "forbidden", status: 403, stage: GatewayFailureStageAccountAuth, scope: GatewayFailureScopeAccount, next: NextAccountRetry, credential: true},
-		{name: "rate_limit", status: 429, scope: GatewayFailureScopeAccount, next: NextAccountRetry},
-		{name: "server_error", status: 503, scope: GatewayFailureScopeProvider, next: NextAccountRetry},
-		{name: "bad_request", status: 400, scope: GatewayFailureScopeRequest, next: NextAccountStop},
+		{name: "unauthorized", status: 401, stage: GatewayFailureStageAccountAuth, scope: GatewayFailureScopeAccount, next: NextAccountRetry, credential: true, clientStatus: http.StatusServiceUnavailable, clientMessage: "OpenCode Go account credentials are unavailable"},
+		{name: "forbidden", status: 403, stage: GatewayFailureStageAccountAuth, scope: GatewayFailureScopeAccount, next: NextAccountRetry, credential: true, clientStatus: http.StatusServiceUnavailable, clientMessage: "OpenCode Go account credentials are unavailable"},
+		{name: "rate_limit", status: 429, stage: GatewayFailureStageInference, scope: GatewayFailureScopeAccount, next: NextAccountRetry, clientStatus: http.StatusTooManyRequests, clientMessage: "OpenCode Go upstream rate limit exceeded, please retry later"},
+		{name: "server_error", status: 503, stage: GatewayFailureStageInference, scope: GatewayFailureScopeProvider, next: NextAccountRetry, clientStatus: http.StatusServiceUnavailable},
+		{name: "bad_request", status: 400, stage: GatewayFailureStageInference, scope: GatewayFailureScopeRequest, next: NextAccountStop, clientStatus: http.StatusBadRequest, clientMessage: "boom"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			upstream := &openCodeHTTPUpstreamStub{do: func(*http.Request, string, int64, int) (*http.Response, error) {
 				return openCodeResponse(test.status, `{"error":"boom"}`, http.Header{"X-Debug": []string{"kept"}}), nil
 			}}
-			service := NewOpenCodeGatewayService(upstream, nil, &config.Config{})
+			service := NewOpenCodeGatewayService(upstream, nil, &config.Config{}, nil)
 			_, c := openCodeTestContext()
 			_, err := service.ForwardChatCompletions(t.Context(), c, openCodeAccount(nil), []byte(`{"model":"grok-4.5","messages":[{"role":"user","content":"hi"}]}`))
 			var failure *UpstreamFailoverError
@@ -193,8 +220,105 @@ func TestOpenCodeErrorClassification(t *testing.T) {
 			require.Equal(t, test.scope, failure.Scope)
 			require.Equal(t, test.next, failure.NextAccountAction)
 			require.Equal(t, test.credential, failure.IsCredentialFailure())
+			require.Equal(t, test.clientStatus, failure.ClientStatusCode)
+			require.Equal(t, test.clientMessage, failure.ClientMessage)
 			require.JSONEq(t, `{"error":"boom"}`, string(failure.ResponseBody))
 			require.Equal(t, "kept", failure.ResponseHeaders.Get("X-Debug"))
+			require.Equal(t, test.status, c.GetInt(OpsUpstreamStatusCodeKey))
+			require.Equal(t, "boom", c.GetString(OpsUpstreamErrorMessageKey))
+			require.JSONEq(t, `{"error":"boom"}`, c.GetString(OpsUpstreamErrorDetailKey))
+			eventsValue, ok := c.Get(OpsUpstreamErrorsKey)
+			require.True(t, ok)
+			events, ok := eventsValue.([]*OpsUpstreamErrorEvent)
+			require.True(t, ok)
+			require.Len(t, events, 1)
+			require.Equal(t, test.status, events[0].UpstreamStatusCode)
+			require.Equal(t, string(test.stage), events[0].Stage)
+			require.Equal(t, string(test.scope), events[0].Scope)
+			require.Equal(t, "boom", events[0].Message)
+			require.Equal(t, `{"error":"boom"}`, events[0].UpstreamResponseBody)
+		})
+	}
+}
+
+func TestOpenCodeRequestErrorRedactsEmbeddedCredentials(t *testing.T) {
+	upstream := &openCodeHTTPUpstreamStub{do: func(*http.Request, string, int64, int) (*http.Response, error) {
+		return openCodeResponse(http.StatusBadRequest, `{"error":{"message":"invalid api_key=secret-key Bearer abc.def access_token: token-value"}}`, nil), nil
+	}}
+	gateway := NewOpenCodeGatewayService(upstream, nil, &config.Config{}, nil)
+	_, c := openCodeTestContext()
+
+	_, err := gateway.ForwardChatCompletions(t.Context(), c, openCodeAccount(nil), []byte(`{"model":"kimi-k3","messages":[{"role":"user","content":"hi"}]}`))
+
+	var failure *UpstreamFailoverError
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, http.StatusBadRequest, failure.ClientStatusCode)
+	require.Contains(t, failure.ClientMessage, "api_key=***")
+	require.Contains(t, failure.ClientMessage, "Bearer ***")
+	require.Contains(t, failure.ClientMessage, "access_token: ***")
+	require.NotContains(t, failure.ClientMessage, "secret-key")
+	require.NotContains(t, failure.ClientMessage, "abc.def")
+	require.NotContains(t, failure.ClientMessage, "token-value")
+
+	upstreamMessage := c.GetString(OpsUpstreamErrorMessageKey)
+	upstreamDetail := c.GetString(OpsUpstreamErrorDetailKey)
+	require.NotContains(t, upstreamMessage, "secret-key")
+	require.NotContains(t, upstreamMessage, "abc.def")
+	require.NotContains(t, upstreamMessage, "token-value")
+	require.NotContains(t, upstreamDetail, "secret-key")
+	require.NotContains(t, upstreamDetail, "abc.def")
+	require.NotContains(t, upstreamDetail, "token-value")
+}
+
+func TestOpenCode429PersistsCrossRequestCooldown(t *testing.T) {
+	tests := []struct {
+		name         string
+		retryAfter   string
+		wantCooldown time.Duration
+	}{
+		{name: "retry_after", retryAfter: "2", wantCooldown: 2 * time.Second},
+		{name: "default", wantCooldown: time.Duration(defaultRateLimit429CooldownSeconds) * time.Second},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repo := &openCodeRateLimitRepositoryStub{}
+			rateLimitService := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+			headers := make(http.Header)
+			if test.retryAfter != "" {
+				headers.Set("Retry-After", test.retryAfter)
+			}
+			upstream := &openCodeHTTPUpstreamStub{do: func(*http.Request, string, int64, int) (*http.Response, error) {
+				return openCodeResponse(http.StatusTooManyRequests, `{"error":{"message":"quota reached"}}`, headers), nil
+			}}
+			gateway := NewOpenCodeGatewayService(upstream, nil, &config.Config{}, rateLimitService)
+			account := openCodeAccount(nil)
+			account.ID = 88
+			_, c := openCodeTestContext()
+			startedAt := time.Now()
+
+			_, err := gateway.ForwardChatCompletions(t.Context(), c, account, []byte(`{"model":"kimi-k3","messages":[{"role":"user","content":"hi"}]}`))
+
+			var failure *UpstreamFailoverError
+			require.ErrorAs(t, err, &failure)
+			require.Equal(t, http.StatusTooManyRequests, failure.StatusCode)
+			require.Equal(t, GatewayFailureScopeAccount, failure.Scope)
+			require.Equal(t, NextAccountRetry, failure.NextAccountAction)
+			require.Equal(t, "OpenCode Go upstream rate limit exceeded, please retry later", failure.ClientMessage)
+			require.Equal(t, test.retryAfter, failure.ResponseHeaders.Get("Retry-After"))
+			require.Eventually(t, func() bool {
+				calls, _, _ := repo.snapshot()
+				return calls == 1
+			}, time.Second, 10*time.Millisecond)
+			calls, accountID, resetAt := repo.snapshot()
+			require.Equal(t, 1, calls)
+			require.Equal(t, account.ID, accountID)
+			actualCooldown := resetAt.Sub(startedAt)
+			require.GreaterOrEqual(t, actualCooldown, test.wantCooldown-500*time.Millisecond)
+			require.LessOrEqual(t, actualCooldown, test.wantCooldown+time.Second)
+			require.Equal(t, http.StatusTooManyRequests, c.GetInt(OpsUpstreamStatusCodeKey))
+			require.Equal(t, "quota reached", c.GetString(OpsUpstreamErrorMessageKey))
+			require.JSONEq(t, `{"error":{"message":"quota reached"}}`, c.GetString(OpsUpstreamErrorDetailKey))
 		})
 	}
 }
@@ -203,7 +327,7 @@ func TestOpenCodeNetworkErrorIsFailover(t *testing.T) {
 	upstream := &openCodeHTTPUpstreamStub{do: func(*http.Request, string, int64, int) (*http.Response, error) {
 		return nil, errors.New("dial failed")
 	}}
-	service := NewOpenCodeGatewayService(upstream, nil, &config.Config{})
+	service := NewOpenCodeGatewayService(upstream, nil, &config.Config{}, nil)
 	_, c := openCodeTestContext()
 	_, err := service.ForwardChatCompletions(t.Context(), c, openCodeAccount(nil), []byte(`{"model":"grok-4.5","messages":[{"role":"user","content":"hi"}]}`))
 	var failure *UpstreamFailoverError
@@ -214,7 +338,7 @@ func TestOpenCodeNetworkErrorIsFailover(t *testing.T) {
 }
 
 func TestOpenCodeCountTokensIsLocal(t *testing.T) {
-	service := NewOpenCodeGatewayService(nil, nil, &config.Config{})
+	service := NewOpenCodeGatewayService(nil, nil, &config.Config{}, nil)
 	recorder, c := openCodeTestContext()
 	result, err := service.CountTokens(t.Context(), c, nil, []byte(`{"model":"opencode-go/grok-4.5","messages":[{"role":"user","content":"hello"}]}`))
 	require.NoError(t, err)

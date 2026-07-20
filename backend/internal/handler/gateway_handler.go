@@ -1847,7 +1847,59 @@ func (h *GatewayHandler) handleConcurrencyError(c *gin.Context, err error, slotT
 	h.handleStreamingAwareError(c, status, errType, message, streamStarted)
 }
 
+func requestScopedFailoverClientError(failoverErr *service.UpstreamFailoverError, fallback string) (int, string, bool) {
+	if failoverErr == nil || failoverErr.Scope != service.GatewayFailureScopeRequest {
+		return 0, "", false
+	}
+
+	status := failoverErr.ClientStatusCode
+	if status < http.StatusBadRequest || status >= http.StatusInternalServerError {
+		status = failoverErr.StatusCode
+	}
+	if status < http.StatusBadRequest || status >= http.StatusInternalServerError {
+		return 0, "", false
+	}
+
+	message := strings.TrimSpace(failoverErr.ClientMessage)
+	if message == "" {
+		message = strings.TrimSpace(fallback)
+	}
+	if message == "" {
+		message = "Upstream rejected the request"
+	}
+	return status, message, true
+}
+
+func rateLimitedFailoverClientMessage(failoverErr *service.UpstreamFailoverError) (string, bool) {
+	if failoverErr == nil || failoverErr.StatusCode != http.StatusTooManyRequests {
+		return "", false
+	}
+	message := strings.TrimSpace(failoverErr.ClientMessage)
+	if message == "" {
+		message = "Upstream rate limit exceeded, please retry later"
+	}
+	return message, true
+}
+
+func setOpsUpstreamErrorFallback(c *gin.Context, statusCode int, message string) {
+	if c == nil {
+		return
+	}
+	if strings.TrimSpace(c.GetString(service.OpsUpstreamErrorMessageKey)) != "" {
+		if c.GetInt(service.OpsUpstreamStatusCodeKey) <= 0 && statusCode > 0 {
+			c.Set(service.OpsUpstreamStatusCodeKey, statusCode)
+		}
+		return
+	}
+	service.SetOpsUpstreamError(c, statusCode, message, "")
+}
+
 func (h *GatewayHandler) handleFailoverExhausted(c *gin.Context, failoverErr *service.UpstreamFailoverError, platform string, streamStarted bool) {
+	if failoverErr == nil {
+		h.handleStreamingAwareError(c, http.StatusBadGateway, "upstream_error", "Upstream request failed", streamStarted)
+		return
+	}
+	copyFailoverRetryAfter(c, failoverErr.ResponseHeaders)
 	statusCode := failoverErr.StatusCode
 	responseBody := failoverErr.ResponseBody
 	if service.IsOpenAISilentRefusalErrorBody(responseBody) {
@@ -1880,15 +1932,32 @@ func (h *GatewayHandler) handleFailoverExhausted(c *gin.Context, failoverErr *se
 		}
 	}
 
-	// Cursor 的 400 包含兼容层解析错误或 Cursor 返回的具体请求错误。
-	// 这类错误与账号无关，应按客户端请求错误返回，而不是统一改写成 502。
-	if platform == service.PlatformCursor && statusCode == http.StatusBadRequest {
-		msg := service.ExtractUpstreamErrorMessage(responseBody)
-		if strings.TrimSpace(msg) == "" {
-			msg = "Cursor rejected the request"
+	// 请求级 4xx 与账号健康无关，切换账号不会改变结果。保留具体错误，
+	// 避免 OpenCode Go / Cursor 等兼容层把可操作的请求错误误报为账号耗尽或 502。
+	requestFallback := "Upstream rejected the request"
+	if platform == service.PlatformCursor {
+		requestFallback = "Cursor rejected the request"
+	} else if platform == service.PlatformOpenCode {
+		requestFallback = "OpenCode Go rejected the request"
+	}
+	// 兼容 Cursor 旧错误对象：历史实现未填写 Scope，但 400 已明确是请求级错误。
+	if platform == service.PlatformCursor && failoverErr.Scope == "" && statusCode == http.StatusBadRequest {
+		message := strings.TrimSpace(service.ExtractUpstreamErrorMessage(responseBody))
+		if message == "" {
+			message = requestFallback
 		}
-		service.SetOpsUpstreamError(c, statusCode, msg, "")
-		h.handleStreamingAwareError(c, http.StatusBadRequest, "invalid_request_error", msg, streamStarted)
+		service.SetOpsUpstreamError(c, statusCode, message, "")
+		h.handleStreamingAwareError(c, http.StatusBadRequest, "invalid_request_error", message, streamStarted)
+		return
+	}
+	if clientStatus, message, ok := requestScopedFailoverClientError(failoverErr, requestFallback); ok {
+		setOpsUpstreamErrorFallback(c, statusCode, message)
+		h.handleStreamingAwareError(c, clientStatus, "invalid_request_error", message, streamStarted)
+		return
+	}
+	if message, ok := rateLimitedFailoverClientMessage(failoverErr); ok {
+		setOpsUpstreamErrorFallback(c, statusCode, message)
+		h.handleStreamingAwareError(c, http.StatusTooManyRequests, "rate_limit_error", message, streamStarted)
 		return
 	}
 

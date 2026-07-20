@@ -19,13 +19,19 @@ import (
 const opencodeErrorBodyLimit int64 = 1 << 20
 
 type OpenCodeGatewayService struct {
-	httpUpstream HTTPUpstream
-	proxyRepo    ProxyRepository
-	cfg          *config.Config
+	httpUpstream     HTTPUpstream
+	proxyRepo        ProxyRepository
+	cfg              *config.Config
+	rateLimitService *RateLimitService
 }
 
-func NewOpenCodeGatewayService(httpUpstream HTTPUpstream, proxyRepo ProxyRepository, cfg *config.Config) *OpenCodeGatewayService {
-	return &OpenCodeGatewayService{httpUpstream: httpUpstream, proxyRepo: proxyRepo, cfg: cfg}
+func NewOpenCodeGatewayService(httpUpstream HTTPUpstream, proxyRepo ProxyRepository, cfg *config.Config, rateLimitService *RateLimitService) *OpenCodeGatewayService {
+	return &OpenCodeGatewayService{
+		httpUpstream:     httpUpstream,
+		proxyRepo:        proxyRepo,
+		cfg:              cfg,
+		rateLimitService: rateLimitService,
+	}
 }
 
 func (s *OpenCodeGatewayService) ForwardMessages(ctx context.Context, c *gin.Context, account *Account, body []byte) (*ForwardResult, error) {
@@ -102,7 +108,7 @@ func (s *OpenCodeGatewayService) forward(ctx context.Context, c *gin.Context, ac
 	defer response.Body.Close()
 
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return nil, opencodeHTTPFailure(response)
+		return nil, s.handleHTTPFailure(c, account, request, response, meta.UpstreamModel)
 	}
 	notifyOpenCodeUpstreamAccepted(c)
 	copyOpenCodeResponseHeaders(c.Writer.Header(), response.Header)
@@ -148,6 +154,72 @@ func (s *OpenCodeGatewayService) forward(ctx context.Context, c *gin.Context, ac
 		return nil, err
 	}
 	return result, nil
+}
+
+func (s *OpenCodeGatewayService) handleHTTPFailure(c *gin.Context, account *Account, request *http.Request, response *http.Response, requestedModel string) *UpstreamFailoverError {
+	failure := opencodeHTTPFailure(response)
+	if failure == nil {
+		return opencodeNetworkFailure(fmt.Errorf("empty OpenCode upstream failure"))
+	}
+
+	upstreamMessage := openCodeSafeErrorMessage(failure.StatusCode, failure.ResponseBody, "OpenCode Go upstream request failed")
+	if failure.Scope == GatewayFailureScopeRequest && strings.TrimSpace(failure.ClientMessage) == "" {
+		failure.ClientMessage = upstreamMessage
+	}
+
+	// Ops 诊断必须独立于普通响应体日志开关：后者控制日志噪声，前者用于生产故障取证。
+	// 入队前的统一 sanitizer 会脱敏并按队列上限截断，避免凭据泄漏和无界内存占用。
+	detail, _ := SanitizeOpsErrorBodyForQueue(string(failure.ResponseBody))
+	setOpsUpstreamError(c, failure.StatusCode, upstreamMessage, detail)
+
+	if c != nil {
+		event := OpsUpstreamErrorEvent{
+			Platform:             PlatformOpenCode,
+			UpstreamStatusCode:   failure.StatusCode,
+			UpstreamRequestID:    opencodeRequestID(failure.ResponseHeaders),
+			Kind:                 "http_error",
+			Stage:                string(failure.Stage),
+			Scope:                string(failure.Scope),
+			Reason:               string(failure.Reason),
+			Message:              upstreamMessage,
+			Detail:               detail,
+			UpstreamResponseBody: detail,
+		}
+		if account != nil {
+			event.AccountID = account.ID
+			event.AccountName = account.Name
+			event.Platform = account.Platform
+		}
+		if request != nil && request.URL != nil {
+			event.UpstreamURL = safeUpstreamURL(request.URL.String())
+		}
+		appendOpsUpstreamError(c, event)
+	}
+
+	s.reconcileAccountFailureAsync(account, failure, requestedModel)
+	return failure
+}
+
+func (s *OpenCodeGatewayService) reconcileAccountFailureAsync(account *Account, failure *UpstreamFailoverError, requestedModel string) {
+	if s == nil || s.rateLimitService == nil || account == nil || failure == nil || failure.Scope == GatewayFailureScopeRequest {
+		return
+	}
+
+	accountSnapshot := *account
+	headers := failure.ResponseHeaders.Clone()
+	body := append([]byte(nil), failure.ResponseBody...)
+	statusCode := failure.StatusCode
+	model := strings.TrimSpace(requestedModel)
+
+	go func() {
+		stateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if model != "" {
+			s.rateLimitService.HandleUpstreamError(stateCtx, &accountSnapshot, statusCode, headers, body, model)
+			return
+		}
+		s.rateLimitService.HandleUpstreamError(stateCtx, &accountSnapshot, statusCode, headers, body)
+	}()
 }
 
 func (s *OpenCodeGatewayService) prepareRequest(account *Account, body []byte, inbound opencodepkg.Protocol) (opencodepkg.RequestMeta, string, error) {
@@ -287,7 +359,7 @@ func (s *OpenCodeGatewayService) fetchModels(ctx context.Context, account *Accou
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		defer response.Body.Close()
-		return nil, "", opencodeHTTPFailure(response)
+		return nil, "", s.handleHTTPFailure(nil, account, request, response, "")
 	}
 	return response, endpoint, nil
 }

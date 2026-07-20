@@ -298,6 +298,19 @@ func extractUpstreamErrorMessage(body []byte) string {
 		return m
 	}
 
+	// 部分 OpenAI 兼容上游直接返回字符串 error：{"error":"..."}。
+	// 只接受字符串类型，避免把完整 error 对象序列化后暴露给客户端。
+	if value := gjson.GetBytes(body, "error"); value.Type == gjson.String {
+		if message := strings.TrimSpace(value.String()); message != "" {
+			return message
+		}
+	}
+
+	// 部分兼容上游使用嵌套 detail：{"error":{"detail":"..."}}。
+	if detail := strings.TrimSpace(gjson.GetBytes(body, "error.detail").String()); detail != "" {
+		return detail
+	}
+
 	// ChatGPT 内部 API 风格：{"detail":"..."}
 	if d := gjson.GetBytes(body, "detail").String(); strings.TrimSpace(d) != "" {
 		return d

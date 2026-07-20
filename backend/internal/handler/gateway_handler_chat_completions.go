@@ -372,6 +372,11 @@ func (h *GatewayHandler) handleCCFailoverExhausted(c *gin.Context, lastErr *serv
 		h.chatCompletionsErrorResponse(c, status, "server_error", message)
 		return
 	}
+	if status, message, ok := requestScopedFailoverClientError(lastErr, "Upstream rejected the request"); ok {
+		setOpsUpstreamErrorFallback(c, lastErr.StatusCode, message)
+		h.chatCompletionsErrorResponse(c, status, "invalid_request_error", message)
+		return
+	}
 	statusCode := http.StatusBadGateway
 	if lastErr != nil && lastErr.StatusCode > 0 {
 		statusCode = lastErr.StatusCode
@@ -379,6 +384,11 @@ func (h *GatewayHandler) handleCCFailoverExhausted(c *gin.Context, lastErr *serv
 	if lastErr != nil && service.IsOpenAISilentRefusalErrorBody(lastErr.ResponseBody) {
 		service.SetOpsUpstreamError(c, statusCode, service.OpenAISilentRefusalClientMessage(), "")
 		h.chatCompletionsErrorResponse(c, http.StatusBadGateway, "upstream_error", service.OpenAISilentRefusalClientMessage())
+		return
+	}
+	if message, ok := rateLimitedFailoverClientMessage(lastErr); ok {
+		setOpsUpstreamErrorFallback(c, statusCode, message)
+		h.chatCompletionsErrorResponse(c, http.StatusTooManyRequests, "rate_limit_error", message)
 		return
 	}
 	h.chatCompletionsErrorResponse(c, statusCode, "server_error", "All available accounts exhausted")
