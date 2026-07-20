@@ -581,6 +581,9 @@
           <div v-else-if="openCodeQuotaNotConfigured" class="text-xs text-gray-400" data-testid="opencode-quota-not-configured">
             {{ t('admin.accounts.opencode.quotaNotConfigured') }}
           </div>
+          <div v-else-if="openCodeQuotaUnavailable" class="max-w-[220px] text-xs text-gray-500 dark:text-gray-400" :title="openCodeQuotaUnavailableMessage" data-testid="opencode-quota-unavailable">
+            {{ t('admin.accounts.opencode.quotaNoEntitlement') }}
+          </div>
           <div v-else-if="openCodeQuotaBars.length > 0" class="space-y-1" data-testid="opencode-quota-bars">
             <UsageProgressBar v-for="bar in openCodeQuotaBars" :key="bar.key" :label="bar.label" :utilization="bar.utilization" :resets-at="bar.resetsAt" :color="bar.color" />
           </div>
@@ -1540,6 +1543,12 @@ const openCodeQuotaError = computed(() => {
   const snapshot = openCodeQuotaSnapshot.value
   if (snapshot?.state !== 'error') return ''
   return snapshot.message || t('admin.accounts.opencode.quotaError')
+})
+const openCodeQuotaUnavailable = computed(() => openCodeQuotaSnapshot.value?.state === 'unavailable')
+const openCodeQuotaUnavailableMessage = computed(() => {
+  const snapshot = openCodeQuotaSnapshot.value
+  if (snapshot?.state !== 'unavailable') return ''
+  return snapshot.message || t('admin.accounts.opencode.quotaNoEntitlement')
 })
 const openCodeQuotaUpdatedAt = computed(() => openCodeQuotaSnapshot.value?.fetched_at || null)
 const resolveOpenCodeResetAt = (window: OpenCodeQuotaWindow, fetchedAt?: string | null): string | null => {

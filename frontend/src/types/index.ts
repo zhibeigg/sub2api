@@ -1140,7 +1140,7 @@ export interface AntigravityModelQuota {
   reset_time: string  // 重置时间 ISO8601
 }
 
-export type OpenCodeQuotaState = 'missing' | 'cached' | 'verified' | 'stale' | 'error'
+export type OpenCodeQuotaState = 'missing' | 'unavailable' | 'cached' | 'verified' | 'stale' | 'error'
 
 export interface OpenCodeQuotaWindow {
   status: string
@@ -1155,8 +1155,8 @@ export interface OpenCodeQuotaSnapshot {
   message?: string | null
   workspace_id?: string | null
   fetched_at?: string | null
-  rolling: OpenCodeQuotaWindow
-  weekly: OpenCodeQuotaWindow
+  rolling?: OpenCodeQuotaWindow | null
+  weekly?: OpenCodeQuotaWindow | null
   monthly?: OpenCodeQuotaWindow | null
 }
 

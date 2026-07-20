@@ -106,6 +106,7 @@ OpenCode Go 的账号平台值统一为 `opencode`，但不同模型家族不应
 `quota_cookie` 和 `quota_workspace_id` 只用于管理后台展示 OpenCode Go 的 rolling、weekly、monthly 配额窗口。配额查询具有独立超时、fresh/stale 缓存和后台刷新：
 
 - 未配置 Cookie 时显示 `missing`；
+- Cookie 有效但官方工作区明确未返回 rolling / weekly 配额对象时显示 `unavailable`，表示 Go 权益可能未开通或已失效，而不是网络或 Cookie 错误；
 - 查询成功时显示 `verified` / `cached`；
 - 旧快照仍可用时显示 `stale` 并异步刷新；
 - Cookie 过期、页面结构变化或配额接口限流时显示 `error`，或保留旧快照。

@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,9 +26,11 @@ const (
 	openCodeQuotaBodyLimit   = int64(1 << 20)
 )
 
+var errOpenCodeQuotaUnavailable = errors.New("OpenCode Go did not return quota windows for this workspace; the Go entitlement may be inactive")
+
 type OpenCodeQuotaInfo struct {
 	Configured  bool                     `json:"configured"`
-	State       string                   `json:"state"` // missing/cached/verified/stale/error
+	State       string                   `json:"state"` // missing/unavailable/cached/verified/stale/error
 	Message     string                   `json:"message,omitempty"`
 	WorkspaceID string                   `json:"workspace_id,omitempty"`
 	FetchedAt   *time.Time               `json:"fetched_at,omitempty"`
@@ -97,6 +100,10 @@ func (s *OpenCodeQuotaService) GetQuota(ctx context.Context, account *Account, f
 	info, err := s.refresh(ctx, account)
 	if err == nil {
 		return info
+	}
+	if errors.Is(err, errOpenCodeQuotaUnavailable) {
+		s.cache.Delete(account.ID)
+		return &OpenCodeQuotaInfo{Configured: true, State: "unavailable", Message: err.Error()}
 	}
 	if cached := s.cachedQuota(account.ID); cached != nil && now.Sub(cached.fetchedAt) <= s.staleTTL() {
 		return cloneOpenCodeQuotaInfo(cached.info, "stale", err.Error())
@@ -169,16 +176,24 @@ func (s *OpenCodeQuotaService) fetchQuota(ctx context.Context, account *Account)
 	}
 
 	configuredWorkspace := strings.TrimSpace(account.GetOpenCodeQuotaWorkspaceID())
+	var pageErr error
 	if configuredWorkspace != "" {
-		if data, pageErr := s.fetchQuotaPage(ctx, account, proxyURL, cookie, configuredWorkspace); pageErr == nil {
+		var data *opencodepkg.QuotaData
+		data, pageErr = s.fetchQuotaPage(ctx, account, proxyURL, cookie, configuredWorkspace)
+		if pageErr == nil {
 			return data, nil
 		}
 	}
 	resolvedWorkspace, resolveErr := s.resolveWorkspaceID(ctx, account, proxyURL, cookie)
 	if resolveErr == nil && resolvedWorkspace != "" && resolvedWorkspace != configuredWorkspace {
-		if data, pageErr := s.fetchQuotaPage(ctx, account, proxyURL, cookie, resolvedWorkspace); pageErr == nil {
+		var data *opencodepkg.QuotaData
+		data, pageErr = s.fetchQuotaPage(ctx, account, proxyURL, cookie, resolvedWorkspace)
+		if pageErr == nil {
 			return data, nil
 		}
+	}
+	if errors.Is(pageErr, errOpenCodeQuotaUnavailable) {
+		return nil, pageErr
 	}
 	if resolveErr != nil {
 		return nil, fmt.Errorf("failed to resolve OpenCode Go workspace: %w", resolveErr)
@@ -267,10 +282,15 @@ func (s *OpenCodeQuotaService) fetchQuotaPage(ctx context.Context, account *Acco
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("OpenCode Go quota page returned HTTP %d", response.StatusCode)
 	}
-	if opencodepkg.LooksSignedOut(string(responseBody)) {
+	pageText := string(responseBody)
+	if opencodepkg.LooksSignedOut(pageText) {
 		return nil, fmt.Errorf("OpenCode Go quota cookie is unauthorized or expired")
 	}
-	return opencodepkg.ParseQuotaPage(string(responseBody), workspaceID, s.currentTime())
+	data, parseErr := opencodepkg.ParseQuotaPage(pageText, workspaceID, s.currentTime())
+	if parseErr != nil && opencodepkg.LooksQuotaUnavailable(pageText) {
+		return nil, errOpenCodeQuotaUnavailable
+	}
+	return data, parseErr
 }
 
 func (s *OpenCodeQuotaService) resolveProxyURL(ctx context.Context, account *Account) (string, error) {

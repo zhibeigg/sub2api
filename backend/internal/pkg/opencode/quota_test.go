@@ -58,3 +58,11 @@ func TestLooksSignedOut(t *testing.T) {
 	require.True(t, LooksSignedOut("Please sign in to continue"))
 	require.False(t, LooksSignedOut(`{"rollingUsage":{}}`))
 }
+
+func TestLooksQuotaUnavailable(t *testing.T) {
+	t.Parallel()
+	require.True(t, LooksQuotaUnavailable(`<script>{monthlyLimit:null, monthlyUsage:null, subscription:null, lite:null}</script>`))
+	require.True(t, LooksQuotaUnavailable(`<script>{"monthlyLimit": null, "monthlyUsage": null, "subscription": null, "lite": null}</script>`))
+	require.False(t, LooksQuotaUnavailable(`<script>{monthlyLimit:null,monthlyUsage:0,subscription:null,lite:{},rollingUsage:{usagePercent:4},weeklyUsage:{usagePercent:3}}</script>`))
+	require.False(t, LooksQuotaUnavailable("unrelated page content"))
+}

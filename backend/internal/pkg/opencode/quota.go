@@ -13,6 +13,8 @@ const WorkspaceServerFunctionID = "def39973159c7f0483d8793a822b8dbb10d067e12c654
 
 const QuotaUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
 
+var quotaWhitespaceRE = regexp.MustCompile(`\s+`)
+
 type QuotaWindow struct {
 	Status         string     `json:"status"`
 	UsagePercent   int        `json:"usage_percent"`
@@ -119,6 +121,29 @@ func LooksSignedOut(text string) bool {
 		}
 	}
 	return false
+}
+
+// LooksQuotaUnavailable identifies an authenticated workspace page that
+// explicitly has no OpenCode Go entitlement/quota object. Keep this separate
+// from parser failures so an upstream markup change still fails closed.
+func LooksQuotaUnavailable(text string) bool {
+	lower := strings.ToLower(text)
+	if strings.Contains(lower, "rollingusage") || strings.Contains(lower, "weeklyusage") {
+		return false
+	}
+	compact := quotaWhitespaceRE.ReplaceAllString(lower, "")
+	compact = strings.NewReplacer(`"`, "", `'`, "").Replace(compact)
+	for _, marker := range []string{
+		"monthlylimit:null",
+		"monthlyusage:null",
+		"subscription:null",
+		"lite:null",
+	} {
+		if !strings.Contains(compact, marker) {
+			return false
+		}
+	}
+	return true
 }
 
 func ParseQuotaPage(text, workspaceID string, now time.Time) (*QuotaData, error) {

@@ -142,6 +142,7 @@ export default {
         monthly: 'Monthly',
         quotaNotConfigured: 'Official quota query is not configured',
         quotaUnavailable: 'Official quota data is unavailable',
+        quotaNoEntitlement: 'OpenCode did not return Go quota windows; the Go entitlement may be inactive',
         quotaError: 'Failed to load official quota',
         refreshQuota: 'Refresh quota',
         quotaUpdatedAt: 'Updated {time}'

@@ -127,6 +127,21 @@ describe('AccountUsageCell', () => {
     getUsage.mockResolvedValueOnce({
       open_code_quota: {
         configured: true,
+        state: 'unavailable',
+        message: 'Go entitlement is inactive'
+      }
+    })
+    const unavailable = mount(AccountUsageCell, {
+      props: { account: makeAccount({ id: 8804, platform: 'opencode', type: 'apikey', credentials_status: { has_quota_cookie: true } }) },
+      global: { stubs: { UsageProgressBar: true, AccountQuotaInfo: true } }
+    })
+    await flushPromises()
+    expect(unavailable.get('[data-testid="opencode-quota-unavailable"]').text()).toContain('admin.accounts.opencode.quotaNoEntitlement')
+    expect(unavailable.get('[data-testid="opencode-quota-unavailable"]').attributes('title')).toBe('Go entitlement is inactive')
+
+    getUsage.mockResolvedValueOnce({
+      open_code_quota: {
+        configured: true,
         state: 'error',
         message: 'quota upstream failed',
         rolling: { status: 'error', usage_percent: 0, reset_in_seconds: 0 },

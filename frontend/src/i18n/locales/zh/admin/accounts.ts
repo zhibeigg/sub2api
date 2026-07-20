@@ -142,6 +142,7 @@ export default {
         monthly: '每月',
         quotaNotConfigured: '未配置官方配额查询',
         quotaUnavailable: '暂无官方配额数据',
+        quotaNoEntitlement: '官方未返回 Go 配额窗口，可能未开通或已失去 Go 权益',
         quotaError: '官方配额获取失败',
         refreshQuota: '刷新配额',
         quotaUpdatedAt: '更新于 {time}'

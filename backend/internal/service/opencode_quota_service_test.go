@@ -72,6 +72,33 @@ func TestOpenCodeQuotaServiceFallsBackToResolvedWorkspace(t *testing.T) {
 	require.Equal(t, int32(3), calls.Load())
 }
 
+func TestOpenCodeQuotaServiceReportsUnavailableWhenWorkspaceHasNoGoEntitlement(t *testing.T) {
+	var calls atomic.Int32
+	upstream := &openCodeHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+		calls.Add(1)
+		switch req.URL.Path {
+		case "/_server":
+			return openCodeResponse(http.StatusOK, `{ id: "wrk_empty" }`, nil), nil
+		case "/workspace/wrk_empty/go":
+			return openCodeResponse(http.StatusOK, `<script>{monthlyLimit:null,monthlyUsage:null,subscription:null,lite:null}</script>`, nil), nil
+		default:
+			t.Fatalf("unexpected path %s", req.URL.Path)
+			return nil, nil
+		}
+	}}
+	service := NewOpenCodeQuotaService(upstream, nil, &config.Config{})
+	account := openCodeAccount(map[string]any{"quota_cookie": "auth=secret"})
+
+	info := service.GetQuota(t.Context(), account, true)
+
+	require.True(t, info.Configured)
+	require.Equal(t, "unavailable", info.State)
+	require.Contains(t, info.Message, "entitlement may be inactive")
+	require.Nil(t, info.Rolling)
+	require.Nil(t, info.Weekly)
+	require.Equal(t, int32(2), calls.Load())
+}
+
 func TestOpenCodeQuotaCooldownResetUsesLatestExhaustedWindow(t *testing.T) {
 	now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
 	rollingReset := now.Add(time.Hour)
