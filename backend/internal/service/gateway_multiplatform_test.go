@@ -2052,6 +2052,34 @@ func TestExplicitGroupSelectionBypassesAutomaticMultiGroupResolution(t *testing.
 	require.Len(t, apiKey.GroupBindings, 1, "explicit routing must preserve the original binding context")
 }
 
+func TestGatewayMultiGroupResolutionSkipsRestrictedStandardGroups(t *testing.T) {
+	blocked := &Group{ID: 10, Name: "blocked", Platform: PlatformAntigravity, Status: StatusActive, Hydrated: true, SubscriptionType: SubscriptionTypeStandard}
+	allowed := &Group{ID: 20, Name: "allowed", Platform: PlatformAntigravity, Status: StatusActive, Hydrated: true, SubscriptionType: SubscriptionTypeStandard}
+	accountRepo := &mockAccountRepoForPlatform{
+		accounts:     []Account{{ID: 1, Platform: PlatformAntigravity, Priority: 1, Status: StatusActive, Schedulable: true}},
+		accountsByID: map[int64]*Account{},
+	}
+	accountRepo.accountsByID[1] = &accountRepo.accounts[0]
+	svc := &GatewayService{
+		accountRepo: accountRepo,
+		groupRepo: &mockGroupRepoForGateway{groups: map[int64]*Group{
+			blocked.ID: blocked,
+			allowed.ID: allowed,
+		}},
+		cache: &mockGatewayCacheForPlatform{},
+		cfg:   testConfig(),
+	}
+	apiKey := &APIKey{
+		User: &User{GroupAccessMode: GroupAccessModeRestricted, GroupAccessGroups: []int64{allowed.ID}},
+		GroupBindings: []APIKeyGroupBinding{
+			{GroupID: blocked.ID, Priority: 0, Group: blocked},
+			{GroupID: allowed.ID, Priority: 1, Group: allowed},
+		},
+	}
+
+	require.Same(t, allowed, svc.ResolveEffectiveGroupBinding(context.Background(), apiKey, ""))
+}
+
 // mockConcurrencyService for testing
 type mockConcurrencyService struct {
 	accountLoads      map[int64]*AccountLoadInfo

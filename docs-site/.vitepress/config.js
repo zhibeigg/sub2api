@@ -72,6 +72,7 @@ export default defineConfig({
       { text: "首页", link: "/" },
       { text: "快速开始", link: "/guide/getting-started" },
       { text: "API 接入", link: "/guide/api-scripts" },
+      { text: "管理员指南", link: "/guide/admin-user-group-restrictions" },
       { text: "控制台", link: "https://www.poke2api.com/home" }
     ],
     sidebar: [
@@ -108,6 +109,13 @@ export default defineConfig({
         collapsed: false,
         items: [
           { text: "API 脚本接入", link: "/guide/api-scripts" }
+        ]
+      },
+      {
+        text: "管理员指南",
+        collapsed: false,
+        items: [
+          { text: "用户分组访问限制", link: "/guide/admin-user-group-restrictions" }
         ]
       }
     ],

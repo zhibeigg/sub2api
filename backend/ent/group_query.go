@@ -25,6 +25,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/usagelog"
 	"github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
+	"github.com/Wei-Shaw/sub2api/ent/usergroupaccessgroup"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscriptiongroup"
 )
@@ -43,11 +44,13 @@ type GroupQuery struct {
 	withAccounts                *AccountQuery
 	withBoundAPIKeys            *APIKeyQuery
 	withAllowedUsers            *UserQuery
+	withAccessRestrictedUsers   *UserQuery
 	withSubscriptionPlans       *SubscriptionPlanQuery
 	withAuthorizedSubscriptions *UserSubscriptionQuery
 	withAccountGroups           *AccountGroupQuery
 	withAPIKeyGroups            *APIKeyGroupQuery
 	withUserAllowedGroups       *UserAllowedGroupQuery
+	withUserGroupAccessGroups   *UserGroupAccessGroupQuery
 	withSubscriptionPlanGroups  *SubscriptionPlanGroupQuery
 	withUserSubscriptionGroups  *UserSubscriptionGroupQuery
 	modifiers                   []func(*sql.Selector)
@@ -241,6 +244,28 @@ func (_q *GroupQuery) QueryAllowedUsers() *UserQuery {
 	return query
 }
 
+// QueryAccessRestrictedUsers chains the current query on the "access_restricted_users" edge.
+func (_q *GroupQuery) QueryAccessRestrictedUsers() *UserQuery {
+	query := (&UserClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(group.Table, group.FieldID, selector),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, true, group.AccessRestrictedUsersTable, group.AccessRestrictedUsersPrimaryKey...),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
 // QuerySubscriptionPlans chains the current query on the "subscription_plans" edge.
 func (_q *GroupQuery) QuerySubscriptionPlans() *SubscriptionPlanQuery {
 	query := (&SubscriptionPlanClient{config: _q.config}).Query()
@@ -344,6 +369,28 @@ func (_q *GroupQuery) QueryUserAllowedGroups() *UserAllowedGroupQuery {
 			sqlgraph.From(group.Table, group.FieldID, selector),
 			sqlgraph.To(userallowedgroup.Table, userallowedgroup.GroupColumn),
 			sqlgraph.Edge(sqlgraph.O2M, true, group.UserAllowedGroupsTable, group.UserAllowedGroupsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryUserGroupAccessGroups chains the current query on the "user_group_access_groups" edge.
+func (_q *GroupQuery) QueryUserGroupAccessGroups() *UserGroupAccessGroupQuery {
+	query := (&UserGroupAccessGroupClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(group.Table, group.FieldID, selector),
+			sqlgraph.To(usergroupaccessgroup.Table, usergroupaccessgroup.GroupColumn),
+			sqlgraph.Edge(sqlgraph.O2M, true, group.UserGroupAccessGroupsTable, group.UserGroupAccessGroupsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -594,11 +641,13 @@ func (_q *GroupQuery) Clone() *GroupQuery {
 		withAccounts:                _q.withAccounts.Clone(),
 		withBoundAPIKeys:            _q.withBoundAPIKeys.Clone(),
 		withAllowedUsers:            _q.withAllowedUsers.Clone(),
+		withAccessRestrictedUsers:   _q.withAccessRestrictedUsers.Clone(),
 		withSubscriptionPlans:       _q.withSubscriptionPlans.Clone(),
 		withAuthorizedSubscriptions: _q.withAuthorizedSubscriptions.Clone(),
 		withAccountGroups:           _q.withAccountGroups.Clone(),
 		withAPIKeyGroups:            _q.withAPIKeyGroups.Clone(),
 		withUserAllowedGroups:       _q.withUserAllowedGroups.Clone(),
+		withUserGroupAccessGroups:   _q.withUserGroupAccessGroups.Clone(),
 		withSubscriptionPlanGroups:  _q.withSubscriptionPlanGroups.Clone(),
 		withUserSubscriptionGroups:  _q.withUserSubscriptionGroups.Clone(),
 		// clone intermediate query.
@@ -684,6 +733,17 @@ func (_q *GroupQuery) WithAllowedUsers(opts ...func(*UserQuery)) *GroupQuery {
 	return _q
 }
 
+// WithAccessRestrictedUsers tells the query-builder to eager-load the nodes that are connected to
+// the "access_restricted_users" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *GroupQuery) WithAccessRestrictedUsers(opts ...func(*UserQuery)) *GroupQuery {
+	query := (&UserClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withAccessRestrictedUsers = query
+	return _q
+}
+
 // WithSubscriptionPlans tells the query-builder to eager-load the nodes that are connected to
 // the "subscription_plans" edge. The optional arguments are used to configure the query builder of the edge.
 func (_q *GroupQuery) WithSubscriptionPlans(opts ...func(*SubscriptionPlanQuery)) *GroupQuery {
@@ -736,6 +796,17 @@ func (_q *GroupQuery) WithUserAllowedGroups(opts ...func(*UserAllowedGroupQuery)
 		opt(query)
 	}
 	_q.withUserAllowedGroups = query
+	return _q
+}
+
+// WithUserGroupAccessGroups tells the query-builder to eager-load the nodes that are connected to
+// the "user_group_access_groups" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *GroupQuery) WithUserGroupAccessGroups(opts ...func(*UserGroupAccessGroupQuery)) *GroupQuery {
+	query := (&UserGroupAccessGroupClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withUserGroupAccessGroups = query
 	return _q
 }
 
@@ -839,7 +910,7 @@ func (_q *GroupQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Group,
 	var (
 		nodes       = []*Group{}
 		_spec       = _q.querySpec()
-		loadedTypes = [14]bool{
+		loadedTypes = [16]bool{
 			_q.withAPIKeys != nil,
 			_q.withRedeemCodes != nil,
 			_q.withSubscriptions != nil,
@@ -847,11 +918,13 @@ func (_q *GroupQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Group,
 			_q.withAccounts != nil,
 			_q.withBoundAPIKeys != nil,
 			_q.withAllowedUsers != nil,
+			_q.withAccessRestrictedUsers != nil,
 			_q.withSubscriptionPlans != nil,
 			_q.withAuthorizedSubscriptions != nil,
 			_q.withAccountGroups != nil,
 			_q.withAPIKeyGroups != nil,
 			_q.withUserAllowedGroups != nil,
+			_q.withUserGroupAccessGroups != nil,
 			_q.withSubscriptionPlanGroups != nil,
 			_q.withUserSubscriptionGroups != nil,
 		}
@@ -926,6 +999,13 @@ func (_q *GroupQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Group,
 			return nil, err
 		}
 	}
+	if query := _q.withAccessRestrictedUsers; query != nil {
+		if err := _q.loadAccessRestrictedUsers(ctx, query, nodes,
+			func(n *Group) { n.Edges.AccessRestrictedUsers = []*User{} },
+			func(n *Group, e *User) { n.Edges.AccessRestrictedUsers = append(n.Edges.AccessRestrictedUsers, e) }); err != nil {
+			return nil, err
+		}
+	}
 	if query := _q.withSubscriptionPlans; query != nil {
 		if err := _q.loadSubscriptionPlans(ctx, query, nodes,
 			func(n *Group) { n.Edges.SubscriptionPlans = []*SubscriptionPlan{} },
@@ -960,6 +1040,15 @@ func (_q *GroupQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Group,
 		if err := _q.loadUserAllowedGroups(ctx, query, nodes,
 			func(n *Group) { n.Edges.UserAllowedGroups = []*UserAllowedGroup{} },
 			func(n *Group, e *UserAllowedGroup) { n.Edges.UserAllowedGroups = append(n.Edges.UserAllowedGroups, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withUserGroupAccessGroups; query != nil {
+		if err := _q.loadUserGroupAccessGroups(ctx, query, nodes,
+			func(n *Group) { n.Edges.UserGroupAccessGroups = []*UserGroupAccessGroup{} },
+			func(n *Group, e *UserGroupAccessGroup) {
+				n.Edges.UserGroupAccessGroups = append(n.Edges.UserGroupAccessGroups, e)
+			}); err != nil {
 			return nil, err
 		}
 	}
@@ -1296,6 +1385,67 @@ func (_q *GroupQuery) loadAllowedUsers(ctx context.Context, query *UserQuery, no
 	}
 	return nil
 }
+func (_q *GroupQuery) loadAccessRestrictedUsers(ctx context.Context, query *UserQuery, nodes []*Group, init func(*Group), assign func(*Group, *User)) error {
+	edgeIDs := make([]driver.Value, len(nodes))
+	byID := make(map[int64]*Group)
+	nids := make(map[int64]map[*Group]struct{})
+	for i, node := range nodes {
+		edgeIDs[i] = node.ID
+		byID[node.ID] = node
+		if init != nil {
+			init(node)
+		}
+	}
+	query.Where(func(s *sql.Selector) {
+		joinT := sql.Table(group.AccessRestrictedUsersTable)
+		s.Join(joinT).On(s.C(user.FieldID), joinT.C(group.AccessRestrictedUsersPrimaryKey[0]))
+		s.Where(sql.InValues(joinT.C(group.AccessRestrictedUsersPrimaryKey[1]), edgeIDs...))
+		columns := s.SelectedColumns()
+		s.Select(joinT.C(group.AccessRestrictedUsersPrimaryKey[1]))
+		s.AppendSelect(columns...)
+		s.SetDistinct(false)
+	})
+	if err := query.prepareQuery(ctx); err != nil {
+		return err
+	}
+	qr := QuerierFunc(func(ctx context.Context, q Query) (Value, error) {
+		return query.sqlAll(ctx, func(_ context.Context, spec *sqlgraph.QuerySpec) {
+			assign := spec.Assign
+			values := spec.ScanValues
+			spec.ScanValues = func(columns []string) ([]any, error) {
+				values, err := values(columns[1:])
+				if err != nil {
+					return nil, err
+				}
+				return append([]any{new(sql.NullInt64)}, values...), nil
+			}
+			spec.Assign = func(columns []string, values []any) error {
+				outValue := values[0].(*sql.NullInt64).Int64
+				inValue := values[1].(*sql.NullInt64).Int64
+				if nids[inValue] == nil {
+					nids[inValue] = map[*Group]struct{}{byID[outValue]: {}}
+					return assign(columns[1:], values[1:])
+				}
+				nids[inValue][byID[outValue]] = struct{}{}
+				return nil
+			}
+		})
+	})
+	neighbors, err := withInterceptors[[]*User](ctx, query, qr, query.inters)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected "access_restricted_users" node returned %v`, n.ID)
+		}
+		for kn := range nodes {
+			assign(kn, n)
+		}
+	}
+	return nil
+}
 func (_q *GroupQuery) loadSubscriptionPlans(ctx context.Context, query *SubscriptionPlanQuery, nodes []*Group, init func(*Group), assign func(*Group, *SubscriptionPlan)) error {
 	edgeIDs := make([]driver.Value, len(nodes))
 	byID := make(map[int64]*Group)
@@ -1493,6 +1643,36 @@ func (_q *GroupQuery) loadUserAllowedGroups(ctx context.Context, query *UserAllo
 	}
 	query.Where(predicate.UserAllowedGroup(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(group.UserAllowedGroupsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.GroupID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "group_id" returned %v for node %v`, fk, n)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *GroupQuery) loadUserGroupAccessGroups(ctx context.Context, query *UserGroupAccessGroupQuery, nodes []*Group, init func(*Group), assign func(*Group, *UserGroupAccessGroup)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int64]*Group)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(usergroupaccessgroup.FieldGroupID)
+	}
+	query.Where(predicate.UserGroupAccessGroup(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(group.UserGroupAccessGroupsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

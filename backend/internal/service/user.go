@@ -7,23 +7,25 @@ import (
 )
 
 type User struct {
-	ID             int64
-	Email          string
-	Username       string
-	Notes          string
-	AvatarURL      string
-	AvatarSource   string
-	AvatarMIME     string
-	AvatarByteSize int
-	AvatarSHA256   string
-	PasswordHash   string
-	Role           string
-	Balance        float64
-	FrozenBalance  float64
-	Concurrency    int
-	Status         string
-	AllowedGroups  []int64
-	TokenVersion   int64 // Incremented on password change to invalidate existing tokens
+	ID                int64
+	Email             string
+	Username          string
+	Notes             string
+	AvatarURL         string
+	AvatarSource      string
+	AvatarMIME        string
+	AvatarByteSize    int
+	AvatarSHA256      string
+	PasswordHash      string
+	Role              string
+	Balance           float64
+	FrozenBalance     float64
+	Concurrency       int
+	Status            string
+	AllowedGroups     []int64
+	GroupAccessMode   string
+	GroupAccessGroups []int64
+	TokenVersion      int64 // Incremented on password change to invalidate existing tokens
 	// TokenVersionResolved indicates TokenVersion already contains the fingerprint-derived
 	// value expected in JWT claims and refresh-token state.
 	TokenVersionResolved bool
@@ -77,17 +79,41 @@ func (u *User) IsActive() bool {
 	return u.Status == StatusActive
 }
 
-// CanBindGroup checks whether a user can bind to a given group.
-// For standard groups:
-// - Public groups (non-exclusive): all users can bind
-// - Exclusive groups: only users with the group in AllowedGroups can bind
+const (
+	GroupAccessModeInherit    = "inherit"
+	GroupAccessModeRestricted = "restricted"
+)
+
+// AllowsStandardGroupByRestriction checks only the optional user-level
+// standard-group allowlist. Base public/exclusive/subscription authorization is
+// evaluated separately so the two policies can be composed without changing
+// legacy grants.
+func (u *User) AllowsStandardGroupByRestriction(groupID int64) bool {
+	if u == nil || groupID <= 0 {
+		return false
+	}
+	if u.GroupAccessMode != GroupAccessModeRestricted {
+		return true
+	}
+	return containsGroupID(u.GroupAccessGroups, groupID)
+}
+
+// CanBindGroup checks whether a user can bind to a standard group.
+// - Public groups still use the legacy implicit grant.
+// - Exclusive groups still require the legacy AllowedGroups grant.
+// - Restricted users additionally require the group in GroupAccessGroups.
 func (u *User) CanBindGroup(groupID int64, isExclusive bool) bool {
-	// 公开分组（非专属）：所有用户都可以绑定
+	if !u.AllowsStandardGroupByRestriction(groupID) {
+		return false
+	}
 	if !isExclusive {
 		return true
 	}
-	// 专属分组：需要在 AllowedGroups 中
-	for _, id := range u.AllowedGroups {
+	return containsGroupID(u.AllowedGroups, groupID)
+}
+
+func containsGroupID(groupIDs []int64, groupID int64) bool {
+	for _, id := range groupIDs {
 		if id == groupID {
 			return true
 		}

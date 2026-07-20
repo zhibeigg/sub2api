@@ -69,6 +69,9 @@ func (h *OpenAIGatewayHandler) resolveMultiGroupAPIKey(ctx context.Context, apiK
 	if apiKey == nil || len(apiKey.GroupBindings) == 0 {
 		return apiKey
 	}
+	if !apiKey.HasAllowedGroupBindingByUserRestriction() {
+		return nil
+	}
 	group := h.gatewayService.ResolveEffectiveGroupBinding(ctx, apiKey, requestedModel)
 	if group == nil {
 		return apiKey
@@ -274,6 +277,10 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	}
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
 	apiKey = h.resolveMultiGroupAPIKey(c.Request.Context(), apiKey, reqModel)
+	if apiKey == nil {
+		middleware2.AbortWithError(c, http.StatusForbidden, "GROUP_NOT_ALLOWED", "当前用户不允许使用任何已绑定的标准分组")
+		return
+	}
 	previousResponseID := strings.TrimSpace(gjson.GetBytes(body, "previous_response_id").String())
 	if previousResponseID != "" {
 		previousResponseIDKind := service.ClassifyOpenAIPreviousResponseIDKind(previousResponseID)
@@ -875,6 +882,10 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 	reqModel := modelResult.String()
 	routingModel := service.NormalizeOpenAICompatRequestedModel(reqModel)
 	apiKey = h.resolveMultiGroupAPIKey(c.Request.Context(), apiKey, reqModel)
+	if apiKey == nil {
+		middleware2.AbortWithError(c, http.StatusForbidden, "GROUP_NOT_ALLOWED", "当前用户不允许使用任何已绑定的标准分组")
+		return
+	}
 	preferredMappedModel := resolveOpenAIMessagesDispatchMappedModel(apiKey, reqModel)
 	reqStream := gjson.GetBytes(body, "stream").Bool()
 

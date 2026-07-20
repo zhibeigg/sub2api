@@ -192,6 +192,10 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	// 多分组：按优先级解析出实际服务分组，再克隆 apiKey 使下游（计费/会话/
 	// 订阅/调度）全部归属该分组。无多分组绑定时返回 nil，保持单分组旧逻辑。
 	apiKey = h.resolveMultiGroupAPIKey(c.Request.Context(), apiKey, reqModel)
+	if apiKey == nil {
+		middleware2.AbortWithError(c, http.StatusForbidden, "GROUP_NOT_ALLOWED", "当前用户不允许使用任何已绑定的标准分组")
+		return
+	}
 
 	// 解析渠道级模型映射
 	channelMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
@@ -1497,6 +1501,9 @@ func cloneAPIKeyWithGroup(apiKey *service.APIKey, group *service.Group) *service
 func (h *GatewayHandler) resolveMultiGroupAPIKey(ctx context.Context, apiKey *service.APIKey, requestedModel string) *service.APIKey {
 	if apiKey == nil || len(apiKey.GroupBindings) == 0 {
 		return apiKey
+	}
+	if !apiKey.HasAllowedGroupBindingByUserRestriction() {
+		return nil
 	}
 	group := h.gatewayService.ResolveEffectiveGroupBinding(ctx, apiKey, requestedModel)
 	if group == nil {

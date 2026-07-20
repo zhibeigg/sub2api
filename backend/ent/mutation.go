@@ -53,6 +53,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
+	"github.com/Wei-Shaw/sub2api/ent/usergroupaccessgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscriptiongroup"
@@ -108,6 +109,7 @@ const (
 	TypeUserAllowedGroup              = "UserAllowedGroup"
 	TypeUserAttributeDefinition       = "UserAttributeDefinition"
 	TypeUserAttributeValue            = "UserAttributeValue"
+	TypeUserGroupAccessGroup          = "UserGroupAccessGroup"
 	TypeUserPlatformQuota             = "UserPlatformQuota"
 	TypeUserSubscription              = "UserSubscription"
 	TypeUserSubscriptionGroup         = "UserSubscriptionGroup"
@@ -229,7 +231,7 @@ func (m APIKeyMutation) Client() *Client {
 // it returns an error otherwise.
 func (m APIKeyMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -2419,7 +2421,7 @@ func (m APIKeyGroupMutation) Client() *Client {
 // it returns an error otherwise.
 func (m APIKeyGroupMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -2977,7 +2979,7 @@ func (m AccountMutation) Client() *Client {
 // it returns an error otherwise.
 func (m AccountMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -5710,7 +5712,7 @@ func (m AccountGroupMutation) Client() *Client {
 // it returns an error otherwise.
 func (m AccountGroupMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -6240,7 +6242,7 @@ func (m AnnouncementMutation) Client() *Client {
 // it returns an error otherwise.
 func (m AnnouncementMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -7452,7 +7454,7 @@ func (m AnnouncementEmailDeliveryMutation) Client() *Client {
 // it returns an error otherwise.
 func (m AnnouncementEmailDeliveryMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -8862,7 +8864,7 @@ func (m AnnouncementEmailJobMutation) Client() *Client {
 // it returns an error otherwise.
 func (m AnnouncementEmailJobMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -11111,7 +11113,7 @@ func (m AnnouncementReadMutation) Client() *Client {
 // it returns an error otherwise.
 func (m AnnouncementReadMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -11712,7 +11714,7 @@ func (m AuthIdentityMutation) Client() *Client {
 // it returns an error otherwise.
 func (m AuthIdentityMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -12730,7 +12732,7 @@ func (m AuthIdentityChannelMutation) Client() *Client {
 // it returns an error otherwise.
 func (m AuthIdentityChannelMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -13540,7 +13542,7 @@ func (m BatchImageEventMutation) Client() *Client {
 // it returns an error otherwise.
 func (m BatchImageEventMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -14140,7 +14142,7 @@ func (m BatchImageItemMutation) Client() *Client {
 // it returns an error otherwise.
 func (m BatchImageItemMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -15763,7 +15765,7 @@ func (m BatchImageJobMutation) Client() *Client {
 // it returns an error otherwise.
 func (m BatchImageJobMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -19035,7 +19037,7 @@ func (m ChannelMonitorMutation) Client() *Client {
 // it returns an error otherwise.
 func (m ChannelMonitorMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -20760,7 +20762,7 @@ func (m ChannelMonitorDailyRollupMutation) Client() *Client {
 // it returns an error otherwise.
 func (m ChannelMonitorDailyRollupMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -22160,7 +22162,7 @@ func (m ChannelMonitorHistoryMutation) Client() *Client {
 // it returns an error otherwise.
 func (m ChannelMonitorHistoryMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -22997,7 +22999,7 @@ func (m ChannelMonitorRequestTemplateMutation) Client() *Client {
 // it returns an error otherwise.
 func (m ChannelMonitorRequestTemplateMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -23897,7 +23899,7 @@ func (m ErrorPassthroughRuleMutation) Client() *Client {
 // it returns an error otherwise.
 func (m ErrorPassthroughRuleMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -25222,6 +25224,9 @@ type GroupMutation struct {
 	allowed_users                           map[int64]struct{}
 	removedallowed_users                    map[int64]struct{}
 	clearedallowed_users                    bool
+	access_restricted_users                 map[int64]struct{}
+	removedaccess_restricted_users          map[int64]struct{}
+	clearedaccess_restricted_users          bool
 	subscription_plans                      map[int64]struct{}
 	removedsubscription_plans               map[int64]struct{}
 	clearedsubscription_plans               bool
@@ -25296,7 +25301,7 @@ func (m GroupMutation) Client() *Client {
 // it returns an error otherwise.
 func (m GroupMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -28164,6 +28169,60 @@ func (m *GroupMutation) ResetAllowedUsers() {
 	m.removedallowed_users = nil
 }
 
+// AddAccessRestrictedUserIDs adds the "access_restricted_users" edge to the User entity by ids.
+func (m *GroupMutation) AddAccessRestrictedUserIDs(ids ...int64) {
+	if m.access_restricted_users == nil {
+		m.access_restricted_users = make(map[int64]struct{})
+	}
+	for i := range ids {
+		m.access_restricted_users[ids[i]] = struct{}{}
+	}
+}
+
+// ClearAccessRestrictedUsers clears the "access_restricted_users" edge to the User entity.
+func (m *GroupMutation) ClearAccessRestrictedUsers() {
+	m.clearedaccess_restricted_users = true
+}
+
+// AccessRestrictedUsersCleared reports if the "access_restricted_users" edge to the User entity was cleared.
+func (m *GroupMutation) AccessRestrictedUsersCleared() bool {
+	return m.clearedaccess_restricted_users
+}
+
+// RemoveAccessRestrictedUserIDs removes the "access_restricted_users" edge to the User entity by IDs.
+func (m *GroupMutation) RemoveAccessRestrictedUserIDs(ids ...int64) {
+	if m.removedaccess_restricted_users == nil {
+		m.removedaccess_restricted_users = make(map[int64]struct{})
+	}
+	for i := range ids {
+		delete(m.access_restricted_users, ids[i])
+		m.removedaccess_restricted_users[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedAccessRestrictedUsers returns the removed IDs of the "access_restricted_users" edge to the User entity.
+func (m *GroupMutation) RemovedAccessRestrictedUsersIDs() (ids []int64) {
+	for id := range m.removedaccess_restricted_users {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// AccessRestrictedUsersIDs returns the "access_restricted_users" edge IDs in the mutation.
+func (m *GroupMutation) AccessRestrictedUsersIDs() (ids []int64) {
+	for id := range m.access_restricted_users {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetAccessRestrictedUsers resets all changes to the "access_restricted_users" edge.
+func (m *GroupMutation) ResetAccessRestrictedUsers() {
+	m.access_restricted_users = nil
+	m.clearedaccess_restricted_users = false
+	m.removedaccess_restricted_users = nil
+}
+
 // AddSubscriptionPlanIDs adds the "subscription_plans" edge to the SubscriptionPlan entity by ids.
 func (m *GroupMutation) AddSubscriptionPlanIDs(ids ...int64) {
 	if m.subscription_plans == nil {
@@ -29592,7 +29651,7 @@ func (m *GroupMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *GroupMutation) AddedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 10)
 	if m.api_keys != nil {
 		edges = append(edges, group.EdgeAPIKeys)
 	}
@@ -29613,6 +29672,9 @@ func (m *GroupMutation) AddedEdges() []string {
 	}
 	if m.allowed_users != nil {
 		edges = append(edges, group.EdgeAllowedUsers)
+	}
+	if m.access_restricted_users != nil {
+		edges = append(edges, group.EdgeAccessRestrictedUsers)
 	}
 	if m.subscription_plans != nil {
 		edges = append(edges, group.EdgeSubscriptionPlans)
@@ -29669,6 +29731,12 @@ func (m *GroupMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case group.EdgeAccessRestrictedUsers:
+		ids := make([]ent.Value, 0, len(m.access_restricted_users))
+		for id := range m.access_restricted_users {
+			ids = append(ids, id)
+		}
+		return ids
 	case group.EdgeSubscriptionPlans:
 		ids := make([]ent.Value, 0, len(m.subscription_plans))
 		for id := range m.subscription_plans {
@@ -29687,7 +29755,7 @@ func (m *GroupMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *GroupMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 10)
 	if m.removedapi_keys != nil {
 		edges = append(edges, group.EdgeAPIKeys)
 	}
@@ -29708,6 +29776,9 @@ func (m *GroupMutation) RemovedEdges() []string {
 	}
 	if m.removedallowed_users != nil {
 		edges = append(edges, group.EdgeAllowedUsers)
+	}
+	if m.removedaccess_restricted_users != nil {
+		edges = append(edges, group.EdgeAccessRestrictedUsers)
 	}
 	if m.removedsubscription_plans != nil {
 		edges = append(edges, group.EdgeSubscriptionPlans)
@@ -29764,6 +29835,12 @@ func (m *GroupMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case group.EdgeAccessRestrictedUsers:
+		ids := make([]ent.Value, 0, len(m.removedaccess_restricted_users))
+		for id := range m.removedaccess_restricted_users {
+			ids = append(ids, id)
+		}
+		return ids
 	case group.EdgeSubscriptionPlans:
 		ids := make([]ent.Value, 0, len(m.removedsubscription_plans))
 		for id := range m.removedsubscription_plans {
@@ -29782,7 +29859,7 @@ func (m *GroupMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *GroupMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 10)
 	if m.clearedapi_keys {
 		edges = append(edges, group.EdgeAPIKeys)
 	}
@@ -29803,6 +29880,9 @@ func (m *GroupMutation) ClearedEdges() []string {
 	}
 	if m.clearedallowed_users {
 		edges = append(edges, group.EdgeAllowedUsers)
+	}
+	if m.clearedaccess_restricted_users {
+		edges = append(edges, group.EdgeAccessRestrictedUsers)
 	}
 	if m.clearedsubscription_plans {
 		edges = append(edges, group.EdgeSubscriptionPlans)
@@ -29831,6 +29911,8 @@ func (m *GroupMutation) EdgeCleared(name string) bool {
 		return m.clearedbound_api_keys
 	case group.EdgeAllowedUsers:
 		return m.clearedallowed_users
+	case group.EdgeAccessRestrictedUsers:
+		return m.clearedaccess_restricted_users
 	case group.EdgeSubscriptionPlans:
 		return m.clearedsubscription_plans
 	case group.EdgeAuthorizedSubscriptions:
@@ -29871,6 +29953,9 @@ func (m *GroupMutation) ResetEdge(name string) error {
 		return nil
 	case group.EdgeAllowedUsers:
 		m.ResetAllowedUsers()
+		return nil
+	case group.EdgeAccessRestrictedUsers:
+		m.ResetAccessRestrictedUsers()
 		return nil
 	case group.EdgeSubscriptionPlans:
 		m.ResetSubscriptionPlans()
@@ -29969,7 +30054,7 @@ func (m IdempotencyRecordMutation) Client() *Client {
 // it returns an error otherwise.
 func (m IdempotencyRecordMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -30948,7 +31033,7 @@ func (m IdentityAdoptionDecisionMutation) Client() *Client {
 // it returns an error otherwise.
 func (m IdentityAdoptionDecisionMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -31719,7 +31804,7 @@ func (m PaymentAuditLogMutation) Client() *Client {
 // it returns an error otherwise.
 func (m PaymentAuditLogMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -32313,7 +32398,7 @@ func (m PaymentOrderMutation) Client() *Client {
 // it returns an error otherwise.
 func (m PaymentOrderMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -35856,7 +35941,7 @@ func (m PaymentProviderInstanceMutation) Client() *Client {
 // it returns an error otherwise.
 func (m PaymentProviderInstanceMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -36823,7 +36908,7 @@ func (m PendingAuthSessionMutation) Client() *Client {
 // it returns an error otherwise.
 func (m PendingAuthSessionMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -38455,7 +38540,7 @@ func (m PromoCodeMutation) Client() *Client {
 // it returns an error otherwise.
 func (m PromoCodeMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -39526,7 +39611,7 @@ func (m PromoCodeUsageMutation) Client() *Client {
 // it returns an error otherwise.
 func (m PromoCodeUsageMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -40163,7 +40248,7 @@ func (m ProxyMutation) Client() *Client {
 // it returns an error otherwise.
 func (m ProxyMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -41492,7 +41577,7 @@ func (m RedeemCodeMutation) Client() *Client {
 // it returns an error otherwise.
 func (m RedeemCodeMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -42627,7 +42712,7 @@ func (m SecuritySecretMutation) Client() *Client {
 // it returns an error otherwise.
 func (m SecuritySecretMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -43114,7 +43199,7 @@ func (m SettingMutation) Client() *Client {
 // it returns an error otherwise.
 func (m SettingMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -43577,7 +43662,7 @@ func (m SubscriptionPlanMutation) Client() *Client {
 // it returns an error otherwise.
 func (m SubscriptionPlanMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -45289,7 +45374,7 @@ func (m SubscriptionPlanGroupMutation) Client() *Client {
 // it returns an error otherwise.
 func (m SubscriptionPlanGroupMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -45823,7 +45908,7 @@ func (m TLSFingerprintProfileMutation) Client() *Client {
 // it returns an error otherwise.
 func (m TLSFingerprintProfileMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -47189,7 +47274,7 @@ func (m UsageCleanupTaskMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UsageCleanupTaskMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -48328,7 +48413,7 @@ func (m UsageLogMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UsageLogMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -52243,6 +52328,7 @@ type UserMutation struct {
 	first_recharge_bonus_used     *bool
 	rpm_limit                     *int
 	addrpm_limit                  *int
+	group_access_mode             *string
 	promo_code_id                 *int64
 	addpromo_code_id              *int64
 	clearedFields                 map[string]struct{}
@@ -52264,6 +52350,9 @@ type UserMutation struct {
 	allowed_groups                map[int64]struct{}
 	removedallowed_groups         map[int64]struct{}
 	clearedallowed_groups         bool
+	group_access_groups           map[int64]struct{}
+	removedgroup_access_groups    map[int64]struct{}
+	clearedgroup_access_groups    bool
 	usage_logs                    map[int64]struct{}
 	removedusage_logs             map[int64]struct{}
 	clearedusage_logs             bool
@@ -52353,7 +52442,7 @@ func (m UserMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UserMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -53487,6 +53576,42 @@ func (m *UserMutation) ResetRpmLimit() {
 	m.addrpm_limit = nil
 }
 
+// SetGroupAccessMode sets the "group_access_mode" field.
+func (m *UserMutation) SetGroupAccessMode(s string) {
+	m.group_access_mode = &s
+}
+
+// GroupAccessMode returns the value of the "group_access_mode" field in the mutation.
+func (m *UserMutation) GroupAccessMode() (r string, exists bool) {
+	v := m.group_access_mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupAccessMode returns the old "group_access_mode" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldGroupAccessMode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupAccessMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupAccessMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupAccessMode: %w", err)
+	}
+	return oldValue.GroupAccessMode, nil
+}
+
+// ResetGroupAccessMode resets all changes to the "group_access_mode" field.
+func (m *UserMutation) ResetGroupAccessMode() {
+	m.group_access_mode = nil
+}
+
 // SetPromoCodeID sets the "promo_code_id" field.
 func (m *UserMutation) SetPromoCodeID(i int64) {
 	m.promo_code_id = &i
@@ -53879,6 +54004,60 @@ func (m *UserMutation) ResetAllowedGroups() {
 	m.allowed_groups = nil
 	m.clearedallowed_groups = false
 	m.removedallowed_groups = nil
+}
+
+// AddGroupAccessGroupIDs adds the "group_access_groups" edge to the Group entity by ids.
+func (m *UserMutation) AddGroupAccessGroupIDs(ids ...int64) {
+	if m.group_access_groups == nil {
+		m.group_access_groups = make(map[int64]struct{})
+	}
+	for i := range ids {
+		m.group_access_groups[ids[i]] = struct{}{}
+	}
+}
+
+// ClearGroupAccessGroups clears the "group_access_groups" edge to the Group entity.
+func (m *UserMutation) ClearGroupAccessGroups() {
+	m.clearedgroup_access_groups = true
+}
+
+// GroupAccessGroupsCleared reports if the "group_access_groups" edge to the Group entity was cleared.
+func (m *UserMutation) GroupAccessGroupsCleared() bool {
+	return m.clearedgroup_access_groups
+}
+
+// RemoveGroupAccessGroupIDs removes the "group_access_groups" edge to the Group entity by IDs.
+func (m *UserMutation) RemoveGroupAccessGroupIDs(ids ...int64) {
+	if m.removedgroup_access_groups == nil {
+		m.removedgroup_access_groups = make(map[int64]struct{})
+	}
+	for i := range ids {
+		delete(m.group_access_groups, ids[i])
+		m.removedgroup_access_groups[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedGroupAccessGroups returns the removed IDs of the "group_access_groups" edge to the Group entity.
+func (m *UserMutation) RemovedGroupAccessGroupsIDs() (ids []int64) {
+	for id := range m.removedgroup_access_groups {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// GroupAccessGroupsIDs returns the "group_access_groups" edge IDs in the mutation.
+func (m *UserMutation) GroupAccessGroupsIDs() (ids []int64) {
+	for id := range m.group_access_groups {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetGroupAccessGroups resets all changes to the "group_access_groups" edge.
+func (m *UserMutation) ResetGroupAccessGroups() {
+	m.group_access_groups = nil
+	m.clearedgroup_access_groups = false
+	m.removedgroup_access_groups = nil
 }
 
 // AddUsageLogIDs adds the "usage_logs" edge to the UsageLog entity by ids.
@@ -54293,7 +54472,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 26)
+	fields := make([]string, 0, 27)
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
 	}
@@ -54369,6 +54548,9 @@ func (m *UserMutation) Fields() []string {
 	if m.rpm_limit != nil {
 		fields = append(fields, user.FieldRpmLimit)
 	}
+	if m.group_access_mode != nil {
+		fields = append(fields, user.FieldGroupAccessMode)
+	}
 	if m.promo_code_id != nil {
 		fields = append(fields, user.FieldPromoCodeID)
 	}
@@ -54430,6 +54612,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.FirstRechargeBonusUsed()
 	case user.FieldRpmLimit:
 		return m.RpmLimit()
+	case user.FieldGroupAccessMode:
+		return m.GroupAccessMode()
 	case user.FieldPromoCodeID:
 		return m.PromoCodeID()
 	}
@@ -54491,6 +54675,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldFirstRechargeBonusUsed(ctx)
 	case user.FieldRpmLimit:
 		return m.OldRpmLimit(ctx)
+	case user.FieldGroupAccessMode:
+		return m.OldGroupAccessMode(ctx)
 	case user.FieldPromoCodeID:
 		return m.OldPromoCodeID(ctx)
 	}
@@ -54676,6 +54862,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetRpmLimit(v)
+		return nil
+	case user.FieldGroupAccessMode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupAccessMode(v)
 		return nil
 	case user.FieldPromoCodeID:
 		v, ok := value.(int64)
@@ -54940,6 +55133,9 @@ func (m *UserMutation) ResetField(name string) error {
 	case user.FieldRpmLimit:
 		m.ResetRpmLimit()
 		return nil
+	case user.FieldGroupAccessMode:
+		m.ResetGroupAccessMode()
+		return nil
 	case user.FieldPromoCodeID:
 		m.ResetPromoCodeID()
 		return nil
@@ -54949,7 +55145,7 @@ func (m *UserMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *UserMutation) AddedEdges() []string {
-	edges := make([]string, 0, 13)
+	edges := make([]string, 0, 14)
 	if m.api_keys != nil {
 		edges = append(edges, user.EdgeAPIKeys)
 	}
@@ -54967,6 +55163,9 @@ func (m *UserMutation) AddedEdges() []string {
 	}
 	if m.allowed_groups != nil {
 		edges = append(edges, user.EdgeAllowedGroups)
+	}
+	if m.group_access_groups != nil {
+		edges = append(edges, user.EdgeGroupAccessGroups)
 	}
 	if m.usage_logs != nil {
 		edges = append(edges, user.EdgeUsageLogs)
@@ -55032,6 +55231,12 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgeGroupAccessGroups:
+		ids := make([]ent.Value, 0, len(m.group_access_groups))
+		for id := range m.group_access_groups {
+			ids = append(ids, id)
+		}
+		return ids
 	case user.EdgeUsageLogs:
 		ids := make([]ent.Value, 0, len(m.usage_logs))
 		for id := range m.usage_logs {
@@ -55080,7 +55285,7 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *UserMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 13)
+	edges := make([]string, 0, 14)
 	if m.removedapi_keys != nil {
 		edges = append(edges, user.EdgeAPIKeys)
 	}
@@ -55098,6 +55303,9 @@ func (m *UserMutation) RemovedEdges() []string {
 	}
 	if m.removedallowed_groups != nil {
 		edges = append(edges, user.EdgeAllowedGroups)
+	}
+	if m.removedgroup_access_groups != nil {
+		edges = append(edges, user.EdgeGroupAccessGroups)
 	}
 	if m.removedusage_logs != nil {
 		edges = append(edges, user.EdgeUsageLogs)
@@ -55163,6 +55371,12 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgeGroupAccessGroups:
+		ids := make([]ent.Value, 0, len(m.removedgroup_access_groups))
+		for id := range m.removedgroup_access_groups {
+			ids = append(ids, id)
+		}
+		return ids
 	case user.EdgeUsageLogs:
 		ids := make([]ent.Value, 0, len(m.removedusage_logs))
 		for id := range m.removedusage_logs {
@@ -55211,7 +55425,7 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *UserMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 13)
+	edges := make([]string, 0, 14)
 	if m.clearedapi_keys {
 		edges = append(edges, user.EdgeAPIKeys)
 	}
@@ -55229,6 +55443,9 @@ func (m *UserMutation) ClearedEdges() []string {
 	}
 	if m.clearedallowed_groups {
 		edges = append(edges, user.EdgeAllowedGroups)
+	}
+	if m.clearedgroup_access_groups {
+		edges = append(edges, user.EdgeGroupAccessGroups)
 	}
 	if m.clearedusage_logs {
 		edges = append(edges, user.EdgeUsageLogs)
@@ -55270,6 +55487,8 @@ func (m *UserMutation) EdgeCleared(name string) bool {
 		return m.clearedannouncement_reads
 	case user.EdgeAllowedGroups:
 		return m.clearedallowed_groups
+	case user.EdgeGroupAccessGroups:
+		return m.clearedgroup_access_groups
 	case user.EdgeUsageLogs:
 		return m.clearedusage_logs
 	case user.EdgeAttributeValues:
@@ -55317,6 +55536,9 @@ func (m *UserMutation) ResetEdge(name string) error {
 		return nil
 	case user.EdgeAllowedGroups:
 		m.ResetAllowedGroups()
+		return nil
+	case user.EdgeGroupAccessGroups:
+		m.ResetGroupAccessGroups()
 		return nil
 	case user.EdgeUsageLogs:
 		m.ResetUsageLogs()
@@ -55390,7 +55612,7 @@ func (m UserAllowedGroupMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UserAllowedGroupMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -55853,7 +56075,7 @@ func (m UserAttributeDefinitionMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UserAttributeDefinitionMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -56983,7 +57205,7 @@ func (m UserAttributeValueMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UserAttributeValueMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -57559,6 +57781,423 @@ func (m *UserAttributeValueMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown UserAttributeValue edge %s", name)
 }
 
+// UserGroupAccessGroupMutation represents an operation that mutates the UserGroupAccessGroup nodes in the graph.
+type UserGroupAccessGroupMutation struct {
+	config
+	op            Op
+	typ           string
+	created_at    *time.Time
+	clearedFields map[string]struct{}
+	user          *int64
+	cleareduser   bool
+	group         *int64
+	clearedgroup  bool
+	done          bool
+	oldValue      func(context.Context) (*UserGroupAccessGroup, error)
+	predicates    []predicate.UserGroupAccessGroup
+}
+
+var _ ent.Mutation = (*UserGroupAccessGroupMutation)(nil)
+
+// usergroupaccessgroupOption allows management of the mutation configuration using functional options.
+type usergroupaccessgroupOption func(*UserGroupAccessGroupMutation)
+
+// newUserGroupAccessGroupMutation creates new mutation for the UserGroupAccessGroup entity.
+func newUserGroupAccessGroupMutation(c config, op Op, opts ...usergroupaccessgroupOption) *UserGroupAccessGroupMutation {
+	m := &UserGroupAccessGroupMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeUserGroupAccessGroup,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m UserGroupAccessGroupMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m UserGroupAccessGroupMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *UserGroupAccessGroupMutation) SetUserID(i int64) {
+	m.user = &i
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *UserGroupAccessGroupMutation) UserID() (r int64, exists bool) {
+	v := m.user
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *UserGroupAccessGroupMutation) ResetUserID() {
+	m.user = nil
+}
+
+// SetGroupID sets the "group_id" field.
+func (m *UserGroupAccessGroupMutation) SetGroupID(i int64) {
+	m.group = &i
+}
+
+// GroupID returns the value of the "group_id" field in the mutation.
+func (m *UserGroupAccessGroupMutation) GroupID() (r int64, exists bool) {
+	v := m.group
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetGroupID resets all changes to the "group_id" field.
+func (m *UserGroupAccessGroupMutation) ResetGroupID() {
+	m.group = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *UserGroupAccessGroupMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *UserGroupAccessGroupMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *UserGroupAccessGroupMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// ClearUser clears the "user" edge to the User entity.
+func (m *UserGroupAccessGroupMutation) ClearUser() {
+	m.cleareduser = true
+	m.clearedFields[usergroupaccessgroup.FieldUserID] = struct{}{}
+}
+
+// UserCleared reports if the "user" edge to the User entity was cleared.
+func (m *UserGroupAccessGroupMutation) UserCleared() bool {
+	return m.cleareduser
+}
+
+// UserIDs returns the "user" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// UserID instead. It exists only for internal usage by the builders.
+func (m *UserGroupAccessGroupMutation) UserIDs() (ids []int64) {
+	if id := m.user; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetUser resets all changes to the "user" edge.
+func (m *UserGroupAccessGroupMutation) ResetUser() {
+	m.user = nil
+	m.cleareduser = false
+}
+
+// ClearGroup clears the "group" edge to the Group entity.
+func (m *UserGroupAccessGroupMutation) ClearGroup() {
+	m.clearedgroup = true
+	m.clearedFields[usergroupaccessgroup.FieldGroupID] = struct{}{}
+}
+
+// GroupCleared reports if the "group" edge to the Group entity was cleared.
+func (m *UserGroupAccessGroupMutation) GroupCleared() bool {
+	return m.clearedgroup
+}
+
+// GroupIDs returns the "group" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// GroupID instead. It exists only for internal usage by the builders.
+func (m *UserGroupAccessGroupMutation) GroupIDs() (ids []int64) {
+	if id := m.group; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetGroup resets all changes to the "group" edge.
+func (m *UserGroupAccessGroupMutation) ResetGroup() {
+	m.group = nil
+	m.clearedgroup = false
+}
+
+// Where appends a list predicates to the UserGroupAccessGroupMutation builder.
+func (m *UserGroupAccessGroupMutation) Where(ps ...predicate.UserGroupAccessGroup) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the UserGroupAccessGroupMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *UserGroupAccessGroupMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.UserGroupAccessGroup, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *UserGroupAccessGroupMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *UserGroupAccessGroupMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (UserGroupAccessGroup).
+func (m *UserGroupAccessGroupMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *UserGroupAccessGroupMutation) Fields() []string {
+	fields := make([]string, 0, 3)
+	if m.user != nil {
+		fields = append(fields, usergroupaccessgroup.FieldUserID)
+	}
+	if m.group != nil {
+		fields = append(fields, usergroupaccessgroup.FieldGroupID)
+	}
+	if m.created_at != nil {
+		fields = append(fields, usergroupaccessgroup.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *UserGroupAccessGroupMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case usergroupaccessgroup.FieldUserID:
+		return m.UserID()
+	case usergroupaccessgroup.FieldGroupID:
+		return m.GroupID()
+	case usergroupaccessgroup.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *UserGroupAccessGroupMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	return nil, errors.New("edge schema UserGroupAccessGroup does not support getting old values")
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *UserGroupAccessGroupMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case usergroupaccessgroup.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case usergroupaccessgroup.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupID(v)
+		return nil
+	case usergroupaccessgroup.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown UserGroupAccessGroup field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *UserGroupAccessGroupMutation) AddedFields() []string {
+	var fields []string
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *UserGroupAccessGroupMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *UserGroupAccessGroupMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown UserGroupAccessGroup numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *UserGroupAccessGroupMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *UserGroupAccessGroupMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *UserGroupAccessGroupMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown UserGroupAccessGroup nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *UserGroupAccessGroupMutation) ResetField(name string) error {
+	switch name {
+	case usergroupaccessgroup.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case usergroupaccessgroup.FieldGroupID:
+		m.ResetGroupID()
+		return nil
+	case usergroupaccessgroup.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown UserGroupAccessGroup field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *UserGroupAccessGroupMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.user != nil {
+		edges = append(edges, usergroupaccessgroup.EdgeUser)
+	}
+	if m.group != nil {
+		edges = append(edges, usergroupaccessgroup.EdgeGroup)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *UserGroupAccessGroupMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case usergroupaccessgroup.EdgeUser:
+		if id := m.user; id != nil {
+			return []ent.Value{*id}
+		}
+	case usergroupaccessgroup.EdgeGroup:
+		if id := m.group; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *UserGroupAccessGroupMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *UserGroupAccessGroupMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *UserGroupAccessGroupMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.cleareduser {
+		edges = append(edges, usergroupaccessgroup.EdgeUser)
+	}
+	if m.clearedgroup {
+		edges = append(edges, usergroupaccessgroup.EdgeGroup)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *UserGroupAccessGroupMutation) EdgeCleared(name string) bool {
+	switch name {
+	case usergroupaccessgroup.EdgeUser:
+		return m.cleareduser
+	case usergroupaccessgroup.EdgeGroup:
+		return m.clearedgroup
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *UserGroupAccessGroupMutation) ClearEdge(name string) error {
+	switch name {
+	case usergroupaccessgroup.EdgeUser:
+		m.ClearUser()
+		return nil
+	case usergroupaccessgroup.EdgeGroup:
+		m.ClearGroup()
+		return nil
+	}
+	return fmt.Errorf("unknown UserGroupAccessGroup unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *UserGroupAccessGroupMutation) ResetEdge(name string) error {
+	switch name {
+	case usergroupaccessgroup.EdgeUser:
+		m.ResetUser()
+		return nil
+	case usergroupaccessgroup.EdgeGroup:
+		m.ResetGroup()
+		return nil
+	}
+	return fmt.Errorf("unknown UserGroupAccessGroup edge %s", name)
+}
+
 // UserPlatformQuotaMutation represents an operation that mutates the UserPlatformQuota nodes in the graph.
 type UserPlatformQuotaMutation struct {
 	config
@@ -57655,7 +58294,7 @@ func (m UserPlatformQuotaMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UserPlatformQuotaMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -59094,7 +59733,7 @@ func (m UserSubscriptionMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UserSubscriptionMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -61262,7 +61901,7 @@ func (m UserSubscriptionGroupMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UserSubscriptionGroupMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("entmerge: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()

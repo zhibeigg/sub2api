@@ -89,6 +89,13 @@ type UpdateUserRequest struct {
 }
 
 // UpdateBalanceRequest represents balance update request
+type UpdateUserGroupConfigRequest struct {
+	AccessMode         string             `json:"access_mode" binding:"required,oneof=inherit restricted"`
+	RestrictedGroupIDs []int64            `json:"restricted_group_ids"`
+	ExclusiveGroupIDs  []int64            `json:"exclusive_group_ids"`
+	GroupRates         map[int64]*float64 `json:"group_rates"`
+}
+
 type UpdateBalanceRequest struct {
 	Balance   float64 `json:"balance" binding:"required,gt=0"`
 	Operation string  `json:"operation" binding:"required,oneof=set add subtract"`
@@ -226,6 +233,50 @@ func (h *UserHandler) GetByID(c *gin.Context) {
 	}
 
 	response.Success(c, dto.UserFromServiceAdmin(user))
+}
+
+// GetGroupConfig returns a user's standard-group restriction, exclusive grants,
+// and custom rate multipliers.
+// GET /api/v1/admin/users/:id/group-config
+func (h *UserHandler) GetGroupConfig(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	config, err := h.adminService.GetUserGroupConfig(c.Request.Context(), userID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, config)
+}
+
+// UpdateGroupConfig atomically updates a user's standard-group restriction,
+// exclusive grants, and partial custom rate changes.
+// PUT /api/v1/admin/users/:id/group-config
+func (h *UserHandler) UpdateGroupConfig(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid user ID")
+		return
+	}
+	var req UpdateUserGroupConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	config, err := h.adminService.UpdateUserGroupConfig(c.Request.Context(), userID, &service.UpdateUserGroupConfigInput{
+		AccessMode:         req.AccessMode,
+		RestrictedGroupIDs: req.RestrictedGroupIDs,
+		ExclusiveGroupIDs:  req.ExclusiveGroupIDs,
+		GroupRates:         req.GroupRates,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, config)
 }
 
 // BindAuthIdentity manually binds a canonical auth identity to a user.

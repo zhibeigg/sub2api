@@ -83,6 +83,10 @@ type UserListFilters struct {
 	IncludeDeleted bool
 }
 
+type UserGroupConfigRepository interface {
+	UpdateUserGroupConfig(ctx context.Context, userID int64, accessMode string, restrictedGroupIDs, exclusiveGroupIDs []int64, groupRates map[int64]*float64) error
+}
+
 type UserRepository interface {
 	Create(ctx context.Context, user *User) error
 	GetByID(ctx context.Context, id int64) (*User, error)

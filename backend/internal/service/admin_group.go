@@ -998,6 +998,15 @@ func (s *adminServiceImpl) validateAdminAPIKeyGroup(ctx context.Context, userID,
 	if group.Status != StatusActive {
 		return nil, false, infraerrors.BadRequest("GROUP_NOT_ACTIVE", "target group is not active")
 	}
+	if !group.IsSubscriptionType() {
+		user, err := s.userRepo.GetByID(ctx, userID)
+		if err != nil {
+			return nil, false, err
+		}
+		if !user.AllowsStandardGroupByRestriction(group.ID) {
+			return nil, false, ErrGroupNotAllowed
+		}
+	}
 	if group.IsSubscriptionType() {
 		if s.userSubRepo == nil {
 			return nil, false, infraerrors.InternalServer("SUBSCRIPTION_REPOSITORY_UNAVAILABLE", "subscription repository is not configured")

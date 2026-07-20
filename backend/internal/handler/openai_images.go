@@ -23,6 +23,10 @@ func (h *OpenAIGatewayHandler) resolveAndApplyImageGroup(c *gin.Context, apiKey 
 	if apiKey == nil || len(apiKey.GroupBindings) == 0 || apiKey.ExplicitGroupSelection {
 		return apiKey, true
 	}
+	if !apiKey.HasAllowedGroupBindingByUserRestriction() {
+		middleware2.AbortWithError(c, http.StatusForbidden, "GROUP_NOT_ALLOWED", "当前用户不允许使用任何已绑定的标准分组")
+		return apiKey, false
+	}
 	group := h.gatewayService.ResolveEffectiveImageGroupBinding(c.Request.Context(), apiKey, model, endpoint, capability)
 	if group == nil {
 		return apiKey, true

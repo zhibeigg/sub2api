@@ -1905,6 +1905,22 @@ export interface ApiKeyUsageTrendPoint {
 
 // ==================== Admin User Management ====================
 
+export type UserGroupAccessMode = 'inherit' | 'restricted'
+
+export interface UserGroupConfig {
+  access_mode: UserGroupAccessMode
+  restricted_group_ids: number[]
+  exclusive_group_ids: number[]
+  group_rates: Record<number, number>
+}
+
+export interface UpdateUserGroupConfigRequest {
+  access_mode: UserGroupAccessMode
+  restricted_group_ids: number[]
+  exclusive_group_ids: number[]
+  group_rates: Record<number, number | null>
+}
+
 export interface UpdateUserRequest {
   email?: string
   password?: string

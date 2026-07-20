@@ -19,6 +19,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	dbuser "github.com/Wei-Shaw/sub2api/ent/user"
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
+	"github.com/Wei-Shaw/sub2api/ent/usergroupaccessgroup"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -32,7 +33,10 @@ type userRepository struct {
 	sql    sqlExecutor
 }
 
-var _ service.RedeemUserAdjustmentRepository = (*userRepository)(nil)
+var (
+	_ service.RedeemUserAdjustmentRepository = (*userRepository)(nil)
+	_ service.UserGroupConfigRepository      = (*userRepository)(nil)
+)
 
 func NewUserRepository(client *dbent.Client, sqlDB *sql.DB) service.UserRepository {
 	return newUserRepositoryWithSQL(client, sqlDB)
@@ -133,6 +137,13 @@ func (r *userRepository) GetByID(ctx context.Context, id int64) (*service.User, 
 	if v, ok := groups[id]; ok {
 		out.AllowedGroups = v
 	}
+	accessGroups, err := r.loadGroupAccessGroups(ctx, []int64{id})
+	if err != nil {
+		return nil, err
+	}
+	if v, ok := accessGroups[id]; ok {
+		out.GroupAccessGroups = v
+	}
 	return out, nil
 }
 
@@ -149,6 +160,13 @@ func (r *userRepository) GetByIDIncludeDeleted(ctx context.Context, id int64) (*
 	}
 	if v, ok := groups[id]; ok {
 		out.AllowedGroups = v
+	}
+	accessGroups, err := r.loadGroupAccessGroups(ctx, []int64{id})
+	if err != nil {
+		return nil, err
+	}
+	if v, ok := accessGroups[id]; ok {
+		out.GroupAccessGroups = v
 	}
 	return out, nil
 }
@@ -176,6 +194,13 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*service
 	}
 	if v, ok := groups[m.ID]; ok {
 		out.AllowedGroups = v
+	}
+	accessGroups, err := r.loadGroupAccessGroups(ctx, []int64{m.ID})
+	if err != nil {
+		return nil, err
+	}
+	if v, ok := accessGroups[m.ID]; ok {
+		out.GroupAccessGroups = v
 	}
 	return out, nil
 }
@@ -273,6 +298,56 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User) error
 	}
 
 	userIn.UpdatedAt = updated.UpdatedAt
+	return nil
+}
+
+func (r *userRepository) UpdateUserGroupConfig(
+	ctx context.Context,
+	userID int64,
+	accessMode string,
+	restrictedGroupIDs, exclusiveGroupIDs []int64,
+	groupRates map[int64]*float64,
+) error {
+	tx, err := r.client.Tx(ctx)
+	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+		return err
+	}
+
+	var txClient *dbent.Client
+	txCtx := ctx
+	if err == nil {
+		defer func() { _ = tx.Rollback() }()
+		txClient = tx.Client()
+		txCtx = dbent.NewTxContext(ctx, tx)
+	} else if existingTx := dbent.TxFromContext(ctx); existingTx != nil {
+		txClient = existingTx.Client()
+	} else {
+		txClient = r.client
+	}
+
+	if _, err := txClient.User.UpdateOneID(userID).
+		SetGroupAccessMode(accessMode).
+		Save(txCtx); err != nil {
+		return translatePersistenceError(err, service.ErrUserNotFound, nil)
+	}
+	if err := r.syncUserAllowedGroupsWithClient(txCtx, txClient, userID, exclusiveGroupIDs); err != nil {
+		return err
+	}
+	if err := r.syncUserGroupAccessGroupsWithClient(txCtx, txClient, userID, restrictedGroupIDs); err != nil {
+		return err
+	}
+	if len(groupRates) > 0 {
+		executor := txAwareSQLExecutor(txCtx, r.sql, r.client)
+		if err := syncUserGroupRatesWithExecutor(txCtx, executor, userID, groupRates); err != nil {
+			return err
+		}
+	}
+
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -1022,6 +1097,13 @@ func (r *userRepository) GetFirstAdmin(ctx context.Context) (*service.User, erro
 	if v, ok := groups[m.ID]; ok {
 		out.AllowedGroups = v
 	}
+	accessGroups, err := r.loadGroupAccessGroups(ctx, []int64{m.ID})
+	if err != nil {
+		return nil, err
+	}
+	if v, ok := accessGroups[m.ID]; ok {
+		out.GroupAccessGroups = v
+	}
 	return out, nil
 }
 
@@ -1046,6 +1128,28 @@ func (r *userRepository) loadAllowedGroups(ctx context.Context, userIDs []int64)
 		sort.Slice(out[userID], func(i, j int) bool { return out[userID][i] < out[userID][j] })
 	}
 
+	return out, nil
+}
+
+func (r *userRepository) loadGroupAccessGroups(ctx context.Context, userIDs []int64) (map[int64][]int64, error) {
+	out := make(map[int64][]int64, len(userIDs))
+	if len(userIDs) == 0 {
+		return out, nil
+	}
+
+	rows, err := r.client.UserGroupAccessGroup.Query().
+		Where(usergroupaccessgroup.UserIDIn(userIDs...)).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range rows {
+		out[rows[i].UserID] = append(out[rows[i].UserID], rows[i].GroupID)
+	}
+	for userID := range out {
+		sort.Slice(out[userID], func(i, j int) bool { return out[userID][i] < out[userID][j] })
+	}
 	return out, nil
 }
 
@@ -1109,6 +1213,62 @@ func (r *userRepository) syncUserAllowedGroupsWithClient(ctx context.Context, cl
 	return nil
 }
 
+func (r *userRepository) syncUserGroupAccessGroupsWithClient(ctx context.Context, client *dbent.Client, userID int64, groupIDs []int64) error {
+	if client == nil {
+		return nil
+	}
+
+	existingRows, err := client.UserGroupAccessGroup.Query().
+		Where(usergroupaccessgroup.UserIDEQ(userID)).
+		All(ctx)
+	if err != nil {
+		return err
+	}
+
+	desired := make(map[int64]struct{}, len(groupIDs))
+	for _, id := range groupIDs {
+		if id > 0 {
+			desired[id] = struct{}{}
+		}
+	}
+
+	existing := make(map[int64]struct{}, len(existingRows))
+	removed := make([]int64, 0)
+	for _, row := range existingRows {
+		existing[row.GroupID] = struct{}{}
+		if _, keep := desired[row.GroupID]; !keep {
+			removed = append(removed, row.GroupID)
+		}
+	}
+	if len(removed) > 0 {
+		if _, err := client.UserGroupAccessGroup.Delete().
+			Where(usergroupaccessgroup.UserIDEQ(userID), usergroupaccessgroup.GroupIDIn(removed...)).
+			Exec(ctx); err != nil {
+			return err
+		}
+	}
+
+	creates := make([]*dbent.UserGroupAccessGroupCreate, 0, len(desired))
+	for groupID := range desired {
+		if _, present := existing[groupID]; !present {
+			creates = append(creates, client.UserGroupAccessGroup.Create().SetUserID(userID).SetGroupID(groupID))
+		}
+	}
+	if len(creates) > 0 {
+		if err := client.UserGroupAccessGroup.
+			CreateBulk(creates...).
+			OnConflictColumns(usergroupaccessgroup.FieldUserID, usergroupaccessgroup.FieldGroupID).
+			DoNothing().
+			Exec(ctx); err != nil {
+			if isSQLNoRowsError(err) {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
+}
+
 func applyUserEntityToService(dst *service.User, src *dbent.User) {
 	if dst == nil || src == nil {
 		return
@@ -1117,6 +1277,7 @@ func applyUserEntityToService(dst *service.User, src *dbent.User) {
 	dst.SignupSource = src.SignupSource
 	dst.LastLoginAt = src.LastLoginAt
 	dst.LastActiveAt = src.LastActiveAt
+	dst.GroupAccessMode = src.GroupAccessMode
 	dst.CreatedAt = src.CreatedAt
 	dst.UpdatedAt = src.UpdatedAt
 }

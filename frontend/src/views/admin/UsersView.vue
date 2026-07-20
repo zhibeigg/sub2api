@@ -775,7 +775,12 @@
       @success="loadUsers"
     />
     <UserApiKeysModal :show="showApiKeysModal" :user="viewingUser" @close="closeApiKeysModal" />
-    <UserAllowedGroupsModal :show="showAllowedGroupsModal" :user="allowedGroupsUser" @close="closeAllowedGroupsModal" @success="loadUsers" />
+    <UserAllowedGroupsModal
+      :show="showAllowedGroupsModal"
+      :user="allowedGroupsUser"
+      @close="closeAllowedGroupsModal"
+      @success="handleAllowedGroupsSuccess"
+    />
     <UserBalanceModal :show="showBalanceModal" :user="balanceUser" :operation="balanceOperation" @close="closeBalanceModal" @success="loadUsers" />
     <UserBalanceHistoryModal :show="showBalanceHistoryModal" :user="balanceHistoryUser" @close="closeBalanceHistoryModal" @deposit="handleDepositFromHistory" @withdraw="handleWithdrawFromHistory" />
     <GroupReplaceModal :show="showGroupReplaceModal" :user="groupReplaceUser" :old-group="groupReplaceOldGroup" :all-groups="allGroups" @close="closeGroupReplaceModal" @success="loadUsers" />
@@ -1771,6 +1776,11 @@ const handleAllowedGroups = (user: AdminUser) => {
 const closeAllowedGroupsModal = () => {
   showAllowedGroupsModal.value = false
   allowedGroupsUser.value = null
+}
+
+const handleAllowedGroupsSuccess = async () => {
+  expandedGroupUserId.value = null
+  await loadUsers()
 }
 
 const openGroupReplace = (user: AdminUser, group: { id: number; name: string }) => {

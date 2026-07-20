@@ -243,6 +243,9 @@ func (Group) Edges() []ent.Edge {
 		edge.From("allowed_users", User.Type).
 			Ref("allowed_groups").
 			Through("user_allowed_groups", UserAllowedGroup.Type),
+		edge.From("access_restricted_users", User.Type).
+			Ref("group_access_groups").
+			Through("user_group_access_groups", UserGroupAccessGroup.Type),
 		edge.From("subscription_plans", SubscriptionPlan.Type).
 			Ref("groups").
 			Through("subscription_plan_groups", SubscriptionPlanGroup.Type),

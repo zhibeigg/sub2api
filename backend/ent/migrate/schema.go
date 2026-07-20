@@ -1945,6 +1945,7 @@ var (
 		{Name: "total_recharged", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
 		{Name: "first_recharge_bonus_used", Type: field.TypeBool, Default: false},
 		{Name: "rpm_limit", Type: field.TypeInt, Default: 0},
+		{Name: "group_access_mode", Type: field.TypeString, Size: 20, Default: "inherit"},
 		{Name: "promo_code_id", Type: field.TypeInt64, Nullable: true},
 	}
 	// UsersTable holds the schema information for the "users" table.
@@ -1966,7 +1967,7 @@ var (
 			{
 				Name:    "user_promo_code_id",
 				Unique:  false,
-				Columns: []*schema.Column{UsersColumns[26]},
+				Columns: []*schema.Column{UsersColumns[27]},
 			},
 		},
 	}
@@ -2086,6 +2087,39 @@ var (
 				Name:    "userattributevalue_attribute_id",
 				Unique:  false,
 				Columns: []*schema.Column{UserAttributeValuesColumns[5]},
+			},
+		},
+	}
+	// UserGroupAccessGroupsColumns holds the columns for the "user_group_access_groups" table.
+	UserGroupAccessGroupsColumns = []*schema.Column{
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "group_id", Type: field.TypeInt64},
+	}
+	// UserGroupAccessGroupsTable holds the schema information for the "user_group_access_groups" table.
+	UserGroupAccessGroupsTable = &schema.Table{
+		Name:       "user_group_access_groups",
+		Columns:    UserGroupAccessGroupsColumns,
+		PrimaryKey: []*schema.Column{UserGroupAccessGroupsColumns[1], UserGroupAccessGroupsColumns[2]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "user_group_access_groups_users_user",
+				Columns:    []*schema.Column{UserGroupAccessGroupsColumns[1]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "user_group_access_groups_groups_group",
+				Columns:    []*schema.Column{UserGroupAccessGroupsColumns[2]},
+				RefColumns: []*schema.Column{GroupsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "usergroupaccessgroup_group_id",
+				Unique:  false,
+				Columns: []*schema.Column{UserGroupAccessGroupsColumns[2]},
 			},
 		},
 	}
@@ -2332,6 +2366,7 @@ var (
 		UserAllowedGroupsTable,
 		UserAttributeDefinitionsTable,
 		UserAttributeValuesTable,
+		UserGroupAccessGroupsTable,
 		UserPlatformQuotasTable,
 		UserSubscriptionsTable,
 		UserSubscriptionGroupsTable,
@@ -2495,6 +2530,11 @@ func init() {
 	UserAttributeValuesTable.ForeignKeys[1].RefTable = UserAttributeDefinitionsTable
 	UserAttributeValuesTable.Annotation = &entsql.Annotation{
 		Table: "user_attribute_values",
+	}
+	UserGroupAccessGroupsTable.ForeignKeys[0].RefTable = UsersTable
+	UserGroupAccessGroupsTable.ForeignKeys[1].RefTable = GroupsTable
+	UserGroupAccessGroupsTable.Annotation = &entsql.Annotation{
+		Table: "user_group_access_groups",
 	}
 	UserPlatformQuotasTable.ForeignKeys[0].RefTable = UsersTable
 	UserPlatformQuotasTable.Annotation = &entsql.Annotation{

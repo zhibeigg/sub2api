@@ -180,6 +180,11 @@ func RpmLimit(v int) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldRpmLimit, v))
 }
 
+// GroupAccessMode applies equality check predicate on the "group_access_mode" field. It's identical to GroupAccessModeEQ.
+func GroupAccessMode(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldGroupAccessMode, v))
+}
+
 // PromoCodeID applies equality check predicate on the "promo_code_id" field. It's identical to PromoCodeIDEQ.
 func PromoCodeID(v int64) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldPromoCodeID, v))
@@ -1405,6 +1410,71 @@ func RpmLimitLTE(v int) predicate.User {
 	return predicate.User(sql.FieldLTE(FieldRpmLimit, v))
 }
 
+// GroupAccessModeEQ applies the EQ predicate on the "group_access_mode" field.
+func GroupAccessModeEQ(v string) predicate.User {
+	return predicate.User(sql.FieldEQ(FieldGroupAccessMode, v))
+}
+
+// GroupAccessModeNEQ applies the NEQ predicate on the "group_access_mode" field.
+func GroupAccessModeNEQ(v string) predicate.User {
+	return predicate.User(sql.FieldNEQ(FieldGroupAccessMode, v))
+}
+
+// GroupAccessModeIn applies the In predicate on the "group_access_mode" field.
+func GroupAccessModeIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldIn(FieldGroupAccessMode, vs...))
+}
+
+// GroupAccessModeNotIn applies the NotIn predicate on the "group_access_mode" field.
+func GroupAccessModeNotIn(vs ...string) predicate.User {
+	return predicate.User(sql.FieldNotIn(FieldGroupAccessMode, vs...))
+}
+
+// GroupAccessModeGT applies the GT predicate on the "group_access_mode" field.
+func GroupAccessModeGT(v string) predicate.User {
+	return predicate.User(sql.FieldGT(FieldGroupAccessMode, v))
+}
+
+// GroupAccessModeGTE applies the GTE predicate on the "group_access_mode" field.
+func GroupAccessModeGTE(v string) predicate.User {
+	return predicate.User(sql.FieldGTE(FieldGroupAccessMode, v))
+}
+
+// GroupAccessModeLT applies the LT predicate on the "group_access_mode" field.
+func GroupAccessModeLT(v string) predicate.User {
+	return predicate.User(sql.FieldLT(FieldGroupAccessMode, v))
+}
+
+// GroupAccessModeLTE applies the LTE predicate on the "group_access_mode" field.
+func GroupAccessModeLTE(v string) predicate.User {
+	return predicate.User(sql.FieldLTE(FieldGroupAccessMode, v))
+}
+
+// GroupAccessModeContains applies the Contains predicate on the "group_access_mode" field.
+func GroupAccessModeContains(v string) predicate.User {
+	return predicate.User(sql.FieldContains(FieldGroupAccessMode, v))
+}
+
+// GroupAccessModeHasPrefix applies the HasPrefix predicate on the "group_access_mode" field.
+func GroupAccessModeHasPrefix(v string) predicate.User {
+	return predicate.User(sql.FieldHasPrefix(FieldGroupAccessMode, v))
+}
+
+// GroupAccessModeHasSuffix applies the HasSuffix predicate on the "group_access_mode" field.
+func GroupAccessModeHasSuffix(v string) predicate.User {
+	return predicate.User(sql.FieldHasSuffix(FieldGroupAccessMode, v))
+}
+
+// GroupAccessModeEqualFold applies the EqualFold predicate on the "group_access_mode" field.
+func GroupAccessModeEqualFold(v string) predicate.User {
+	return predicate.User(sql.FieldEqualFold(FieldGroupAccessMode, v))
+}
+
+// GroupAccessModeContainsFold applies the ContainsFold predicate on the "group_access_mode" field.
+func GroupAccessModeContainsFold(v string) predicate.User {
+	return predicate.User(sql.FieldContainsFold(FieldGroupAccessMode, v))
+}
+
 // PromoCodeIDEQ applies the EQ predicate on the "promo_code_id" field.
 func PromoCodeIDEQ(v int64) predicate.User {
 	return predicate.User(sql.FieldEQ(FieldPromoCodeID, v))
@@ -1593,6 +1663,29 @@ func HasAllowedGroupsWith(preds ...predicate.Group) predicate.User {
 	})
 }
 
+// HasGroupAccessGroups applies the HasEdge predicate on the "group_access_groups" edge.
+func HasGroupAccessGroups() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, false, GroupAccessGroupsTable, GroupAccessGroupsPrimaryKey...),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasGroupAccessGroupsWith applies the HasEdge predicate on the "group_access_groups" edge with a given conditions (other predicates).
+func HasGroupAccessGroupsWith(preds ...predicate.Group) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newGroupAccessGroupsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // HasUsageLogs applies the HasEdge predicate on the "usage_logs" edge.
 func HasUsageLogs() predicate.User {
 	return predicate.User(func(s *sql.Selector) {
@@ -1769,6 +1862,29 @@ func HasUserAllowedGroups() predicate.User {
 func HasUserAllowedGroupsWith(preds ...predicate.UserAllowedGroup) predicate.User {
 	return predicate.User(func(s *sql.Selector) {
 		step := newUserAllowedGroupsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasUserGroupAccessGroups applies the HasEdge predicate on the "user_group_access_groups" edge.
+func HasUserGroupAccessGroups() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, true, UserGroupAccessGroupsTable, UserGroupAccessGroupsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasUserGroupAccessGroupsWith applies the HasEdge predicate on the "user_group_access_groups" edge with a given conditions (other predicates).
+func HasUserGroupAccessGroupsWith(preds ...predicate.UserGroupAccessGroup) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newUserGroupAccessGroupsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

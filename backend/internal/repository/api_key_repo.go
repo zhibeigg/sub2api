@@ -136,6 +136,9 @@ func (r *apiKeyRepository) GetByID(ctx context.Context, id int64) (*service.APIK
 			q.WithAllowedGroups(func(gq *dbent.GroupQuery) {
 				gq.Select(group.FieldID)
 			})
+			q.WithGroupAccessGroups(func(gq *dbent.GroupQuery) {
+				gq.Select(group.FieldID)
+			})
 		}).
 		WithGroup().
 		Only(ctx)
@@ -172,6 +175,9 @@ func (r *apiKeyRepository) GetByKey(ctx context.Context, key string) (*service.A
 		Where(apikey.KeyEQ(key)).
 		WithUser(func(q *dbent.UserQuery) {
 			q.WithAllowedGroups(func(gq *dbent.GroupQuery) {
+				gq.Select(group.FieldID)
+			})
+			q.WithGroupAccessGroups(func(gq *dbent.GroupQuery) {
 				gq.Select(group.FieldID)
 			})
 		}).
@@ -211,6 +217,7 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 				user.FieldUsername,
 				user.FieldStatus,
 				user.FieldRole,
+				user.FieldGroupAccessMode,
 				user.FieldBalance,
 				user.FieldConcurrency,
 				user.FieldBalanceNotifyEnabled,
@@ -224,6 +231,9 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 				user.FieldRpmLimit,
 			)
 			q.WithAllowedGroups(func(gq *dbent.GroupQuery) {
+				gq.Select(group.FieldID)
+			})
+			q.WithGroupAccessGroups(func(gq *dbent.GroupQuery) {
 				gq.Select(group.FieldID)
 			})
 		}).
@@ -1051,6 +1061,14 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 				}
 			}
 		}
+		if restricted := m.Edges.User.Edges.GroupAccessGroups; len(restricted) > 0 {
+			out.User.GroupAccessGroups = make([]int64, 0, len(restricted))
+			for _, g := range restricted {
+				if g != nil {
+					out.User.GroupAccessGroups = append(out.User.GroupAccessGroups, g.ID)
+				}
+			}
+		}
 	}
 	if m.Edges.Group != nil {
 		out.Group = groupEntityToService(m.Edges.Group)
@@ -1095,6 +1113,7 @@ func userEntityToService(u *dbent.User) *service.User {
 		FrozenBalance:              u.FrozenBalance,
 		Concurrency:                u.Concurrency,
 		Status:                     u.Status,
+		GroupAccessMode:            u.GroupAccessMode,
 		SignupSource:               u.SignupSource,
 		LastLoginAt:                u.LastLoginAt,
 		LastActiveAt:               u.LastActiveAt,

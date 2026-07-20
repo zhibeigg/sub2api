@@ -198,6 +198,15 @@ gateway:
   # This security-sensitive header name is intentionally not configurable.
   # 多分组 API Key 使用固定的 X-Sub2API-Group-ID 请求头，在路由、订阅和计费前
   # 选择该密钥已绑定的分组；此安全相关请求头名称不提供配置覆盖。
+  # Per-user standard-group restrictions are managed through
+  # GET/PUT /api/v1/admin/users/:id/group-config and stored in the database.
+  # Do not add YAML keys for access_mode, restricted_group_ids,
+  # exclusive_group_ids, or group_rates. Successful updates immediately
+  # invalidate that user's API-key auth caches across instances.
+  # 用户级 standard 分组限制通过 GET/PUT /api/v1/admin/users/:id/group-config
+  # 管理并保存到数据库；不要在 YAML 中新增 access_mode、restricted_group_ids、
+  # exclusive_group_ids 或 group_rates。保存成功后会立即使该用户的 API Key
+  # 认证缓存跨实例失效。subscription 分组仍由订阅管理，用户倍率保持独立。
   # Timeout for waiting upstream response headers (seconds)
   # 等待上游响应头超时时间（秒）
   response_header_timeout: 600

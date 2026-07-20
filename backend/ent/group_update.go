@@ -1025,6 +1025,21 @@ func (_u *GroupUpdate) AddAllowedUsers(v ...*User) *GroupUpdate {
 	return _u.AddAllowedUserIDs(ids...)
 }
 
+// AddAccessRestrictedUserIDs adds the "access_restricted_users" edge to the User entity by IDs.
+func (_u *GroupUpdate) AddAccessRestrictedUserIDs(ids ...int64) *GroupUpdate {
+	_u.mutation.AddAccessRestrictedUserIDs(ids...)
+	return _u
+}
+
+// AddAccessRestrictedUsers adds the "access_restricted_users" edges to the User entity.
+func (_u *GroupUpdate) AddAccessRestrictedUsers(v ...*User) *GroupUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddAccessRestrictedUserIDs(ids...)
+}
+
 // AddSubscriptionPlanIDs adds the "subscription_plans" edge to the SubscriptionPlan entity by IDs.
 func (_u *GroupUpdate) AddSubscriptionPlanIDs(ids ...int64) *GroupUpdate {
 	_u.mutation.AddSubscriptionPlanIDs(ids...)
@@ -1205,6 +1220,27 @@ func (_u *GroupUpdate) RemoveAllowedUsers(v ...*User) *GroupUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveAllowedUserIDs(ids...)
+}
+
+// ClearAccessRestrictedUsers clears all "access_restricted_users" edges to the User entity.
+func (_u *GroupUpdate) ClearAccessRestrictedUsers() *GroupUpdate {
+	_u.mutation.ClearAccessRestrictedUsers()
+	return _u
+}
+
+// RemoveAccessRestrictedUserIDs removes the "access_restricted_users" edge to User entities by IDs.
+func (_u *GroupUpdate) RemoveAccessRestrictedUserIDs(ids ...int64) *GroupUpdate {
+	_u.mutation.RemoveAccessRestrictedUserIDs(ids...)
+	return _u
+}
+
+// RemoveAccessRestrictedUsers removes "access_restricted_users" edges to User entities.
+func (_u *GroupUpdate) RemoveAccessRestrictedUsers(v ...*User) *GroupUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveAccessRestrictedUserIDs(ids...)
 }
 
 // ClearSubscriptionPlans clears all "subscription_plans" edges to the SubscriptionPlan entity.
@@ -1949,6 +1985,63 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		createE := &UserAllowedGroupCreate{config: _u.config, mutation: newUserAllowedGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.AccessRestrictedUsersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   group.AccessRestrictedUsersTable,
+			Columns: group.AccessRestrictedUsersPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt64),
+			},
+		}
+		createE := &UserGroupAccessGroupCreate{config: _u.config, mutation: newUserGroupAccessGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedAccessRestrictedUsersIDs(); len(nodes) > 0 && !_u.mutation.AccessRestrictedUsersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   group.AccessRestrictedUsersTable,
+			Columns: group.AccessRestrictedUsersPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		createE := &UserGroupAccessGroupCreate{config: _u.config, mutation: newUserGroupAccessGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.AccessRestrictedUsersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   group.AccessRestrictedUsersTable,
+			Columns: group.AccessRestrictedUsersPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		createE := &UserGroupAccessGroupCreate{config: _u.config, mutation: newUserGroupAccessGroupMutation(_u.config, OpCreate)}
 		createE.defaults()
 		_, specE := createE.createSpec()
 		edge.Target.Fields = specE.Fields
@@ -3076,6 +3169,21 @@ func (_u *GroupUpdateOne) AddAllowedUsers(v ...*User) *GroupUpdateOne {
 	return _u.AddAllowedUserIDs(ids...)
 }
 
+// AddAccessRestrictedUserIDs adds the "access_restricted_users" edge to the User entity by IDs.
+func (_u *GroupUpdateOne) AddAccessRestrictedUserIDs(ids ...int64) *GroupUpdateOne {
+	_u.mutation.AddAccessRestrictedUserIDs(ids...)
+	return _u
+}
+
+// AddAccessRestrictedUsers adds the "access_restricted_users" edges to the User entity.
+func (_u *GroupUpdateOne) AddAccessRestrictedUsers(v ...*User) *GroupUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddAccessRestrictedUserIDs(ids...)
+}
+
 // AddSubscriptionPlanIDs adds the "subscription_plans" edge to the SubscriptionPlan entity by IDs.
 func (_u *GroupUpdateOne) AddSubscriptionPlanIDs(ids ...int64) *GroupUpdateOne {
 	_u.mutation.AddSubscriptionPlanIDs(ids...)
@@ -3256,6 +3364,27 @@ func (_u *GroupUpdateOne) RemoveAllowedUsers(v ...*User) *GroupUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveAllowedUserIDs(ids...)
+}
+
+// ClearAccessRestrictedUsers clears all "access_restricted_users" edges to the User entity.
+func (_u *GroupUpdateOne) ClearAccessRestrictedUsers() *GroupUpdateOne {
+	_u.mutation.ClearAccessRestrictedUsers()
+	return _u
+}
+
+// RemoveAccessRestrictedUserIDs removes the "access_restricted_users" edge to User entities by IDs.
+func (_u *GroupUpdateOne) RemoveAccessRestrictedUserIDs(ids ...int64) *GroupUpdateOne {
+	_u.mutation.RemoveAccessRestrictedUserIDs(ids...)
+	return _u
+}
+
+// RemoveAccessRestrictedUsers removes "access_restricted_users" edges to User entities.
+func (_u *GroupUpdateOne) RemoveAccessRestrictedUsers(v ...*User) *GroupUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveAccessRestrictedUserIDs(ids...)
 }
 
 // ClearSubscriptionPlans clears all "subscription_plans" edges to the SubscriptionPlan entity.
@@ -4030,6 +4159,63 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		createE := &UserAllowedGroupCreate{config: _u.config, mutation: newUserAllowedGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.AccessRestrictedUsersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   group.AccessRestrictedUsersTable,
+			Columns: group.AccessRestrictedUsersPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt64),
+			},
+		}
+		createE := &UserGroupAccessGroupCreate{config: _u.config, mutation: newUserGroupAccessGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedAccessRestrictedUsersIDs(); len(nodes) > 0 && !_u.mutation.AccessRestrictedUsersCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   group.AccessRestrictedUsersTable,
+			Columns: group.AccessRestrictedUsersPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		createE := &UserGroupAccessGroupCreate{config: _u.config, mutation: newUserGroupAccessGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.AccessRestrictedUsersIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: true,
+			Table:   group.AccessRestrictedUsersTable,
+			Columns: group.AccessRestrictedUsersPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		createE := &UserGroupAccessGroupCreate{config: _u.config, mutation: newUserGroupAccessGroupMutation(_u.config, OpCreate)}
 		createE.defaults()
 		_, specE := createE.createSpec()
 		edge.Target.Fields = specE.Fields

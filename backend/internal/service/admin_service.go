@@ -17,6 +17,8 @@ type AdminService interface {
 	GetUserIncludeDeleted(ctx context.Context, id int64) (*User, error)
 	CreateUser(ctx context.Context, input *CreateUserInput) (*User, error)
 	UpdateUser(ctx context.Context, id int64, input *UpdateUserInput) (*User, error)
+	GetUserGroupConfig(ctx context.Context, id int64) (*UserGroupConfig, error)
+	UpdateUserGroupConfig(ctx context.Context, id int64, input *UpdateUserGroupConfigInput) (*UserGroupConfig, error)
 	DeleteUser(ctx context.Context, id int64) error
 	UpdateUserBalance(ctx context.Context, userID int64, balance float64, operation string, notes string) (*User, error)
 	BatchUpdateConcurrency(ctx context.Context, userIDs []int64, value int, mode string) (int, error)
@@ -163,6 +165,22 @@ type UpdateUserInput struct {
 	GroupRates map[int64]*float64
 	// ActorAdminID 执行本次操作的管理员ID(来自JWT)，仅用于权限敏感操作的审计日志。
 	ActorAdminID int64
+}
+
+type UserGroupConfig struct {
+	AccessMode         string            `json:"access_mode"`
+	RestrictedGroupIDs []int64           `json:"restricted_group_ids"`
+	ExclusiveGroupIDs  []int64           `json:"exclusive_group_ids"`
+	GroupRates         map[int64]float64 `json:"group_rates"`
+}
+
+type UpdateUserGroupConfigInput struct {
+	AccessMode         string
+	RestrictedGroupIDs []int64
+	ExclusiveGroupIDs  []int64
+	// GroupRates is a partial update: nil/empty leaves rates unchanged; a nil
+	// value clears one group's custom rate.
+	GroupRates map[int64]*float64
 }
 
 type AdminBindAuthIdentityInput struct {

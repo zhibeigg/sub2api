@@ -1356,7 +1356,7 @@ func (s *OpenAIGatewayService) ResolveEffectiveGroupBinding(ctx context.Context,
 	var firstGroup *Group
 	for i := range apiKey.GroupBindings {
 		b := apiKey.GroupBindings[i]
-		if b.Group == nil {
+		if b.Group == nil || !apiKey.AllowsGroupByUserRestriction(b.Group) {
 			continue
 		}
 		if firstGroup == nil {
@@ -1385,7 +1385,7 @@ func (s *OpenAIGatewayService) ResolveEffectiveImageGroupBinding(ctx context.Con
 	for i := range apiKey.GroupBindings {
 		binding := apiKey.GroupBindings[i]
 		group := binding.Group
-		if group == nil {
+		if group == nil || !apiKey.AllowsGroupByUserRestriction(group) {
 			continue
 		}
 		if firstGroup == nil {

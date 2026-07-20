@@ -55,6 +55,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
+	"github.com/Wei-Shaw/sub2api/ent/usergroupaccessgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscriptiongroup"
@@ -147,6 +148,8 @@ type Client struct {
 	UserAttributeDefinition *UserAttributeDefinitionClient
 	// UserAttributeValue is the client for interacting with the UserAttributeValue builders.
 	UserAttributeValue *UserAttributeValueClient
+	// UserGroupAccessGroup is the client for interacting with the UserGroupAccessGroup builders.
+	UserGroupAccessGroup *UserGroupAccessGroupClient
 	// UserPlatformQuota is the client for interacting with the UserPlatformQuota builders.
 	UserPlatformQuota *UserPlatformQuotaClient
 	// UserSubscription is the client for interacting with the UserSubscription builders.
@@ -204,6 +207,7 @@ func (c *Client) init() {
 	c.UserAllowedGroup = NewUserAllowedGroupClient(c.config)
 	c.UserAttributeDefinition = NewUserAttributeDefinitionClient(c.config)
 	c.UserAttributeValue = NewUserAttributeValueClient(c.config)
+	c.UserGroupAccessGroup = NewUserGroupAccessGroupClient(c.config)
 	c.UserPlatformQuota = NewUserPlatformQuotaClient(c.config)
 	c.UserSubscription = NewUserSubscriptionClient(c.config)
 	c.UserSubscriptionGroup = NewUserSubscriptionGroupClient(c.config)
@@ -339,6 +343,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		UserAllowedGroup:              NewUserAllowedGroupClient(cfg),
 		UserAttributeDefinition:       NewUserAttributeDefinitionClient(cfg),
 		UserAttributeValue:            NewUserAttributeValueClient(cfg),
+		UserGroupAccessGroup:          NewUserGroupAccessGroupClient(cfg),
 		UserPlatformQuota:             NewUserPlatformQuotaClient(cfg),
 		UserSubscription:              NewUserSubscriptionClient(cfg),
 		UserSubscriptionGroup:         NewUserSubscriptionGroupClient(cfg),
@@ -401,6 +406,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		UserAllowedGroup:              NewUserAllowedGroupClient(cfg),
 		UserAttributeDefinition:       NewUserAttributeDefinitionClient(cfg),
 		UserAttributeValue:            NewUserAttributeValueClient(cfg),
+		UserGroupAccessGroup:          NewUserGroupAccessGroupClient(cfg),
 		UserPlatformQuota:             NewUserPlatformQuotaClient(cfg),
 		UserSubscription:              NewUserSubscriptionClient(cfg),
 		UserSubscriptionGroup:         NewUserSubscriptionGroupClient(cfg),
@@ -444,8 +450,8 @@ func (c *Client) Use(hooks ...Hook) {
 		c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
 		c.SubscriptionPlanGroup, c.TLSFingerprintProfile, c.UsageCleanupTask,
 		c.UsageLog, c.User, c.UserAllowedGroup, c.UserAttributeDefinition,
-		c.UserAttributeValue, c.UserPlatformQuota, c.UserSubscription,
-		c.UserSubscriptionGroup,
+		c.UserAttributeValue, c.UserGroupAccessGroup, c.UserPlatformQuota,
+		c.UserSubscription, c.UserSubscriptionGroup,
 	} {
 		n.Use(hooks...)
 	}
@@ -466,8 +472,8 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
 		c.SubscriptionPlanGroup, c.TLSFingerprintProfile, c.UsageCleanupTask,
 		c.UsageLog, c.User, c.UserAllowedGroup, c.UserAttributeDefinition,
-		c.UserAttributeValue, c.UserPlatformQuota, c.UserSubscription,
-		c.UserSubscriptionGroup,
+		c.UserAttributeValue, c.UserGroupAccessGroup, c.UserPlatformQuota,
+		c.UserSubscription, c.UserSubscriptionGroup,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -556,6 +562,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.UserAttributeDefinition.mutate(ctx, m)
 	case *UserAttributeValueMutation:
 		return c.UserAttributeValue.mutate(ctx, m)
+	case *UserGroupAccessGroupMutation:
+		return c.UserGroupAccessGroup.mutate(ctx, m)
 	case *UserPlatformQuotaMutation:
 		return c.UserPlatformQuota.mutate(ctx, m)
 	case *UserSubscriptionMutation:
@@ -3599,6 +3607,22 @@ func (c *GroupClient) QueryAllowedUsers(_m *Group) *UserQuery {
 	return query
 }
 
+// QueryAccessRestrictedUsers queries the access_restricted_users edge of a Group.
+func (c *GroupClient) QueryAccessRestrictedUsers(_m *Group) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(group.Table, group.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, true, group.AccessRestrictedUsersTable, group.AccessRestrictedUsersPrimaryKey...),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // QuerySubscriptionPlans queries the subscription_plans edge of a Group.
 func (c *GroupClient) QuerySubscriptionPlans(_m *Group) *SubscriptionPlanQuery {
 	query := (&SubscriptionPlanClient{config: c.config}).Query()
@@ -3672,6 +3696,22 @@ func (c *GroupClient) QueryUserAllowedGroups(_m *Group) *UserAllowedGroupQuery {
 			sqlgraph.From(group.Table, group.FieldID, id),
 			sqlgraph.To(userallowedgroup.Table, userallowedgroup.GroupColumn),
 			sqlgraph.Edge(sqlgraph.O2M, true, group.UserAllowedGroupsTable, group.UserAllowedGroupsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryUserGroupAccessGroups queries the user_group_access_groups edge of a Group.
+func (c *GroupClient) QueryUserGroupAccessGroups(_m *Group) *UserGroupAccessGroupQuery {
+	query := (&UserGroupAccessGroupClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(group.Table, group.FieldID, id),
+			sqlgraph.To(usergroupaccessgroup.Table, usergroupaccessgroup.GroupColumn),
+			sqlgraph.Edge(sqlgraph.O2M, true, group.UserGroupAccessGroupsTable, group.UserGroupAccessGroupsColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -6508,6 +6548,22 @@ func (c *UserClient) QueryAllowedGroups(_m *User) *GroupQuery {
 	return query
 }
 
+// QueryGroupAccessGroups queries the group_access_groups edge of a User.
+func (c *UserClient) QueryGroupAccessGroups(_m *User) *GroupQuery {
+	query := (&GroupClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(group.Table, group.FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, false, user.GroupAccessGroupsTable, user.GroupAccessGroupsPrimaryKey...),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // QueryUsageLogs queries the usage_logs edge of a User.
 func (c *UserClient) QueryUsageLogs(_m *User) *UsageLogQuery {
 	query := (&UsageLogClient{config: c.config}).Query()
@@ -6629,6 +6685,22 @@ func (c *UserClient) QueryUserAllowedGroups(_m *User) *UserAllowedGroupQuery {
 			sqlgraph.From(user.Table, user.FieldID, id),
 			sqlgraph.To(userallowedgroup.Table, userallowedgroup.UserColumn),
 			sqlgraph.Edge(sqlgraph.O2M, true, user.UserAllowedGroupsTable, user.UserAllowedGroupsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryUserGroupAccessGroups queries the user_group_access_groups edge of a User.
+func (c *UserClient) QueryUserGroupAccessGroups(_m *User) *UserGroupAccessGroupQuery {
+	query := (&UserGroupAccessGroupClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(usergroupaccessgroup.Table, usergroupaccessgroup.UserColumn),
+			sqlgraph.Edge(sqlgraph.O2M, true, user.UserGroupAccessGroupsTable, user.UserGroupAccessGroupsColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -7092,6 +7164,122 @@ func (c *UserAttributeValueClient) mutate(ctx context.Context, m *UserAttributeV
 		return (&UserAttributeValueDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown UserAttributeValue mutation op: %q", m.Op())
+	}
+}
+
+// UserGroupAccessGroupClient is a client for the UserGroupAccessGroup schema.
+type UserGroupAccessGroupClient struct {
+	config
+}
+
+// NewUserGroupAccessGroupClient returns a client for the UserGroupAccessGroup from the given config.
+func NewUserGroupAccessGroupClient(c config) *UserGroupAccessGroupClient {
+	return &UserGroupAccessGroupClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `usergroupaccessgroup.Hooks(f(g(h())))`.
+func (c *UserGroupAccessGroupClient) Use(hooks ...Hook) {
+	c.hooks.UserGroupAccessGroup = append(c.hooks.UserGroupAccessGroup, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `usergroupaccessgroup.Intercept(f(g(h())))`.
+func (c *UserGroupAccessGroupClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UserGroupAccessGroup = append(c.inters.UserGroupAccessGroup, interceptors...)
+}
+
+// Create returns a builder for creating a UserGroupAccessGroup entity.
+func (c *UserGroupAccessGroupClient) Create() *UserGroupAccessGroupCreate {
+	mutation := newUserGroupAccessGroupMutation(c.config, OpCreate)
+	return &UserGroupAccessGroupCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UserGroupAccessGroup entities.
+func (c *UserGroupAccessGroupClient) CreateBulk(builders ...*UserGroupAccessGroupCreate) *UserGroupAccessGroupCreateBulk {
+	return &UserGroupAccessGroupCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UserGroupAccessGroupClient) MapCreateBulk(slice any, setFunc func(*UserGroupAccessGroupCreate, int)) *UserGroupAccessGroupCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UserGroupAccessGroupCreateBulk{err: fmt.Errorf("calling to UserGroupAccessGroupClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UserGroupAccessGroupCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UserGroupAccessGroupCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UserGroupAccessGroup.
+func (c *UserGroupAccessGroupClient) Update() *UserGroupAccessGroupUpdate {
+	mutation := newUserGroupAccessGroupMutation(c.config, OpUpdate)
+	return &UserGroupAccessGroupUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UserGroupAccessGroupClient) UpdateOne(_m *UserGroupAccessGroup) *UserGroupAccessGroupUpdateOne {
+	mutation := newUserGroupAccessGroupMutation(c.config, OpUpdateOne)
+	mutation.user = &_m.UserID
+	mutation.group = &_m.GroupID
+	return &UserGroupAccessGroupUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UserGroupAccessGroup.
+func (c *UserGroupAccessGroupClient) Delete() *UserGroupAccessGroupDelete {
+	mutation := newUserGroupAccessGroupMutation(c.config, OpDelete)
+	return &UserGroupAccessGroupDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Query returns a query builder for UserGroupAccessGroup.
+func (c *UserGroupAccessGroupClient) Query() *UserGroupAccessGroupQuery {
+	return &UserGroupAccessGroupQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUserGroupAccessGroup},
+		inters: c.Interceptors(),
+	}
+}
+
+// QueryUser queries the user edge of a UserGroupAccessGroup.
+func (c *UserGroupAccessGroupClient) QueryUser(_m *UserGroupAccessGroup) *UserQuery {
+	return c.Query().
+		Where(usergroupaccessgroup.UserID(_m.UserID), usergroupaccessgroup.GroupID(_m.GroupID)).
+		QueryUser()
+}
+
+// QueryGroup queries the group edge of a UserGroupAccessGroup.
+func (c *UserGroupAccessGroupClient) QueryGroup(_m *UserGroupAccessGroup) *GroupQuery {
+	return c.Query().
+		Where(usergroupaccessgroup.UserID(_m.UserID), usergroupaccessgroup.GroupID(_m.GroupID)).
+		QueryGroup()
+}
+
+// Hooks returns the client hooks.
+func (c *UserGroupAccessGroupClient) Hooks() []Hook {
+	return c.hooks.UserGroupAccessGroup
+}
+
+// Interceptors returns the client interceptors.
+func (c *UserGroupAccessGroupClient) Interceptors() []Interceptor {
+	return c.inters.UserGroupAccessGroup
+}
+
+func (c *UserGroupAccessGroupClient) mutate(ctx context.Context, m *UserGroupAccessGroupMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UserGroupAccessGroupCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UserGroupAccessGroupUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UserGroupAccessGroupUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UserGroupAccessGroupDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UserGroupAccessGroup mutation op: %q", m.Op())
 	}
 }
 
@@ -7622,7 +7810,8 @@ type (
 		PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting, SubscriptionPlan,
 		SubscriptionPlanGroup, TLSFingerprintProfile, UsageCleanupTask, UsageLog, User,
 		UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
-		UserPlatformQuota, UserSubscription, UserSubscriptionGroup []ent.Hook
+		UserGroupAccessGroup, UserPlatformQuota, UserSubscription,
+		UserSubscriptionGroup []ent.Hook
 	}
 	inters struct {
 		APIKey, APIKeyGroup, Account, AccountGroup, Announcement,
@@ -7635,7 +7824,8 @@ type (
 		PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting, SubscriptionPlan,
 		SubscriptionPlanGroup, TLSFingerprintProfile, UsageCleanupTask, UsageLog, User,
 		UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
-		UserPlatformQuota, UserSubscription, UserSubscriptionGroup []ent.Interceptor
+		UserGroupAccessGroup, UserPlatformQuota, UserSubscription,
+		UserSubscriptionGroup []ent.Interceptor
 	}
 )
 

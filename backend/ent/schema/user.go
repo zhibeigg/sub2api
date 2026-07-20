@@ -119,6 +119,19 @@ func (User) Fields() []ent.Field {
 		field.Int("rpm_limit").
 			Default(0),
 
+		// 用户标准分组访问模式：inherit 保持公开/专属既有授权语义；restricted 额外应用用户白名单。
+		field.String("group_access_mode").
+			MaxLen(20).
+			Default("inherit").
+			Validate(func(value string) error {
+				switch value {
+				case "inherit", "restricted":
+					return nil
+				default:
+					return fmt.Errorf("must be inherit or restricted")
+				}
+			}),
+
 		// 注册时绑定的优惠码 ID（可空）。用于第三方支付充值到账加成，以及按优惠链接筛选用量统计。
 		field.Int64("promo_code_id").
 			Optional().
@@ -136,6 +149,8 @@ func (User) Edges() []ent.Edge {
 		edge.To("announcement_reads", AnnouncementRead.Type),
 		edge.To("allowed_groups", Group.Type).
 			Through("user_allowed_groups", UserAllowedGroup.Type),
+		edge.To("group_access_groups", Group.Type).
+			Through("user_group_access_groups", UserGroupAccessGroup.Type),
 		edge.To("usage_logs", UsageLog.Type),
 		edge.To("attribute_values", UserAttributeValue.Type),
 		edge.To("promo_code_usages", PromoCodeUsage.Type),

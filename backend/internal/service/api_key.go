@@ -84,6 +84,32 @@ func (k *APIKey) IsActive() bool {
 	return k.Status == StatusActive
 }
 
+// AllowsGroupByUserRestriction applies only the optional per-user standard
+// group allowlist. Subscription groups remain governed by subscriptions.
+func (k *APIKey) AllowsGroupByUserRestriction(group *Group) bool {
+	if group == nil || group.IsSubscriptionType() || k == nil || k.User == nil {
+		return true
+	}
+	if k.User.GroupAccessMode != GroupAccessModeRestricted {
+		return true
+	}
+	// In restricted mode the allowlist intersects the legacy authorization, so
+	// exclusive standard groups must still keep their explicit user grant.
+	return k.User.CanBindGroup(group.ID, group.IsExclusive)
+}
+
+func (k *APIKey) HasAllowedGroupBindingByUserRestriction() bool {
+	if k == nil || len(k.GroupBindings) == 0 {
+		return true
+	}
+	for i := range k.GroupBindings {
+		if k.GroupBindings[i].Group != nil && k.AllowsGroupByUserRestriction(k.GroupBindings[i].Group) {
+			return true
+		}
+	}
+	return false
+}
+
 // HasRateLimits returns true if any rate limit window is configured
 func (k *APIKey) HasRateLimits() bool {
 	return k.RateLimit5h > 0 || k.RateLimit1d > 0 || k.RateLimit7d > 0

@@ -1,23 +1,30 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { post } = vi.hoisted(() => ({
+const { get, post, put } = vi.hoisted(() => ({
+  get: vi.fn(),
   post: vi.fn(),
+  put: vi.fn(),
 }))
 
 vi.mock('@/api/client', () => ({
   apiClient: {
+    get,
     post,
+    put,
   },
 }))
 
 import {
   batchUpdateLimits,
   bindUserAuthIdentity,
+  getGroupConfig,
+  updateGroupConfig,
   type AdminBindAuthIdentityRequest,
   type AdminBoundAuthIdentity,
   type BatchUpdateUserLimitsRequest,
   type BatchUpdateUserLimitsResponse,
 } from '@/api/admin/users'
+import type { UpdateUserGroupConfigRequest, UserGroupConfig } from '@/types'
 
 type Assert<T extends true> = T
 type IsExact<T, U> = (
@@ -80,10 +87,28 @@ const batchRequestContractExact: Assert<
 const batchResponseContractExact: Assert<
   IsExact<BatchUpdateUserLimitsResponse, { affected: number }>
 > = true
+const groupConfigContractExact: Assert<
+  IsExact<UserGroupConfig, {
+    access_mode: 'inherit' | 'restricted'
+    restricted_group_ids: number[]
+    exclusive_group_ids: number[]
+    group_rates: Record<number, number>
+  }>
+> = true
+const updateGroupConfigContractExact: Assert<
+  IsExact<UpdateUserGroupConfigRequest, {
+    access_mode: 'inherit' | 'restricted'
+    restricted_group_ids: number[]
+    exclusive_group_ids: number[]
+    group_rates: Record<number, number | null>
+  }>
+> = true
 
 describe('admin users api auth identity binding', () => {
   beforeEach(() => {
+    get.mockReset()
     post.mockReset()
+    put.mockReset()
   })
 
   it('posts the backend-compatible auth identity bind payload and returns the backend response shape', async () => {
@@ -146,5 +171,42 @@ describe('admin users api auth identity binding', () => {
     expect(result).toEqual({ affected: 2 })
     expect(batchRequestContractExact).toBe(true)
     expect(batchResponseContractExact).toBe(true)
+  })
+
+  it('gets the dedicated user group configuration endpoint', async () => {
+    const response: UserGroupConfig = {
+      access_mode: 'inherit',
+      restricted_group_ids: [],
+      exclusive_group_ids: [8],
+      group_rates: { 2: 1.25 },
+    }
+    get.mockResolvedValue({ data: response })
+
+    await expect(getGroupConfig(19)).resolves.toEqual(response)
+
+    expect(get).toHaveBeenCalledWith('/admin/users/19/group-config')
+    expect(groupConfigContractExact).toBe(true)
+  })
+
+  it('puts the complete group configuration payload including nullable rate clears', async () => {
+    const request: UpdateUserGroupConfigRequest = {
+      access_mode: 'restricted',
+      restricted_group_ids: [2],
+      exclusive_group_ids: [8],
+      group_rates: { 2: 1.5, 8: null },
+    }
+    put.mockResolvedValue({
+      data: {
+        access_mode: 'restricted',
+        restricted_group_ids: [2],
+        exclusive_group_ids: [8],
+        group_rates: { 2: 1.5 },
+      } satisfies UserGroupConfig,
+    })
+
+    await updateGroupConfig(19, request)
+
+    expect(put).toHaveBeenCalledWith('/admin/users/19/group-config', request)
+    expect(updateGroupConfigContractExact).toBe(true)
   })
 })

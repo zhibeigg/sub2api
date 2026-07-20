@@ -65,6 +65,8 @@ const (
 	FieldFirstRechargeBonusUsed = "first_recharge_bonus_used"
 	// FieldRpmLimit holds the string denoting the rpm_limit field in the database.
 	FieldRpmLimit = "rpm_limit"
+	// FieldGroupAccessMode holds the string denoting the group_access_mode field in the database.
+	FieldGroupAccessMode = "group_access_mode"
 	// FieldPromoCodeID holds the string denoting the promo_code_id field in the database.
 	FieldPromoCodeID = "promo_code_id"
 	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
@@ -79,6 +81,8 @@ const (
 	EdgeAnnouncementReads = "announcement_reads"
 	// EdgeAllowedGroups holds the string denoting the allowed_groups edge name in mutations.
 	EdgeAllowedGroups = "allowed_groups"
+	// EdgeGroupAccessGroups holds the string denoting the group_access_groups edge name in mutations.
+	EdgeGroupAccessGroups = "group_access_groups"
 	// EdgeUsageLogs holds the string denoting the usage_logs edge name in mutations.
 	EdgeUsageLogs = "usage_logs"
 	// EdgeAttributeValues holds the string denoting the attribute_values edge name in mutations.
@@ -95,6 +99,8 @@ const (
 	EdgePlatformQuotas = "platform_quotas"
 	// EdgeUserAllowedGroups holds the string denoting the user_allowed_groups edge name in mutations.
 	EdgeUserAllowedGroups = "user_allowed_groups"
+	// EdgeUserGroupAccessGroups holds the string denoting the user_group_access_groups edge name in mutations.
+	EdgeUserGroupAccessGroups = "user_group_access_groups"
 	// Table holds the table name of the user in the database.
 	Table = "users"
 	// APIKeysTable is the table that holds the api_keys relation/edge.
@@ -137,6 +143,11 @@ const (
 	// AllowedGroupsInverseTable is the table name for the Group entity.
 	// It exists in this package in order to avoid circular dependency with the "group" package.
 	AllowedGroupsInverseTable = "groups"
+	// GroupAccessGroupsTable is the table that holds the group_access_groups relation/edge. The primary key declared below.
+	GroupAccessGroupsTable = "user_group_access_groups"
+	// GroupAccessGroupsInverseTable is the table name for the Group entity.
+	// It exists in this package in order to avoid circular dependency with the "group" package.
+	GroupAccessGroupsInverseTable = "groups"
 	// UsageLogsTable is the table that holds the usage_logs relation/edge.
 	UsageLogsTable = "usage_logs"
 	// UsageLogsInverseTable is the table name for the UsageLog entity.
@@ -193,6 +204,13 @@ const (
 	UserAllowedGroupsInverseTable = "user_allowed_groups"
 	// UserAllowedGroupsColumn is the table column denoting the user_allowed_groups relation/edge.
 	UserAllowedGroupsColumn = "user_id"
+	// UserGroupAccessGroupsTable is the table that holds the user_group_access_groups relation/edge.
+	UserGroupAccessGroupsTable = "user_group_access_groups"
+	// UserGroupAccessGroupsInverseTable is the table name for the UserGroupAccessGroup entity.
+	// It exists in this package in order to avoid circular dependency with the "usergroupaccessgroup" package.
+	UserGroupAccessGroupsInverseTable = "user_group_access_groups"
+	// UserGroupAccessGroupsColumn is the table column denoting the user_group_access_groups relation/edge.
+	UserGroupAccessGroupsColumn = "user_id"
 )
 
 // Columns holds all SQL columns for user fields.
@@ -223,6 +241,7 @@ var Columns = []string{
 	FieldTotalRecharged,
 	FieldFirstRechargeBonusUsed,
 	FieldRpmLimit,
+	FieldGroupAccessMode,
 	FieldPromoCodeID,
 }
 
@@ -230,6 +249,9 @@ var (
 	// AllowedGroupsPrimaryKey and AllowedGroupsColumn2 are the table columns denoting the
 	// primary key for the allowed_groups relation (M2M).
 	AllowedGroupsPrimaryKey = []string{"user_id", "group_id"}
+	// GroupAccessGroupsPrimaryKey and GroupAccessGroupsColumn2 are the table columns denoting the
+	// primary key for the group_access_groups relation (M2M).
+	GroupAccessGroupsPrimaryKey = []string{"user_id", "group_id"}
 )
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -298,6 +320,10 @@ var (
 	DefaultFirstRechargeBonusUsed bool
 	// DefaultRpmLimit holds the default value on creation for the "rpm_limit" field.
 	DefaultRpmLimit int
+	// DefaultGroupAccessMode holds the default value on creation for the "group_access_mode" field.
+	DefaultGroupAccessMode string
+	// GroupAccessModeValidator is a validator for the "group_access_mode" field. It is called by the builders before save.
+	GroupAccessModeValidator func(string) error
 )
 
 // OrderOption defines the ordering options for the User queries.
@@ -433,6 +459,11 @@ func ByRpmLimit(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRpmLimit, opts...).ToFunc()
 }
 
+// ByGroupAccessMode orders the results by the group_access_mode field.
+func ByGroupAccessMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldGroupAccessMode, opts...).ToFunc()
+}
+
 // ByPromoCodeID orders the results by the promo_code_id field.
 func ByPromoCodeID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPromoCodeID, opts...).ToFunc()
@@ -519,6 +550,20 @@ func ByAllowedGroupsCount(opts ...sql.OrderTermOption) OrderOption {
 func ByAllowedGroups(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
 		sqlgraph.OrderByNeighborTerms(s, newAllowedGroupsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByGroupAccessGroupsCount orders the results by group_access_groups count.
+func ByGroupAccessGroupsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newGroupAccessGroupsStep(), opts...)
+	}
+}
+
+// ByGroupAccessGroups orders the results by group_access_groups terms.
+func ByGroupAccessGroups(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newGroupAccessGroupsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -633,6 +678,20 @@ func ByUserAllowedGroups(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption
 		sqlgraph.OrderByNeighborTerms(s, newUserAllowedGroupsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByUserGroupAccessGroupsCount orders the results by user_group_access_groups count.
+func ByUserGroupAccessGroupsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newUserGroupAccessGroupsStep(), opts...)
+	}
+}
+
+// ByUserGroupAccessGroups orders the results by user_group_access_groups terms.
+func ByUserGroupAccessGroups(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newUserGroupAccessGroupsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newAPIKeysStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -673,6 +732,13 @@ func newAllowedGroupsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(AllowedGroupsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2M, false, AllowedGroupsTable, AllowedGroupsPrimaryKey...),
+	)
+}
+func newGroupAccessGroupsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(GroupAccessGroupsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2M, false, GroupAccessGroupsTable, GroupAccessGroupsPrimaryKey...),
 	)
 }
 func newUsageLogsStep() *sqlgraph.Step {
@@ -729,5 +795,12 @@ func newUserAllowedGroupsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(UserAllowedGroupsInverseTable, UserAllowedGroupsColumn),
 		sqlgraph.Edge(sqlgraph.O2M, true, UserAllowedGroupsTable, UserAllowedGroupsColumn),
+	)
+}
+func newUserGroupAccessGroupsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(UserGroupAccessGroupsInverseTable, UserGroupAccessGroupsColumn),
+		sqlgraph.Edge(sqlgraph.O2M, true, UserGroupAccessGroupsTable, UserGroupAccessGroupsColumn),
 	)
 }

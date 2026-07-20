@@ -130,6 +130,8 @@ const (
 	EdgeBoundAPIKeys = "bound_api_keys"
 	// EdgeAllowedUsers holds the string denoting the allowed_users edge name in mutations.
 	EdgeAllowedUsers = "allowed_users"
+	// EdgeAccessRestrictedUsers holds the string denoting the access_restricted_users edge name in mutations.
+	EdgeAccessRestrictedUsers = "access_restricted_users"
 	// EdgeSubscriptionPlans holds the string denoting the subscription_plans edge name in mutations.
 	EdgeSubscriptionPlans = "subscription_plans"
 	// EdgeAuthorizedSubscriptions holds the string denoting the authorized_subscriptions edge name in mutations.
@@ -140,6 +142,8 @@ const (
 	EdgeAPIKeyGroups = "api_key_groups"
 	// EdgeUserAllowedGroups holds the string denoting the user_allowed_groups edge name in mutations.
 	EdgeUserAllowedGroups = "user_allowed_groups"
+	// EdgeUserGroupAccessGroups holds the string denoting the user_group_access_groups edge name in mutations.
+	EdgeUserGroupAccessGroups = "user_group_access_groups"
 	// EdgeSubscriptionPlanGroups holds the string denoting the subscription_plan_groups edge name in mutations.
 	EdgeSubscriptionPlanGroups = "subscription_plan_groups"
 	// EdgeUserSubscriptionGroups holds the string denoting the user_subscription_groups edge name in mutations.
@@ -189,6 +193,11 @@ const (
 	// AllowedUsersInverseTable is the table name for the User entity.
 	// It exists in this package in order to avoid circular dependency with the "user" package.
 	AllowedUsersInverseTable = "users"
+	// AccessRestrictedUsersTable is the table that holds the access_restricted_users relation/edge. The primary key declared below.
+	AccessRestrictedUsersTable = "user_group_access_groups"
+	// AccessRestrictedUsersInverseTable is the table name for the User entity.
+	// It exists in this package in order to avoid circular dependency with the "user" package.
+	AccessRestrictedUsersInverseTable = "users"
 	// SubscriptionPlansTable is the table that holds the subscription_plans relation/edge. The primary key declared below.
 	SubscriptionPlansTable = "subscription_plan_groups"
 	// SubscriptionPlansInverseTable is the table name for the SubscriptionPlan entity.
@@ -220,6 +229,13 @@ const (
 	UserAllowedGroupsInverseTable = "user_allowed_groups"
 	// UserAllowedGroupsColumn is the table column denoting the user_allowed_groups relation/edge.
 	UserAllowedGroupsColumn = "group_id"
+	// UserGroupAccessGroupsTable is the table that holds the user_group_access_groups relation/edge.
+	UserGroupAccessGroupsTable = "user_group_access_groups"
+	// UserGroupAccessGroupsInverseTable is the table name for the UserGroupAccessGroup entity.
+	// It exists in this package in order to avoid circular dependency with the "usergroupaccessgroup" package.
+	UserGroupAccessGroupsInverseTable = "user_group_access_groups"
+	// UserGroupAccessGroupsColumn is the table column denoting the user_group_access_groups relation/edge.
+	UserGroupAccessGroupsColumn = "group_id"
 	// SubscriptionPlanGroupsTable is the table that holds the subscription_plan_groups relation/edge.
 	SubscriptionPlanGroupsTable = "subscription_plan_groups"
 	// SubscriptionPlanGroupsInverseTable is the table name for the SubscriptionPlanGroup entity.
@@ -301,6 +317,9 @@ var (
 	// AllowedUsersPrimaryKey and AllowedUsersColumn2 are the table columns denoting the
 	// primary key for the allowed_users relation (M2M).
 	AllowedUsersPrimaryKey = []string{"user_id", "group_id"}
+	// AccessRestrictedUsersPrimaryKey and AccessRestrictedUsersColumn2 are the table columns denoting the
+	// primary key for the access_restricted_users relation (M2M).
+	AccessRestrictedUsersPrimaryKey = []string{"user_id", "group_id"}
 	// SubscriptionPlansPrimaryKey and SubscriptionPlansColumn2 are the table columns denoting the
 	// primary key for the subscription_plans relation (M2M).
 	SubscriptionPlansPrimaryKey = []string{"plan_id", "group_id"}
@@ -744,6 +763,20 @@ func ByAllowedUsers(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
+// ByAccessRestrictedUsersCount orders the results by access_restricted_users count.
+func ByAccessRestrictedUsersCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newAccessRestrictedUsersStep(), opts...)
+	}
+}
+
+// ByAccessRestrictedUsers orders the results by access_restricted_users terms.
+func ByAccessRestrictedUsers(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newAccessRestrictedUsersStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
 // BySubscriptionPlansCount orders the results by subscription_plans count.
 func BySubscriptionPlansCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -811,6 +844,20 @@ func ByUserAllowedGroupsCount(opts ...sql.OrderTermOption) OrderOption {
 func ByUserAllowedGroups(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
 		sqlgraph.OrderByNeighborTerms(s, newUserAllowedGroupsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByUserGroupAccessGroupsCount orders the results by user_group_access_groups count.
+func ByUserGroupAccessGroupsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newUserGroupAccessGroupsStep(), opts...)
+	}
+}
+
+// ByUserGroupAccessGroups orders the results by user_group_access_groups terms.
+func ByUserGroupAccessGroups(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newUserGroupAccessGroupsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -890,6 +937,13 @@ func newAllowedUsersStep() *sqlgraph.Step {
 		sqlgraph.Edge(sqlgraph.M2M, true, AllowedUsersTable, AllowedUsersPrimaryKey...),
 	)
 }
+func newAccessRestrictedUsersStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(AccessRestrictedUsersInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2M, true, AccessRestrictedUsersTable, AccessRestrictedUsersPrimaryKey...),
+	)
+}
 func newSubscriptionPlansStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -923,6 +977,13 @@ func newUserAllowedGroupsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(UserAllowedGroupsInverseTable, UserAllowedGroupsColumn),
 		sqlgraph.Edge(sqlgraph.O2M, true, UserAllowedGroupsTable, UserAllowedGroupsColumn),
+	)
+}
+func newUserGroupAccessGroupsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(UserGroupAccessGroupsInverseTable, UserGroupAccessGroupsColumn),
+		sqlgraph.Edge(sqlgraph.O2M, true, UserGroupAccessGroupsTable, UserGroupAccessGroupsColumn),
 	)
 }
 func newSubscriptionPlanGroupsStep() *sqlgraph.Step {

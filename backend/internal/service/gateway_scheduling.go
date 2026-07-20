@@ -2486,7 +2486,7 @@ func (s *GatewayService) ResolveEffectiveGroupBinding(ctx context.Context, apiKe
 	var firstGroup *Group
 	for i := range apiKey.GroupBindings {
 		b := apiKey.GroupBindings[i]
-		if b.Group == nil {
+		if b.Group == nil || !apiKey.AllowsGroupByUserRestriction(b.Group) {
 			continue
 		}
 		if firstGroup == nil {

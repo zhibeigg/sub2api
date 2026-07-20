@@ -368,6 +368,20 @@ func (_c *UserCreate) SetNillableRpmLimit(v *int) *UserCreate {
 	return _c
 }
 
+// SetGroupAccessMode sets the "group_access_mode" field.
+func (_c *UserCreate) SetGroupAccessMode(v string) *UserCreate {
+	_c.mutation.SetGroupAccessMode(v)
+	return _c
+}
+
+// SetNillableGroupAccessMode sets the "group_access_mode" field if the given value is not nil.
+func (_c *UserCreate) SetNillableGroupAccessMode(v *string) *UserCreate {
+	if v != nil {
+		_c.SetGroupAccessMode(*v)
+	}
+	return _c
+}
+
 // SetPromoCodeID sets the "promo_code_id" field.
 func (_c *UserCreate) SetPromoCodeID(v int64) *UserCreate {
 	_c.mutation.SetPromoCodeID(v)
@@ -470,6 +484,21 @@ func (_c *UserCreate) AddAllowedGroups(v ...*Group) *UserCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddAllowedGroupIDs(ids...)
+}
+
+// AddGroupAccessGroupIDs adds the "group_access_groups" edge to the Group entity by IDs.
+func (_c *UserCreate) AddGroupAccessGroupIDs(ids ...int64) *UserCreate {
+	_c.mutation.AddGroupAccessGroupIDs(ids...)
+	return _c
+}
+
+// AddGroupAccessGroups adds the "group_access_groups" edges to the Group entity.
+func (_c *UserCreate) AddGroupAccessGroups(v ...*Group) *UserCreate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddGroupAccessGroupIDs(ids...)
 }
 
 // AddUsageLogIDs adds the "usage_logs" edge to the UsageLog entity by IDs.
@@ -688,6 +717,10 @@ func (_c *UserCreate) defaults() error {
 		v := user.DefaultRpmLimit
 		_c.mutation.SetRpmLimit(v)
 	}
+	if _, ok := _c.mutation.GroupAccessMode(); !ok {
+		v := user.DefaultGroupAccessMode
+		_c.mutation.SetGroupAccessMode(v)
+	}
 	return nil
 }
 
@@ -779,6 +812,14 @@ func (_c *UserCreate) check() error {
 	}
 	if _, ok := _c.mutation.RpmLimit(); !ok {
 		return &ValidationError{Name: "rpm_limit", err: errors.New(`ent: missing required field "User.rpm_limit"`)}
+	}
+	if _, ok := _c.mutation.GroupAccessMode(); !ok {
+		return &ValidationError{Name: "group_access_mode", err: errors.New(`ent: missing required field "User.group_access_mode"`)}
+	}
+	if v, ok := _c.mutation.GroupAccessMode(); ok {
+		if err := user.GroupAccessModeValidator(v); err != nil {
+			return &ValidationError{Name: "group_access_mode", err: fmt.Errorf(`ent: validator failed for field "User.group_access_mode": %w`, err)}
+		}
 	}
 	return nil
 }
@@ -907,6 +948,10 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_spec.SetField(user.FieldRpmLimit, field.TypeInt, value)
 		_node.RpmLimit = value
 	}
+	if value, ok := _c.mutation.GroupAccessMode(); ok {
+		_spec.SetField(user.FieldGroupAccessMode, field.TypeString, value)
+		_node.GroupAccessMode = value
+	}
 	if value, ok := _c.mutation.PromoCodeID(); ok {
 		_spec.SetField(user.FieldPromoCodeID, field.TypeInt64, value)
 		_node.PromoCodeID = &value
@@ -1006,6 +1051,26 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		createE := &UserAllowedGroupCreate{config: _c.config, mutation: newUserAllowedGroupMutation(_c.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.GroupAccessGroupsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   user.GroupAccessGroupsTable,
+			Columns: user.GroupAccessGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		createE := &UserGroupAccessGroupCreate{config: _c.config, mutation: newUserGroupAccessGroupMutation(_c.config, OpCreate)}
 		createE.defaults()
 		_, specE := createE.createSpec()
 		edge.Target.Fields = specE.Fields
@@ -1535,6 +1600,18 @@ func (u *UserUpsert) AddRpmLimit(v int) *UserUpsert {
 	return u
 }
 
+// SetGroupAccessMode sets the "group_access_mode" field.
+func (u *UserUpsert) SetGroupAccessMode(v string) *UserUpsert {
+	u.Set(user.FieldGroupAccessMode, v)
+	return u
+}
+
+// UpdateGroupAccessMode sets the "group_access_mode" field to the value that was provided on create.
+func (u *UserUpsert) UpdateGroupAccessMode() *UserUpsert {
+	u.SetExcluded(user.FieldGroupAccessMode)
+	return u
+}
+
 // SetPromoCodeID sets the "promo_code_id" field.
 func (u *UserUpsert) SetPromoCodeID(v int64) *UserUpsert {
 	u.Set(user.FieldPromoCodeID, v)
@@ -2021,6 +2098,20 @@ func (u *UserUpsertOne) AddRpmLimit(v int) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateRpmLimit() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateRpmLimit()
+	})
+}
+
+// SetGroupAccessMode sets the "group_access_mode" field.
+func (u *UserUpsertOne) SetGroupAccessMode(v string) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetGroupAccessMode(v)
+	})
+}
+
+// UpdateGroupAccessMode sets the "group_access_mode" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateGroupAccessMode() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateGroupAccessMode()
 	})
 }
 
@@ -2680,6 +2771,20 @@ func (u *UserUpsertBulk) AddRpmLimit(v int) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateRpmLimit() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateRpmLimit()
+	})
+}
+
+// SetGroupAccessMode sets the "group_access_mode" field.
+func (u *UserUpsertBulk) SetGroupAccessMode(v string) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetGroupAccessMode(v)
+	})
+}
+
+// UpdateGroupAccessMode sets the "group_access_mode" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateGroupAccessMode() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateGroupAccessMode()
 	})
 }
 

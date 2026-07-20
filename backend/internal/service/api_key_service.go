@@ -410,14 +410,22 @@ func (s *APIKeyService) canUserBindGroup(ctx context.Context, user *User, group 
 	if user == nil || group == nil {
 		return false
 	}
+
+	subscriptionGranted := false
 	// 原生订阅分组必须有订阅；专属标准分组也可由 standard_quota 套餐临时授权。
 	if (group.IsSubscriptionType() || group.IsExclusive) && s.userSubRepo != nil {
 		if _, err := s.userSubRepo.GetActiveByUserIDAndGroupID(ctx, user.ID, group.ID); err == nil {
-			return true
+			subscriptionGranted = true
 		}
 	}
 	if group.IsSubscriptionType() {
+		return subscriptionGranted
+	}
+	if !user.AllowsStandardGroupByRestriction(group.ID) {
 		return false
+	}
+	if subscriptionGranted && group.IsExclusive {
+		return true
 	}
 	return user.CanBindGroup(group.ID, group.IsExclusive)
 }
@@ -1071,11 +1079,15 @@ func (s *APIKeyService) GetAvailableGroups(ctx context.Context, userID int64) ([
 
 // canUserBindGroupInternal 内部方法，检查用户是否可以绑定分组（使用预加载的订阅数据）
 func (s *APIKeyService) canUserBindGroupInternal(user *User, group *Group, subscribedGroupIDs map[int64]bool) bool {
-	if subscribedGroupIDs[group.ID] {
-		return true
-	}
+	subscriptionGranted := subscribedGroupIDs[group.ID]
 	if group.IsSubscriptionType() {
+		return subscriptionGranted
+	}
+	if !user.AllowsStandardGroupByRestriction(group.ID) {
 		return false
+	}
+	if subscriptionGranted && group.IsExclusive {
+		return true
 	}
 	return user.CanBindGroup(group.ID, group.IsExclusive)
 }

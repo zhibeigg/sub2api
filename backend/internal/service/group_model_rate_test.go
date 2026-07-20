@@ -97,7 +97,7 @@ func TestModelRatePatternMatches(t *testing.T) {
 }
 
 func TestGroupModelRateMultipliersAuthCacheVersion(t *testing.T) {
-	require.Equal(t, 18, apiKeyAuthSnapshotVersion)
+	require.Equal(t, 19, apiKeyAuthSnapshotVersion)
 }
 
 func TestGroupModelRateMultipliersAuthSnapshotRoundTrip(t *testing.T) {

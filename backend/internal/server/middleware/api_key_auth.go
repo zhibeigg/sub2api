@@ -460,7 +460,7 @@ func abortIfAPIKeyGroupNotAllowed(c *gin.Context, apiKey *service.APIKey, subscr
 	}
 	service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonAPIKeyGroupUnavailable)
 	MarkIngressRejected(c, IngressRejectGroupNotAllowed)
-	AbortWithError(c, 403, "GROUP_NOT_ALLOWED", "API Key 所属专属分组不再允许当前用户使用")
+	AbortWithError(c, 403, "GROUP_NOT_ALLOWED", "当前用户不允许使用该分组")
 	return true
 }
 
@@ -468,8 +468,20 @@ func validateAPIKeyGroupAllowed(apiKey *service.APIKey, subscription *service.Us
 	if apiKey == nil || apiKey.GroupID == nil || apiKey.User == nil || apiKey.Group == nil {
 		return true
 	}
+	// Unpinned multi-group keys defer the concrete group choice to the gateway.
+	// Permit the request when at least one bound candidate survives the user's
+	// standard-group restriction; the resolver will skip disallowed candidates.
+	if len(apiKey.GroupBindings) > 0 && !apiKey.ExplicitGroupSelection {
+		return apiKey.HasAllowedGroupBindingByUserRestriction()
+	}
 	group := apiKey.Group
-	if group.IsSubscriptionType() || subscription != nil {
+	if group.IsSubscriptionType() {
+		return subscription != nil
+	}
+	if !apiKey.User.AllowsStandardGroupByRestriction(group.ID) {
+		return false
+	}
+	if subscription != nil && group.IsExclusive {
 		return true
 	}
 	return apiKey.User.CanBindGroup(group.ID, group.IsExclusive)

@@ -366,71 +366,71 @@ func (_c *SubscriptionPlanCreate) defaults() {
 // check runs all checks and user-defined validators on the builder.
 func (_c *SubscriptionPlanCreate) check() error {
 	if _, ok := _c.mutation.GroupID(); !ok {
-		return &ValidationError{Name: "group_id", err: errors.New(`entmerge: missing required field "SubscriptionPlan.group_id"`)}
+		return &ValidationError{Name: "group_id", err: errors.New(`ent: missing required field "SubscriptionPlan.group_id"`)}
 	}
 	if _, ok := _c.mutation.PlanType(); !ok {
-		return &ValidationError{Name: "plan_type", err: errors.New(`entmerge: missing required field "SubscriptionPlan.plan_type"`)}
+		return &ValidationError{Name: "plan_type", err: errors.New(`ent: missing required field "SubscriptionPlan.plan_type"`)}
 	}
 	if v, ok := _c.mutation.PlanType(); ok {
 		if err := subscriptionplan.PlanTypeValidator(v); err != nil {
-			return &ValidationError{Name: "plan_type", err: fmt.Errorf(`entmerge: validator failed for field "SubscriptionPlan.plan_type": %w`, err)}
+			return &ValidationError{Name: "plan_type", err: fmt.Errorf(`ent: validator failed for field "SubscriptionPlan.plan_type": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Name(); !ok {
-		return &ValidationError{Name: "name", err: errors.New(`entmerge: missing required field "SubscriptionPlan.name"`)}
+		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "SubscriptionPlan.name"`)}
 	}
 	if v, ok := _c.mutation.Name(); ok {
 		if err := subscriptionplan.NameValidator(v); err != nil {
-			return &ValidationError{Name: "name", err: fmt.Errorf(`entmerge: validator failed for field "SubscriptionPlan.name": %w`, err)}
+			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "SubscriptionPlan.name": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Description(); !ok {
-		return &ValidationError{Name: "description", err: errors.New(`entmerge: missing required field "SubscriptionPlan.description"`)}
+		return &ValidationError{Name: "description", err: errors.New(`ent: missing required field "SubscriptionPlan.description"`)}
 	}
 	if _, ok := _c.mutation.Price(); !ok {
-		return &ValidationError{Name: "price", err: errors.New(`entmerge: missing required field "SubscriptionPlan.price"`)}
+		return &ValidationError{Name: "price", err: errors.New(`ent: missing required field "SubscriptionPlan.price"`)}
 	}
 	if _, ok := _c.mutation.Currency(); !ok {
-		return &ValidationError{Name: "currency", err: errors.New(`entmerge: missing required field "SubscriptionPlan.currency"`)}
+		return &ValidationError{Name: "currency", err: errors.New(`ent: missing required field "SubscriptionPlan.currency"`)}
 	}
 	if v, ok := _c.mutation.Currency(); ok {
 		if err := subscriptionplan.CurrencyValidator(v); err != nil {
-			return &ValidationError{Name: "currency", err: fmt.Errorf(`entmerge: validator failed for field "SubscriptionPlan.currency": %w`, err)}
+			return &ValidationError{Name: "currency", err: fmt.Errorf(`ent: validator failed for field "SubscriptionPlan.currency": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.ValidityDays(); !ok {
-		return &ValidationError{Name: "validity_days", err: errors.New(`entmerge: missing required field "SubscriptionPlan.validity_days"`)}
+		return &ValidationError{Name: "validity_days", err: errors.New(`ent: missing required field "SubscriptionPlan.validity_days"`)}
 	}
 	if _, ok := _c.mutation.ValidityUnit(); !ok {
-		return &ValidationError{Name: "validity_unit", err: errors.New(`entmerge: missing required field "SubscriptionPlan.validity_unit"`)}
+		return &ValidationError{Name: "validity_unit", err: errors.New(`ent: missing required field "SubscriptionPlan.validity_unit"`)}
 	}
 	if v, ok := _c.mutation.ValidityUnit(); ok {
 		if err := subscriptionplan.ValidityUnitValidator(v); err != nil {
-			return &ValidationError{Name: "validity_unit", err: fmt.Errorf(`entmerge: validator failed for field "SubscriptionPlan.validity_unit": %w`, err)}
+			return &ValidationError{Name: "validity_unit", err: fmt.Errorf(`ent: validator failed for field "SubscriptionPlan.validity_unit": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Features(); !ok {
-		return &ValidationError{Name: "features", err: errors.New(`entmerge: missing required field "SubscriptionPlan.features"`)}
+		return &ValidationError{Name: "features", err: errors.New(`ent: missing required field "SubscriptionPlan.features"`)}
 	}
 	if _, ok := _c.mutation.ProductName(); !ok {
-		return &ValidationError{Name: "product_name", err: errors.New(`entmerge: missing required field "SubscriptionPlan.product_name"`)}
+		return &ValidationError{Name: "product_name", err: errors.New(`ent: missing required field "SubscriptionPlan.product_name"`)}
 	}
 	if v, ok := _c.mutation.ProductName(); ok {
 		if err := subscriptionplan.ProductNameValidator(v); err != nil {
-			return &ValidationError{Name: "product_name", err: fmt.Errorf(`entmerge: validator failed for field "SubscriptionPlan.product_name": %w`, err)}
+			return &ValidationError{Name: "product_name", err: fmt.Errorf(`ent: validator failed for field "SubscriptionPlan.product_name": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.ForSale(); !ok {
-		return &ValidationError{Name: "for_sale", err: errors.New(`entmerge: missing required field "SubscriptionPlan.for_sale"`)}
+		return &ValidationError{Name: "for_sale", err: errors.New(`ent: missing required field "SubscriptionPlan.for_sale"`)}
 	}
 	if _, ok := _c.mutation.SortOrder(); !ok {
-		return &ValidationError{Name: "sort_order", err: errors.New(`entmerge: missing required field "SubscriptionPlan.sort_order"`)}
+		return &ValidationError{Name: "sort_order", err: errors.New(`ent: missing required field "SubscriptionPlan.sort_order"`)}
 	}
 	if _, ok := _c.mutation.CreatedAt(); !ok {
-		return &ValidationError{Name: "created_at", err: errors.New(`entmerge: missing required field "SubscriptionPlan.created_at"`)}
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "SubscriptionPlan.created_at"`)}
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
-		return &ValidationError{Name: "updated_at", err: errors.New(`entmerge: missing required field "SubscriptionPlan.updated_at"`)}
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "SubscriptionPlan.updated_at"`)}
 	}
 	return nil
 }
@@ -1265,7 +1265,7 @@ func (u *SubscriptionPlanUpsertOne) UpdateUpdatedAt() *SubscriptionPlanUpsertOne
 // Exec executes the query.
 func (u *SubscriptionPlanUpsertOne) Exec(ctx context.Context) error {
 	if len(u.create.conflict) == 0 {
-		return errors.New("entmerge: missing options for SubscriptionPlanCreate.OnConflict")
+		return errors.New("ent: missing options for SubscriptionPlanCreate.OnConflict")
 	}
 	return u.create.Exec(ctx)
 }
@@ -1802,11 +1802,11 @@ func (u *SubscriptionPlanUpsertBulk) Exec(ctx context.Context) error {
 	}
 	for i, b := range u.create.builders {
 		if len(b.conflict) != 0 {
-			return fmt.Errorf("entmerge: OnConflict was set for builder %d. Set it on the SubscriptionPlanCreateBulk instead", i)
+			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the SubscriptionPlanCreateBulk instead", i)
 		}
 	}
 	if len(u.create.conflict) == 0 {
-		return errors.New("entmerge: missing options for SubscriptionPlanCreateBulk.OnConflict")
+		return errors.New("ent: missing options for SubscriptionPlanCreateBulk.OnConflict")
 	}
 	return u.create.Exec(ctx)
 }

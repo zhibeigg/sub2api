@@ -4,7 +4,14 @@
  */
 
 import { apiClient } from '../client'
-import type { AdminUser, UpdateUserRequest, PaginatedResponse, ApiKey } from '@/types'
+import type {
+  AdminUser,
+  UpdateUserRequest,
+  PaginatedResponse,
+  ApiKey,
+  UserGroupConfig,
+  UpdateUserGroupConfigRequest,
+} from '@/types'
 
 export interface AdminBindAuthIdentityChannelRequest {
   channel: string
@@ -119,6 +126,24 @@ export async function list(
 export async function getById(id: number, includeDeleted = false): Promise<AdminUser> {
   const url = includeDeleted ? `/admin/users/${id}?include_deleted=true` : `/admin/users/${id}`
   const { data } = await apiClient.get<AdminUser>(url)
+  return data
+}
+
+/** Get the latest group access and rate configuration for a user. */
+export async function getGroupConfig(id: number): Promise<UserGroupConfig> {
+  const { data } = await apiClient.get<UserGroupConfig>(`/admin/users/${id}/group-config`)
+  return data
+}
+
+/** Replace a user's group access configuration and apply group rate changes. */
+export async function updateGroupConfig(
+  id: number,
+  config: UpdateUserGroupConfigRequest
+): Promise<UserGroupConfig> {
+  const { data } = await apiClient.put<UserGroupConfig>(
+    `/admin/users/${id}/group-config`,
+    config
+  )
   return data
 }
 
@@ -403,6 +428,8 @@ export async function resetPlatformQuotaWindow(
 export const usersAPI = {
   list,
   getById,
+  getGroupConfig,
+  updateGroupConfig,
   create,
   update,
   delete: deleteUser,

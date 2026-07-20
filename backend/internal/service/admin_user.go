@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -103,6 +104,119 @@ func (s *adminServiceImpl) GetUser(ctx context.Context, id int64) (*User, error)
 
 func (s *adminServiceImpl) GetUserIncludeDeleted(ctx context.Context, id int64) (*User, error) {
 	return s.userRepo.GetByIDIncludeDeleted(ctx, id)
+}
+
+func (s *adminServiceImpl) GetUserGroupConfig(ctx context.Context, id int64) (*UserGroupConfig, error) {
+	user, err := s.userRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	groupRates := make(map[int64]float64)
+	if s.userGroupRateRepo != nil {
+		loaded, err := s.userGroupRateRepo.GetByUserID(ctx, id)
+		if err != nil {
+			return nil, fmt.Errorf("get user group rates: %w", err)
+		}
+		groupRates = loaded
+	}
+	mode := user.GroupAccessMode
+	if mode != GroupAccessModeRestricted {
+		mode = GroupAccessModeInherit
+	}
+	return &UserGroupConfig{
+		AccessMode:         mode,
+		RestrictedGroupIDs: sortedUniqueGroupIDs(user.GroupAccessGroups),
+		ExclusiveGroupIDs:  sortedUniqueGroupIDs(user.AllowedGroups),
+		GroupRates:         groupRates,
+	}, nil
+}
+
+func (s *adminServiceImpl) UpdateUserGroupConfig(ctx context.Context, id int64, input *UpdateUserGroupConfigInput) (*UserGroupConfig, error) {
+	if input == nil {
+		return nil, infraerrors.BadRequest("INVALID_USER_GROUP_CONFIG", "user group config is required")
+	}
+	mode := strings.TrimSpace(strings.ToLower(input.AccessMode))
+	if mode != GroupAccessModeInherit && mode != GroupAccessModeRestricted {
+		return nil, infraerrors.BadRequest("INVALID_GROUP_ACCESS_MODE", "access_mode must be inherit or restricted")
+	}
+	if _, err := s.userRepo.GetByID(ctx, id); err != nil {
+		return nil, err
+	}
+
+	groups, err := s.groupRepo.ListActive(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list active groups: %w", err)
+	}
+	groupByID := make(map[int64]*Group, len(groups))
+	for i := range groups {
+		groupByID[groups[i].ID] = &groups[i]
+	}
+
+	restrictedIDs := sortedUniqueGroupIDs(input.RestrictedGroupIDs)
+	if mode == GroupAccessModeInherit {
+		restrictedIDs = nil
+	}
+	exclusiveIDs := sortedUniqueGroupIDs(input.ExclusiveGroupIDs)
+	exclusiveSet := make(map[int64]struct{}, len(exclusiveIDs))
+	for _, groupID := range exclusiveIDs {
+		group := groupByID[groupID]
+		if group == nil || group.IsSubscriptionType() || !group.IsExclusive {
+			return nil, infraerrors.BadRequest("INVALID_EXCLUSIVE_GROUP", fmt.Sprintf("group %d must be an active exclusive standard group", groupID))
+		}
+		exclusiveSet[groupID] = struct{}{}
+	}
+	for _, groupID := range restrictedIDs {
+		group := groupByID[groupID]
+		if group == nil || group.IsSubscriptionType() {
+			return nil, infraerrors.BadRequest("INVALID_RESTRICTED_GROUP", fmt.Sprintf("group %d must be an active standard group", groupID))
+		}
+		if group.IsExclusive {
+			if _, granted := exclusiveSet[groupID]; !granted {
+				return nil, infraerrors.BadRequest("EXCLUSIVE_GROUP_GRANT_REQUIRED", fmt.Sprintf("exclusive group %d must also be granted", groupID))
+			}
+		}
+	}
+	for groupID, rate := range input.GroupRates {
+		group := groupByID[groupID]
+		if group == nil || group.IsSubscriptionType() {
+			return nil, infraerrors.BadRequest("INVALID_GROUP_RATE", fmt.Sprintf("group %d must be an active standard group", groupID))
+		}
+		if rate != nil && (*rate <= 0 || math.IsNaN(*rate) || math.IsInf(*rate, 0)) {
+			return nil, infraerrors.BadRequest("INVALID_GROUP_RATE", fmt.Sprintf("group %d rate_multiplier must be a finite number greater than 0", groupID))
+		}
+	}
+
+	repo, ok := s.userRepo.(UserGroupConfigRepository)
+	if !ok {
+		return nil, infraerrors.InternalServer("USER_GROUP_CONFIG_UNAVAILABLE", "user group config repository is not configured")
+	}
+	if err := repo.UpdateUserGroupConfig(ctx, id, mode, restrictedIDs, exclusiveIDs, input.GroupRates); err != nil {
+		return nil, fmt.Errorf("update user group config: %w", err)
+	}
+	if s.authCacheInvalidator != nil {
+		s.authCacheInvalidator.InvalidateAuthCacheByUserID(ctx, id)
+	}
+	return s.GetUserGroupConfig(ctx, id)
+}
+
+func sortedUniqueGroupIDs(groupIDs []int64) []int64 {
+	if len(groupIDs) == 0 {
+		return []int64{}
+	}
+	seen := make(map[int64]struct{}, len(groupIDs))
+	out := make([]int64, 0, len(groupIDs))
+	for _, groupID := range groupIDs {
+		if groupID <= 0 {
+			continue
+		}
+		if _, exists := seen[groupID]; exists {
+			continue
+		}
+		seen[groupID] = struct{}{}
+		out = append(out, groupID)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
 }
 
 // normalizeUserRole 校验并归一化角色输入。

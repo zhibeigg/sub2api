@@ -46,6 +46,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/userallowedgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userattributedefinition"
 	"github.com/Wei-Shaw/sub2api/ent/userattributevalue"
+	"github.com/Wei-Shaw/sub2api/ent/usergroupaccessgroup"
 	"github.com/Wei-Shaw/sub2api/ent/userplatformquota"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 	"github.com/Wei-Shaw/sub2api/ent/usersubscriptiongroup"
@@ -2310,6 +2311,26 @@ func init() {
 	userDescRpmLimit := userFields[21].Descriptor()
 	// user.DefaultRpmLimit holds the default value on creation for the rpm_limit field.
 	user.DefaultRpmLimit = userDescRpmLimit.Default.(int)
+	// userDescGroupAccessMode is the schema descriptor for group_access_mode field.
+	userDescGroupAccessMode := userFields[22].Descriptor()
+	// user.DefaultGroupAccessMode holds the default value on creation for the group_access_mode field.
+	user.DefaultGroupAccessMode = userDescGroupAccessMode.Default.(string)
+	// user.GroupAccessModeValidator is a validator for the "group_access_mode" field. It is called by the builders before save.
+	user.GroupAccessModeValidator = func() func(string) error {
+		validators := userDescGroupAccessMode.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(group_access_mode string) error {
+			for _, fn := range fns {
+				if err := fn(group_access_mode); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
 	userallowedgroupFields := schema.UserAllowedGroup{}.Fields()
 	_ = userallowedgroupFields
 	// userallowedgroupDescCreatedAt is the schema descriptor for created_at field.
@@ -2438,6 +2459,12 @@ func init() {
 	userattributevalueDescValue := userattributevalueFields[2].Descriptor()
 	// userattributevalue.DefaultValue holds the default value on creation for the value field.
 	userattributevalue.DefaultValue = userattributevalueDescValue.Default.(string)
+	usergroupaccessgroupFields := schema.UserGroupAccessGroup{}.Fields()
+	_ = usergroupaccessgroupFields
+	// usergroupaccessgroupDescCreatedAt is the schema descriptor for created_at field.
+	usergroupaccessgroupDescCreatedAt := usergroupaccessgroupFields[2].Descriptor()
+	// usergroupaccessgroup.DefaultCreatedAt holds the default value on creation for the created_at field.
+	usergroupaccessgroup.DefaultCreatedAt = usergroupaccessgroupDescCreatedAt.Default.(func() time.Time)
 	userplatformquotaMixin := schema.UserPlatformQuota{}.Mixin()
 	userplatformquotaMixinHooks1 := userplatformquotaMixin[1].Hooks()
 	userplatformquota.Hooks[0] = userplatformquotaMixinHooks1[0]

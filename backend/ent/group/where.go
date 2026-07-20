@@ -2266,6 +2266,29 @@ func HasAllowedUsersWith(preds ...predicate.User) predicate.Group {
 	})
 }
 
+// HasAccessRestrictedUsers applies the HasEdge predicate on the "access_restricted_users" edge.
+func HasAccessRestrictedUsers() predicate.Group {
+	return predicate.Group(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, true, AccessRestrictedUsersTable, AccessRestrictedUsersPrimaryKey...),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasAccessRestrictedUsersWith applies the HasEdge predicate on the "access_restricted_users" edge with a given conditions (other predicates).
+func HasAccessRestrictedUsersWith(preds ...predicate.User) predicate.Group {
+	return predicate.Group(func(s *sql.Selector) {
+		step := newAccessRestrictedUsersStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // HasSubscriptionPlans applies the HasEdge predicate on the "subscription_plans" edge.
 func HasSubscriptionPlans() predicate.Group {
 	return predicate.Group(func(s *sql.Selector) {
@@ -2373,6 +2396,29 @@ func HasUserAllowedGroups() predicate.Group {
 func HasUserAllowedGroupsWith(preds ...predicate.UserAllowedGroup) predicate.Group {
 	return predicate.Group(func(s *sql.Selector) {
 		step := newUserAllowedGroupsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasUserGroupAccessGroups applies the HasEdge predicate on the "user_group_access_groups" edge.
+func HasUserGroupAccessGroups() predicate.Group {
+	return predicate.Group(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, true, UserGroupAccessGroupsTable, UserGroupAccessGroupsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasUserGroupAccessGroupsWith applies the HasEdge predicate on the "user_group_access_groups" edge with a given conditions (other predicates).
+func HasUserGroupAccessGroupsWith(preds ...predicate.UserGroupAccessGroup) predicate.Group {
+	return predicate.Group(func(s *sql.Selector) {
+		step := newUserGroupAccessGroupsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

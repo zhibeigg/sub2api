@@ -287,7 +287,7 @@ func (_m *SubscriptionPlan) Update() *SubscriptionPlanUpdateOne {
 func (_m *SubscriptionPlan) Unwrap() *SubscriptionPlan {
 	_tx, ok := _m.config.driver.(*txDriver)
 	if !ok {
-		panic("entmerge: SubscriptionPlan is not a transactional entity")
+		panic("ent: SubscriptionPlan is not a transactional entity")
 	}
 	_m.config.driver = _tx.drv
 	return _m

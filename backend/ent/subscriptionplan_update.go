@@ -457,27 +457,27 @@ func (_u *SubscriptionPlanUpdate) defaults() {
 func (_u *SubscriptionPlanUpdate) check() error {
 	if v, ok := _u.mutation.PlanType(); ok {
 		if err := subscriptionplan.PlanTypeValidator(v); err != nil {
-			return &ValidationError{Name: "plan_type", err: fmt.Errorf(`entmerge: validator failed for field "SubscriptionPlan.plan_type": %w`, err)}
+			return &ValidationError{Name: "plan_type", err: fmt.Errorf(`ent: validator failed for field "SubscriptionPlan.plan_type": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.Name(); ok {
 		if err := subscriptionplan.NameValidator(v); err != nil {
-			return &ValidationError{Name: "name", err: fmt.Errorf(`entmerge: validator failed for field "SubscriptionPlan.name": %w`, err)}
+			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "SubscriptionPlan.name": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.Currency(); ok {
 		if err := subscriptionplan.CurrencyValidator(v); err != nil {
-			return &ValidationError{Name: "currency", err: fmt.Errorf(`entmerge: validator failed for field "SubscriptionPlan.currency": %w`, err)}
+			return &ValidationError{Name: "currency", err: fmt.Errorf(`ent: validator failed for field "SubscriptionPlan.currency": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.ValidityUnit(); ok {
 		if err := subscriptionplan.ValidityUnitValidator(v); err != nil {
-			return &ValidationError{Name: "validity_unit", err: fmt.Errorf(`entmerge: validator failed for field "SubscriptionPlan.validity_unit": %w`, err)}
+			return &ValidationError{Name: "validity_unit", err: fmt.Errorf(`ent: validator failed for field "SubscriptionPlan.validity_unit": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.ProductName(); ok {
 		if err := subscriptionplan.ProductNameValidator(v); err != nil {
-			return &ValidationError{Name: "product_name", err: fmt.Errorf(`entmerge: validator failed for field "SubscriptionPlan.product_name": %w`, err)}
+			return &ValidationError{Name: "product_name", err: fmt.Errorf(`ent: validator failed for field "SubscriptionPlan.product_name": %w`, err)}
 		}
 	}
 	return nil
@@ -1144,27 +1144,27 @@ func (_u *SubscriptionPlanUpdateOne) defaults() {
 func (_u *SubscriptionPlanUpdateOne) check() error {
 	if v, ok := _u.mutation.PlanType(); ok {
 		if err := subscriptionplan.PlanTypeValidator(v); err != nil {
-			return &ValidationError{Name: "plan_type", err: fmt.Errorf(`entmerge: validator failed for field "SubscriptionPlan.plan_type": %w`, err)}
+			return &ValidationError{Name: "plan_type", err: fmt.Errorf(`ent: validator failed for field "SubscriptionPlan.plan_type": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.Name(); ok {
 		if err := subscriptionplan.NameValidator(v); err != nil {
-			return &ValidationError{Name: "name", err: fmt.Errorf(`entmerge: validator failed for field "SubscriptionPlan.name": %w`, err)}
+			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "SubscriptionPlan.name": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.Currency(); ok {
 		if err := subscriptionplan.CurrencyValidator(v); err != nil {
-			return &ValidationError{Name: "currency", err: fmt.Errorf(`entmerge: validator failed for field "SubscriptionPlan.currency": %w`, err)}
+			return &ValidationError{Name: "currency", err: fmt.Errorf(`ent: validator failed for field "SubscriptionPlan.currency": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.ValidityUnit(); ok {
 		if err := subscriptionplan.ValidityUnitValidator(v); err != nil {
-			return &ValidationError{Name: "validity_unit", err: fmt.Errorf(`entmerge: validator failed for field "SubscriptionPlan.validity_unit": %w`, err)}
+			return &ValidationError{Name: "validity_unit", err: fmt.Errorf(`ent: validator failed for field "SubscriptionPlan.validity_unit": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.ProductName(); ok {
 		if err := subscriptionplan.ProductNameValidator(v); err != nil {
-			return &ValidationError{Name: "product_name", err: fmt.Errorf(`entmerge: validator failed for field "SubscriptionPlan.product_name": %w`, err)}
+			return &ValidationError{Name: "product_name", err: fmt.Errorf(`ent: validator failed for field "SubscriptionPlan.product_name": %w`, err)}
 		}
 	}
 	return nil
@@ -1177,7 +1177,7 @@ func (_u *SubscriptionPlanUpdateOne) sqlSave(ctx context.Context) (_node *Subscr
 	_spec := sqlgraph.NewUpdateSpec(subscriptionplan.Table, subscriptionplan.Columns, sqlgraph.NewFieldSpec(subscriptionplan.FieldID, field.TypeInt64))
 	id, ok := _u.mutation.ID()
 	if !ok {
-		return nil, &ValidationError{Name: "id", err: errors.New(`entmerge: missing "SubscriptionPlan.id" for update`)}
+		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "SubscriptionPlan.id" for update`)}
 	}
 	_spec.Node.ID.Value = id
 	if fields := _u.fields; len(fields) > 0 {
@@ -1185,7 +1185,7 @@ func (_u *SubscriptionPlanUpdateOne) sqlSave(ctx context.Context) (_node *Subscr
 		_spec.Node.Columns = append(_spec.Node.Columns, subscriptionplan.FieldID)
 		for _, f := range fields {
 			if !subscriptionplan.ValidColumn(f) {
-				return nil, &ValidationError{Name: f, err: fmt.Errorf("entmerge: invalid field %q for query", f)}
+				return nil, &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 			}
 			if f != subscriptionplan.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, f)

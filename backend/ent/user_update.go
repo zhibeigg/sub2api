@@ -446,6 +446,20 @@ func (_u *UserUpdate) AddRpmLimit(v int) *UserUpdate {
 	return _u
 }
 
+// SetGroupAccessMode sets the "group_access_mode" field.
+func (_u *UserUpdate) SetGroupAccessMode(v string) *UserUpdate {
+	_u.mutation.SetGroupAccessMode(v)
+	return _u
+}
+
+// SetNillableGroupAccessMode sets the "group_access_mode" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableGroupAccessMode(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetGroupAccessMode(*v)
+	}
+	return _u
+}
+
 // SetPromoCodeID sets the "promo_code_id" field.
 func (_u *UserUpdate) SetPromoCodeID(v int64) *UserUpdate {
 	_u.mutation.ResetPromoCodeID()
@@ -561,6 +575,21 @@ func (_u *UserUpdate) AddAllowedGroups(v ...*Group) *UserUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.AddAllowedGroupIDs(ids...)
+}
+
+// AddGroupAccessGroupIDs adds the "group_access_groups" edge to the Group entity by IDs.
+func (_u *UserUpdate) AddGroupAccessGroupIDs(ids ...int64) *UserUpdate {
+	_u.mutation.AddGroupAccessGroupIDs(ids...)
+	return _u
+}
+
+// AddGroupAccessGroups adds the "group_access_groups" edges to the Group entity.
+func (_u *UserUpdate) AddGroupAccessGroups(v ...*Group) *UserUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddGroupAccessGroupIDs(ids...)
 }
 
 // AddUsageLogIDs adds the "usage_logs" edge to the UsageLog entity by IDs.
@@ -799,6 +828,27 @@ func (_u *UserUpdate) RemoveAllowedGroups(v ...*Group) *UserUpdate {
 	return _u.RemoveAllowedGroupIDs(ids...)
 }
 
+// ClearGroupAccessGroups clears all "group_access_groups" edges to the Group entity.
+func (_u *UserUpdate) ClearGroupAccessGroups() *UserUpdate {
+	_u.mutation.ClearGroupAccessGroups()
+	return _u
+}
+
+// RemoveGroupAccessGroupIDs removes the "group_access_groups" edge to Group entities by IDs.
+func (_u *UserUpdate) RemoveGroupAccessGroupIDs(ids ...int64) *UserUpdate {
+	_u.mutation.RemoveGroupAccessGroupIDs(ids...)
+	return _u
+}
+
+// RemoveGroupAccessGroups removes "group_access_groups" edges to Group entities.
+func (_u *UserUpdate) RemoveGroupAccessGroups(v ...*Group) *UserUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveGroupAccessGroupIDs(ids...)
+}
+
 // ClearUsageLogs clears all "usage_logs" edges to the UsageLog entity.
 func (_u *UserUpdate) ClearUsageLogs() *UserUpdate {
 	_u.mutation.ClearUsageLogs()
@@ -1020,6 +1070,11 @@ func (_u *UserUpdate) check() error {
 			return &ValidationError{Name: "signup_source", err: fmt.Errorf(`ent: validator failed for field "User.signup_source": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.GroupAccessMode(); ok {
+		if err := user.GroupAccessModeValidator(v); err != nil {
+			return &ValidationError{Name: "group_access_mode", err: fmt.Errorf(`ent: validator failed for field "User.group_access_mode": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -1142,6 +1197,9 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedRpmLimit(); ok {
 		_spec.AddField(user.FieldRpmLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.GroupAccessMode(); ok {
+		_spec.SetField(user.FieldGroupAccessMode, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.PromoCodeID(); ok {
 		_spec.SetField(user.FieldPromoCodeID, field.TypeInt64, value)
@@ -1429,6 +1487,63 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		createE := &UserAllowedGroupCreate{config: _u.config, mutation: newUserAllowedGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.GroupAccessGroupsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   user.GroupAccessGroupsTable,
+			Columns: user.GroupAccessGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeInt64),
+			},
+		}
+		createE := &UserGroupAccessGroupCreate{config: _u.config, mutation: newUserGroupAccessGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedGroupAccessGroupsIDs(); len(nodes) > 0 && !_u.mutation.GroupAccessGroupsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   user.GroupAccessGroupsTable,
+			Columns: user.GroupAccessGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		createE := &UserGroupAccessGroupCreate{config: _u.config, mutation: newUserGroupAccessGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.GroupAccessGroupsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   user.GroupAccessGroupsTable,
+			Columns: user.GroupAccessGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		createE := &UserGroupAccessGroupCreate{config: _u.config, mutation: newUserGroupAccessGroupMutation(_u.config, OpCreate)}
 		createE.defaults()
 		_, specE := createE.createSpec()
 		edge.Target.Fields = specE.Fields
@@ -2175,6 +2290,20 @@ func (_u *UserUpdateOne) AddRpmLimit(v int) *UserUpdateOne {
 	return _u
 }
 
+// SetGroupAccessMode sets the "group_access_mode" field.
+func (_u *UserUpdateOne) SetGroupAccessMode(v string) *UserUpdateOne {
+	_u.mutation.SetGroupAccessMode(v)
+	return _u
+}
+
+// SetNillableGroupAccessMode sets the "group_access_mode" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableGroupAccessMode(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetGroupAccessMode(*v)
+	}
+	return _u
+}
+
 // SetPromoCodeID sets the "promo_code_id" field.
 func (_u *UserUpdateOne) SetPromoCodeID(v int64) *UserUpdateOne {
 	_u.mutation.ResetPromoCodeID()
@@ -2290,6 +2419,21 @@ func (_u *UserUpdateOne) AddAllowedGroups(v ...*Group) *UserUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.AddAllowedGroupIDs(ids...)
+}
+
+// AddGroupAccessGroupIDs adds the "group_access_groups" edge to the Group entity by IDs.
+func (_u *UserUpdateOne) AddGroupAccessGroupIDs(ids ...int64) *UserUpdateOne {
+	_u.mutation.AddGroupAccessGroupIDs(ids...)
+	return _u
+}
+
+// AddGroupAccessGroups adds the "group_access_groups" edges to the Group entity.
+func (_u *UserUpdateOne) AddGroupAccessGroups(v ...*Group) *UserUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddGroupAccessGroupIDs(ids...)
 }
 
 // AddUsageLogIDs adds the "usage_logs" edge to the UsageLog entity by IDs.
@@ -2528,6 +2672,27 @@ func (_u *UserUpdateOne) RemoveAllowedGroups(v ...*Group) *UserUpdateOne {
 	return _u.RemoveAllowedGroupIDs(ids...)
 }
 
+// ClearGroupAccessGroups clears all "group_access_groups" edges to the Group entity.
+func (_u *UserUpdateOne) ClearGroupAccessGroups() *UserUpdateOne {
+	_u.mutation.ClearGroupAccessGroups()
+	return _u
+}
+
+// RemoveGroupAccessGroupIDs removes the "group_access_groups" edge to Group entities by IDs.
+func (_u *UserUpdateOne) RemoveGroupAccessGroupIDs(ids ...int64) *UserUpdateOne {
+	_u.mutation.RemoveGroupAccessGroupIDs(ids...)
+	return _u
+}
+
+// RemoveGroupAccessGroups removes "group_access_groups" edges to Group entities.
+func (_u *UserUpdateOne) RemoveGroupAccessGroups(v ...*Group) *UserUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveGroupAccessGroupIDs(ids...)
+}
+
 // ClearUsageLogs clears all "usage_logs" edges to the UsageLog entity.
 func (_u *UserUpdateOne) ClearUsageLogs() *UserUpdateOne {
 	_u.mutation.ClearUsageLogs()
@@ -2762,6 +2927,11 @@ func (_u *UserUpdateOne) check() error {
 			return &ValidationError{Name: "signup_source", err: fmt.Errorf(`ent: validator failed for field "User.signup_source": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.GroupAccessMode(); ok {
+		if err := user.GroupAccessModeValidator(v); err != nil {
+			return &ValidationError{Name: "group_access_mode", err: fmt.Errorf(`ent: validator failed for field "User.group_access_mode": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -2901,6 +3071,9 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.AddedRpmLimit(); ok {
 		_spec.AddField(user.FieldRpmLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.GroupAccessMode(); ok {
+		_spec.SetField(user.FieldGroupAccessMode, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.PromoCodeID(); ok {
 		_spec.SetField(user.FieldPromoCodeID, field.TypeInt64, value)
@@ -3188,6 +3361,63 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		createE := &UserAllowedGroupCreate{config: _u.config, mutation: newUserAllowedGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.GroupAccessGroupsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   user.GroupAccessGroupsTable,
+			Columns: user.GroupAccessGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeInt64),
+			},
+		}
+		createE := &UserGroupAccessGroupCreate{config: _u.config, mutation: newUserGroupAccessGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedGroupAccessGroupsIDs(); len(nodes) > 0 && !_u.mutation.GroupAccessGroupsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   user.GroupAccessGroupsTable,
+			Columns: user.GroupAccessGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		createE := &UserGroupAccessGroupCreate{config: _u.config, mutation: newUserGroupAccessGroupMutation(_u.config, OpCreate)}
+		createE.defaults()
+		_, specE := createE.createSpec()
+		edge.Target.Fields = specE.Fields
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.GroupAccessGroupsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   user.GroupAccessGroupsTable,
+			Columns: user.GroupAccessGroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		createE := &UserGroupAccessGroupCreate{config: _u.config, mutation: newUserGroupAccessGroupMutation(_u.config, OpCreate)}
 		createE.defaults()
 		_, specE := createE.createSpec()
 		edge.Target.Fields = specE.Fields
