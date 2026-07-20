@@ -174,6 +174,25 @@ func (s *stubAdminService) GetUserIncludeDeleted(ctx context.Context, id int64) 
 	return s.GetUser(ctx, id)
 }
 
+func (s *stubAdminService) GetUserGroupConfig(ctx context.Context, id int64) (*service.UserGroupConfig, error) {
+	return &service.UserGroupConfig{
+		AccessMode: service.GroupAccessModeInherit,
+		GroupRates: map[int64]float64{},
+	}, nil
+}
+
+func (s *stubAdminService) UpdateUserGroupConfig(ctx context.Context, id int64, input *service.UpdateUserGroupConfigInput) (*service.UserGroupConfig, error) {
+	if input == nil {
+		return s.GetUserGroupConfig(ctx, id)
+	}
+	return &service.UserGroupConfig{
+		AccessMode:         input.AccessMode,
+		RestrictedGroupIDs: append([]int64(nil), input.RestrictedGroupIDs...),
+		ExclusiveGroupIDs:  append([]int64(nil), input.ExclusiveGroupIDs...),
+		GroupRates:         map[int64]float64{},
+	}, nil
+}
+
 func (s *stubAdminService) CreateUser(ctx context.Context, input *service.CreateUserInput) (*service.User, error) {
 	user := service.User{ID: 100, Email: input.Email, Status: service.StatusActive}
 	return &user, nil

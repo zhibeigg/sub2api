@@ -62,6 +62,7 @@ vi.mock('vue-i18n', async (importOriginal) => {
         'common.availableBalance': '可用余额',
         'common.frozenBalance': '冻结金额',
         'common.totalBalance': '总余额',
+        'common.userMenu': 'User Menu',
       }[key] ?? key),
     }),
   }

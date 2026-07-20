@@ -216,3 +216,14 @@ describe('SubscriptionPlanCard renewal detection', () => {
     ]).text()).toContain('Subscribe now')
   })
 })
+
+describe('SubscriptionPlanCard currency display', () => {
+  it('uses the configured currency symbol while preserving USD for legacy plans', () => {
+    const cnyPlan = mountPlanCard(makePlan({ currency: 'CNY', original_price: 20 })).text()
+
+    expect(cnyPlan).toContain('¥10CNY')
+    expect(cnyPlan).toContain('¥20CNY')
+    expect(mountPlanCard(makePlan({ currency: 'USD' })).text()).toContain('$10USD')
+    expect(mountPlanCard(makePlan({ currency: '' })).text()).toContain('$10')
+  })
+})

@@ -52,7 +52,8 @@ type UpdateSettingsRequest struct {
 	TurnstileEndpoint  string `json:"turnstile_endpoint"`
 
 	// API Key IP 访问控制设置
-	APIKeyACLTrustForwardedIP *bool `json:"api_key_acl_trust_forwarded_ip"`
+	APIKeyACLTrustForwardedIP *bool     `json:"api_key_acl_trust_forwarded_ip"`
+	ForwardedClientIPHeaders  *[]string `json:"forwarded_client_ip_headers"`
 
 	ChatwootEnabled                  *bool   `json:"chatwoot_enabled"`
 	ChatwootBaseURL                  *string `json:"chatwoot_base_url"`
@@ -409,6 +410,10 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	stepUpEnabled := previousSettings.StepUpEnabled
 	if req.StepUpEnabled != nil {
 		stepUpEnabled = *req.StepUpEnabled
+	}
+	forwardedClientIPHeaders := append([]string(nil), previousSettings.ForwardedClientIPHeaders...)
+	if req.ForwardedClientIPHeaders != nil {
+		forwardedClientIPHeaders = append([]string(nil), (*req.ForwardedClientIPHeaders)...)
 	}
 
 	// 开启敏感操作 step-up 门控属自锁风险操作：仅允许本人已启用 TOTP 的管理员会话开启，
@@ -1285,6 +1290,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.APIKeyACLTrustForwardedIP
 		}(),
+		ForwardedClientIPHeaders: forwardedClientIPHeaders,
 		ChatwootEnabled: func() bool {
 			if req.ChatwootEnabled != nil {
 				return *req.ChatwootEnabled
@@ -1851,6 +1857,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		TurnstileSecretKeyConfigured:     updatedSettings.TurnstileSecretKeyConfigured,
 		TurnstileEndpoint:                updatedSettings.TurnstileEndpoint,
 		APIKeyACLTrustForwardedIP:        updatedSettings.APIKeyACLTrustForwardedIP,
+		ForwardedClientIPHeaders:         updatedSettings.ForwardedClientIPHeaders,
 		ChatwootEnabled:                  updatedSettings.ChatwootEnabled,
 		ChatwootBaseURL:                  updatedSettings.ChatwootBaseURL,
 		ChatwootWebsiteToken:             updatedSettings.ChatwootWebsiteToken,

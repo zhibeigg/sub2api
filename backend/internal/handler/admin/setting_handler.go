@@ -153,6 +153,7 @@ func (h *SettingHandler) GetSettings(c *gin.Context) {
 		TurnstileSecretKeyConfigured:     settings.TurnstileSecretKeyConfigured,
 		TurnstileEndpoint:                settings.TurnstileEndpoint,
 		APIKeyACLTrustForwardedIP:        settings.APIKeyACLTrustForwardedIP,
+		ForwardedClientIPHeaders:         settings.ForwardedClientIPHeaders,
 		ChatwootEnabled:                  settings.ChatwootEnabled,
 		ChatwootBaseURL:                  settings.ChatwootBaseURL,
 		ChatwootWebsiteToken:             settings.ChatwootWebsiteToken,

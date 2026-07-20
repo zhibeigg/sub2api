@@ -15,7 +15,7 @@
     <header class="public-header">
       <div class="public-shell public-header-inner">
         <router-link to="/home" class="public-brand" :aria-label="siteName">
-          <img :src="siteLogo || '/logo.png'" :alt="siteName" class="public-brand-logo" />
+          <img :src="siteLogo || '/logo.svg'" :alt="siteName" class="public-brand-logo" />
           <span>{{ siteName }}</span>
         </router-link>
 

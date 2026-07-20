@@ -6,7 +6,7 @@
       <div class="public-shell auth-header-inner">
         <router-link to="/home" class="auth-brand" :aria-label="siteName">
           <span class="auth-logo-lockup" aria-hidden="true">
-            <img :src="siteLogo || '/logo.png'" alt="" class="auth-logo" />
+            <img :src="siteLogo || '/logo.svg'" alt="" class="auth-logo" />
           </span>
           <LetterSwapText :text="siteName" />
         </router-link>

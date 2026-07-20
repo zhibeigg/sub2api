@@ -43,6 +43,7 @@ type SystemSettings struct {
 	TurnstileSecretKeyConfigured bool
 	TurnstileEndpoint            string
 	APIKeyACLTrustForwardedIP    bool
+	ForwardedClientIPHeaders     []string
 
 	ChatwootEnabled                            bool
 	ChatwootBaseURL                            string
