@@ -19,6 +19,16 @@ describe('AppSidebar custom SVG styles', () => {
   })
 })
 
+describe('AppSidebar feature flags', () => {
+  it('uses independent flags for model square and available channels', () => {
+    expect(componentSource).toContain('const flagModelSquare = makeSidebarFlag(FeatureFlags.modelSquare)')
+    expect(componentSource).toContain("path: '/models'")
+    expect(componentSource).toContain('featureFlag: flagModelSquare')
+    expect(componentSource).toContain("path: '/available-channels'")
+    expect(componentSource).toContain('featureFlag: flagAvailableChannels')
+  })
+})
+
 describe('AppSidebar scroll position persistence', () => {
   it('binds a template ref to the sidebar nav element', () => {
     expect(componentSource).toContain('ref="sidebarNavRef"')

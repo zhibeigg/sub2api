@@ -890,7 +890,7 @@ async function loadData(options: LoadDataOptions = {}) {
   if (controlsLoading) loading.value = true
 
   try {
-    const list = await userChannelsAPI.getAvailable({ signal })
+    const list = await userChannelsAPI.getModelSquare({ signal })
 
     if (signal.aborted || abortController !== currentController) return
     channels.value = list

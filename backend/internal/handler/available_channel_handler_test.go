@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -19,13 +21,96 @@ func TestUserAvailableChannel_Unauthenticated401(t *testing.T) {
 	// 没有 AuthSubject 注入时，handler 应返回 401 且不触达 service 依赖。
 	gin.SetMode(gin.TestMode)
 	h := &AvailableChannelHandler{} // nil services — 401 路径不会调用它们
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/channels/available", nil)
+	for _, test := range []struct {
+		path   string
+		handle func(*gin.Context)
+	}{
+		{path: "/api/v1/channels/available", handle: h.List},
+		{path: "/api/v1/models/available", handle: h.ListModelSquare},
+	} {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, test.path, nil)
 
-	h.List(c)
+		test.handle(c)
 
-	require.Equal(t, http.StatusUnauthorized, w.Code)
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	}
+}
+
+func TestAvailableChannelHandler_FeatureGatesAreIndependent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := service.NewSettingService(&settingHandlerPublicRepoStub{values: map[string]string{
+		service.SettingKeyAvailableChannelsEnabled: "true",
+		service.SettingKeyModelSquareEnabled:       "false",
+	}}, &config.Config{})
+	h := &AvailableChannelHandler{settingService: svc}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+
+	require.True(t, h.availableChannelsEnabled(c))
+	require.False(t, h.modelSquareEnabled(c))
+
+	svc = service.NewSettingService(&settingHandlerPublicRepoStub{values: map[string]string{
+		service.SettingKeyAvailableChannelsEnabled: "false",
+		service.SettingKeyModelSquareEnabled:       "true",
+	}}, &config.Config{})
+	h.settingService = svc
+	require.False(t, h.availableChannelsEnabled(c))
+	require.True(t, h.modelSquareEnabled(c))
+}
+
+func TestAvailableChannelHandler_ClosedGateReturnsEmptyAfterAuthentication(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []struct {
+		name   string
+		path   string
+		values map[string]string
+		handle func(*AvailableChannelHandler, *gin.Context)
+	}{
+		{
+			name: "available channels ignores enabled model square",
+			path: "/api/v1/channels/available",
+			values: map[string]string{
+				service.SettingKeyAvailableChannelsEnabled: "false",
+				service.SettingKeyModelSquareEnabled:       "true",
+			},
+			handle: func(h *AvailableChannelHandler, c *gin.Context) { h.List(c) },
+		},
+		{
+			name: "model square ignores enabled available channels",
+			path: "/api/v1/models/available",
+			values: map[string]string{
+				service.SettingKeyAvailableChannelsEnabled: "true",
+				service.SettingKeyModelSquareEnabled:       "false",
+			},
+			handle: func(h *AvailableChannelHandler, c *gin.Context) { h.ListModelSquare(c) },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &AvailableChannelHandler{settingService: service.NewSettingService(
+				&settingHandlerPublicRepoStub{values: tt.values},
+				&config.Config{},
+			)}
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodGet, tt.path, nil)
+			c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: 1})
+
+			tt.handle(h, c)
+
+			require.Equal(t, http.StatusOK, w.Code)
+			var resp struct {
+				Code int   `json:"code"`
+				Data []any `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+			require.Equal(t, 0, resp.Code)
+			require.Empty(t, resp.Data)
+		})
+	}
 }
 
 func TestFilterUserVisibleGroups_IntersectionOnly(t *testing.T) {

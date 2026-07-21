@@ -57,6 +57,7 @@ function createPublicSettings(overrides: Partial<PublicSettings> = {}): PublicSe
     channel_monitor_enabled: true,
     channel_monitor_default_interval_seconds: 60,
     available_channels_enabled: false,
+    model_square_enabled: false,
     service_quota_enabled: false,
     affiliate_enabled: false,
     ...overrides,
@@ -433,7 +434,21 @@ describe('useAppStore', () => {
       expect(store.siteName).toBe('TestSite')
       expect(store.siteLogo).toBe('/logo.png')
       expect(store.siteVersion).toBe('1.0.0')
+      expect(store.cachedPublicSettings?.model_square_enabled).toBe(false)
+      expect(windowAny.__APP_CONFIG__.model_square_enabled).toBe(false)
       expect(store.publicSettingsLoaded).toBe(true)
+    })
+
+    it('保留注入配置中显式启用的模型广场开关', () => {
+      const windowAny = window as any
+      windowAny.__APP_CONFIG__ = createPublicSettings({ model_square_enabled: true })
+
+      const store = useAppStore()
+      const result = store.initFromInjectedConfig()
+
+      expect(result).toBe(true)
+      expect(store.cachedPublicSettings?.model_square_enabled).toBe(true)
+      expect(windowAny.__APP_CONFIG__.model_square_enabled).toBe(true)
     })
 
     it('无注入配置时返回 false', () => {
@@ -442,6 +457,15 @@ describe('useAppStore', () => {
 
       expect(result).toBe(false)
       expect(store.publicSettingsLoaded).toBe(false)
+    })
+
+    it('缓存缺失时返回的公共设置包含默认关闭的模型广场开关', async () => {
+      const store = useAppStore()
+      store.publicSettingsLoaded = true
+
+      const settings = await store.fetchPublicSettings()
+
+      expect(settings?.model_square_enabled).toBe(false)
     })
 
     it('clearPublicSettingsCache 清除缓存', () => {

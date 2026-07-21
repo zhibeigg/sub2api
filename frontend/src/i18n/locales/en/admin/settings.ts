@@ -25,10 +25,17 @@ export default {
         },
         availableChannels: {
           title: 'Available Channels',
-          description: 'Show logged-in users an aggregate view of the channels, models and pricing they can access. Disabled by default.',
-          configureLink: 'Configure model pricing in Channel Management > Channel Pricing',
+          description: 'Control whether logged-in users can access the Available Channels page. Disabled by default.',
+          configureLink: 'Configure channel information in Channel Management > Channel Pricing',
           enabled: 'Enable Available Channels',
-          enabledHint: 'When off, the sidebar entry is hidden and the endpoint returns an empty list.',
+          enabledHint: 'When off, the Available Channels sidebar entry is hidden and its endpoint returns an empty list without affecting Model Square.',
+        },
+        modelSquare: {
+          title: 'Model Square',
+          description: 'Show logged-in users available models, billing modes, and group pricing. Disabled by default.',
+          configureLink: 'Configure model pricing in Channel Management > Channel Pricing',
+          enabled: 'Enable Model Square',
+          enabledHint: 'When off, the Model Square sidebar entry is hidden and its endpoint returns an empty list without affecting Available Channels.',
         },
         riskControl: {
           title: 'Risk Control',

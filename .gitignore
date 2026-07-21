@@ -146,6 +146,7 @@ docs/*
 !docs/ADMIN_PAYMENT_INTEGRATION_API.md
 !docs/ADMIN_USER_GROUP_RESTRICTIONS.md
 !docs/ASYNC_IMAGE_TASKS.md
+!docs/MODEL_SQUARE.md
 !docs/legal/
 !docs/legal/*.md
 .serena/

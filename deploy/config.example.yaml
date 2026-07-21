@@ -8,6 +8,10 @@
 # Payment provider credentials and protocol-specific settings are configured in
 # the Admin Dashboard and stored in the database; do not add them to this YAML.
 # 支付服务商凭证及协议相关设置请在管理后台配置并保存到数据库，不要写入此 YAML。
+# The Model Square and Available Channels feature switches are also DB-backed
+# Admin Dashboard settings, not YAML keys. See docs/MODEL_SQUARE.md.
+# 模型广场与可用渠道功能开关同样由管理后台写入数据库，并非 YAML 配置项；
+# 配置方式见 docs/MODEL_SQUARE.md。
 
 # =============================================================================
 # Server Configuration

@@ -217,6 +217,32 @@ func TestSettingService_AffiliateAdminRechargeSetting(t *testing.T) {
 	})
 }
 
+func TestSettingService_ModelSquareSettingDefaultsAndPersistsIndependently(t *testing.T) {
+	t.Run("missing value defaults to disabled", func(t *testing.T) {
+		svc := NewSettingService(&settingGetAllRepoStub{values: map[string]string{
+			SettingKeyAvailableChannelsEnabled: "true",
+		}}, &config.Config{})
+
+		settings, err := svc.GetAllSettings(context.Background())
+		require.NoError(t, err)
+		require.True(t, settings.AvailableChannelsEnabled)
+		require.False(t, settings.ModelSquareEnabled)
+	})
+
+	t.Run("both values persist independently", func(t *testing.T) {
+		repo := &settingUpdateRepoStub{}
+		svc := NewSettingService(repo, &config.Config{})
+
+		err := svc.UpdateSettings(context.Background(), &SystemSettings{
+			AvailableChannelsEnabled: false,
+			ModelSquareEnabled:       true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, "false", repo.updates[SettingKeyAvailableChannelsEnabled])
+		require.Equal(t, "true", repo.updates[SettingKeyModelSquareEnabled])
+	})
+}
+
 func (s *defaultSubGroupReaderStub) GetByID(ctx context.Context, id int64) (*Group, error) {
 	s.calls = append(s.calls, id)
 	if err, ok := s.errBy[id]; ok {
@@ -565,6 +591,7 @@ func TestSettingService_InitializeDefaultSettingsPersistsConfiguredForwardedClie
 
 	require.NoError(t, svc.InitializeDefaultSettings(context.Background()))
 	require.JSONEq(t, `["X-Cdn-Ip","True-Client-Ip"]`, repo.values[SettingKeyForwardedClientIPHeaders])
+	require.Equal(t, "false", repo.values[SettingKeyModelSquareEnabled])
 }
 
 func TestSettingService_UpdateSettings_APIKeyACLTrustForwardedIPRefreshesConfig(t *testing.T) {

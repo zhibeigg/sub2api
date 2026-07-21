@@ -189,8 +189,9 @@ type SystemSettings struct {
 	ChannelMonitorEnabled                bool `json:"channel_monitor_enabled"`
 	ChannelMonitorDefaultIntervalSeconds int  `json:"channel_monitor_default_interval_seconds"`
 
-	// Available Channels feature (user-facing aggregate view)
+	// Available Channels and Model Square features (independent user-facing views)
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
+	ModelSquareEnabled       bool `json:"model_square_enabled"`
 
 	// Claude Code version check
 	MinClaudeCodeVersion string
@@ -345,8 +346,9 @@ type PublicSettings struct {
 	ChannelMonitorEnabled                bool `json:"channel_monitor_enabled"`
 	ChannelMonitorDefaultIntervalSeconds int  `json:"channel_monitor_default_interval_seconds"`
 
-	// Available Channels feature (user-facing aggregate view)
+	// Available Channels and Model Square features (independent user-facing views)
 	AvailableChannelsEnabled bool `json:"available_channels_enabled"`
+	ModelSquareEnabled       bool `json:"model_square_enabled"`
 
 	// Affiliate (邀请返利) feature toggle
 	AffiliateEnabled bool `json:"affiliate_enabled"`

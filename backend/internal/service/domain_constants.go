@@ -398,6 +398,10 @@ const (
 	// sidebar entry is hidden. Defaults to false (opt-in feature).
 	SettingKeyAvailableChannelsEnabled = "available_channels_enabled"
 
+	// SettingKeyModelSquareEnabled is an independent opt-in switch for the model-square
+	// view. Runtime reads are fail-closed and only the exact stored value "true" enables it.
+	SettingKeyModelSquareEnabled = "model_square_enabled"
+
 	// SettingKeyUpstreamBillingProbeSettings stores the global enable switch and interval
 	// for probing remote Sub2API API-key billing metadata.
 	SettingKeyUpstreamBillingProbeSettings = "upstream_billing_probe_settings"

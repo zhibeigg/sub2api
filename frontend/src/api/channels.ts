@@ -116,6 +116,14 @@ export async function getAvailable(options?: { signal?: AbortSignal }): Promise<
   return data
 }
 
-export const userChannelsAPI = { getAvailable }
+/** 列出模型广场可见的渠道与模型聚合数据。 */
+export async function getModelSquare(options?: { signal?: AbortSignal }): Promise<UserAvailableChannel[]> {
+  const { data } = await apiClient.get<UserAvailableChannel[]>('/models/available', {
+    signal: options?.signal
+  })
+  return data
+}
+
+export const userChannelsAPI = { getAvailable, getModelSquare }
 
 export default userChannelsAPI

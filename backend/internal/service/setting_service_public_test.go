@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -11,7 +12,8 @@ import (
 )
 
 type settingPublicRepoStub struct {
-	values map[string]string
+	values         map[string]string
+	getMultipleErr error
 }
 
 func (s *settingPublicRepoStub) Get(ctx context.Context, key string) (*Setting, error) {
@@ -27,6 +29,9 @@ func (s *settingPublicRepoStub) Set(ctx context.Context, key, value string) erro
 }
 
 func (s *settingPublicRepoStub) GetMultiple(ctx context.Context, keys []string) (map[string]string, error) {
+	if s.getMultipleErr != nil {
+		return nil, s.getMultipleErr
+	}
 	out := make(map[string]string, len(keys))
 	for _, key := range keys {
 		if value, ok := s.values[key]; ok {
@@ -163,4 +168,82 @@ func TestSettingService_GetPublicSettings_FallsBackToConfigForWeChatOAuthCapabil
 	require.True(t, settings.WeChatOAuthOpenEnabled)
 	require.False(t, settings.WeChatOAuthMPEnabled)
 	require.False(t, settings.WeChatOAuthMobileEnabled)
+}
+
+func TestSettingService_ModelSquareSettingsAreIndependent(t *testing.T) {
+	tests := []struct {
+		name            string
+		values          map[string]string
+		wantChannels    bool
+		wantModelSquare bool
+	}{
+		{
+			name: "channels only",
+			values: map[string]string{
+				SettingKeyAvailableChannelsEnabled: "true",
+				SettingKeyModelSquareEnabled:       "false",
+			},
+			wantChannels: true,
+		},
+		{
+			name: "model square only",
+			values: map[string]string{
+				SettingKeyAvailableChannelsEnabled: "false",
+				SettingKeyModelSquareEnabled:       "true",
+			},
+			wantModelSquare: true,
+		},
+		{
+			name: "missing and malformed stay disabled",
+			values: map[string]string{
+				SettingKeyAvailableChannelsEnabled: "TRUE",
+				SettingKeyModelSquareEnabled:       "1",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := NewSettingService(&settingPublicRepoStub{values: tt.values}, &config.Config{})
+			parsed := svc.parseSettings(tt.values)
+			require.Equal(t, tt.wantChannels, parsed.AvailableChannelsEnabled)
+			require.Equal(t, tt.wantModelSquare, parsed.ModelSquareEnabled)
+
+			public, err := svc.GetPublicSettings(context.Background())
+			require.NoError(t, err)
+			require.Equal(t, tt.wantChannels, public.AvailableChannelsEnabled)
+			require.Equal(t, tt.wantModelSquare, public.ModelSquareEnabled)
+		})
+	}
+}
+
+func TestSettingService_GetPublicSettingsForInjectionIncludesModelSquare(t *testing.T) {
+	svc := NewSettingService(&settingPublicRepoStub{values: map[string]string{
+		SettingKeyModelSquareEnabled: "true",
+	}}, &config.Config{})
+
+	payload, err := svc.GetPublicSettingsForInjection(context.Background())
+	require.NoError(t, err)
+	injection, ok := payload.(*PublicSettingsInjectionPayload)
+	require.True(t, ok)
+	require.True(t, injection.ModelSquareEnabled)
+}
+
+func TestSettingService_GetModelSquareRuntime_FailsClosed(t *testing.T) {
+	t.Run("exact true enables", func(t *testing.T) {
+		svc := NewSettingService(&settingPublicRepoStub{values: map[string]string{
+			SettingKeyModelSquareEnabled: "true",
+		}}, &config.Config{})
+		require.True(t, svc.GetModelSquareRuntime(context.Background()).Enabled)
+	})
+
+	t.Run("missing disables", func(t *testing.T) {
+		svc := NewSettingService(&settingPublicRepoStub{values: map[string]string{}}, &config.Config{})
+		require.False(t, svc.GetModelSquareRuntime(context.Background()).Enabled)
+	})
+
+	t.Run("read failure disables", func(t *testing.T) {
+		svc := NewSettingService(&settingPublicRepoStub{getMultipleErr: errors.New("database unavailable")}, &config.Config{})
+		require.False(t, svc.GetModelSquareRuntime(context.Background()).Enabled)
+	})
 }

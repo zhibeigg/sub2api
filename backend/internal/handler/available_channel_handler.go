@@ -42,12 +42,20 @@ func NewAvailableChannelHandler(
 	}
 }
 
-// featureEnabled 返回 available-channels 开关是否启用。默认关闭（opt-in）。
-func (h *AvailableChannelHandler) featureEnabled(c *gin.Context) bool {
+// availableChannelsEnabled 返回可用渠道开关是否启用。默认关闭（opt-in）。
+func (h *AvailableChannelHandler) availableChannelsEnabled(c *gin.Context) bool {
 	if h.settingService == nil {
 		return false
 	}
 	return h.settingService.GetAvailableChannelsRuntime(c.Request.Context()).Enabled
+}
+
+// modelSquareEnabled 返回模型广场独立开关是否启用。读取失败或缺失时关闭。
+func (h *AvailableChannelHandler) modelSquareEnabled(c *gin.Context) bool {
+	if h.settingService == nil {
+		return false
+	}
+	return h.settingService.GetModelSquareRuntime(c.Request.Context()).Enabled
 }
 
 // userAvailableGroup 用户可见的分组概要（白名单字段）。
@@ -150,6 +158,16 @@ type userAvailableChannel struct {
 // List 列出当前用户可见的「可用渠道」。
 // GET /api/v1/channels/available
 func (h *AvailableChannelHandler) List(c *gin.Context) {
+	h.list(c, h.availableChannelsEnabled)
+}
+
+// ListModelSquare 复用可用渠道聚合结果，但只受模型广场独立开关控制。
+// GET /api/v1/models/available
+func (h *AvailableChannelHandler) ListModelSquare(c *gin.Context) {
+	h.list(c, h.modelSquareEnabled)
+}
+
+func (h *AvailableChannelHandler) list(c *gin.Context, enabled func(*gin.Context) bool) {
 	subject, ok := middleware.GetAuthSubjectFromContext(c)
 	if !ok {
 		response.Unauthorized(c, "User not authenticated")
@@ -157,8 +175,8 @@ func (h *AvailableChannelHandler) List(c *gin.Context) {
 	}
 
 	// Feature 未启用时返回空数组（不暴露渠道信息）。检查放在认证之后，
-	// 保持与未开关前的 401 行为一致：未登录先 401，登录后再按开关决定。
-	if !h.featureEnabled(c) {
+	// 保持未登录先 401，登录后再按各自独立开关决定。
+	if enabled == nil || !enabled(c) {
 		response.Success(c, []userAvailableChannel{})
 		return
 	}

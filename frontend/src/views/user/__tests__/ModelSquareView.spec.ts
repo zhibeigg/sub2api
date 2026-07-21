@@ -11,8 +11,9 @@ import {
 import { BILLING_MODE_IMAGE, BILLING_MODE_TOKEN } from '@/constants/channel'
 import type { UserSupportedModelPricing } from '@/api/channels'
 
-const { getAvailableChannels, showError } = vi.hoisted(() => ({
+const { getAvailableChannels, legacyGetAvailable, showError } = vi.hoisted(() => ({
   getAvailableChannels: vi.fn(),
+  legacyGetAvailable: vi.fn(),
   showError: vi.fn()
 }))
 
@@ -95,8 +96,12 @@ vi.mock('@/api/channels', async () => {
   const actual = await vi.importActual<typeof import('@/api/channels')>('@/api/channels')
   return {
     ...actual,
-    default: { getAvailable: getAvailableChannels },
-    getAvailable: getAvailableChannels
+    default: {
+      getAvailable: legacyGetAvailable,
+      getModelSquare: getAvailableChannels
+    },
+    getAvailable: legacyGetAvailable,
+    getModelSquare: getAvailableChannels
   }
 })
 
@@ -315,6 +320,9 @@ describe('ModelSquareView image model cards', () => {
     })
 
     await flushPromises()
+
+    expect(getAvailableChannels).toHaveBeenCalledTimes(1)
+    expect(legacyGetAvailable).not.toHaveBeenCalled()
 
     const cards = wrapper.findAll('article')
     expect(cards).toHaveLength(2)

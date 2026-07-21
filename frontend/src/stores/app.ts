@@ -289,18 +289,23 @@ export const useAppStore = defineStore('app', () => {
   /**
    * Apply settings to store state (internal helper to avoid code duplication)
    */
-  function applySettings(config: PublicSettings): void {
-    if (typeof window !== 'undefined') {
-      window.__APP_CONFIG__ = { ...config }
+  function applySettings(config: PublicSettings): PublicSettings {
+    const normalizedConfig: PublicSettings = {
+      ...config,
+      model_square_enabled: config.model_square_enabled === true,
     }
-    cachedPublicSettings.value = config
-    siteName.value = config.site_name || 'Sub2API'
-    siteLogo.value = config.site_logo || ''
-    siteVersion.value = config.version || ''
-    contactInfo.value = config.contact_info || ''
-    apiBaseUrl.value = config.api_base_url || ''
-    docUrl.value = config.doc_url || ''
+    if (typeof window !== 'undefined') {
+      window.__APP_CONFIG__ = { ...normalizedConfig }
+    }
+    cachedPublicSettings.value = normalizedConfig
+    siteName.value = normalizedConfig.site_name || 'Sub2API'
+    siteLogo.value = normalizedConfig.site_logo || ''
+    siteVersion.value = normalizedConfig.version || ''
+    contactInfo.value = normalizedConfig.contact_info || ''
+    apiBaseUrl.value = normalizedConfig.api_base_url || ''
+    docUrl.value = normalizedConfig.doc_url || ''
     publicSettingsLoaded.value = true
+    return normalizedConfig
   }
 
   /**
@@ -316,8 +321,7 @@ export const useAppStore = defineStore('app', () => {
 
     // Check for injected config from server (eliminates flash)
     if (!publicSettingsLoaded.value && !force && window.__APP_CONFIG__) {
-      applySettings(window.__APP_CONFIG__)
-      return Promise.resolve(window.__APP_CONFIG__)
+      return Promise.resolve(applySettings(window.__APP_CONFIG__))
     }
 
     // Return cached data if available and not forcing refresh
@@ -370,6 +374,7 @@ export const useAppStore = defineStore('app', () => {
         channel_monitor_enabled: true,
         channel_monitor_default_interval_seconds: 60,
         available_channels_enabled: false,
+        model_square_enabled: false,
         risk_control_enabled: false,
         service_quota_enabled: false,
         affiliate_enabled: false,
@@ -388,10 +393,7 @@ export const useAppStore = defineStore('app', () => {
     }
 
     const request = apiRequest
-      .then((data) => {
-        applySettings(data)
-        return data
-      })
+      .then((data) => applySettings(data))
       .catch((error) => {
         console.error('Failed to fetch public settings:', error)
         return null

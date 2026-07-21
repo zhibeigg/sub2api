@@ -25,10 +25,17 @@ export default {
         },
         availableChannels: {
           title: '可用渠道',
-          description: '向已登录用户展示他们能访问的渠道、模型和定价聚合视图。默认关闭。',
-          configureLink: '前往 渠道管理 > 渠道定价 配置模型价格',
+          description: '控制已登录用户是否可访问“可用渠道”页面。默认关闭。',
+          configureLink: '前往 渠道管理 > 渠道定价 配置渠道信息',
           enabled: '启用可用渠道',
-          enabledHint: '关闭后用户端侧边栏入口隐藏，接口返回空数组。',
+          enabledHint: '关闭后可用渠道侧边栏入口隐藏、对应接口返回空数组，且不影响模型广场。',
+        },
+        modelSquare: {
+          title: '模型广场',
+          description: '向已登录用户展示可用模型、计费方式和分组价格。默认关闭。',
+          configureLink: '前往 渠道管理 > 渠道定价 配置模型价格',
+          enabled: '启用模型广场',
+          enabledHint: '关闭后模型广场侧边栏入口隐藏、对应接口返回空数组，且不影响可用渠道页面。',
         },
         riskControl: {
           title: '风控中心',

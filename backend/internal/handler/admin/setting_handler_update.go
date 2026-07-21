@@ -315,8 +315,9 @@ type UpdateSettingsRequest struct {
 	ChannelMonitorEnabled                *bool `json:"channel_monitor_enabled"`
 	ChannelMonitorDefaultIntervalSeconds *int  `json:"channel_monitor_default_interval_seconds"`
 
-	// Available Channels feature switch (user-facing)
+	// Available Channels and Model Square feature switches (user-facing)
 	AvailableChannelsEnabled *bool `json:"available_channels_enabled"`
+	ModelSquareEnabled       *bool `json:"model_square_enabled"`
 
 	// Affiliate (邀请返利) feature switch
 	AffiliateEnabled *bool `json:"affiliate_enabled"`
@@ -1656,6 +1657,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.AvailableChannelsEnabled
 		}(),
+		ModelSquareEnabled: boolValueOrDefault(req.ModelSquareEnabled, previousSettings.ModelSquareEnabled),
 		AffiliateEnabled: func() bool {
 			if req.AffiliateEnabled != nil {
 				return *req.AffiliateEnabled
@@ -2053,6 +2055,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		ChannelMonitorDefaultIntervalSeconds: updatedSettings.ChannelMonitorDefaultIntervalSeconds,
 
 		AvailableChannelsEnabled: updatedSettings.AvailableChannelsEnabled,
+		ModelSquareEnabled:       updatedSettings.ModelSquareEnabled,
 
 		AffiliateEnabled: updatedSettings.AffiliateEnabled,
 

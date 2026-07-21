@@ -519,6 +519,8 @@ const baseSettingsResponse = {
   subscription_expiry_notify_enabled: true,
   account_quota_notify_enabled: false,
   account_quota_notify_emails: [],
+  available_channels_enabled: false,
+  model_square_enabled: false,
   // 平台限额嵌套字段（新后端契约）
   default_platform_quotas: {
     anthropic:   { daily: null, weekly: null, monthly: null },
@@ -556,6 +558,16 @@ async function openPaymentTab(wrapper: ReturnType<typeof mountView>) {
 
   expect(paymentTabButton).toBeDefined();
   await paymentTabButton?.trigger("click");
+  await flushPromises();
+}
+
+async function openFeaturesTab(wrapper: ReturnType<typeof mountView>) {
+  const featuresTabButton = wrapper
+    .findAll("button")
+    .find((node) => node.text().includes("admin.settings.tabs.features"));
+
+  expect(featuresTabButton).toBeDefined();
+  await featuresTabButton?.trigger("click");
   await flushPromises();
 }
 
@@ -674,6 +686,45 @@ describe("admin SettingsView payment visible method controls", () => {
     fetchPublicSettings.mockResolvedValue(undefined);
     adminSettingsFetch.mockResolvedValue(undefined);
   });
+
+  it.each([
+    [false, false],
+    [false, true],
+    [true, false],
+    [true, true],
+  ])(
+    "loads and submits available channels=%s and model square=%s independently",
+    async (availableChannelsEnabled, modelSquareEnabled) => {
+      getSettings.mockResolvedValueOnce({
+        ...baseSettingsResponse,
+        available_channels_enabled: availableChannelsEnabled,
+        model_square_enabled: modelSquareEnabled,
+      });
+
+      const wrapper = mountView();
+      await flushPromises();
+      await openFeaturesTab(wrapper);
+
+      expect(
+        (wrapper.get('[data-testid="available-channels-enabled"]').element as HTMLInputElement)
+          .checked,
+      ).toBe(availableChannelsEnabled);
+      expect(
+        (wrapper.get('[data-testid="model-square-enabled"]').element as HTMLInputElement)
+          .checked,
+      ).toBe(modelSquareEnabled);
+
+      await wrapper.find("form").trigger("submit.prevent");
+      await flushPromises();
+
+      expect(updateSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          available_channels_enabled: availableChannelsEnabled,
+          model_square_enabled: modelSquareEnabled,
+        }),
+      );
+    },
+  );
 
   it("loads and saves Chatwoot settings while preserving a configured identity secret", async () => {
     getSettings.mockResolvedValueOnce({
