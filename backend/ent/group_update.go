@@ -920,6 +920,41 @@ func (_u *GroupUpdate) AddRpmLimit(v int) *GroupUpdate {
 	return _u
 }
 
+// SetPoolCapacityAlertEnabled sets the "pool_capacity_alert_enabled" field.
+func (_u *GroupUpdate) SetPoolCapacityAlertEnabled(v bool) *GroupUpdate {
+	_u.mutation.SetPoolCapacityAlertEnabled(v)
+	return _u
+}
+
+// SetNillablePoolCapacityAlertEnabled sets the "pool_capacity_alert_enabled" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillablePoolCapacityAlertEnabled(v *bool) *GroupUpdate {
+	if v != nil {
+		_u.SetPoolCapacityAlertEnabled(*v)
+	}
+	return _u
+}
+
+// SetPoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field.
+func (_u *GroupUpdate) SetPoolCapacityAlertGeneration(v int64) *GroupUpdate {
+	_u.mutation.ResetPoolCapacityAlertGeneration()
+	_u.mutation.SetPoolCapacityAlertGeneration(v)
+	return _u
+}
+
+// SetNillablePoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillablePoolCapacityAlertGeneration(v *int64) *GroupUpdate {
+	if v != nil {
+		_u.SetPoolCapacityAlertGeneration(*v)
+	}
+	return _u
+}
+
+// AddPoolCapacityAlertGeneration adds value to the "pool_capacity_alert_generation" field.
+func (_u *GroupUpdate) AddPoolCapacityAlertGeneration(v int64) *GroupUpdate {
+	_u.mutation.AddPoolCapacityAlertGeneration(v)
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *GroupUpdate) AddAPIKeyIDs(ids ...int64) *GroupUpdate {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -1638,6 +1673,15 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedRpmLimit(); ok {
 		_spec.AddField(group.FieldRpmLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.PoolCapacityAlertEnabled(); ok {
+		_spec.SetField(group.FieldPoolCapacityAlertEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PoolCapacityAlertGeneration(); ok {
+		_spec.SetField(group.FieldPoolCapacityAlertGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedPoolCapacityAlertGeneration(); ok {
+		_spec.AddField(group.FieldPoolCapacityAlertGeneration, field.TypeInt64, value)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -3064,6 +3108,41 @@ func (_u *GroupUpdateOne) AddRpmLimit(v int) *GroupUpdateOne {
 	return _u
 }
 
+// SetPoolCapacityAlertEnabled sets the "pool_capacity_alert_enabled" field.
+func (_u *GroupUpdateOne) SetPoolCapacityAlertEnabled(v bool) *GroupUpdateOne {
+	_u.mutation.SetPoolCapacityAlertEnabled(v)
+	return _u
+}
+
+// SetNillablePoolCapacityAlertEnabled sets the "pool_capacity_alert_enabled" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillablePoolCapacityAlertEnabled(v *bool) *GroupUpdateOne {
+	if v != nil {
+		_u.SetPoolCapacityAlertEnabled(*v)
+	}
+	return _u
+}
+
+// SetPoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field.
+func (_u *GroupUpdateOne) SetPoolCapacityAlertGeneration(v int64) *GroupUpdateOne {
+	_u.mutation.ResetPoolCapacityAlertGeneration()
+	_u.mutation.SetPoolCapacityAlertGeneration(v)
+	return _u
+}
+
+// SetNillablePoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillablePoolCapacityAlertGeneration(v *int64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetPoolCapacityAlertGeneration(*v)
+	}
+	return _u
+}
+
+// AddPoolCapacityAlertGeneration adds value to the "pool_capacity_alert_generation" field.
+func (_u *GroupUpdateOne) AddPoolCapacityAlertGeneration(v int64) *GroupUpdateOne {
+	_u.mutation.AddPoolCapacityAlertGeneration(v)
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *GroupUpdateOne) AddAPIKeyIDs(ids ...int64) *GroupUpdateOne {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -3812,6 +3891,15 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.AddedRpmLimit(); ok {
 		_spec.AddField(group.FieldRpmLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.PoolCapacityAlertEnabled(); ok {
+		_spec.SetField(group.FieldPoolCapacityAlertEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PoolCapacityAlertGeneration(); ok {
+		_spec.SetField(group.FieldPoolCapacityAlertGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedPoolCapacityAlertGeneration(); ok {
+		_spec.AddField(group.FieldPoolCapacityAlertGeneration, field.TypeInt64, value)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{

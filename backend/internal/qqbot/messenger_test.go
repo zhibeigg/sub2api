@@ -71,6 +71,42 @@ func TestBotGoMessengerPreservesReplyIdentifiers(t *testing.T) {
 	}
 }
 
+func TestBotGoMessengerProactiveC2COmitsInboundReplyIdentifiers(t *testing.T) {
+	var sent map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		switch request.URL.Path {
+		case "/token":
+			_ = json.NewEncoder(writer).Encode(map[string]any{"code": 0, "access_token": "token", "expires_in": "7200"})
+		case "/v2/users/openid/messages":
+			if err := json.NewDecoder(request.Body).Decode(&sent); err != nil {
+				t.Error(err)
+			}
+			writer.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	defer server.Close()
+
+	messenger, err := NewBotGoMessenger("app", "secret", false, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messenger.baseURL = server.URL
+	messenger.tokenURL = server.URL + "/token"
+	if err := messenger.SendProactiveC2C(t.Context(), "openid", "admin alert"); err != nil {
+		t.Fatal(err)
+	}
+	if sent["content"] != "admin alert" {
+		t.Fatalf("sent=%#v", sent)
+	}
+	for _, forbidden := range []string{"msg_id", "event_id", "msg_seq"} {
+		if _, exists := sent[forbidden]; exists {
+			t.Fatalf("proactive request contains %s: %#v", forbidden, sent)
+		}
+	}
+}
+
 func TestBotGoMessengerUploadsAndRepliesWithGroupImage(t *testing.T) {
 	var upload botGoMediaUploadRequest
 	var sent botGoMessage

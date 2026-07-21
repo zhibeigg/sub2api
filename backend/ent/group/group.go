@@ -116,6 +116,10 @@ const (
 	FieldModelsListConfig = "models_list_config"
 	// FieldRpmLimit holds the string denoting the rpm_limit field in the database.
 	FieldRpmLimit = "rpm_limit"
+	// FieldPoolCapacityAlertEnabled holds the string denoting the pool_capacity_alert_enabled field in the database.
+	FieldPoolCapacityAlertEnabled = "pool_capacity_alert_enabled"
+	// FieldPoolCapacityAlertGeneration holds the string denoting the pool_capacity_alert_generation field in the database.
+	FieldPoolCapacityAlertGeneration = "pool_capacity_alert_generation"
 	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
 	EdgeAPIKeys = "api_keys"
 	// EdgeRedeemCodes holds the string denoting the redeem_codes edge name in mutations.
@@ -305,6 +309,8 @@ var Columns = []string{
 	FieldMessagesDispatchModelConfig,
 	FieldModelsListConfig,
 	FieldRpmLimit,
+	FieldPoolCapacityAlertEnabled,
+	FieldPoolCapacityAlertGeneration,
 }
 
 var (
@@ -430,6 +436,10 @@ var (
 	DefaultModelsListConfig domain.GroupModelsListConfig
 	// DefaultRpmLimit holds the default value on creation for the "rpm_limit" field.
 	DefaultRpmLimit int
+	// DefaultPoolCapacityAlertEnabled holds the default value on creation for the "pool_capacity_alert_enabled" field.
+	DefaultPoolCapacityAlertEnabled bool
+	// DefaultPoolCapacityAlertGeneration holds the default value on creation for the "pool_capacity_alert_generation" field.
+	DefaultPoolCapacityAlertGeneration int64
 )
 
 // OrderOption defines the ordering options for the Group queries.
@@ -663,6 +673,16 @@ func ByDefaultMappedModel(opts ...sql.OrderTermOption) OrderOption {
 // ByRpmLimit orders the results by the rpm_limit field.
 func ByRpmLimit(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRpmLimit, opts...).ToFunc()
+}
+
+// ByPoolCapacityAlertEnabled orders the results by the pool_capacity_alert_enabled field.
+func ByPoolCapacityAlertEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPoolCapacityAlertEnabled, opts...).ToFunc()
+}
+
+// ByPoolCapacityAlertGeneration orders the results by the pool_capacity_alert_generation field.
+func ByPoolCapacityAlertGeneration(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPoolCapacityAlertGeneration, opts...).ToFunc()
 }
 
 // ByAPIKeysCount orders the results by api_keys count.

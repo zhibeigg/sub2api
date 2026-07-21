@@ -2,7 +2,7 @@ import { defineConfig } from "vitepress"
 
 const siteUrl = "https://docs.poke2api.com"
 const siteDescription = "Poke API - AI API 网关，一个 API Key 接入 Claude / OpenAI / Gemini"
-const brandLogo = "/logo.png?v=0.53.55"
+const brandLogo = "/logo.png?v=0.54.55"
 
 function canonicalPath(relativePath) {
   if (relativePath === "index.md") {
@@ -115,7 +115,8 @@ export default defineConfig({
         text: "管理员指南",
         collapsed: false,
         items: [
-          { text: "用户分组访问限制", link: "/guide/admin-user-group-restrictions" }
+          { text: "用户分组访问限制", link: "/guide/admin-user-group-restrictions" },
+          { text: "池模式账户容量提醒", link: "/guide/admin-pool-capacity-alerts" }
         ]
       }
     ],

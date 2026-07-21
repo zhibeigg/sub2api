@@ -97,6 +97,8 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetMessagesDispatchModelConfig(groupIn.MessagesDispatchModelConfig).
 		SetModelsListConfig(groupIn.ModelsListConfig).
 		SetRpmLimit(groupIn.RPMLimit).
+		SetPoolCapacityAlertEnabled(groupIn.PoolCapacityAlertEnabled).
+		SetPoolCapacityAlertGeneration(groupIn.PoolCapacityAlertGeneration).
 		SetPeakRateEnabled(groupIn.PeakRateEnabled).
 		SetPeakStart(groupIn.PeakStart).
 		SetPeakEnd(groupIn.PeakEnd).
@@ -147,7 +149,13 @@ func (r *groupRepository) CreateFromSource(ctx context.Context, groupIn *service
 	if groupIn == nil {
 		return errors.New("group is nil")
 	}
+	// A duplicate must never inherit alert runtime ownership from its source.
+	// Reset before persistence so both the stored row and the returned object are consistent.
+	groupIn.PoolCapacityAlertEnabled = false
+	groupIn.PoolCapacityAlertGeneration = 0
+
 	tx, err := r.client.Tx(ctx)
+
 	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
 		return err
 	}
@@ -224,7 +232,75 @@ func (r *groupRepository) GetByIDLite(ctx context.Context, id int64) (*service.G
 }
 
 func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) error {
-	builder := r.client.Group.UpdateOneID(groupIn.ID).
+	updated, err := updateGroupRecord(ctx, r.client, groupIn, false)
+	if err != nil {
+		return err
+	}
+	groupIn.PoolCapacityAlertEnabled = updated.PoolCapacityAlertEnabled
+	groupIn.PoolCapacityAlertGeneration = updated.PoolCapacityAlertGeneration
+	groupIn.UpdatedAt = updated.UpdatedAt
+	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
+		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group update failed: group=%d err=%v", groupIn.ID, err)
+	}
+	return nil
+}
+
+// UpdateWithPoolCapacityAlert locks the current row before merging the alert
+// switch. Ordinary group updates never write the alert fields, so a stale
+// snapshot cannot restore an old generation after a concurrent toggle.
+func (r *groupRepository) UpdateWithPoolCapacityAlert(ctx context.Context, groupIn *service.Group, enabled *bool) error {
+	if groupIn == nil {
+		return errors.New("group is nil")
+	}
+	tx, err := r.client.Tx(ctx)
+	if err != nil && !errors.Is(err, dbent.ErrTxStarted) {
+		return err
+	}
+	var txClient *dbent.Client
+	if tx != nil {
+		defer func() { _ = tx.Rollback() }()
+		txClient = tx.Client()
+	} else {
+		// Reuse a caller-owned transaction in integration tests and transactional callers.
+		txClient = r.client
+	}
+	current, err := txClient.Group.Query().
+		Where(group.IDEQ(groupIn.ID)).
+		ForUpdate().
+		Only(ctx)
+	if err != nil {
+		return translatePersistenceError(err, service.ErrGroupNotFound, nil)
+	}
+	groupIn.PoolCapacityAlertEnabled = current.PoolCapacityAlertEnabled
+	groupIn.PoolCapacityAlertGeneration = current.PoolCapacityAlertGeneration
+	if enabled != nil && current.PoolCapacityAlertEnabled != *enabled {
+		groupIn.PoolCapacityAlertEnabled = *enabled
+		groupIn.PoolCapacityAlertGeneration++
+	}
+
+	updated, err := updateGroupRecord(ctx, txClient, groupIn, true)
+	if err != nil {
+		return err
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	groupIn.PoolCapacityAlertEnabled = updated.PoolCapacityAlertEnabled
+	groupIn.PoolCapacityAlertGeneration = updated.PoolCapacityAlertGeneration
+	groupIn.UpdatedAt = updated.UpdatedAt
+	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
+		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group update failed: group=%d err=%v", groupIn.ID, err)
+	}
+	return nil
+}
+
+func updateGroupRecord(ctx context.Context, client *dbent.Client, groupIn *service.Group, includePoolCapacityAlert bool) (*dbent.Group, error) {
+	if groupIn == nil {
+		return nil, errors.New("group is nil")
+	}
+	builder := client.Group.UpdateOneID(groupIn.ID).
 		SetName(groupIn.Name).
 		SetDescription(groupIn.Description).
 		SetPlatform(groupIn.Platform).
@@ -265,6 +341,11 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		SetPeakStart(groupIn.PeakStart).
 		SetPeakEnd(groupIn.PeakEnd).
 		SetPeakRateMultiplier(groupIn.PeakRateMultiplier)
+	if includePoolCapacityAlert {
+		builder = builder.
+			SetPoolCapacityAlertEnabled(groupIn.PoolCapacityAlertEnabled).
+			SetPoolCapacityAlertGeneration(groupIn.PoolCapacityAlertGeneration)
+	}
 
 	// 显式处理可空字段：nil 需要 clear，非 nil 需要 set。
 	if groupIn.DailyLimitUSD != nil {
@@ -343,13 +424,9 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 
 	updated, err := builder.Save(ctx)
 	if err != nil {
-		return translatePersistenceError(err, service.ErrGroupNotFound, service.ErrGroupExists)
+		return nil, translatePersistenceError(err, service.ErrGroupNotFound, service.ErrGroupExists)
 	}
-	groupIn.UpdatedAt = updated.UpdatedAt
-	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
-		logger.LegacyPrintf("repository.group", "[SchedulerOutbox] enqueue group update failed: group=%d err=%v", groupIn.ID, err)
-	}
-	return nil
+	return updated, nil
 }
 
 func (r *groupRepository) Delete(ctx context.Context, id int64) error {

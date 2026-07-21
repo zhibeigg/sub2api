@@ -138,6 +138,7 @@ func TestNotificationEmailAdditionalEventsAreListedAndPreviewable(t *testing.T) 
 	}{
 		{NotificationEmailEventNotificationEmailVerifyCode, "verification_code"},
 		{NotificationEmailEventAccountQuotaAlert, "account_name"},
+		{NotificationEmailEventPoolCapacityLow, "predicted_requests"},
 		{NotificationEmailEventContentModerationViolation, "moderation_category"},
 		{NotificationEmailEventContentModerationDisabled, "violation_count"},
 		{NotificationEmailEventCyberPolicyNotice, "upstream_message"},

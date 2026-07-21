@@ -738,6 +738,61 @@ func TestAdminService_UpdateGroup_InvalidatesAuthCacheOnRPMLimitChange(t *testin
 	require.Equal(t, []int64{1}, invalidator.groupIDs, "分组 RPMLimit 写入 auth snapshot，变更后必须失效 API Key 认证缓存")
 }
 
+func TestAdminService_CreateGroup_DefaultsPoolCapacityAlertDisabled(t *testing.T) {
+	repo := &groupRepoStubForAdmin{}
+	svc := &adminServiceImpl{groupRepo: repo}
+
+	group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
+		Name:           "pool-alert-default",
+		Platform:       PlatformAnthropic,
+		RateMultiplier: 1,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, group)
+	require.False(t, repo.created.PoolCapacityAlertEnabled)
+	require.Zero(t, repo.created.PoolCapacityAlertGeneration)
+}
+
+func TestAdminService_UpdateGroup_PoolCapacityAlertGenerationChangesOnlyWithSwitch(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          *bool
+		wantEnabled    bool
+		wantGeneration int64
+	}{
+		{name: "omitted", input: nil, wantEnabled: false, wantGeneration: 7},
+		{name: "same value", input: testPtrBool(false), wantEnabled: false, wantGeneration: 7},
+		{name: "changed", input: testPtrBool(true), wantEnabled: true, wantGeneration: 8},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			existingGroup := &Group{
+				ID:                          1,
+				Name:                        "existing-group",
+				Platform:                    PlatformAnthropic,
+				Status:                      StatusActive,
+				PoolCapacityAlertEnabled:    false,
+				PoolCapacityAlertGeneration: 7,
+			}
+			repo := &groupRepoStubForAdmin{getByID: existingGroup}
+			invalidator := &authCacheInvalidatorStub{}
+			svc := &adminServiceImpl{groupRepo: repo, authCacheInvalidator: invalidator}
+
+			group, err := svc.UpdateGroup(context.Background(), 1, &UpdateGroupInput{
+				PoolCapacityAlertEnabled: tt.input,
+			})
+
+			require.NoError(t, err)
+			require.NotNil(t, group)
+			require.Equal(t, tt.wantEnabled, repo.updated.PoolCapacityAlertEnabled)
+			require.Equal(t, tt.wantGeneration, repo.updated.PoolCapacityAlertGeneration)
+			require.Equal(t, []int64{1}, invalidator.groupIDs, "既有 group 更新缓存失效机制必须保持")
+		})
+	}
+}
+
 func TestAdminService_UpdateGroup_ClearsPeakRateWhenChangingToStandard(t *testing.T) {
 	existingGroup := &Group{
 		ID:                 1,

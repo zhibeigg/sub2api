@@ -26,7 +26,6 @@ function getDefaultLocale(): LocaleCode {
   if (browserLang.startsWith('zh')) {
     return 'zh'
   }
-
   return DEFAULT_LOCALE
 }
 

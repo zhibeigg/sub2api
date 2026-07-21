@@ -315,6 +315,9 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 	}
 
 	finalizePostUsageBilling(billingCtx, p, deps, result)
+	if deps.poolCapacityAlertService != nil {
+		deps.poolCapacityAlertService.SubmitAfterBilling(usageLog, p, result)
+	}
 	return true, nil
 }
 
@@ -501,26 +504,28 @@ func detachUpstreamContext(ctx context.Context) (context.Context, context.Cancel
 
 // billingDeps 扣费逻辑依赖的服务（由各 gateway service 提供）
 type billingDeps struct {
-	accountRepo           AccountRepository
-	userRepo              UserRepository
-	userSubRepo           UserSubscriptionRepository
-	billingCacheService   *BillingCacheService
-	deferredService       *DeferredService
-	balanceNotifyService  *BalanceNotifyService
-	userPlatformQuotaRepo UserPlatformQuotaRepository
-	cfg                   *config.Config
+	accountRepo              AccountRepository
+	userRepo                 UserRepository
+	userSubRepo              UserSubscriptionRepository
+	billingCacheService      *BillingCacheService
+	deferredService          *DeferredService
+	balanceNotifyService     *BalanceNotifyService
+	userPlatformQuotaRepo    UserPlatformQuotaRepository
+	poolCapacityAlertService *PoolCapacityAlertService
+	cfg                      *config.Config
 }
 
 func (s *GatewayService) billingDeps() *billingDeps {
 	return &billingDeps{
-		accountRepo:           s.accountRepo,
-		userRepo:              s.userRepo,
-		userSubRepo:           s.userSubRepo,
-		billingCacheService:   s.billingCacheService,
-		deferredService:       s.deferredService,
-		balanceNotifyService:  s.balanceNotifyService,
-		userPlatformQuotaRepo: s.userPlatformQuotaRepo,
-		cfg:                   s.cfg,
+		accountRepo:              s.accountRepo,
+		userRepo:                 s.userRepo,
+		userSubRepo:              s.userSubRepo,
+		billingCacheService:      s.billingCacheService,
+		deferredService:          s.deferredService,
+		balanceNotifyService:     s.balanceNotifyService,
+		userPlatformQuotaRepo:    s.userPlatformQuotaRepo,
+		poolCapacityAlertService: s.poolCapacityAlertService,
+		cfg:                      s.cfg,
 	}
 }
 

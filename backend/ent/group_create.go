@@ -698,6 +698,34 @@ func (_c *GroupCreate) SetNillableRpmLimit(v *int) *GroupCreate {
 	return _c
 }
 
+// SetPoolCapacityAlertEnabled sets the "pool_capacity_alert_enabled" field.
+func (_c *GroupCreate) SetPoolCapacityAlertEnabled(v bool) *GroupCreate {
+	_c.mutation.SetPoolCapacityAlertEnabled(v)
+	return _c
+}
+
+// SetNillablePoolCapacityAlertEnabled sets the "pool_capacity_alert_enabled" field if the given value is not nil.
+func (_c *GroupCreate) SetNillablePoolCapacityAlertEnabled(v *bool) *GroupCreate {
+	if v != nil {
+		_c.SetPoolCapacityAlertEnabled(*v)
+	}
+	return _c
+}
+
+// SetPoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field.
+func (_c *GroupCreate) SetPoolCapacityAlertGeneration(v int64) *GroupCreate {
+	_c.mutation.SetPoolCapacityAlertGeneration(v)
+	return _c
+}
+
+// SetNillablePoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field if the given value is not nil.
+func (_c *GroupCreate) SetNillablePoolCapacityAlertGeneration(v *int64) *GroupCreate {
+	if v != nil {
+		_c.SetPoolCapacityAlertGeneration(*v)
+	}
+	return _c
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_c *GroupCreate) AddAPIKeyIDs(ids ...int64) *GroupCreate {
 	_c.mutation.AddAPIKeyIDs(ids...)
@@ -1023,6 +1051,14 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultRpmLimit
 		_c.mutation.SetRpmLimit(v)
 	}
+	if _, ok := _c.mutation.PoolCapacityAlertEnabled(); !ok {
+		v := group.DefaultPoolCapacityAlertEnabled
+		_c.mutation.SetPoolCapacityAlertEnabled(v)
+	}
+	if _, ok := _c.mutation.PoolCapacityAlertGeneration(); !ok {
+		v := group.DefaultPoolCapacityAlertGeneration
+		_c.mutation.SetPoolCapacityAlertGeneration(v)
+	}
 	return nil
 }
 
@@ -1169,6 +1205,12 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.RpmLimit(); !ok {
 		return &ValidationError{Name: "rpm_limit", err: errors.New(`ent: missing required field "Group.rpm_limit"`)}
+	}
+	if _, ok := _c.mutation.PoolCapacityAlertEnabled(); !ok {
+		return &ValidationError{Name: "pool_capacity_alert_enabled", err: errors.New(`ent: missing required field "Group.pool_capacity_alert_enabled"`)}
+	}
+	if _, ok := _c.mutation.PoolCapacityAlertGeneration(); !ok {
+		return &ValidationError{Name: "pool_capacity_alert_generation", err: errors.New(`ent: missing required field "Group.pool_capacity_alert_generation"`)}
 	}
 	return nil
 }
@@ -1396,6 +1438,14 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RpmLimit(); ok {
 		_spec.SetField(group.FieldRpmLimit, field.TypeInt, value)
 		_node.RpmLimit = value
+	}
+	if value, ok := _c.mutation.PoolCapacityAlertEnabled(); ok {
+		_spec.SetField(group.FieldPoolCapacityAlertEnabled, field.TypeBool, value)
+		_node.PoolCapacityAlertEnabled = value
+	}
+	if value, ok := _c.mutation.PoolCapacityAlertGeneration(); ok {
+		_spec.SetField(group.FieldPoolCapacityAlertGeneration, field.TypeInt64, value)
+		_node.PoolCapacityAlertGeneration = value
 	}
 	if nodes := _c.mutation.APIKeysIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -2425,6 +2475,36 @@ func (u *GroupUpsert) AddRpmLimit(v int) *GroupUpsert {
 	return u
 }
 
+// SetPoolCapacityAlertEnabled sets the "pool_capacity_alert_enabled" field.
+func (u *GroupUpsert) SetPoolCapacityAlertEnabled(v bool) *GroupUpsert {
+	u.Set(group.FieldPoolCapacityAlertEnabled, v)
+	return u
+}
+
+// UpdatePoolCapacityAlertEnabled sets the "pool_capacity_alert_enabled" field to the value that was provided on create.
+func (u *GroupUpsert) UpdatePoolCapacityAlertEnabled() *GroupUpsert {
+	u.SetExcluded(group.FieldPoolCapacityAlertEnabled)
+	return u
+}
+
+// SetPoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field.
+func (u *GroupUpsert) SetPoolCapacityAlertGeneration(v int64) *GroupUpsert {
+	u.Set(group.FieldPoolCapacityAlertGeneration, v)
+	return u
+}
+
+// UpdatePoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field to the value that was provided on create.
+func (u *GroupUpsert) UpdatePoolCapacityAlertGeneration() *GroupUpsert {
+	u.SetExcluded(group.FieldPoolCapacityAlertGeneration)
+	return u
+}
+
+// AddPoolCapacityAlertGeneration adds v to the "pool_capacity_alert_generation" field.
+func (u *GroupUpsert) AddPoolCapacityAlertGeneration(v int64) *GroupUpsert {
+	u.Add(group.FieldPoolCapacityAlertGeneration, v)
+	return u
+}
+
 // UpdateNewValues updates the mutable fields using the new values that were set on create.
 // Using this option is equivalent to using:
 //
@@ -3394,6 +3474,41 @@ func (u *GroupUpsertOne) AddRpmLimit(v int) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateRpmLimit() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateRpmLimit()
+	})
+}
+
+// SetPoolCapacityAlertEnabled sets the "pool_capacity_alert_enabled" field.
+func (u *GroupUpsertOne) SetPoolCapacityAlertEnabled(v bool) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetPoolCapacityAlertEnabled(v)
+	})
+}
+
+// UpdatePoolCapacityAlertEnabled sets the "pool_capacity_alert_enabled" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdatePoolCapacityAlertEnabled() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdatePoolCapacityAlertEnabled()
+	})
+}
+
+// SetPoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field.
+func (u *GroupUpsertOne) SetPoolCapacityAlertGeneration(v int64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetPoolCapacityAlertGeneration(v)
+	})
+}
+
+// AddPoolCapacityAlertGeneration adds v to the "pool_capacity_alert_generation" field.
+func (u *GroupUpsertOne) AddPoolCapacityAlertGeneration(v int64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddPoolCapacityAlertGeneration(v)
+	})
+}
+
+// UpdatePoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdatePoolCapacityAlertGeneration() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdatePoolCapacityAlertGeneration()
 	})
 }
 
@@ -4532,6 +4647,41 @@ func (u *GroupUpsertBulk) AddRpmLimit(v int) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateRpmLimit() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateRpmLimit()
+	})
+}
+
+// SetPoolCapacityAlertEnabled sets the "pool_capacity_alert_enabled" field.
+func (u *GroupUpsertBulk) SetPoolCapacityAlertEnabled(v bool) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetPoolCapacityAlertEnabled(v)
+	})
+}
+
+// UpdatePoolCapacityAlertEnabled sets the "pool_capacity_alert_enabled" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdatePoolCapacityAlertEnabled() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdatePoolCapacityAlertEnabled()
+	})
+}
+
+// SetPoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field.
+func (u *GroupUpsertBulk) SetPoolCapacityAlertGeneration(v int64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetPoolCapacityAlertGeneration(v)
+	})
+}
+
+// AddPoolCapacityAlertGeneration adds v to the "pool_capacity_alert_generation" field.
+func (u *GroupUpsertBulk) AddPoolCapacityAlertGeneration(v int64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddPoolCapacityAlertGeneration(v)
+	})
+}
+
+// UpdatePoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdatePoolCapacityAlertGeneration() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdatePoolCapacityAlertGeneration()
 	})
 }
 

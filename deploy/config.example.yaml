@@ -946,6 +946,28 @@ announcement_email:
   send_timeout_seconds: 30
 
 # =============================================================================
+# 池模式账户容量预测提醒
+# Pool-mode Account Capacity Prediction Alerts
+# =============================================================================
+# 全局运行时默认开启，但每个分组的 pool_capacity_alert_enabled 默认关闭。
+# 仅最终实际命中的 pool_mode 账户 + 最终计费分组均开启时评估。
+# 样本数固定为最近 50 次成功落账；预计剩余请求数严格小于 50 才告警。
+pool_capacity_alert:
+  enabled: true
+  evaluation_worker_count: 2
+  queue_size: 256
+  evaluation_timeout_seconds: 15
+  delivery_worker_count: 4
+  delivery_batch_size: 50
+  poll_interval_seconds: 5
+  lease_seconds: 90
+  max_attempts: 6
+  retry_base_seconds: 30
+  max_retry_seconds: 3600
+  send_timeout_seconds: 20
+  reminder_cooldown_hours: 24
+
+# =============================================================================
 # Concurrency Wait Configuration
 # 并发等待配置
 # =============================================================================

@@ -64,6 +64,12 @@ type Tx struct {
 	PaymentProviderInstance *PaymentProviderInstanceClient
 	// PendingAuthSession is the client for interacting with the PendingAuthSession builders.
 	PendingAuthSession *PendingAuthSessionClient
+	// PoolCapacityAlertDelivery is the client for interacting with the PoolCapacityAlertDelivery builders.
+	PoolCapacityAlertDelivery *PoolCapacityAlertDeliveryClient
+	// PoolCapacityAlertEvent is the client for interacting with the PoolCapacityAlertEvent builders.
+	PoolCapacityAlertEvent *PoolCapacityAlertEventClient
+	// PoolCapacityAlertState is the client for interacting with the PoolCapacityAlertState builders.
+	PoolCapacityAlertState *PoolCapacityAlertStateClient
 	// PromoCode is the client for interacting with the PromoCode builders.
 	PromoCode *PromoCodeClient
 	// PromoCodeUsage is the client for interacting with the PromoCodeUsage builders.
@@ -258,6 +264,9 @@ func (tx *Tx) init() {
 	tx.PaymentOrder = NewPaymentOrderClient(tx.config)
 	tx.PaymentProviderInstance = NewPaymentProviderInstanceClient(tx.config)
 	tx.PendingAuthSession = NewPendingAuthSessionClient(tx.config)
+	tx.PoolCapacityAlertDelivery = NewPoolCapacityAlertDeliveryClient(tx.config)
+	tx.PoolCapacityAlertEvent = NewPoolCapacityAlertEventClient(tx.config)
+	tx.PoolCapacityAlertState = NewPoolCapacityAlertStateClient(tx.config)
 	tx.PromoCode = NewPromoCodeClient(tx.config)
 	tx.PromoCodeUsage = NewPromoCodeUsageClient(tx.config)
 	tx.Proxy = NewProxyClient(tx.config)

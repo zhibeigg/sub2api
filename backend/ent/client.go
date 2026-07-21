@@ -40,6 +40,9 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
 	"github.com/Wei-Shaw/sub2api/ent/paymentproviderinstance"
 	"github.com/Wei-Shaw/sub2api/ent/pendingauthsession"
+	"github.com/Wei-Shaw/sub2api/ent/poolcapacityalertdelivery"
+	"github.com/Wei-Shaw/sub2api/ent/poolcapacityalertevent"
+	"github.com/Wei-Shaw/sub2api/ent/poolcapacityalertstate"
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
@@ -118,6 +121,12 @@ type Client struct {
 	PaymentProviderInstance *PaymentProviderInstanceClient
 	// PendingAuthSession is the client for interacting with the PendingAuthSession builders.
 	PendingAuthSession *PendingAuthSessionClient
+	// PoolCapacityAlertDelivery is the client for interacting with the PoolCapacityAlertDelivery builders.
+	PoolCapacityAlertDelivery *PoolCapacityAlertDeliveryClient
+	// PoolCapacityAlertEvent is the client for interacting with the PoolCapacityAlertEvent builders.
+	PoolCapacityAlertEvent *PoolCapacityAlertEventClient
+	// PoolCapacityAlertState is the client for interacting with the PoolCapacityAlertState builders.
+	PoolCapacityAlertState *PoolCapacityAlertStateClient
 	// PromoCode is the client for interacting with the PromoCode builders.
 	PromoCode *PromoCodeClient
 	// PromoCodeUsage is the client for interacting with the PromoCodeUsage builders.
@@ -192,6 +201,9 @@ func (c *Client) init() {
 	c.PaymentOrder = NewPaymentOrderClient(c.config)
 	c.PaymentProviderInstance = NewPaymentProviderInstanceClient(c.config)
 	c.PendingAuthSession = NewPendingAuthSessionClient(c.config)
+	c.PoolCapacityAlertDelivery = NewPoolCapacityAlertDeliveryClient(c.config)
+	c.PoolCapacityAlertEvent = NewPoolCapacityAlertEventClient(c.config)
+	c.PoolCapacityAlertState = NewPoolCapacityAlertStateClient(c.config)
 	c.PromoCode = NewPromoCodeClient(c.config)
 	c.PromoCodeUsage = NewPromoCodeUsageClient(c.config)
 	c.Proxy = NewProxyClient(c.config)
@@ -328,6 +340,9 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		PaymentOrder:                  NewPaymentOrderClient(cfg),
 		PaymentProviderInstance:       NewPaymentProviderInstanceClient(cfg),
 		PendingAuthSession:            NewPendingAuthSessionClient(cfg),
+		PoolCapacityAlertDelivery:     NewPoolCapacityAlertDeliveryClient(cfg),
+		PoolCapacityAlertEvent:        NewPoolCapacityAlertEventClient(cfg),
+		PoolCapacityAlertState:        NewPoolCapacityAlertStateClient(cfg),
 		PromoCode:                     NewPromoCodeClient(cfg),
 		PromoCodeUsage:                NewPromoCodeUsageClient(cfg),
 		Proxy:                         NewProxyClient(cfg),
@@ -391,6 +406,9 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		PaymentOrder:                  NewPaymentOrderClient(cfg),
 		PaymentProviderInstance:       NewPaymentProviderInstanceClient(cfg),
 		PendingAuthSession:            NewPendingAuthSessionClient(cfg),
+		PoolCapacityAlertDelivery:     NewPoolCapacityAlertDeliveryClient(cfg),
+		PoolCapacityAlertEvent:        NewPoolCapacityAlertEventClient(cfg),
+		PoolCapacityAlertState:        NewPoolCapacityAlertStateClient(cfg),
 		PromoCode:                     NewPromoCodeClient(cfg),
 		PromoCodeUsage:                NewPromoCodeUsageClient(cfg),
 		Proxy:                         NewProxyClient(cfg),
@@ -446,12 +464,13 @@ func (c *Client) Use(hooks ...Hook) {
 		c.ChannelMonitorHistory, c.ChannelMonitorRequestTemplate,
 		c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
 		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
-		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
-		c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
-		c.SubscriptionPlanGroup, c.TLSFingerprintProfile, c.UsageCleanupTask,
-		c.UsageLog, c.User, c.UserAllowedGroup, c.UserAttributeDefinition,
-		c.UserAttributeValue, c.UserGroupAccessGroup, c.UserPlatformQuota,
-		c.UserSubscription, c.UserSubscriptionGroup,
+		c.PaymentProviderInstance, c.PendingAuthSession, c.PoolCapacityAlertDelivery,
+		c.PoolCapacityAlertEvent, c.PoolCapacityAlertState, c.PromoCode,
+		c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting,
+		c.SubscriptionPlan, c.SubscriptionPlanGroup, c.TLSFingerprintProfile,
+		c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
+		c.UserAttributeDefinition, c.UserAttributeValue, c.UserGroupAccessGroup,
+		c.UserPlatformQuota, c.UserSubscription, c.UserSubscriptionGroup,
 	} {
 		n.Use(hooks...)
 	}
@@ -468,12 +487,13 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.ChannelMonitorHistory, c.ChannelMonitorRequestTemplate,
 		c.ErrorPassthroughRule, c.Group, c.IdempotencyRecord,
 		c.IdentityAdoptionDecision, c.PaymentAuditLog, c.PaymentOrder,
-		c.PaymentProviderInstance, c.PendingAuthSession, c.PromoCode, c.PromoCodeUsage,
-		c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting, c.SubscriptionPlan,
-		c.SubscriptionPlanGroup, c.TLSFingerprintProfile, c.UsageCleanupTask,
-		c.UsageLog, c.User, c.UserAllowedGroup, c.UserAttributeDefinition,
-		c.UserAttributeValue, c.UserGroupAccessGroup, c.UserPlatformQuota,
-		c.UserSubscription, c.UserSubscriptionGroup,
+		c.PaymentProviderInstance, c.PendingAuthSession, c.PoolCapacityAlertDelivery,
+		c.PoolCapacityAlertEvent, c.PoolCapacityAlertState, c.PromoCode,
+		c.PromoCodeUsage, c.Proxy, c.RedeemCode, c.SecuritySecret, c.Setting,
+		c.SubscriptionPlan, c.SubscriptionPlanGroup, c.TLSFingerprintProfile,
+		c.UsageCleanupTask, c.UsageLog, c.User, c.UserAllowedGroup,
+		c.UserAttributeDefinition, c.UserAttributeValue, c.UserGroupAccessGroup,
+		c.UserPlatformQuota, c.UserSubscription, c.UserSubscriptionGroup,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -532,6 +552,12 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.PaymentProviderInstance.mutate(ctx, m)
 	case *PendingAuthSessionMutation:
 		return c.PendingAuthSession.mutate(ctx, m)
+	case *PoolCapacityAlertDeliveryMutation:
+		return c.PoolCapacityAlertDelivery.mutate(ctx, m)
+	case *PoolCapacityAlertEventMutation:
+		return c.PoolCapacityAlertEvent.mutate(ctx, m)
+	case *PoolCapacityAlertStateMutation:
+		return c.PoolCapacityAlertState.mutate(ctx, m)
 	case *PromoCodeMutation:
 		return c.PromoCode.mutate(ctx, m)
 	case *PromoCodeUsageMutation:
@@ -4656,6 +4682,405 @@ func (c *PendingAuthSessionClient) mutate(ctx context.Context, m *PendingAuthSes
 	}
 }
 
+// PoolCapacityAlertDeliveryClient is a client for the PoolCapacityAlertDelivery schema.
+type PoolCapacityAlertDeliveryClient struct {
+	config
+}
+
+// NewPoolCapacityAlertDeliveryClient returns a client for the PoolCapacityAlertDelivery from the given config.
+func NewPoolCapacityAlertDeliveryClient(c config) *PoolCapacityAlertDeliveryClient {
+	return &PoolCapacityAlertDeliveryClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `poolcapacityalertdelivery.Hooks(f(g(h())))`.
+func (c *PoolCapacityAlertDeliveryClient) Use(hooks ...Hook) {
+	c.hooks.PoolCapacityAlertDelivery = append(c.hooks.PoolCapacityAlertDelivery, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `poolcapacityalertdelivery.Intercept(f(g(h())))`.
+func (c *PoolCapacityAlertDeliveryClient) Intercept(interceptors ...Interceptor) {
+	c.inters.PoolCapacityAlertDelivery = append(c.inters.PoolCapacityAlertDelivery, interceptors...)
+}
+
+// Create returns a builder for creating a PoolCapacityAlertDelivery entity.
+func (c *PoolCapacityAlertDeliveryClient) Create() *PoolCapacityAlertDeliveryCreate {
+	mutation := newPoolCapacityAlertDeliveryMutation(c.config, OpCreate)
+	return &PoolCapacityAlertDeliveryCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of PoolCapacityAlertDelivery entities.
+func (c *PoolCapacityAlertDeliveryClient) CreateBulk(builders ...*PoolCapacityAlertDeliveryCreate) *PoolCapacityAlertDeliveryCreateBulk {
+	return &PoolCapacityAlertDeliveryCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PoolCapacityAlertDeliveryClient) MapCreateBulk(slice any, setFunc func(*PoolCapacityAlertDeliveryCreate, int)) *PoolCapacityAlertDeliveryCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PoolCapacityAlertDeliveryCreateBulk{err: fmt.Errorf("calling to PoolCapacityAlertDeliveryClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PoolCapacityAlertDeliveryCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PoolCapacityAlertDeliveryCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for PoolCapacityAlertDelivery.
+func (c *PoolCapacityAlertDeliveryClient) Update() *PoolCapacityAlertDeliveryUpdate {
+	mutation := newPoolCapacityAlertDeliveryMutation(c.config, OpUpdate)
+	return &PoolCapacityAlertDeliveryUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PoolCapacityAlertDeliveryClient) UpdateOne(_m *PoolCapacityAlertDelivery) *PoolCapacityAlertDeliveryUpdateOne {
+	mutation := newPoolCapacityAlertDeliveryMutation(c.config, OpUpdateOne, withPoolCapacityAlertDelivery(_m))
+	return &PoolCapacityAlertDeliveryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PoolCapacityAlertDeliveryClient) UpdateOneID(id int64) *PoolCapacityAlertDeliveryUpdateOne {
+	mutation := newPoolCapacityAlertDeliveryMutation(c.config, OpUpdateOne, withPoolCapacityAlertDeliveryID(id))
+	return &PoolCapacityAlertDeliveryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for PoolCapacityAlertDelivery.
+func (c *PoolCapacityAlertDeliveryClient) Delete() *PoolCapacityAlertDeliveryDelete {
+	mutation := newPoolCapacityAlertDeliveryMutation(c.config, OpDelete)
+	return &PoolCapacityAlertDeliveryDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *PoolCapacityAlertDeliveryClient) DeleteOne(_m *PoolCapacityAlertDelivery) *PoolCapacityAlertDeliveryDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *PoolCapacityAlertDeliveryClient) DeleteOneID(id int64) *PoolCapacityAlertDeliveryDeleteOne {
+	builder := c.Delete().Where(poolcapacityalertdelivery.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &PoolCapacityAlertDeliveryDeleteOne{builder}
+}
+
+// Query returns a query builder for PoolCapacityAlertDelivery.
+func (c *PoolCapacityAlertDeliveryClient) Query() *PoolCapacityAlertDeliveryQuery {
+	return &PoolCapacityAlertDeliveryQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypePoolCapacityAlertDelivery},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a PoolCapacityAlertDelivery entity by its id.
+func (c *PoolCapacityAlertDeliveryClient) Get(ctx context.Context, id int64) (*PoolCapacityAlertDelivery, error) {
+	return c.Query().Where(poolcapacityalertdelivery.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PoolCapacityAlertDeliveryClient) GetX(ctx context.Context, id int64) *PoolCapacityAlertDelivery {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *PoolCapacityAlertDeliveryClient) Hooks() []Hook {
+	return c.hooks.PoolCapacityAlertDelivery
+}
+
+// Interceptors returns the client interceptors.
+func (c *PoolCapacityAlertDeliveryClient) Interceptors() []Interceptor {
+	return c.inters.PoolCapacityAlertDelivery
+}
+
+func (c *PoolCapacityAlertDeliveryClient) mutate(ctx context.Context, m *PoolCapacityAlertDeliveryMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&PoolCapacityAlertDeliveryCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&PoolCapacityAlertDeliveryUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&PoolCapacityAlertDeliveryUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&PoolCapacityAlertDeliveryDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown PoolCapacityAlertDelivery mutation op: %q", m.Op())
+	}
+}
+
+// PoolCapacityAlertEventClient is a client for the PoolCapacityAlertEvent schema.
+type PoolCapacityAlertEventClient struct {
+	config
+}
+
+// NewPoolCapacityAlertEventClient returns a client for the PoolCapacityAlertEvent from the given config.
+func NewPoolCapacityAlertEventClient(c config) *PoolCapacityAlertEventClient {
+	return &PoolCapacityAlertEventClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `poolcapacityalertevent.Hooks(f(g(h())))`.
+func (c *PoolCapacityAlertEventClient) Use(hooks ...Hook) {
+	c.hooks.PoolCapacityAlertEvent = append(c.hooks.PoolCapacityAlertEvent, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `poolcapacityalertevent.Intercept(f(g(h())))`.
+func (c *PoolCapacityAlertEventClient) Intercept(interceptors ...Interceptor) {
+	c.inters.PoolCapacityAlertEvent = append(c.inters.PoolCapacityAlertEvent, interceptors...)
+}
+
+// Create returns a builder for creating a PoolCapacityAlertEvent entity.
+func (c *PoolCapacityAlertEventClient) Create() *PoolCapacityAlertEventCreate {
+	mutation := newPoolCapacityAlertEventMutation(c.config, OpCreate)
+	return &PoolCapacityAlertEventCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of PoolCapacityAlertEvent entities.
+func (c *PoolCapacityAlertEventClient) CreateBulk(builders ...*PoolCapacityAlertEventCreate) *PoolCapacityAlertEventCreateBulk {
+	return &PoolCapacityAlertEventCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PoolCapacityAlertEventClient) MapCreateBulk(slice any, setFunc func(*PoolCapacityAlertEventCreate, int)) *PoolCapacityAlertEventCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PoolCapacityAlertEventCreateBulk{err: fmt.Errorf("calling to PoolCapacityAlertEventClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PoolCapacityAlertEventCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PoolCapacityAlertEventCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for PoolCapacityAlertEvent.
+func (c *PoolCapacityAlertEventClient) Update() *PoolCapacityAlertEventUpdate {
+	mutation := newPoolCapacityAlertEventMutation(c.config, OpUpdate)
+	return &PoolCapacityAlertEventUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PoolCapacityAlertEventClient) UpdateOne(_m *PoolCapacityAlertEvent) *PoolCapacityAlertEventUpdateOne {
+	mutation := newPoolCapacityAlertEventMutation(c.config, OpUpdateOne, withPoolCapacityAlertEvent(_m))
+	return &PoolCapacityAlertEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PoolCapacityAlertEventClient) UpdateOneID(id int64) *PoolCapacityAlertEventUpdateOne {
+	mutation := newPoolCapacityAlertEventMutation(c.config, OpUpdateOne, withPoolCapacityAlertEventID(id))
+	return &PoolCapacityAlertEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for PoolCapacityAlertEvent.
+func (c *PoolCapacityAlertEventClient) Delete() *PoolCapacityAlertEventDelete {
+	mutation := newPoolCapacityAlertEventMutation(c.config, OpDelete)
+	return &PoolCapacityAlertEventDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *PoolCapacityAlertEventClient) DeleteOne(_m *PoolCapacityAlertEvent) *PoolCapacityAlertEventDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *PoolCapacityAlertEventClient) DeleteOneID(id int64) *PoolCapacityAlertEventDeleteOne {
+	builder := c.Delete().Where(poolcapacityalertevent.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &PoolCapacityAlertEventDeleteOne{builder}
+}
+
+// Query returns a query builder for PoolCapacityAlertEvent.
+func (c *PoolCapacityAlertEventClient) Query() *PoolCapacityAlertEventQuery {
+	return &PoolCapacityAlertEventQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypePoolCapacityAlertEvent},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a PoolCapacityAlertEvent entity by its id.
+func (c *PoolCapacityAlertEventClient) Get(ctx context.Context, id int64) (*PoolCapacityAlertEvent, error) {
+	return c.Query().Where(poolcapacityalertevent.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PoolCapacityAlertEventClient) GetX(ctx context.Context, id int64) *PoolCapacityAlertEvent {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *PoolCapacityAlertEventClient) Hooks() []Hook {
+	return c.hooks.PoolCapacityAlertEvent
+}
+
+// Interceptors returns the client interceptors.
+func (c *PoolCapacityAlertEventClient) Interceptors() []Interceptor {
+	return c.inters.PoolCapacityAlertEvent
+}
+
+func (c *PoolCapacityAlertEventClient) mutate(ctx context.Context, m *PoolCapacityAlertEventMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&PoolCapacityAlertEventCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&PoolCapacityAlertEventUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&PoolCapacityAlertEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&PoolCapacityAlertEventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown PoolCapacityAlertEvent mutation op: %q", m.Op())
+	}
+}
+
+// PoolCapacityAlertStateClient is a client for the PoolCapacityAlertState schema.
+type PoolCapacityAlertStateClient struct {
+	config
+}
+
+// NewPoolCapacityAlertStateClient returns a client for the PoolCapacityAlertState from the given config.
+func NewPoolCapacityAlertStateClient(c config) *PoolCapacityAlertStateClient {
+	return &PoolCapacityAlertStateClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `poolcapacityalertstate.Hooks(f(g(h())))`.
+func (c *PoolCapacityAlertStateClient) Use(hooks ...Hook) {
+	c.hooks.PoolCapacityAlertState = append(c.hooks.PoolCapacityAlertState, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `poolcapacityalertstate.Intercept(f(g(h())))`.
+func (c *PoolCapacityAlertStateClient) Intercept(interceptors ...Interceptor) {
+	c.inters.PoolCapacityAlertState = append(c.inters.PoolCapacityAlertState, interceptors...)
+}
+
+// Create returns a builder for creating a PoolCapacityAlertState entity.
+func (c *PoolCapacityAlertStateClient) Create() *PoolCapacityAlertStateCreate {
+	mutation := newPoolCapacityAlertStateMutation(c.config, OpCreate)
+	return &PoolCapacityAlertStateCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of PoolCapacityAlertState entities.
+func (c *PoolCapacityAlertStateClient) CreateBulk(builders ...*PoolCapacityAlertStateCreate) *PoolCapacityAlertStateCreateBulk {
+	return &PoolCapacityAlertStateCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PoolCapacityAlertStateClient) MapCreateBulk(slice any, setFunc func(*PoolCapacityAlertStateCreate, int)) *PoolCapacityAlertStateCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PoolCapacityAlertStateCreateBulk{err: fmt.Errorf("calling to PoolCapacityAlertStateClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PoolCapacityAlertStateCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PoolCapacityAlertStateCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for PoolCapacityAlertState.
+func (c *PoolCapacityAlertStateClient) Update() *PoolCapacityAlertStateUpdate {
+	mutation := newPoolCapacityAlertStateMutation(c.config, OpUpdate)
+	return &PoolCapacityAlertStateUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PoolCapacityAlertStateClient) UpdateOne(_m *PoolCapacityAlertState) *PoolCapacityAlertStateUpdateOne {
+	mutation := newPoolCapacityAlertStateMutation(c.config, OpUpdateOne, withPoolCapacityAlertState(_m))
+	return &PoolCapacityAlertStateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PoolCapacityAlertStateClient) UpdateOneID(id int64) *PoolCapacityAlertStateUpdateOne {
+	mutation := newPoolCapacityAlertStateMutation(c.config, OpUpdateOne, withPoolCapacityAlertStateID(id))
+	return &PoolCapacityAlertStateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for PoolCapacityAlertState.
+func (c *PoolCapacityAlertStateClient) Delete() *PoolCapacityAlertStateDelete {
+	mutation := newPoolCapacityAlertStateMutation(c.config, OpDelete)
+	return &PoolCapacityAlertStateDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *PoolCapacityAlertStateClient) DeleteOne(_m *PoolCapacityAlertState) *PoolCapacityAlertStateDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *PoolCapacityAlertStateClient) DeleteOneID(id int64) *PoolCapacityAlertStateDeleteOne {
+	builder := c.Delete().Where(poolcapacityalertstate.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &PoolCapacityAlertStateDeleteOne{builder}
+}
+
+// Query returns a query builder for PoolCapacityAlertState.
+func (c *PoolCapacityAlertStateClient) Query() *PoolCapacityAlertStateQuery {
+	return &PoolCapacityAlertStateQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypePoolCapacityAlertState},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a PoolCapacityAlertState entity by its id.
+func (c *PoolCapacityAlertStateClient) Get(ctx context.Context, id int64) (*PoolCapacityAlertState, error) {
+	return c.Query().Where(poolcapacityalertstate.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PoolCapacityAlertStateClient) GetX(ctx context.Context, id int64) *PoolCapacityAlertState {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// Hooks returns the client hooks.
+func (c *PoolCapacityAlertStateClient) Hooks() []Hook {
+	return c.hooks.PoolCapacityAlertState
+}
+
+// Interceptors returns the client interceptors.
+func (c *PoolCapacityAlertStateClient) Interceptors() []Interceptor {
+	return c.inters.PoolCapacityAlertState
+}
+
+func (c *PoolCapacityAlertStateClient) mutate(ctx context.Context, m *PoolCapacityAlertStateMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&PoolCapacityAlertStateCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&PoolCapacityAlertStateUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&PoolCapacityAlertStateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&PoolCapacityAlertStateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown PoolCapacityAlertState mutation op: %q", m.Op())
+	}
+}
+
 // PromoCodeClient is a client for the PromoCode schema.
 type PromoCodeClient struct {
 	config
@@ -7806,11 +8231,12 @@ type (
 		BatchImageJob, ChannelMonitor, ChannelMonitorDailyRollup,
 		ChannelMonitorHistory, ChannelMonitorRequestTemplate, ErrorPassthroughRule,
 		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
-		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
-		PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting, SubscriptionPlan,
-		SubscriptionPlanGroup, TLSFingerprintProfile, UsageCleanupTask, UsageLog, User,
-		UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
-		UserGroupAccessGroup, UserPlatformQuota, UserSubscription,
+		PaymentOrder, PaymentProviderInstance, PendingAuthSession,
+		PoolCapacityAlertDelivery, PoolCapacityAlertEvent, PoolCapacityAlertState,
+		PromoCode, PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting,
+		SubscriptionPlan, SubscriptionPlanGroup, TLSFingerprintProfile,
+		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
+		UserAttributeValue, UserGroupAccessGroup, UserPlatformQuota, UserSubscription,
 		UserSubscriptionGroup []ent.Hook
 	}
 	inters struct {
@@ -7820,11 +8246,12 @@ type (
 		BatchImageJob, ChannelMonitor, ChannelMonitorDailyRollup,
 		ChannelMonitorHistory, ChannelMonitorRequestTemplate, ErrorPassthroughRule,
 		Group, IdempotencyRecord, IdentityAdoptionDecision, PaymentAuditLog,
-		PaymentOrder, PaymentProviderInstance, PendingAuthSession, PromoCode,
-		PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting, SubscriptionPlan,
-		SubscriptionPlanGroup, TLSFingerprintProfile, UsageCleanupTask, UsageLog, User,
-		UserAllowedGroup, UserAttributeDefinition, UserAttributeValue,
-		UserGroupAccessGroup, UserPlatformQuota, UserSubscription,
+		PaymentOrder, PaymentProviderInstance, PendingAuthSession,
+		PoolCapacityAlertDelivery, PoolCapacityAlertEvent, PoolCapacityAlertState,
+		PromoCode, PromoCodeUsage, Proxy, RedeemCode, SecuritySecret, Setting,
+		SubscriptionPlan, SubscriptionPlanGroup, TLSFingerprintProfile,
+		UsageCleanupTask, UsageLog, User, UserAllowedGroup, UserAttributeDefinition,
+		UserAttributeValue, UserGroupAccessGroup, UserPlatformQuota, UserSubscription,
 		UserSubscriptionGroup []ent.Interceptor
 	}
 )

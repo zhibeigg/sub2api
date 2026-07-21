@@ -43,13 +43,97 @@ type Runtime struct {
 	state   RuntimeState
 }
 
+var _ service.QQBotProactiveC2CTransport = (*Runtime)(nil)
+
 func NewRuntime(manager *ConfigManager, queue *ReliableQueue, binding *service.QQBotService, channelCheck *ChannelCheckService) *Runtime {
 	runtime := &Runtime{manager: manager, queue: queue, binding: binding, channelCheck: channelCheck, state: RuntimeState{ProcessStatus: RuntimeDisabled}}
 	registerGlobalHandlers()
 	if manager != nil {
 		manager.SetOnReload(runtime.applyConfig)
 	}
+	if binding != nil {
+		binding.SetProactiveC2CTransport(runtime)
+	}
 	return runtime
+}
+
+func (r *Runtime) ActiveAppID() (string, bool) {
+	if r == nil {
+		return "", false
+	}
+	generation := r.generation.Load()
+	if generation == nil || !generation.config.Enabled {
+		return "", false
+	}
+	appID := strings.TrimSpace(generation.config.AppID)
+	return appID, appID != ""
+}
+
+func (r *Runtime) SendProactiveC2C(ctx context.Context, botAppID, openID, content string) error {
+	if r == nil {
+		return ErrRuntimeUnavailable
+	}
+	botAppID = strings.TrimSpace(botAppID)
+	openID = strings.TrimSpace(openID)
+	content = strings.TrimSpace(content)
+	if botAppID == "" || openID == "" || content == "" {
+		return ErrInvalidConfig
+	}
+	generation := r.generation.Load()
+	if generation == nil || !generation.config.Enabled {
+		return ErrRuntimeDisabled
+	}
+	if strings.TrimSpace(generation.config.AppID) != botAppID || generation.messenger == nil {
+		return ErrRuntimeUnavailable
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	sendCtx, cancel := context.WithCancel(ctx)
+	stopGenerationCancel := func() bool { return false }
+	if generation.ctx != nil {
+		stopGenerationCancel = context.AfterFunc(generation.ctx, cancel)
+	}
+	defer func() {
+		stopGenerationCancel()
+		cancel()
+	}()
+	timeout := time.Duration(generation.config.APITimeoutMS) * time.Millisecond
+	if timeout <= 0 {
+		timeout = time.Duration(DefaultAPITimeoutMS) * time.Millisecond
+	}
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if r.generation.Load() != generation || strings.TrimSpace(generation.config.AppID) != botAppID {
+			return ErrRuntimeUnavailable
+		}
+		attemptCtx, attemptCancel := context.WithTimeout(sendCtx, timeout)
+		lastErr = generation.messenger.SendProactiveC2C(attemptCtx, openID, content)
+		attemptCancel()
+		if lastErr == nil {
+			r.markSent()
+			return nil
+		}
+		var definitive interface{ Definitive() bool }
+		if errors.As(lastErr, &definitive) && definitive.Definitive() {
+			r.recordError("proactive_send_failed")
+			return lastErr
+		}
+		if sendCtx.Err() != nil {
+			return sendCtx.Err()
+		}
+		if attempt < 2 {
+			timer := time.NewTimer(time.Duration(attempt+1) * 250 * time.Millisecond)
+			select {
+			case <-sendCtx.Done():
+				timer.Stop()
+				return sendCtx.Err()
+			case <-timer.C:
+			}
+		}
+	}
+	r.recordError("proactive_send_failed")
+	return lastErr
 }
 
 func (r *Runtime) Start(ctx context.Context) error {

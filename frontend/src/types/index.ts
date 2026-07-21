@@ -601,6 +601,9 @@ export interface Group {
 }
 
 export interface AdminGroup extends Group {
+  // 池账号容量预测提醒（仅管理员可配置）
+  pool_capacity_alert_enabled?: boolean
+
   // 模型级倍率配置（仅管理员可见，模型匹配模式 -> 倍率）
   model_rate_multipliers?: Record<string, number>
 
@@ -755,6 +758,7 @@ export interface CreateGroupRequest {
   model_routing?: Record<string, number[]> | null
   model_routing_enabled?: boolean
   rpm_limit?: number
+  pool_capacity_alert_enabled?: boolean
   require_oauth_only?: boolean
   require_privacy_set?: boolean
   // 从指定分组复制账号
@@ -804,6 +808,7 @@ export interface UpdateGroupRequest {
   model_routing?: Record<string, number[]> | null
   model_routing_enabled?: boolean
   rpm_limit?: number
+  pool_capacity_alert_enabled?: boolean
   require_oauth_only?: boolean
   require_privacy_set?: boolean
   copy_accounts_from_group_ids?: number[]

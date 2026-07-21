@@ -225,6 +225,12 @@ func (Group) Fields() []ent.Field {
 		field.Int("rpm_limit").
 			Default(0).
 			Comment("分组 RPM 上限，0 表示不限制；设置后接管该分组用户的限流"),
+		field.Bool("pool_capacity_alert_enabled").
+			Default(false).
+			Comment("是否启用分组池容量告警"),
+		field.Int64("pool_capacity_alert_generation").
+			Default(0).
+			Comment("分组池容量告警配置代际，仅供内部缓存一致性使用"),
 	}
 }
 

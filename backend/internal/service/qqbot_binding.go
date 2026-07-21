@@ -24,16 +24,17 @@ const (
 )
 
 var (
-	ErrQQBotBindingDisabled = infraerrors.Forbidden("BINDING_DISABLED", "QQ account binding is currently disabled")
-	ErrQQBotBindingNotFound = infraerrors.NotFound("INVALID_BINDING_TOKEN", "binding link is invalid or no longer available")
-	ErrQQBotBindingExpired  = infraerrors.Conflict("BINDING_EXPIRED", "binding link has expired")
-	ErrQQBotBindingRevoked  = infraerrors.Conflict("BINDING_REVOKED", "binding has been revoked")
-	ErrQQBotBindingFailed   = infraerrors.Conflict("BINDING_FAILED", "binding request cannot be completed")
-	ErrQQBotIdentityOwned   = infraerrors.Conflict("QQ_IDENTITY_CONFLICT", "this QQ identity is already bound to another account")
-	ErrQQBotInvalidInput    = infraerrors.BadRequest("INVALID_QQBOT_BINDING_INPUT", "invalid QQBot binding request")
-	ErrQQBotInvalidQQNumber = infraerrors.BadRequest("INVALID_QQ_NUMBER", "QQ number must be 5 to 12 digits and cannot start with zero")
-	ErrQQBotEmailQueueFull  = infraerrors.ServiceUnavailable("QQBOT_EMAIL_QUEUE_FULL", "verification email queue is temporarily unavailable")
-	ErrQQBotNotConfigured   = infraerrors.ServiceUnavailable("QQBOT_INTEGRATION_NOT_CONFIGURED", "QQBot integration is not configured")
+	ErrQQBotBindingDisabled      = infraerrors.Forbidden("BINDING_DISABLED", "QQ account binding is currently disabled")
+	ErrQQBotBindingNotFound      = infraerrors.NotFound("INVALID_BINDING_TOKEN", "binding link is invalid or no longer available")
+	ErrQQBotBindingExpired       = infraerrors.Conflict("BINDING_EXPIRED", "binding link has expired")
+	ErrQQBotBindingRevoked       = infraerrors.Conflict("BINDING_REVOKED", "binding has been revoked")
+	ErrQQBotBindingFailed        = infraerrors.Conflict("BINDING_FAILED", "binding request cannot be completed")
+	ErrQQBotIdentityOwned        = infraerrors.Conflict("QQ_IDENTITY_CONFLICT", "this QQ identity is already bound to another account")
+	ErrQQBotInvalidInput         = infraerrors.BadRequest("INVALID_QQBOT_BINDING_INPUT", "invalid QQBot binding request")
+	ErrQQBotInvalidQQNumber      = infraerrors.BadRequest("INVALID_QQ_NUMBER", "QQ number must be 5 to 12 digits and cannot start with zero")
+	ErrQQBotEmailQueueFull       = infraerrors.ServiceUnavailable("QQBOT_EMAIL_QUEUE_FULL", "verification email queue is temporarily unavailable")
+	ErrQQBotNotConfigured        = infraerrors.ServiceUnavailable("QQBOT_INTEGRATION_NOT_CONFIGURED", "QQBot integration is not configured")
+	ErrQQBotRecipientUnavailable = infraerrors.NotFound("QQBOT_RECIPIENT_UNAVAILABLE", "QQBot recipient is unavailable")
 )
 
 const (
@@ -236,9 +237,22 @@ type QQBotUserLookup interface {
 	GetByEmail(ctx context.Context, email string) (*User, error)
 }
 
+type QQBotAdminRecipient struct {
+	IdentityID        int64  `json:"identity_id"`
+	IdentityChannelID int64  `json:"identity_channel_id"`
+	ChannelSubject    string `json:"-"`
+}
+
+type QQBotProactiveC2CTransport interface {
+	ActiveAppID() (string, bool)
+	SendProactiveC2C(ctx context.Context, botAppID, openID, content string) error
+}
+
 type QQBotBindingRepository interface {
 	FindBoundEmail(ctx context.Context, botAppID, providerSubject string) (string, bool, error)
 	HasActiveBoundIdentity(ctx context.Context, botAppID, providerSubject string) (bool, error)
+	ListActiveAdminC2CRecipients(ctx context.Context, botAppID string) ([]QQBotAdminRecipient, error)
+	GetActiveAdminC2CRecipient(ctx context.Context, botAppID string, identityChannelID int64) (QQBotAdminRecipient, bool, error)
 	CreateChallenge(ctx context.Context, input QQBotChallengeCreateInput) (QQBotBindingRecord, bool, error)
 	GetChallengeByToken(ctx context.Context, token string) (QQBotBindingRecord, string, error)
 	UpdateEmailStatus(ctx context.Context, id int64, status, failureCode string) error

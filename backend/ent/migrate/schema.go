@@ -1038,6 +1038,8 @@ var (
 		{Name: "messages_dispatch_model_config", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
 		{Name: "models_list_config", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
 		{Name: "rpm_limit", Type: field.TypeInt, Default: 0},
+		{Name: "pool_capacity_alert_enabled", Type: field.TypeBool, Default: false},
+		{Name: "pool_capacity_alert_generation", Type: field.TypeInt64, Default: 0},
 	}
 	// GroupsTable holds the schema information for the "groups" table.
 	GroupsTable = &schema.Table{
@@ -1404,6 +1406,151 @@ var (
 				Name:    "pendingauthsession_completion_code_hash",
 				Unique:  false,
 				Columns: []*schema.Column{PendingAuthSessionsColumns[14]},
+			},
+		},
+	}
+	// PoolCapacityAlertDeliveriesColumns holds the columns for the "pool_capacity_alert_deliveries" table.
+	PoolCapacityAlertDeliveriesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "event_id", Type: field.TypeInt64},
+		{Name: "channel", Type: field.TypeString, Size: 24},
+		{Name: "recipient_user_id", Type: field.TypeInt64},
+		{Name: "identity_channel_id", Type: field.TypeInt64, Default: 0},
+		{Name: "recipient_email", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "recipient_name", Type: field.TypeString, Size: 100, Default: ""},
+		{Name: "locale", Type: field.TypeString, Size: 16, Default: "en"},
+		{Name: "status", Type: field.TypeString, Size: 24, Default: "pending"},
+		{Name: "attempt_count", Type: field.TypeInt, Default: 0},
+		{Name: "max_attempts", Type: field.TypeInt, Default: 6},
+		{Name: "next_attempt_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "lease_owner", Type: field.TypeString, Nullable: true, Size: 128},
+		{Name: "lease_expires_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "last_error_class", Type: field.TypeString, Nullable: true, Size: 32},
+		{Name: "last_error", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "sent_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// PoolCapacityAlertDeliveriesTable holds the schema information for the "pool_capacity_alert_deliveries" table.
+	PoolCapacityAlertDeliveriesTable = &schema.Table{
+		Name:       "pool_capacity_alert_deliveries",
+		Columns:    PoolCapacityAlertDeliveriesColumns,
+		PrimaryKey: []*schema.Column{PoolCapacityAlertDeliveriesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "poolcapacityalertdelivery_event_id_channel_recipient_user_id_identity_channel_id",
+				Unique:  true,
+				Columns: []*schema.Column{PoolCapacityAlertDeliveriesColumns[1], PoolCapacityAlertDeliveriesColumns[2], PoolCapacityAlertDeliveriesColumns[3], PoolCapacityAlertDeliveriesColumns[4]},
+			},
+			{
+				Name:    "poolcapacityalertdelivery_status_next_attempt_at",
+				Unique:  false,
+				Columns: []*schema.Column{PoolCapacityAlertDeliveriesColumns[8], PoolCapacityAlertDeliveriesColumns[11]},
+			},
+			{
+				Name:    "poolcapacityalertdelivery_lease_expires_at",
+				Unique:  false,
+				Columns: []*schema.Column{PoolCapacityAlertDeliveriesColumns[13]},
+			},
+		},
+	}
+	// PoolCapacityAlertEventsColumns holds the columns for the "pool_capacity_alert_events" table.
+	PoolCapacityAlertEventsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "state_id", Type: field.TypeInt64},
+		{Name: "episode", Type: field.TypeInt64},
+		{Name: "group_id", Type: field.TypeInt64},
+		{Name: "group_generation", Type: field.TypeInt64, Default: 0},
+		{Name: "account_id", Type: field.TypeInt64},
+		{Name: "api_key_id", Type: field.TypeInt64},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "billing_type", Type: field.TypeInt8},
+		{Name: "group_name", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "account_name", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "api_key_name", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "user_email", Type: field.TypeString, Size: 255, Default: ""},
+		{Name: "predicted_requests", Type: field.TypeInt64},
+		{Name: "threshold_requests", Type: field.TypeInt64, Default: 50},
+		{Name: "account_requests", Type: field.TypeInt64, Nullable: true},
+		{Name: "api_key_requests", Type: field.TypeInt64, Nullable: true},
+		{Name: "wallet_requests", Type: field.TypeInt64, Nullable: true},
+		{Name: "avg_account_cost", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "numeric(30,12)"}},
+		{Name: "avg_actual_cost", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "numeric(30,12)"}},
+		{Name: "account_remaining", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(30,12)"}},
+		{Name: "api_key_remaining", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(30,12)"}},
+		{Name: "wallet_remaining", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(30,12)"}},
+		{Name: "sample_count", Type: field.TypeInt, Default: 50},
+		{Name: "bottleneck", Type: field.TypeString, Size: 32, Default: ""},
+		{Name: "qqbot_app_id", Type: field.TypeString, Size: 128, Default: ""},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// PoolCapacityAlertEventsTable holds the schema information for the "pool_capacity_alert_events" table.
+	PoolCapacityAlertEventsTable = &schema.Table{
+		Name:       "pool_capacity_alert_events",
+		Columns:    PoolCapacityAlertEventsColumns,
+		PrimaryKey: []*schema.Column{PoolCapacityAlertEventsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "poolcapacityalertevent_state_id_episode",
+				Unique:  true,
+				Columns: []*schema.Column{PoolCapacityAlertEventsColumns[1], PoolCapacityAlertEventsColumns[2]},
+			},
+			{
+				Name:    "poolcapacityalertevent_group_id_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{PoolCapacityAlertEventsColumns[3], PoolCapacityAlertEventsColumns[26]},
+			},
+			{
+				Name:    "poolcapacityalertevent_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{PoolCapacityAlertEventsColumns[26]},
+			},
+		},
+	}
+	// PoolCapacityAlertStatesColumns holds the columns for the "pool_capacity_alert_states" table.
+	PoolCapacityAlertStatesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "group_id", Type: field.TypeInt64},
+		{Name: "group_generation", Type: field.TypeInt64, Default: 0},
+		{Name: "account_id", Type: field.TypeInt64},
+		{Name: "api_key_id", Type: field.TypeInt64},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "billing_type", Type: field.TypeInt8},
+		{Name: "status", Type: field.TypeString, Size: 16, Default: "healthy"},
+		{Name: "episode", Type: field.TypeInt64, Default: 0},
+		{Name: "predicted_requests", Type: field.TypeInt64, Nullable: true},
+		{Name: "account_requests", Type: field.TypeInt64, Nullable: true},
+		{Name: "api_key_requests", Type: field.TypeInt64, Nullable: true},
+		{Name: "wallet_requests", Type: field.TypeInt64, Nullable: true},
+		{Name: "avg_account_cost", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "numeric(30,12)"}},
+		{Name: "avg_actual_cost", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "numeric(30,12)"}},
+		{Name: "sample_count", Type: field.TypeInt, Default: 0},
+		{Name: "bottleneck", Type: field.TypeString, Size: 32, Default: ""},
+		{Name: "last_evaluated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "last_alerted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+	}
+	// PoolCapacityAlertStatesTable holds the schema information for the "pool_capacity_alert_states" table.
+	PoolCapacityAlertStatesTable = &schema.Table{
+		Name:       "pool_capacity_alert_states",
+		Columns:    PoolCapacityAlertStatesColumns,
+		PrimaryKey: []*schema.Column{PoolCapacityAlertStatesColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "poolcapacityalertstate_group_id_group_generation_account_id_api_key_id_user_id_billing_type",
+				Unique:  true,
+				Columns: []*schema.Column{PoolCapacityAlertStatesColumns[1], PoolCapacityAlertStatesColumns[2], PoolCapacityAlertStatesColumns[3], PoolCapacityAlertStatesColumns[4], PoolCapacityAlertStatesColumns[5], PoolCapacityAlertStatesColumns[6]},
+			},
+			{
+				Name:    "poolcapacityalertstate_group_id_group_generation",
+				Unique:  false,
+				Columns: []*schema.Column{PoolCapacityAlertStatesColumns[1], PoolCapacityAlertStatesColumns[2]},
+			},
+			{
+				Name:    "poolcapacityalertstate_status_updated_at",
+				Unique:  false,
+				Columns: []*schema.Column{PoolCapacityAlertStatesColumns[7], PoolCapacityAlertStatesColumns[20]},
 			},
 		},
 	}
@@ -2353,6 +2500,9 @@ var (
 		PaymentOrdersTable,
 		PaymentProviderInstancesTable,
 		PendingAuthSessionsTable,
+		PoolCapacityAlertDeliveriesTable,
+		PoolCapacityAlertEventsTable,
+		PoolCapacityAlertStatesTable,
 		PromoCodesTable,
 		PromoCodeUsagesTable,
 		ProxiesTable,
@@ -2471,6 +2621,15 @@ func init() {
 	PendingAuthSessionsTable.ForeignKeys[0].RefTable = UsersTable
 	PendingAuthSessionsTable.Annotation = &entsql.Annotation{
 		Table: "pending_auth_sessions",
+	}
+	PoolCapacityAlertDeliveriesTable.Annotation = &entsql.Annotation{
+		Table: "pool_capacity_alert_deliveries",
+	}
+	PoolCapacityAlertEventsTable.Annotation = &entsql.Annotation{
+		Table: "pool_capacity_alert_events",
+	}
+	PoolCapacityAlertStatesTable.Annotation = &entsql.Annotation{
+		Table: "pool_capacity_alert_states",
 	}
 	PromoCodesTable.Annotation = &entsql.Annotation{
 		Table: "promo_codes",

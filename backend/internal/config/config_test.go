@@ -577,6 +577,27 @@ func TestLoadAnnouncementEmailConfigAndBounds(t *testing.T) {
 	require.GreaterOrEqual(t, cfg.AnnouncementEmail.LeaseSeconds, cfg.AnnouncementEmail.SendTimeoutSeconds+30)
 }
 
+func TestLoadPoolCapacityAlertConfigAndBounds(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("POOL_CAPACITY_ALERT_ENABLED", "false")
+	t.Setenv("POOL_CAPACITY_ALERT_EVALUATION_WORKER_COUNT", "99")
+	t.Setenv("POOL_CAPACITY_ALERT_QUEUE_SIZE", "200000")
+	t.Setenv("POOL_CAPACITY_ALERT_DELIVERY_BATCH_SIZE", "9999")
+	t.Setenv("POOL_CAPACITY_ALERT_SEND_TIMEOUT_SECONDS", "999")
+	t.Setenv("POOL_CAPACITY_ALERT_LEASE_SECONDS", "1")
+	t.Setenv("POOL_CAPACITY_ALERT_REMINDER_COOLDOWN_HOURS", "9999")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.False(t, cfg.PoolCapacityAlert.Enabled)
+	require.Equal(t, 32, cfg.PoolCapacityAlert.EvaluationWorkerCount)
+	require.Equal(t, 100000, cfg.PoolCapacityAlert.QueueSize)
+	require.Equal(t, 500, cfg.PoolCapacityAlert.DeliveryBatchSize)
+	require.Equal(t, 300, cfg.PoolCapacityAlert.SendTimeoutSeconds)
+	require.GreaterOrEqual(t, cfg.PoolCapacityAlert.LeaseSeconds, cfg.PoolCapacityAlert.SendTimeoutSeconds+30)
+	require.Equal(t, 24*30, cfg.PoolCapacityAlert.ReminderCooldownHours)
+}
+
 func TestLoadDefaultBatchImageQueueDisabled(t *testing.T) {
 	resetViperWithJWTSecret(t)
 

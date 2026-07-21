@@ -51,12 +51,14 @@ func TestGroupRepoSuite(t *testing.T) {
 
 func (s *GroupRepoSuite) TestCreate() {
 	group := &service.Group{
-		Name:             "test-create",
-		Platform:         service.PlatformAnthropic,
-		RateMultiplier:   1.0,
-		IsExclusive:      false,
-		Status:           service.StatusActive,
-		SubscriptionType: service.SubscriptionTypeStandard,
+		Name:                        "test-create",
+		Platform:                    service.PlatformAnthropic,
+		RateMultiplier:              1.0,
+		IsExclusive:                 false,
+		Status:                      service.StatusActive,
+		SubscriptionType:            service.SubscriptionTypeStandard,
+		PoolCapacityAlertEnabled:    true,
+		PoolCapacityAlertGeneration: 5,
 	}
 
 	err := s.repo.Create(s.ctx, group)
@@ -66,6 +68,8 @@ func (s *GroupRepoSuite) TestCreate() {
 	got, err := s.repo.GetByID(s.ctx, group.ID)
 	s.Require().NoError(err, "GetByID")
 	s.Require().Equal("test-create", got.Name)
+	s.Require().True(got.PoolCapacityAlertEnabled)
+	s.Require().Equal(int64(5), got.PoolCapacityAlertGeneration)
 }
 
 func (s *GroupRepoSuite) TestCreateFromSourcePreservesPriorityAndFiltersIneligibleAccounts() {
@@ -112,16 +116,20 @@ func (s *GroupRepoSuite) TestCreateFromSourcePreservesPriorityAndFiltersIneligib
 	}
 
 	duplicate := &service.Group{
-		Name:                 "duplicate-source (Copy)",
-		Platform:             source.Platform,
-		RateMultiplier:       source.RateMultiplier,
-		Status:               "inactive",
-		SubscriptionType:     source.SubscriptionType,
-		RequireOAuthOnly:     true,
-		DuplicateOperationID: strings.Repeat("a", 64),
+		Name:                        "duplicate-source (Copy)",
+		Platform:                    source.Platform,
+		RateMultiplier:              source.RateMultiplier,
+		Status:                      "inactive",
+		SubscriptionType:            source.SubscriptionType,
+		RequireOAuthOnly:            true,
+		DuplicateOperationID:        strings.Repeat("a", 64),
+		PoolCapacityAlertEnabled:    true,
+		PoolCapacityAlertGeneration: 99,
 	}
 	s.Require().NoError(s.repo.CreateFromSource(s.ctx, duplicate, source.ID))
 	s.Require().EqualValues(1, duplicate.AccountCount)
+	s.Require().False(duplicate.PoolCapacityAlertEnabled)
+	s.Require().Zero(duplicate.PoolCapacityAlertGeneration)
 
 	rows, err := s.tx.QueryContext(
 		s.ctx,
@@ -141,6 +149,8 @@ func (s *GroupRepoSuite) TestCreateFromSourcePreservesPriorityAndFiltersIneligib
 	recovered, err := s.repo.FindByDuplicateOperationID(s.ctx, duplicate.DuplicateOperationID)
 	s.Require().NoError(err)
 	s.Require().Equal(duplicate.ID, recovered.ID)
+	s.Require().False(recovered.PoolCapacityAlertEnabled)
+	s.Require().Zero(recovered.PoolCapacityAlertGeneration)
 
 	var outboxCount int
 	s.Require().NoError(scanSingleRow(
@@ -179,24 +189,53 @@ func (s *GroupRepoSuite) TestGetByIDLite_DoesNotUseAccountCount() {
 	s.Require().False(spy.called, "expected no direct sql executor usage")
 }
 
-func (s *GroupRepoSuite) TestUpdate() {
+func (s *GroupRepoSuite) TestUpdatePreservesPoolCapacityAlertGenerationFromStaleSnapshots() {
 	group := &service.Group{
-		Name:             "original",
-		Platform:         service.PlatformAnthropic,
-		RateMultiplier:   1.0,
-		IsExclusive:      false,
-		Status:           service.StatusActive,
-		SubscriptionType: service.SubscriptionTypeStandard,
+		Name:                        "original",
+		Platform:                    service.PlatformAnthropic,
+		RateMultiplier:              1.0,
+		IsExclusive:                 false,
+		Status:                      service.StatusActive,
+		SubscriptionType:            service.SubscriptionTypeStandard,
+		PoolCapacityAlertEnabled:    true,
+		PoolCapacityAlertGeneration: 5,
 	}
 	s.Require().NoError(s.repo.Create(s.ctx, group))
 
 	group.Name = "updated"
+	group.PoolCapacityAlertEnabled = false
+	group.PoolCapacityAlertGeneration = 0
 	err := s.repo.Update(s.ctx, group)
 	s.Require().NoError(err, "Update")
 
 	got, err := s.repo.GetByID(s.ctx, group.ID)
 	s.Require().NoError(err, "GetByID after update")
 	s.Require().Equal("updated", got.Name)
+	s.Require().True(got.PoolCapacityAlertEnabled)
+	s.Require().Equal(int64(5), got.PoolCapacityAlertGeneration)
+}
+
+func (s *GroupRepoSuite) TestUpdateWithPoolCapacityAlertIncrementsCurrentGenerationAtomically() {
+	group := &service.Group{
+		Name:                        "alert-toggle",
+		Platform:                    service.PlatformAnthropic,
+		RateMultiplier:              1.0,
+		Status:                      service.StatusActive,
+		SubscriptionType:            service.SubscriptionTypeStandard,
+		PoolCapacityAlertEnabled:    true,
+		PoolCapacityAlertGeneration: 5,
+	}
+	s.Require().NoError(s.repo.Create(s.ctx, group))
+
+	disabled := false
+	group.PoolCapacityAlertEnabled = true
+	group.PoolCapacityAlertGeneration = 1
+	s.Require().NoError(s.repo.UpdateWithPoolCapacityAlert(s.ctx, group, &disabled))
+	s.Require().False(group.PoolCapacityAlertEnabled)
+	s.Require().Equal(int64(6), group.PoolCapacityAlertGeneration)
+
+	s.Require().NoError(s.repo.UpdateWithPoolCapacityAlert(s.ctx, group, &disabled))
+	s.Require().Equal(int64(6), group.PoolCapacityAlertGeneration, "writing the same value must not advance the generation")
 }
 
 func (s *GroupRepoSuite) TestGetByID_PreservesMessagesDispatchModelConfig() {

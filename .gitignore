@@ -147,6 +147,7 @@ docs/*
 !docs/ADMIN_USER_GROUP_RESTRICTIONS.md
 !docs/ASYNC_IMAGE_TASKS.md
 !docs/MODEL_SQUARE.md
+!docs/POOL_CAPACITY_ALERTS.md
 !docs/legal/
 !docs/legal/*.md
 .serena/

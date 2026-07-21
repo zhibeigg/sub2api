@@ -309,6 +309,42 @@ func (f PendingAuthSessionFunc) Mutate(ctx context.Context, m ent.Mutation) (ent
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PendingAuthSessionMutation", m)
 }
 
+// The PoolCapacityAlertDeliveryFunc type is an adapter to allow the use of ordinary
+// function as PoolCapacityAlertDelivery mutator.
+type PoolCapacityAlertDeliveryFunc func(context.Context, *ent.PoolCapacityAlertDeliveryMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f PoolCapacityAlertDeliveryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.PoolCapacityAlertDeliveryMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PoolCapacityAlertDeliveryMutation", m)
+}
+
+// The PoolCapacityAlertEventFunc type is an adapter to allow the use of ordinary
+// function as PoolCapacityAlertEvent mutator.
+type PoolCapacityAlertEventFunc func(context.Context, *ent.PoolCapacityAlertEventMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f PoolCapacityAlertEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.PoolCapacityAlertEventMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PoolCapacityAlertEventMutation", m)
+}
+
+// The PoolCapacityAlertStateFunc type is an adapter to allow the use of ordinary
+// function as PoolCapacityAlertState mutator.
+type PoolCapacityAlertStateFunc func(context.Context, *ent.PoolCapacityAlertStateMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f PoolCapacityAlertStateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.PoolCapacityAlertStateMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PoolCapacityAlertStateMutation", m)
+}
+
 // The PromoCodeFunc type is an adapter to allow the use of ordinary
 // function as PromoCode mutator.
 type PromoCodeFunc func(context.Context, *ent.PromoCodeMutation) (ent.Value, error)

@@ -81,6 +81,15 @@ type PaymentProviderInstance func(*sql.Selector)
 // PendingAuthSession is the predicate function for pendingauthsession builders.
 type PendingAuthSession func(*sql.Selector)
 
+// PoolCapacityAlertDelivery is the predicate function for poolcapacityalertdelivery builders.
+type PoolCapacityAlertDelivery func(*sql.Selector)
+
+// PoolCapacityAlertEvent is the predicate function for poolcapacityalertevent builders.
+type PoolCapacityAlertEvent func(*sql.Selector)
+
+// PoolCapacityAlertState is the predicate function for poolcapacityalertstate builders.
+type PoolCapacityAlertState func(*sql.Selector)
+
 // PromoCode is the predicate function for promocode builders.
 type PromoCode func(*sql.Selector)
 

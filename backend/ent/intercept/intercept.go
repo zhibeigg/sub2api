@@ -33,6 +33,9 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
 	"github.com/Wei-Shaw/sub2api/ent/paymentproviderinstance"
 	"github.com/Wei-Shaw/sub2api/ent/pendingauthsession"
+	"github.com/Wei-Shaw/sub2api/ent/poolcapacityalertdelivery"
+	"github.com/Wei-Shaw/sub2api/ent/poolcapacityalertevent"
+	"github.com/Wei-Shaw/sub2api/ent/poolcapacityalertstate"
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
@@ -786,6 +789,87 @@ func (f TraversePendingAuthSession) Traverse(ctx context.Context, q ent.Query) e
 	return fmt.Errorf("unexpected query type %T. expect *ent.PendingAuthSessionQuery", q)
 }
 
+// The PoolCapacityAlertDeliveryFunc type is an adapter to allow the use of ordinary function as a Querier.
+type PoolCapacityAlertDeliveryFunc func(context.Context, *ent.PoolCapacityAlertDeliveryQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f PoolCapacityAlertDeliveryFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.PoolCapacityAlertDeliveryQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.PoolCapacityAlertDeliveryQuery", q)
+}
+
+// The TraversePoolCapacityAlertDelivery type is an adapter to allow the use of ordinary function as Traverser.
+type TraversePoolCapacityAlertDelivery func(context.Context, *ent.PoolCapacityAlertDeliveryQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraversePoolCapacityAlertDelivery) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraversePoolCapacityAlertDelivery) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.PoolCapacityAlertDeliveryQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.PoolCapacityAlertDeliveryQuery", q)
+}
+
+// The PoolCapacityAlertEventFunc type is an adapter to allow the use of ordinary function as a Querier.
+type PoolCapacityAlertEventFunc func(context.Context, *ent.PoolCapacityAlertEventQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f PoolCapacityAlertEventFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.PoolCapacityAlertEventQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.PoolCapacityAlertEventQuery", q)
+}
+
+// The TraversePoolCapacityAlertEvent type is an adapter to allow the use of ordinary function as Traverser.
+type TraversePoolCapacityAlertEvent func(context.Context, *ent.PoolCapacityAlertEventQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraversePoolCapacityAlertEvent) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraversePoolCapacityAlertEvent) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.PoolCapacityAlertEventQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.PoolCapacityAlertEventQuery", q)
+}
+
+// The PoolCapacityAlertStateFunc type is an adapter to allow the use of ordinary function as a Querier.
+type PoolCapacityAlertStateFunc func(context.Context, *ent.PoolCapacityAlertStateQuery) (ent.Value, error)
+
+// Query calls f(ctx, q).
+func (f PoolCapacityAlertStateFunc) Query(ctx context.Context, q ent.Query) (ent.Value, error) {
+	if q, ok := q.(*ent.PoolCapacityAlertStateQuery); ok {
+		return f(ctx, q)
+	}
+	return nil, fmt.Errorf("unexpected query type %T. expect *ent.PoolCapacityAlertStateQuery", q)
+}
+
+// The TraversePoolCapacityAlertState type is an adapter to allow the use of ordinary function as Traverser.
+type TraversePoolCapacityAlertState func(context.Context, *ent.PoolCapacityAlertStateQuery) error
+
+// Intercept is a dummy implementation of Intercept that returns the next Querier in the pipeline.
+func (f TraversePoolCapacityAlertState) Intercept(next ent.Querier) ent.Querier {
+	return next
+}
+
+// Traverse calls f(ctx, q).
+func (f TraversePoolCapacityAlertState) Traverse(ctx context.Context, q ent.Query) error {
+	if q, ok := q.(*ent.PoolCapacityAlertStateQuery); ok {
+		return f(ctx, q)
+	}
+	return fmt.Errorf("unexpected query type %T. expect *ent.PoolCapacityAlertStateQuery", q)
+}
+
 // The PromoCodeFunc type is an adapter to allow the use of ordinary function as a Querier.
 type PromoCodeFunc func(context.Context, *ent.PromoCodeQuery) (ent.Value, error)
 
@@ -1352,6 +1436,12 @@ func NewQuery(q ent.Query) (Query, error) {
 		return &query[*ent.PaymentProviderInstanceQuery, predicate.PaymentProviderInstance, paymentproviderinstance.OrderOption]{typ: ent.TypePaymentProviderInstance, tq: q}, nil
 	case *ent.PendingAuthSessionQuery:
 		return &query[*ent.PendingAuthSessionQuery, predicate.PendingAuthSession, pendingauthsession.OrderOption]{typ: ent.TypePendingAuthSession, tq: q}, nil
+	case *ent.PoolCapacityAlertDeliveryQuery:
+		return &query[*ent.PoolCapacityAlertDeliveryQuery, predicate.PoolCapacityAlertDelivery, poolcapacityalertdelivery.OrderOption]{typ: ent.TypePoolCapacityAlertDelivery, tq: q}, nil
+	case *ent.PoolCapacityAlertEventQuery:
+		return &query[*ent.PoolCapacityAlertEventQuery, predicate.PoolCapacityAlertEvent, poolcapacityalertevent.OrderOption]{typ: ent.TypePoolCapacityAlertEvent, tq: q}, nil
+	case *ent.PoolCapacityAlertStateQuery:
+		return &query[*ent.PoolCapacityAlertStateQuery, predicate.PoolCapacityAlertState, poolcapacityalertstate.OrderOption]{typ: ent.TypePoolCapacityAlertState, tq: q}, nil
 	case *ent.PromoCodeQuery:
 		return &query[*ent.PromoCodeQuery, predicate.PromoCode, promocode.OrderOption]{typ: ent.TypePromoCode, tq: q}, nil
 	case *ent.PromoCodeUsageQuery:

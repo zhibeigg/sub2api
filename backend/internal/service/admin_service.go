@@ -273,6 +273,8 @@ type CreateGroupInput struct {
 	ModelsListConfig            GroupModelsListConfig
 	// RPMLimit 分组 RPM 上限（0 = 不限制）
 	RPMLimit int
+	// PoolCapacityAlertEnabled 是否启用分组池容量告警；未提供时 bool 零值默认为 false。
+	PoolCapacityAlertEnabled bool
 	// 从指定分组复制账号（创建分组后在同一事务内绑定）
 	CopyAccountsFromGroupIDs []int64
 }
@@ -330,6 +332,8 @@ type UpdateGroupInput struct {
 	ModelsListConfig            *GroupModelsListConfig
 	// RPMLimit 分组 RPM 上限（0 = 不限制），nil 表示未提供不改动。
 	RPMLimit *int
+	// PoolCapacityAlertEnabled nil 表示未提供不改动；显式修改开关时由服务递增内部 generation。
+	PoolCapacityAlertEnabled *bool
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64
 }
@@ -618,27 +622,28 @@ var ErrRPMStatusUnavailable = infraerrors.New(http.StatusNotImplemented, "RPM_ST
 
 // adminServiceImpl implements AdminService
 type adminServiceImpl struct {
-	userRepo             UserRepository
-	groupRepo            GroupRepository
-	groupDuplicateRepo   GroupDuplicateRepository
-	accountRepo          AccountRepository
-	accountDuplicateRepo AccountDuplicateRepository
-	proxyRepo            ProxyRepository
-	apiKeyRepo           APIKeyRepository
-	redeemCodeRepo       RedeemCodeRepository
-	userGroupRateRepo    UserGroupRateRepository
-	userRPMCache         UserRPMCache
-	billingCacheService  *BillingCacheService
-	proxyProber          ProxyExitInfoProber
-	proxyLatencyCache    ProxyLatencyCache
-	authCacheInvalidator APIKeyAuthCacheInvalidator
-	entClient            *dbent.Client // 用于开启数据库事务
-	settingService       *SettingService
-	defaultSubAssigner   DefaultSubscriptionAssigner
-	userSubRepo          UserSubscriptionRepository
-	privacyClientFactory PrivacyClientFactory
-	runtimeBlocker       AccountRuntimeBlocker
-	affiliateService     adminRechargeAffiliateAccruer
+	userRepo                   UserRepository
+	groupRepo                  GroupRepository
+	groupDuplicateRepo         GroupDuplicateRepository
+	groupPoolCapacityAlertRepo GroupPoolCapacityAlertRepository
+	accountRepo                AccountRepository
+	accountDuplicateRepo       AccountDuplicateRepository
+	proxyRepo                  ProxyRepository
+	apiKeyRepo                 APIKeyRepository
+	redeemCodeRepo             RedeemCodeRepository
+	userGroupRateRepo          UserGroupRateRepository
+	userRPMCache               UserRPMCache
+	billingCacheService        *BillingCacheService
+	proxyProber                ProxyExitInfoProber
+	proxyLatencyCache          ProxyLatencyCache
+	authCacheInvalidator       APIKeyAuthCacheInvalidator
+	entClient                  *dbent.Client // 用于开启数据库事务
+	settingService             *SettingService
+	defaultSubAssigner         DefaultSubscriptionAssigner
+	userSubRepo                UserSubscriptionRepository
+	privacyClientFactory       PrivacyClientFactory
+	runtimeBlocker             AccountRuntimeBlocker
+	affiliateService           adminRechargeAffiliateAccruer
 }
 
 type adminRechargeAffiliateAccruer interface {
@@ -672,26 +677,27 @@ func NewAdminService(
 	affiliateService *AffiliateService,
 ) AdminService {
 	return &adminServiceImpl{
-		userRepo:             userRepo,
-		groupRepo:            groupRepo,
-		groupDuplicateRepo:   groupRepo,
-		accountRepo:          accountRepo,
-		accountDuplicateRepo: accountRepo,
-		proxyRepo:            proxyRepo,
-		apiKeyRepo:           apiKeyRepo,
-		redeemCodeRepo:       redeemCodeRepo,
-		userGroupRateRepo:    userGroupRateRepo,
-		userRPMCache:         userRPMCache,
-		billingCacheService:  billingCacheService,
-		proxyProber:          proxyProber,
-		proxyLatencyCache:    proxyLatencyCache,
-		authCacheInvalidator: authCacheInvalidator,
-		entClient:            entClient,
-		settingService:       settingService,
-		defaultSubAssigner:   defaultSubAssigner,
-		userSubRepo:          userSubRepo,
-		privacyClientFactory: privacyClientFactory,
-		runtimeBlocker:       runtimeBlocker,
-		affiliateService:     affiliateService,
+		userRepo:                   userRepo,
+		groupRepo:                  groupRepo,
+		groupDuplicateRepo:         groupRepo,
+		groupPoolCapacityAlertRepo: groupRepo,
+		accountRepo:                accountRepo,
+		accountDuplicateRepo:       accountRepo,
+		proxyRepo:                  proxyRepo,
+		apiKeyRepo:                 apiKeyRepo,
+		redeemCodeRepo:             redeemCodeRepo,
+		userGroupRateRepo:          userGroupRateRepo,
+		userRPMCache:               userRPMCache,
+		billingCacheService:        billingCacheService,
+		proxyProber:                proxyProber,
+		proxyLatencyCache:          proxyLatencyCache,
+		authCacheInvalidator:       authCacheInvalidator,
+		entClient:                  entClient,
+		settingService:             settingService,
+		defaultSubAssigner:         defaultSubAssigner,
+		userSubRepo:                userSubRepo,
+		privacyClientFactory:       privacyClientFactory,
+		runtimeBlocker:             runtimeBlocker,
+		affiliateService:           affiliateService,
 	}
 }

@@ -74,6 +74,8 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 		nil, // openAIImageUploadTemp
 		nil, // batchImageWorker
 		nil, // announcementEmailDispatch
+		nil, // poolCapacityAlert
+		nil, // poolCapacityAlertGatewayBinding
 		pricingSvc,
 		emailQueueSvc,
 		billingCacheSvc,

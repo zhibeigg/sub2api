@@ -316,6 +316,8 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		MessagesDispatchModelConfig:     normalizeOpenAIMessagesDispatchModelConfig(input.MessagesDispatchModelConfig),
 		ModelsListConfig:                normalizeGroupModelsListConfig(input.ModelsListConfig),
 		RPMLimit:                        input.RPMLimit,
+		PoolCapacityAlertEnabled:        input.PoolCapacityAlertEnabled,
+		PoolCapacityAlertGeneration:     0,
 	}
 	sanitizeGroupMessagesDispatchFields(group)
 	if err := s.groupRepo.Create(ctx, group); err != nil {
@@ -660,8 +662,24 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 	sanitizeGroupMessagesDispatchFields(group)
 
-	if err := s.groupRepo.Update(ctx, group); err != nil {
-		return nil, err
+	poolAlertRepo := s.groupPoolCapacityAlertRepo
+	if poolAlertRepo == nil {
+		poolAlertRepo, _ = s.groupRepo.(GroupPoolCapacityAlertRepository)
+	}
+	if poolAlertRepo != nil {
+		if err := poolAlertRepo.UpdateWithPoolCapacityAlert(ctx, group, input.PoolCapacityAlertEnabled); err != nil {
+			return nil, err
+		}
+	} else {
+		// Test doubles and legacy embedders may only provide GroupRepository.
+		// Production wiring always supplies the atomic admin repository above.
+		if input.PoolCapacityAlertEnabled != nil && group.PoolCapacityAlertEnabled != *input.PoolCapacityAlertEnabled {
+			group.PoolCapacityAlertEnabled = *input.PoolCapacityAlertEnabled
+			group.PoolCapacityAlertGeneration++
+		}
+		if err := s.groupRepo.Update(ctx, group); err != nil {
+			return nil, err
+		}
 	}
 
 	if s.authCacheInvalidator != nil {

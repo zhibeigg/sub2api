@@ -37,6 +37,9 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
 	"github.com/Wei-Shaw/sub2api/ent/paymentproviderinstance"
 	"github.com/Wei-Shaw/sub2api/ent/pendingauthsession"
+	"github.com/Wei-Shaw/sub2api/ent/poolcapacityalertdelivery"
+	"github.com/Wei-Shaw/sub2api/ent/poolcapacityalertevent"
+	"github.com/Wei-Shaw/sub2api/ent/poolcapacityalertstate"
 	"github.com/Wei-Shaw/sub2api/ent/predicate"
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
@@ -94,6 +97,9 @@ const (
 	TypePaymentOrder                  = "PaymentOrder"
 	TypePaymentProviderInstance       = "PaymentProviderInstance"
 	TypePendingAuthSession            = "PendingAuthSession"
+	TypePoolCapacityAlertDelivery     = "PoolCapacityAlertDelivery"
+	TypePoolCapacityAlertEvent        = "PoolCapacityAlertEvent"
+	TypePoolCapacityAlertState        = "PoolCapacityAlertState"
 	TypePromoCode                     = "PromoCode"
 	TypePromoCodeUsage                = "PromoCodeUsage"
 	TypeProxy                         = "Proxy"
@@ -25202,6 +25208,9 @@ type GroupMutation struct {
 	models_list_config                      *domain.GroupModelsListConfig
 	rpm_limit                               *int
 	addrpm_limit                            *int
+	pool_capacity_alert_enabled             *bool
+	pool_capacity_alert_generation          *int64
+	addpool_capacity_alert_generation       *int64
 	clearedFields                           map[string]struct{}
 	api_keys                                map[int64]struct{}
 	removedapi_keys                         map[int64]struct{}
@@ -27791,6 +27800,98 @@ func (m *GroupMutation) ResetRpmLimit() {
 	m.addrpm_limit = nil
 }
 
+// SetPoolCapacityAlertEnabled sets the "pool_capacity_alert_enabled" field.
+func (m *GroupMutation) SetPoolCapacityAlertEnabled(b bool) {
+	m.pool_capacity_alert_enabled = &b
+}
+
+// PoolCapacityAlertEnabled returns the value of the "pool_capacity_alert_enabled" field in the mutation.
+func (m *GroupMutation) PoolCapacityAlertEnabled() (r bool, exists bool) {
+	v := m.pool_capacity_alert_enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPoolCapacityAlertEnabled returns the old "pool_capacity_alert_enabled" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldPoolCapacityAlertEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPoolCapacityAlertEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPoolCapacityAlertEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPoolCapacityAlertEnabled: %w", err)
+	}
+	return oldValue.PoolCapacityAlertEnabled, nil
+}
+
+// ResetPoolCapacityAlertEnabled resets all changes to the "pool_capacity_alert_enabled" field.
+func (m *GroupMutation) ResetPoolCapacityAlertEnabled() {
+	m.pool_capacity_alert_enabled = nil
+}
+
+// SetPoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field.
+func (m *GroupMutation) SetPoolCapacityAlertGeneration(i int64) {
+	m.pool_capacity_alert_generation = &i
+	m.addpool_capacity_alert_generation = nil
+}
+
+// PoolCapacityAlertGeneration returns the value of the "pool_capacity_alert_generation" field in the mutation.
+func (m *GroupMutation) PoolCapacityAlertGeneration() (r int64, exists bool) {
+	v := m.pool_capacity_alert_generation
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPoolCapacityAlertGeneration returns the old "pool_capacity_alert_generation" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldPoolCapacityAlertGeneration(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPoolCapacityAlertGeneration is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPoolCapacityAlertGeneration requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPoolCapacityAlertGeneration: %w", err)
+	}
+	return oldValue.PoolCapacityAlertGeneration, nil
+}
+
+// AddPoolCapacityAlertGeneration adds i to the "pool_capacity_alert_generation" field.
+func (m *GroupMutation) AddPoolCapacityAlertGeneration(i int64) {
+	if m.addpool_capacity_alert_generation != nil {
+		*m.addpool_capacity_alert_generation += i
+	} else {
+		m.addpool_capacity_alert_generation = &i
+	}
+}
+
+// AddedPoolCapacityAlertGeneration returns the value that was added to the "pool_capacity_alert_generation" field in this mutation.
+func (m *GroupMutation) AddedPoolCapacityAlertGeneration() (r int64, exists bool) {
+	v := m.addpool_capacity_alert_generation
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPoolCapacityAlertGeneration resets all changes to the "pool_capacity_alert_generation" field.
+func (m *GroupMutation) ResetPoolCapacityAlertGeneration() {
+	m.pool_capacity_alert_generation = nil
+	m.addpool_capacity_alert_generation = nil
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by ids.
 func (m *GroupMutation) AddAPIKeyIDs(ids ...int64) {
 	if m.api_keys == nil {
@@ -28365,7 +28466,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 50)
+	fields := make([]string, 0, 52)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -28516,6 +28617,12 @@ func (m *GroupMutation) Fields() []string {
 	if m.rpm_limit != nil {
 		fields = append(fields, group.FieldRpmLimit)
 	}
+	if m.pool_capacity_alert_enabled != nil {
+		fields = append(fields, group.FieldPoolCapacityAlertEnabled)
+	}
+	if m.pool_capacity_alert_generation != nil {
+		fields = append(fields, group.FieldPoolCapacityAlertGeneration)
+	}
 	return fields
 }
 
@@ -28624,6 +28731,10 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.ModelsListConfig()
 	case group.FieldRpmLimit:
 		return m.RpmLimit()
+	case group.FieldPoolCapacityAlertEnabled:
+		return m.PoolCapacityAlertEnabled()
+	case group.FieldPoolCapacityAlertGeneration:
+		return m.PoolCapacityAlertGeneration()
 	}
 	return nil, false
 }
@@ -28733,6 +28844,10 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldModelsListConfig(ctx)
 	case group.FieldRpmLimit:
 		return m.OldRpmLimit(ctx)
+	case group.FieldPoolCapacityAlertEnabled:
+		return m.OldPoolCapacityAlertEnabled(ctx)
+	case group.FieldPoolCapacityAlertGeneration:
+		return m.OldPoolCapacityAlertGeneration(ctx)
 	}
 	return nil, fmt.Errorf("unknown Group field %s", name)
 }
@@ -29092,6 +29207,20 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetRpmLimit(v)
 		return nil
+	case group.FieldPoolCapacityAlertEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPoolCapacityAlertEnabled(v)
+		return nil
+	case group.FieldPoolCapacityAlertGeneration:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPoolCapacityAlertGeneration(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Group field %s", name)
 }
@@ -29163,6 +29292,9 @@ func (m *GroupMutation) AddedFields() []string {
 	if m.addrpm_limit != nil {
 		fields = append(fields, group.FieldRpmLimit)
 	}
+	if m.addpool_capacity_alert_generation != nil {
+		fields = append(fields, group.FieldPoolCapacityAlertGeneration)
+	}
 	return fields
 }
 
@@ -29213,6 +29345,8 @@ func (m *GroupMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedSortOrder()
 	case group.FieldRpmLimit:
 		return m.AddedRpmLimit()
+	case group.FieldPoolCapacityAlertGeneration:
+		return m.AddedPoolCapacityAlertGeneration()
 	}
 	return nil, false
 }
@@ -29368,6 +29502,13 @@ func (m *GroupMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddRpmLimit(v)
+		return nil
+	case group.FieldPoolCapacityAlertGeneration:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPoolCapacityAlertGeneration(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Group numeric field %s", name)
@@ -29644,6 +29785,12 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldRpmLimit:
 		m.ResetRpmLimit()
+		return nil
+	case group.FieldPoolCapacityAlertEnabled:
+		m.ResetPoolCapacityAlertEnabled()
+		return nil
+	case group.FieldPoolCapacityAlertGeneration:
+		m.ResetPoolCapacityAlertGeneration()
 		return nil
 	}
 	return fmt.Errorf("unknown Group field %s", name)
@@ -38446,6 +38593,5864 @@ func (m *PendingAuthSessionMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown PendingAuthSession edge %s", name)
+}
+
+// PoolCapacityAlertDeliveryMutation represents an operation that mutates the PoolCapacityAlertDelivery nodes in the graph.
+type PoolCapacityAlertDeliveryMutation struct {
+	config
+	op                     Op
+	typ                    string
+	id                     *int64
+	event_id               *int64
+	addevent_id            *int64
+	channel                *string
+	recipient_user_id      *int64
+	addrecipient_user_id   *int64
+	identity_channel_id    *int64
+	addidentity_channel_id *int64
+	recipient_email        *string
+	recipient_name         *string
+	locale                 *string
+	status                 *string
+	attempt_count          *int
+	addattempt_count       *int
+	max_attempts           *int
+	addmax_attempts        *int
+	next_attempt_at        *time.Time
+	lease_owner            *string
+	lease_expires_at       *time.Time
+	last_error_class       *string
+	last_error             *string
+	sent_at                *time.Time
+	created_at             *time.Time
+	updated_at             *time.Time
+	clearedFields          map[string]struct{}
+	done                   bool
+	oldValue               func(context.Context) (*PoolCapacityAlertDelivery, error)
+	predicates             []predicate.PoolCapacityAlertDelivery
+}
+
+var _ ent.Mutation = (*PoolCapacityAlertDeliveryMutation)(nil)
+
+// poolcapacityalertdeliveryOption allows management of the mutation configuration using functional options.
+type poolcapacityalertdeliveryOption func(*PoolCapacityAlertDeliveryMutation)
+
+// newPoolCapacityAlertDeliveryMutation creates new mutation for the PoolCapacityAlertDelivery entity.
+func newPoolCapacityAlertDeliveryMutation(c config, op Op, opts ...poolcapacityalertdeliveryOption) *PoolCapacityAlertDeliveryMutation {
+	m := &PoolCapacityAlertDeliveryMutation{
+		config:        c,
+		op:            op,
+		typ:           TypePoolCapacityAlertDelivery,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withPoolCapacityAlertDeliveryID sets the ID field of the mutation.
+func withPoolCapacityAlertDeliveryID(id int64) poolcapacityalertdeliveryOption {
+	return func(m *PoolCapacityAlertDeliveryMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *PoolCapacityAlertDelivery
+		)
+		m.oldValue = func(ctx context.Context) (*PoolCapacityAlertDelivery, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().PoolCapacityAlertDelivery.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withPoolCapacityAlertDelivery sets the old PoolCapacityAlertDelivery of the mutation.
+func withPoolCapacityAlertDelivery(node *PoolCapacityAlertDelivery) poolcapacityalertdeliveryOption {
+	return func(m *PoolCapacityAlertDeliveryMutation) {
+		m.oldValue = func(context.Context) (*PoolCapacityAlertDelivery, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m PoolCapacityAlertDeliveryMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m PoolCapacityAlertDeliveryMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *PoolCapacityAlertDeliveryMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().PoolCapacityAlertDelivery.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetEventID sets the "event_id" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetEventID(i int64) {
+	m.event_id = &i
+	m.addevent_id = nil
+}
+
+// EventID returns the value of the "event_id" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) EventID() (r int64, exists bool) {
+	v := m.event_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEventID returns the old "event_id" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldEventID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEventID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEventID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEventID: %w", err)
+	}
+	return oldValue.EventID, nil
+}
+
+// AddEventID adds i to the "event_id" field.
+func (m *PoolCapacityAlertDeliveryMutation) AddEventID(i int64) {
+	if m.addevent_id != nil {
+		*m.addevent_id += i
+	} else {
+		m.addevent_id = &i
+	}
+}
+
+// AddedEventID returns the value that was added to the "event_id" field in this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) AddedEventID() (r int64, exists bool) {
+	v := m.addevent_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetEventID resets all changes to the "event_id" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetEventID() {
+	m.event_id = nil
+	m.addevent_id = nil
+}
+
+// SetChannel sets the "channel" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetChannel(s string) {
+	m.channel = &s
+}
+
+// Channel returns the value of the "channel" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) Channel() (r string, exists bool) {
+	v := m.channel
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChannel returns the old "channel" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldChannel(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChannel is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChannel requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChannel: %w", err)
+	}
+	return oldValue.Channel, nil
+}
+
+// ResetChannel resets all changes to the "channel" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetChannel() {
+	m.channel = nil
+}
+
+// SetRecipientUserID sets the "recipient_user_id" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetRecipientUserID(i int64) {
+	m.recipient_user_id = &i
+	m.addrecipient_user_id = nil
+}
+
+// RecipientUserID returns the value of the "recipient_user_id" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) RecipientUserID() (r int64, exists bool) {
+	v := m.recipient_user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRecipientUserID returns the old "recipient_user_id" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldRecipientUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRecipientUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRecipientUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRecipientUserID: %w", err)
+	}
+	return oldValue.RecipientUserID, nil
+}
+
+// AddRecipientUserID adds i to the "recipient_user_id" field.
+func (m *PoolCapacityAlertDeliveryMutation) AddRecipientUserID(i int64) {
+	if m.addrecipient_user_id != nil {
+		*m.addrecipient_user_id += i
+	} else {
+		m.addrecipient_user_id = &i
+	}
+}
+
+// AddedRecipientUserID returns the value that was added to the "recipient_user_id" field in this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) AddedRecipientUserID() (r int64, exists bool) {
+	v := m.addrecipient_user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRecipientUserID resets all changes to the "recipient_user_id" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetRecipientUserID() {
+	m.recipient_user_id = nil
+	m.addrecipient_user_id = nil
+}
+
+// SetIdentityChannelID sets the "identity_channel_id" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetIdentityChannelID(i int64) {
+	m.identity_channel_id = &i
+	m.addidentity_channel_id = nil
+}
+
+// IdentityChannelID returns the value of the "identity_channel_id" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) IdentityChannelID() (r int64, exists bool) {
+	v := m.identity_channel_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldIdentityChannelID returns the old "identity_channel_id" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldIdentityChannelID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldIdentityChannelID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldIdentityChannelID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldIdentityChannelID: %w", err)
+	}
+	return oldValue.IdentityChannelID, nil
+}
+
+// AddIdentityChannelID adds i to the "identity_channel_id" field.
+func (m *PoolCapacityAlertDeliveryMutation) AddIdentityChannelID(i int64) {
+	if m.addidentity_channel_id != nil {
+		*m.addidentity_channel_id += i
+	} else {
+		m.addidentity_channel_id = &i
+	}
+}
+
+// AddedIdentityChannelID returns the value that was added to the "identity_channel_id" field in this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) AddedIdentityChannelID() (r int64, exists bool) {
+	v := m.addidentity_channel_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetIdentityChannelID resets all changes to the "identity_channel_id" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetIdentityChannelID() {
+	m.identity_channel_id = nil
+	m.addidentity_channel_id = nil
+}
+
+// SetRecipientEmail sets the "recipient_email" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetRecipientEmail(s string) {
+	m.recipient_email = &s
+}
+
+// RecipientEmail returns the value of the "recipient_email" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) RecipientEmail() (r string, exists bool) {
+	v := m.recipient_email
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRecipientEmail returns the old "recipient_email" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldRecipientEmail(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRecipientEmail is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRecipientEmail requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRecipientEmail: %w", err)
+	}
+	return oldValue.RecipientEmail, nil
+}
+
+// ResetRecipientEmail resets all changes to the "recipient_email" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetRecipientEmail() {
+	m.recipient_email = nil
+}
+
+// SetRecipientName sets the "recipient_name" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetRecipientName(s string) {
+	m.recipient_name = &s
+}
+
+// RecipientName returns the value of the "recipient_name" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) RecipientName() (r string, exists bool) {
+	v := m.recipient_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRecipientName returns the old "recipient_name" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldRecipientName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRecipientName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRecipientName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRecipientName: %w", err)
+	}
+	return oldValue.RecipientName, nil
+}
+
+// ResetRecipientName resets all changes to the "recipient_name" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetRecipientName() {
+	m.recipient_name = nil
+}
+
+// SetLocale sets the "locale" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetLocale(s string) {
+	m.locale = &s
+}
+
+// Locale returns the value of the "locale" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) Locale() (r string, exists bool) {
+	v := m.locale
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLocale returns the old "locale" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldLocale(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLocale is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLocale requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLocale: %w", err)
+	}
+	return oldValue.Locale, nil
+}
+
+// ResetLocale resets all changes to the "locale" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetLocale() {
+	m.locale = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetAttemptCount sets the "attempt_count" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetAttemptCount(i int) {
+	m.attempt_count = &i
+	m.addattempt_count = nil
+}
+
+// AttemptCount returns the value of the "attempt_count" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) AttemptCount() (r int, exists bool) {
+	v := m.attempt_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAttemptCount returns the old "attempt_count" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldAttemptCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAttemptCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAttemptCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAttemptCount: %w", err)
+	}
+	return oldValue.AttemptCount, nil
+}
+
+// AddAttemptCount adds i to the "attempt_count" field.
+func (m *PoolCapacityAlertDeliveryMutation) AddAttemptCount(i int) {
+	if m.addattempt_count != nil {
+		*m.addattempt_count += i
+	} else {
+		m.addattempt_count = &i
+	}
+}
+
+// AddedAttemptCount returns the value that was added to the "attempt_count" field in this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) AddedAttemptCount() (r int, exists bool) {
+	v := m.addattempt_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAttemptCount resets all changes to the "attempt_count" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetAttemptCount() {
+	m.attempt_count = nil
+	m.addattempt_count = nil
+}
+
+// SetMaxAttempts sets the "max_attempts" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetMaxAttempts(i int) {
+	m.max_attempts = &i
+	m.addmax_attempts = nil
+}
+
+// MaxAttempts returns the value of the "max_attempts" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) MaxAttempts() (r int, exists bool) {
+	v := m.max_attempts
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMaxAttempts returns the old "max_attempts" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldMaxAttempts(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMaxAttempts is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMaxAttempts requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMaxAttempts: %w", err)
+	}
+	return oldValue.MaxAttempts, nil
+}
+
+// AddMaxAttempts adds i to the "max_attempts" field.
+func (m *PoolCapacityAlertDeliveryMutation) AddMaxAttempts(i int) {
+	if m.addmax_attempts != nil {
+		*m.addmax_attempts += i
+	} else {
+		m.addmax_attempts = &i
+	}
+}
+
+// AddedMaxAttempts returns the value that was added to the "max_attempts" field in this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) AddedMaxAttempts() (r int, exists bool) {
+	v := m.addmax_attempts
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetMaxAttempts resets all changes to the "max_attempts" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetMaxAttempts() {
+	m.max_attempts = nil
+	m.addmax_attempts = nil
+}
+
+// SetNextAttemptAt sets the "next_attempt_at" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetNextAttemptAt(t time.Time) {
+	m.next_attempt_at = &t
+}
+
+// NextAttemptAt returns the value of the "next_attempt_at" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) NextAttemptAt() (r time.Time, exists bool) {
+	v := m.next_attempt_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNextAttemptAt returns the old "next_attempt_at" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldNextAttemptAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNextAttemptAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNextAttemptAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNextAttemptAt: %w", err)
+	}
+	return oldValue.NextAttemptAt, nil
+}
+
+// ResetNextAttemptAt resets all changes to the "next_attempt_at" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetNextAttemptAt() {
+	m.next_attempt_at = nil
+}
+
+// SetLeaseOwner sets the "lease_owner" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetLeaseOwner(s string) {
+	m.lease_owner = &s
+}
+
+// LeaseOwner returns the value of the "lease_owner" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) LeaseOwner() (r string, exists bool) {
+	v := m.lease_owner
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLeaseOwner returns the old "lease_owner" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldLeaseOwner(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLeaseOwner is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLeaseOwner requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLeaseOwner: %w", err)
+	}
+	return oldValue.LeaseOwner, nil
+}
+
+// ClearLeaseOwner clears the value of the "lease_owner" field.
+func (m *PoolCapacityAlertDeliveryMutation) ClearLeaseOwner() {
+	m.lease_owner = nil
+	m.clearedFields[poolcapacityalertdelivery.FieldLeaseOwner] = struct{}{}
+}
+
+// LeaseOwnerCleared returns if the "lease_owner" field was cleared in this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) LeaseOwnerCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertdelivery.FieldLeaseOwner]
+	return ok
+}
+
+// ResetLeaseOwner resets all changes to the "lease_owner" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetLeaseOwner() {
+	m.lease_owner = nil
+	delete(m.clearedFields, poolcapacityalertdelivery.FieldLeaseOwner)
+}
+
+// SetLeaseExpiresAt sets the "lease_expires_at" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetLeaseExpiresAt(t time.Time) {
+	m.lease_expires_at = &t
+}
+
+// LeaseExpiresAt returns the value of the "lease_expires_at" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) LeaseExpiresAt() (r time.Time, exists bool) {
+	v := m.lease_expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLeaseExpiresAt returns the old "lease_expires_at" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldLeaseExpiresAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLeaseExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLeaseExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLeaseExpiresAt: %w", err)
+	}
+	return oldValue.LeaseExpiresAt, nil
+}
+
+// ClearLeaseExpiresAt clears the value of the "lease_expires_at" field.
+func (m *PoolCapacityAlertDeliveryMutation) ClearLeaseExpiresAt() {
+	m.lease_expires_at = nil
+	m.clearedFields[poolcapacityalertdelivery.FieldLeaseExpiresAt] = struct{}{}
+}
+
+// LeaseExpiresAtCleared returns if the "lease_expires_at" field was cleared in this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) LeaseExpiresAtCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertdelivery.FieldLeaseExpiresAt]
+	return ok
+}
+
+// ResetLeaseExpiresAt resets all changes to the "lease_expires_at" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetLeaseExpiresAt() {
+	m.lease_expires_at = nil
+	delete(m.clearedFields, poolcapacityalertdelivery.FieldLeaseExpiresAt)
+}
+
+// SetLastErrorClass sets the "last_error_class" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetLastErrorClass(s string) {
+	m.last_error_class = &s
+}
+
+// LastErrorClass returns the value of the "last_error_class" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) LastErrorClass() (r string, exists bool) {
+	v := m.last_error_class
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastErrorClass returns the old "last_error_class" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldLastErrorClass(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastErrorClass is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastErrorClass requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastErrorClass: %w", err)
+	}
+	return oldValue.LastErrorClass, nil
+}
+
+// ClearLastErrorClass clears the value of the "last_error_class" field.
+func (m *PoolCapacityAlertDeliveryMutation) ClearLastErrorClass() {
+	m.last_error_class = nil
+	m.clearedFields[poolcapacityalertdelivery.FieldLastErrorClass] = struct{}{}
+}
+
+// LastErrorClassCleared returns if the "last_error_class" field was cleared in this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) LastErrorClassCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertdelivery.FieldLastErrorClass]
+	return ok
+}
+
+// ResetLastErrorClass resets all changes to the "last_error_class" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetLastErrorClass() {
+	m.last_error_class = nil
+	delete(m.clearedFields, poolcapacityalertdelivery.FieldLastErrorClass)
+}
+
+// SetLastError sets the "last_error" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetLastError(s string) {
+	m.last_error = &s
+}
+
+// LastError returns the value of the "last_error" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) LastError() (r string, exists bool) {
+	v := m.last_error
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastError returns the old "last_error" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldLastError(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastError is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastError requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastError: %w", err)
+	}
+	return oldValue.LastError, nil
+}
+
+// ClearLastError clears the value of the "last_error" field.
+func (m *PoolCapacityAlertDeliveryMutation) ClearLastError() {
+	m.last_error = nil
+	m.clearedFields[poolcapacityalertdelivery.FieldLastError] = struct{}{}
+}
+
+// LastErrorCleared returns if the "last_error" field was cleared in this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) LastErrorCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertdelivery.FieldLastError]
+	return ok
+}
+
+// ResetLastError resets all changes to the "last_error" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetLastError() {
+	m.last_error = nil
+	delete(m.clearedFields, poolcapacityalertdelivery.FieldLastError)
+}
+
+// SetSentAt sets the "sent_at" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetSentAt(t time.Time) {
+	m.sent_at = &t
+}
+
+// SentAt returns the value of the "sent_at" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) SentAt() (r time.Time, exists bool) {
+	v := m.sent_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSentAt returns the old "sent_at" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldSentAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSentAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSentAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSentAt: %w", err)
+	}
+	return oldValue.SentAt, nil
+}
+
+// ClearSentAt clears the value of the "sent_at" field.
+func (m *PoolCapacityAlertDeliveryMutation) ClearSentAt() {
+	m.sent_at = nil
+	m.clearedFields[poolcapacityalertdelivery.FieldSentAt] = struct{}{}
+}
+
+// SentAtCleared returns if the "sent_at" field was cleared in this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) SentAtCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertdelivery.FieldSentAt]
+	return ok
+}
+
+// ResetSentAt resets all changes to the "sent_at" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetSentAt() {
+	m.sent_at = nil
+	delete(m.clearedFields, poolcapacityalertdelivery.FieldSentAt)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *PoolCapacityAlertDeliveryMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *PoolCapacityAlertDeliveryMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the PoolCapacityAlertDelivery entity.
+// If the PoolCapacityAlertDelivery object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertDeliveryMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *PoolCapacityAlertDeliveryMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the PoolCapacityAlertDeliveryMutation builder.
+func (m *PoolCapacityAlertDeliveryMutation) Where(ps ...predicate.PoolCapacityAlertDelivery) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the PoolCapacityAlertDeliveryMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *PoolCapacityAlertDeliveryMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.PoolCapacityAlertDelivery, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *PoolCapacityAlertDeliveryMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *PoolCapacityAlertDeliveryMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (PoolCapacityAlertDelivery).
+func (m *PoolCapacityAlertDeliveryMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *PoolCapacityAlertDeliveryMutation) Fields() []string {
+	fields := make([]string, 0, 18)
+	if m.event_id != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldEventID)
+	}
+	if m.channel != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldChannel)
+	}
+	if m.recipient_user_id != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldRecipientUserID)
+	}
+	if m.identity_channel_id != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldIdentityChannelID)
+	}
+	if m.recipient_email != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldRecipientEmail)
+	}
+	if m.recipient_name != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldRecipientName)
+	}
+	if m.locale != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldLocale)
+	}
+	if m.status != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldStatus)
+	}
+	if m.attempt_count != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldAttemptCount)
+	}
+	if m.max_attempts != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldMaxAttempts)
+	}
+	if m.next_attempt_at != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldNextAttemptAt)
+	}
+	if m.lease_owner != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldLeaseOwner)
+	}
+	if m.lease_expires_at != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldLeaseExpiresAt)
+	}
+	if m.last_error_class != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldLastErrorClass)
+	}
+	if m.last_error != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldLastError)
+	}
+	if m.sent_at != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldSentAt)
+	}
+	if m.created_at != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *PoolCapacityAlertDeliveryMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case poolcapacityalertdelivery.FieldEventID:
+		return m.EventID()
+	case poolcapacityalertdelivery.FieldChannel:
+		return m.Channel()
+	case poolcapacityalertdelivery.FieldRecipientUserID:
+		return m.RecipientUserID()
+	case poolcapacityalertdelivery.FieldIdentityChannelID:
+		return m.IdentityChannelID()
+	case poolcapacityalertdelivery.FieldRecipientEmail:
+		return m.RecipientEmail()
+	case poolcapacityalertdelivery.FieldRecipientName:
+		return m.RecipientName()
+	case poolcapacityalertdelivery.FieldLocale:
+		return m.Locale()
+	case poolcapacityalertdelivery.FieldStatus:
+		return m.Status()
+	case poolcapacityalertdelivery.FieldAttemptCount:
+		return m.AttemptCount()
+	case poolcapacityalertdelivery.FieldMaxAttempts:
+		return m.MaxAttempts()
+	case poolcapacityalertdelivery.FieldNextAttemptAt:
+		return m.NextAttemptAt()
+	case poolcapacityalertdelivery.FieldLeaseOwner:
+		return m.LeaseOwner()
+	case poolcapacityalertdelivery.FieldLeaseExpiresAt:
+		return m.LeaseExpiresAt()
+	case poolcapacityalertdelivery.FieldLastErrorClass:
+		return m.LastErrorClass()
+	case poolcapacityalertdelivery.FieldLastError:
+		return m.LastError()
+	case poolcapacityalertdelivery.FieldSentAt:
+		return m.SentAt()
+	case poolcapacityalertdelivery.FieldCreatedAt:
+		return m.CreatedAt()
+	case poolcapacityalertdelivery.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *PoolCapacityAlertDeliveryMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case poolcapacityalertdelivery.FieldEventID:
+		return m.OldEventID(ctx)
+	case poolcapacityalertdelivery.FieldChannel:
+		return m.OldChannel(ctx)
+	case poolcapacityalertdelivery.FieldRecipientUserID:
+		return m.OldRecipientUserID(ctx)
+	case poolcapacityalertdelivery.FieldIdentityChannelID:
+		return m.OldIdentityChannelID(ctx)
+	case poolcapacityalertdelivery.FieldRecipientEmail:
+		return m.OldRecipientEmail(ctx)
+	case poolcapacityalertdelivery.FieldRecipientName:
+		return m.OldRecipientName(ctx)
+	case poolcapacityalertdelivery.FieldLocale:
+		return m.OldLocale(ctx)
+	case poolcapacityalertdelivery.FieldStatus:
+		return m.OldStatus(ctx)
+	case poolcapacityalertdelivery.FieldAttemptCount:
+		return m.OldAttemptCount(ctx)
+	case poolcapacityalertdelivery.FieldMaxAttempts:
+		return m.OldMaxAttempts(ctx)
+	case poolcapacityalertdelivery.FieldNextAttemptAt:
+		return m.OldNextAttemptAt(ctx)
+	case poolcapacityalertdelivery.FieldLeaseOwner:
+		return m.OldLeaseOwner(ctx)
+	case poolcapacityalertdelivery.FieldLeaseExpiresAt:
+		return m.OldLeaseExpiresAt(ctx)
+	case poolcapacityalertdelivery.FieldLastErrorClass:
+		return m.OldLastErrorClass(ctx)
+	case poolcapacityalertdelivery.FieldLastError:
+		return m.OldLastError(ctx)
+	case poolcapacityalertdelivery.FieldSentAt:
+		return m.OldSentAt(ctx)
+	case poolcapacityalertdelivery.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case poolcapacityalertdelivery.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown PoolCapacityAlertDelivery field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *PoolCapacityAlertDeliveryMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case poolcapacityalertdelivery.FieldEventID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEventID(v)
+		return nil
+	case poolcapacityalertdelivery.FieldChannel:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChannel(v)
+		return nil
+	case poolcapacityalertdelivery.FieldRecipientUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRecipientUserID(v)
+		return nil
+	case poolcapacityalertdelivery.FieldIdentityChannelID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetIdentityChannelID(v)
+		return nil
+	case poolcapacityalertdelivery.FieldRecipientEmail:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRecipientEmail(v)
+		return nil
+	case poolcapacityalertdelivery.FieldRecipientName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRecipientName(v)
+		return nil
+	case poolcapacityalertdelivery.FieldLocale:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLocale(v)
+		return nil
+	case poolcapacityalertdelivery.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case poolcapacityalertdelivery.FieldAttemptCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAttemptCount(v)
+		return nil
+	case poolcapacityalertdelivery.FieldMaxAttempts:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMaxAttempts(v)
+		return nil
+	case poolcapacityalertdelivery.FieldNextAttemptAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNextAttemptAt(v)
+		return nil
+	case poolcapacityalertdelivery.FieldLeaseOwner:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLeaseOwner(v)
+		return nil
+	case poolcapacityalertdelivery.FieldLeaseExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLeaseExpiresAt(v)
+		return nil
+	case poolcapacityalertdelivery.FieldLastErrorClass:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastErrorClass(v)
+		return nil
+	case poolcapacityalertdelivery.FieldLastError:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastError(v)
+		return nil
+	case poolcapacityalertdelivery.FieldSentAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSentAt(v)
+		return nil
+	case poolcapacityalertdelivery.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case poolcapacityalertdelivery.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown PoolCapacityAlertDelivery field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) AddedFields() []string {
+	var fields []string
+	if m.addevent_id != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldEventID)
+	}
+	if m.addrecipient_user_id != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldRecipientUserID)
+	}
+	if m.addidentity_channel_id != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldIdentityChannelID)
+	}
+	if m.addattempt_count != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldAttemptCount)
+	}
+	if m.addmax_attempts != nil {
+		fields = append(fields, poolcapacityalertdelivery.FieldMaxAttempts)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *PoolCapacityAlertDeliveryMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case poolcapacityalertdelivery.FieldEventID:
+		return m.AddedEventID()
+	case poolcapacityalertdelivery.FieldRecipientUserID:
+		return m.AddedRecipientUserID()
+	case poolcapacityalertdelivery.FieldIdentityChannelID:
+		return m.AddedIdentityChannelID()
+	case poolcapacityalertdelivery.FieldAttemptCount:
+		return m.AddedAttemptCount()
+	case poolcapacityalertdelivery.FieldMaxAttempts:
+		return m.AddedMaxAttempts()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *PoolCapacityAlertDeliveryMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case poolcapacityalertdelivery.FieldEventID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddEventID(v)
+		return nil
+	case poolcapacityalertdelivery.FieldRecipientUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRecipientUserID(v)
+		return nil
+	case poolcapacityalertdelivery.FieldIdentityChannelID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddIdentityChannelID(v)
+		return nil
+	case poolcapacityalertdelivery.FieldAttemptCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAttemptCount(v)
+		return nil
+	case poolcapacityalertdelivery.FieldMaxAttempts:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddMaxAttempts(v)
+		return nil
+	}
+	return fmt.Errorf("unknown PoolCapacityAlertDelivery numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *PoolCapacityAlertDeliveryMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(poolcapacityalertdelivery.FieldLeaseOwner) {
+		fields = append(fields, poolcapacityalertdelivery.FieldLeaseOwner)
+	}
+	if m.FieldCleared(poolcapacityalertdelivery.FieldLeaseExpiresAt) {
+		fields = append(fields, poolcapacityalertdelivery.FieldLeaseExpiresAt)
+	}
+	if m.FieldCleared(poolcapacityalertdelivery.FieldLastErrorClass) {
+		fields = append(fields, poolcapacityalertdelivery.FieldLastErrorClass)
+	}
+	if m.FieldCleared(poolcapacityalertdelivery.FieldLastError) {
+		fields = append(fields, poolcapacityalertdelivery.FieldLastError)
+	}
+	if m.FieldCleared(poolcapacityalertdelivery.FieldSentAt) {
+		fields = append(fields, poolcapacityalertdelivery.FieldSentAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *PoolCapacityAlertDeliveryMutation) ClearField(name string) error {
+	switch name {
+	case poolcapacityalertdelivery.FieldLeaseOwner:
+		m.ClearLeaseOwner()
+		return nil
+	case poolcapacityalertdelivery.FieldLeaseExpiresAt:
+		m.ClearLeaseExpiresAt()
+		return nil
+	case poolcapacityalertdelivery.FieldLastErrorClass:
+		m.ClearLastErrorClass()
+		return nil
+	case poolcapacityalertdelivery.FieldLastError:
+		m.ClearLastError()
+		return nil
+	case poolcapacityalertdelivery.FieldSentAt:
+		m.ClearSentAt()
+		return nil
+	}
+	return fmt.Errorf("unknown PoolCapacityAlertDelivery nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *PoolCapacityAlertDeliveryMutation) ResetField(name string) error {
+	switch name {
+	case poolcapacityalertdelivery.FieldEventID:
+		m.ResetEventID()
+		return nil
+	case poolcapacityalertdelivery.FieldChannel:
+		m.ResetChannel()
+		return nil
+	case poolcapacityalertdelivery.FieldRecipientUserID:
+		m.ResetRecipientUserID()
+		return nil
+	case poolcapacityalertdelivery.FieldIdentityChannelID:
+		m.ResetIdentityChannelID()
+		return nil
+	case poolcapacityalertdelivery.FieldRecipientEmail:
+		m.ResetRecipientEmail()
+		return nil
+	case poolcapacityalertdelivery.FieldRecipientName:
+		m.ResetRecipientName()
+		return nil
+	case poolcapacityalertdelivery.FieldLocale:
+		m.ResetLocale()
+		return nil
+	case poolcapacityalertdelivery.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case poolcapacityalertdelivery.FieldAttemptCount:
+		m.ResetAttemptCount()
+		return nil
+	case poolcapacityalertdelivery.FieldMaxAttempts:
+		m.ResetMaxAttempts()
+		return nil
+	case poolcapacityalertdelivery.FieldNextAttemptAt:
+		m.ResetNextAttemptAt()
+		return nil
+	case poolcapacityalertdelivery.FieldLeaseOwner:
+		m.ResetLeaseOwner()
+		return nil
+	case poolcapacityalertdelivery.FieldLeaseExpiresAt:
+		m.ResetLeaseExpiresAt()
+		return nil
+	case poolcapacityalertdelivery.FieldLastErrorClass:
+		m.ResetLastErrorClass()
+		return nil
+	case poolcapacityalertdelivery.FieldLastError:
+		m.ResetLastError()
+		return nil
+	case poolcapacityalertdelivery.FieldSentAt:
+		m.ResetSentAt()
+		return nil
+	case poolcapacityalertdelivery.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case poolcapacityalertdelivery.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown PoolCapacityAlertDelivery field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *PoolCapacityAlertDeliveryMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *PoolCapacityAlertDeliveryMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown PoolCapacityAlertDelivery unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *PoolCapacityAlertDeliveryMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown PoolCapacityAlertDelivery edge %s", name)
+}
+
+// PoolCapacityAlertEventMutation represents an operation that mutates the PoolCapacityAlertEvent nodes in the graph.
+type PoolCapacityAlertEventMutation struct {
+	config
+	op                    Op
+	typ                   string
+	id                    *int64
+	state_id              *int64
+	addstate_id           *int64
+	episode               *int64
+	addepisode            *int64
+	group_id              *int64
+	addgroup_id           *int64
+	group_generation      *int64
+	addgroup_generation   *int64
+	account_id            *int64
+	addaccount_id         *int64
+	api_key_id            *int64
+	addapi_key_id         *int64
+	user_id               *int64
+	adduser_id            *int64
+	billing_type          *int8
+	addbilling_type       *int8
+	group_name            *string
+	account_name          *string
+	api_key_name          *string
+	user_email            *string
+	predicted_requests    *int64
+	addpredicted_requests *int64
+	threshold_requests    *int64
+	addthreshold_requests *int64
+	account_requests      *int64
+	addaccount_requests   *int64
+	api_key_requests      *int64
+	addapi_key_requests   *int64
+	wallet_requests       *int64
+	addwallet_requests    *int64
+	avg_account_cost      *float64
+	addavg_account_cost   *float64
+	avg_actual_cost       *float64
+	addavg_actual_cost    *float64
+	account_remaining     *float64
+	addaccount_remaining  *float64
+	api_key_remaining     *float64
+	addapi_key_remaining  *float64
+	wallet_remaining      *float64
+	addwallet_remaining   *float64
+	sample_count          *int
+	addsample_count       *int
+	bottleneck            *string
+	qqbot_app_id          *string
+	created_at            *time.Time
+	clearedFields         map[string]struct{}
+	done                  bool
+	oldValue              func(context.Context) (*PoolCapacityAlertEvent, error)
+	predicates            []predicate.PoolCapacityAlertEvent
+}
+
+var _ ent.Mutation = (*PoolCapacityAlertEventMutation)(nil)
+
+// poolcapacityalerteventOption allows management of the mutation configuration using functional options.
+type poolcapacityalerteventOption func(*PoolCapacityAlertEventMutation)
+
+// newPoolCapacityAlertEventMutation creates new mutation for the PoolCapacityAlertEvent entity.
+func newPoolCapacityAlertEventMutation(c config, op Op, opts ...poolcapacityalerteventOption) *PoolCapacityAlertEventMutation {
+	m := &PoolCapacityAlertEventMutation{
+		config:        c,
+		op:            op,
+		typ:           TypePoolCapacityAlertEvent,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withPoolCapacityAlertEventID sets the ID field of the mutation.
+func withPoolCapacityAlertEventID(id int64) poolcapacityalerteventOption {
+	return func(m *PoolCapacityAlertEventMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *PoolCapacityAlertEvent
+		)
+		m.oldValue = func(ctx context.Context) (*PoolCapacityAlertEvent, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().PoolCapacityAlertEvent.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withPoolCapacityAlertEvent sets the old PoolCapacityAlertEvent of the mutation.
+func withPoolCapacityAlertEvent(node *PoolCapacityAlertEvent) poolcapacityalerteventOption {
+	return func(m *PoolCapacityAlertEventMutation) {
+		m.oldValue = func(context.Context) (*PoolCapacityAlertEvent, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m PoolCapacityAlertEventMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m PoolCapacityAlertEventMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *PoolCapacityAlertEventMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *PoolCapacityAlertEventMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().PoolCapacityAlertEvent.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetStateID sets the "state_id" field.
+func (m *PoolCapacityAlertEventMutation) SetStateID(i int64) {
+	m.state_id = &i
+	m.addstate_id = nil
+}
+
+// StateID returns the value of the "state_id" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) StateID() (r int64, exists bool) {
+	v := m.state_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStateID returns the old "state_id" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldStateID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStateID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStateID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStateID: %w", err)
+	}
+	return oldValue.StateID, nil
+}
+
+// AddStateID adds i to the "state_id" field.
+func (m *PoolCapacityAlertEventMutation) AddStateID(i int64) {
+	if m.addstate_id != nil {
+		*m.addstate_id += i
+	} else {
+		m.addstate_id = &i
+	}
+}
+
+// AddedStateID returns the value that was added to the "state_id" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedStateID() (r int64, exists bool) {
+	v := m.addstate_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetStateID resets all changes to the "state_id" field.
+func (m *PoolCapacityAlertEventMutation) ResetStateID() {
+	m.state_id = nil
+	m.addstate_id = nil
+}
+
+// SetEpisode sets the "episode" field.
+func (m *PoolCapacityAlertEventMutation) SetEpisode(i int64) {
+	m.episode = &i
+	m.addepisode = nil
+}
+
+// Episode returns the value of the "episode" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) Episode() (r int64, exists bool) {
+	v := m.episode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEpisode returns the old "episode" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldEpisode(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEpisode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEpisode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEpisode: %w", err)
+	}
+	return oldValue.Episode, nil
+}
+
+// AddEpisode adds i to the "episode" field.
+func (m *PoolCapacityAlertEventMutation) AddEpisode(i int64) {
+	if m.addepisode != nil {
+		*m.addepisode += i
+	} else {
+		m.addepisode = &i
+	}
+}
+
+// AddedEpisode returns the value that was added to the "episode" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedEpisode() (r int64, exists bool) {
+	v := m.addepisode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetEpisode resets all changes to the "episode" field.
+func (m *PoolCapacityAlertEventMutation) ResetEpisode() {
+	m.episode = nil
+	m.addepisode = nil
+}
+
+// SetGroupID sets the "group_id" field.
+func (m *PoolCapacityAlertEventMutation) SetGroupID(i int64) {
+	m.group_id = &i
+	m.addgroup_id = nil
+}
+
+// GroupID returns the value of the "group_id" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) GroupID() (r int64, exists bool) {
+	v := m.group_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupID returns the old "group_id" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldGroupID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupID: %w", err)
+	}
+	return oldValue.GroupID, nil
+}
+
+// AddGroupID adds i to the "group_id" field.
+func (m *PoolCapacityAlertEventMutation) AddGroupID(i int64) {
+	if m.addgroup_id != nil {
+		*m.addgroup_id += i
+	} else {
+		m.addgroup_id = &i
+	}
+}
+
+// AddedGroupID returns the value that was added to the "group_id" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedGroupID() (r int64, exists bool) {
+	v := m.addgroup_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetGroupID resets all changes to the "group_id" field.
+func (m *PoolCapacityAlertEventMutation) ResetGroupID() {
+	m.group_id = nil
+	m.addgroup_id = nil
+}
+
+// SetGroupGeneration sets the "group_generation" field.
+func (m *PoolCapacityAlertEventMutation) SetGroupGeneration(i int64) {
+	m.group_generation = &i
+	m.addgroup_generation = nil
+}
+
+// GroupGeneration returns the value of the "group_generation" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) GroupGeneration() (r int64, exists bool) {
+	v := m.group_generation
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupGeneration returns the old "group_generation" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldGroupGeneration(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupGeneration is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupGeneration requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupGeneration: %w", err)
+	}
+	return oldValue.GroupGeneration, nil
+}
+
+// AddGroupGeneration adds i to the "group_generation" field.
+func (m *PoolCapacityAlertEventMutation) AddGroupGeneration(i int64) {
+	if m.addgroup_generation != nil {
+		*m.addgroup_generation += i
+	} else {
+		m.addgroup_generation = &i
+	}
+}
+
+// AddedGroupGeneration returns the value that was added to the "group_generation" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedGroupGeneration() (r int64, exists bool) {
+	v := m.addgroup_generation
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetGroupGeneration resets all changes to the "group_generation" field.
+func (m *PoolCapacityAlertEventMutation) ResetGroupGeneration() {
+	m.group_generation = nil
+	m.addgroup_generation = nil
+}
+
+// SetAccountID sets the "account_id" field.
+func (m *PoolCapacityAlertEventMutation) SetAccountID(i int64) {
+	m.account_id = &i
+	m.addaccount_id = nil
+}
+
+// AccountID returns the value of the "account_id" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) AccountID() (r int64, exists bool) {
+	v := m.account_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountID returns the old "account_id" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldAccountID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountID: %w", err)
+	}
+	return oldValue.AccountID, nil
+}
+
+// AddAccountID adds i to the "account_id" field.
+func (m *PoolCapacityAlertEventMutation) AddAccountID(i int64) {
+	if m.addaccount_id != nil {
+		*m.addaccount_id += i
+	} else {
+		m.addaccount_id = &i
+	}
+}
+
+// AddedAccountID returns the value that was added to the "account_id" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedAccountID() (r int64, exists bool) {
+	v := m.addaccount_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAccountID resets all changes to the "account_id" field.
+func (m *PoolCapacityAlertEventMutation) ResetAccountID() {
+	m.account_id = nil
+	m.addaccount_id = nil
+}
+
+// SetAPIKeyID sets the "api_key_id" field.
+func (m *PoolCapacityAlertEventMutation) SetAPIKeyID(i int64) {
+	m.api_key_id = &i
+	m.addapi_key_id = nil
+}
+
+// APIKeyID returns the value of the "api_key_id" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) APIKeyID() (r int64, exists bool) {
+	v := m.api_key_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyID returns the old "api_key_id" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldAPIKeyID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyID: %w", err)
+	}
+	return oldValue.APIKeyID, nil
+}
+
+// AddAPIKeyID adds i to the "api_key_id" field.
+func (m *PoolCapacityAlertEventMutation) AddAPIKeyID(i int64) {
+	if m.addapi_key_id != nil {
+		*m.addapi_key_id += i
+	} else {
+		m.addapi_key_id = &i
+	}
+}
+
+// AddedAPIKeyID returns the value that was added to the "api_key_id" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedAPIKeyID() (r int64, exists bool) {
+	v := m.addapi_key_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAPIKeyID resets all changes to the "api_key_id" field.
+func (m *PoolCapacityAlertEventMutation) ResetAPIKeyID() {
+	m.api_key_id = nil
+	m.addapi_key_id = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *PoolCapacityAlertEventMutation) SetUserID(i int64) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) UserID() (r int64, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *PoolCapacityAlertEventMutation) AddUserID(i int64) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedUserID() (r int64, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *PoolCapacityAlertEventMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+}
+
+// SetBillingType sets the "billing_type" field.
+func (m *PoolCapacityAlertEventMutation) SetBillingType(i int8) {
+	m.billing_type = &i
+	m.addbilling_type = nil
+}
+
+// BillingType returns the value of the "billing_type" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) BillingType() (r int8, exists bool) {
+	v := m.billing_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBillingType returns the old "billing_type" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldBillingType(ctx context.Context) (v int8, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBillingType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBillingType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBillingType: %w", err)
+	}
+	return oldValue.BillingType, nil
+}
+
+// AddBillingType adds i to the "billing_type" field.
+func (m *PoolCapacityAlertEventMutation) AddBillingType(i int8) {
+	if m.addbilling_type != nil {
+		*m.addbilling_type += i
+	} else {
+		m.addbilling_type = &i
+	}
+}
+
+// AddedBillingType returns the value that was added to the "billing_type" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedBillingType() (r int8, exists bool) {
+	v := m.addbilling_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBillingType resets all changes to the "billing_type" field.
+func (m *PoolCapacityAlertEventMutation) ResetBillingType() {
+	m.billing_type = nil
+	m.addbilling_type = nil
+}
+
+// SetGroupName sets the "group_name" field.
+func (m *PoolCapacityAlertEventMutation) SetGroupName(s string) {
+	m.group_name = &s
+}
+
+// GroupName returns the value of the "group_name" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) GroupName() (r string, exists bool) {
+	v := m.group_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupName returns the old "group_name" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldGroupName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupName: %w", err)
+	}
+	return oldValue.GroupName, nil
+}
+
+// ResetGroupName resets all changes to the "group_name" field.
+func (m *PoolCapacityAlertEventMutation) ResetGroupName() {
+	m.group_name = nil
+}
+
+// SetAccountName sets the "account_name" field.
+func (m *PoolCapacityAlertEventMutation) SetAccountName(s string) {
+	m.account_name = &s
+}
+
+// AccountName returns the value of the "account_name" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) AccountName() (r string, exists bool) {
+	v := m.account_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountName returns the old "account_name" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldAccountName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountName: %w", err)
+	}
+	return oldValue.AccountName, nil
+}
+
+// ResetAccountName resets all changes to the "account_name" field.
+func (m *PoolCapacityAlertEventMutation) ResetAccountName() {
+	m.account_name = nil
+}
+
+// SetAPIKeyName sets the "api_key_name" field.
+func (m *PoolCapacityAlertEventMutation) SetAPIKeyName(s string) {
+	m.api_key_name = &s
+}
+
+// APIKeyName returns the value of the "api_key_name" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) APIKeyName() (r string, exists bool) {
+	v := m.api_key_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyName returns the old "api_key_name" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldAPIKeyName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyName: %w", err)
+	}
+	return oldValue.APIKeyName, nil
+}
+
+// ResetAPIKeyName resets all changes to the "api_key_name" field.
+func (m *PoolCapacityAlertEventMutation) ResetAPIKeyName() {
+	m.api_key_name = nil
+}
+
+// SetUserEmail sets the "user_email" field.
+func (m *PoolCapacityAlertEventMutation) SetUserEmail(s string) {
+	m.user_email = &s
+}
+
+// UserEmail returns the value of the "user_email" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) UserEmail() (r string, exists bool) {
+	v := m.user_email
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserEmail returns the old "user_email" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldUserEmail(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserEmail is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserEmail requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserEmail: %w", err)
+	}
+	return oldValue.UserEmail, nil
+}
+
+// ResetUserEmail resets all changes to the "user_email" field.
+func (m *PoolCapacityAlertEventMutation) ResetUserEmail() {
+	m.user_email = nil
+}
+
+// SetPredictedRequests sets the "predicted_requests" field.
+func (m *PoolCapacityAlertEventMutation) SetPredictedRequests(i int64) {
+	m.predicted_requests = &i
+	m.addpredicted_requests = nil
+}
+
+// PredictedRequests returns the value of the "predicted_requests" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) PredictedRequests() (r int64, exists bool) {
+	v := m.predicted_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPredictedRequests returns the old "predicted_requests" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldPredictedRequests(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPredictedRequests is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPredictedRequests requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPredictedRequests: %w", err)
+	}
+	return oldValue.PredictedRequests, nil
+}
+
+// AddPredictedRequests adds i to the "predicted_requests" field.
+func (m *PoolCapacityAlertEventMutation) AddPredictedRequests(i int64) {
+	if m.addpredicted_requests != nil {
+		*m.addpredicted_requests += i
+	} else {
+		m.addpredicted_requests = &i
+	}
+}
+
+// AddedPredictedRequests returns the value that was added to the "predicted_requests" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedPredictedRequests() (r int64, exists bool) {
+	v := m.addpredicted_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPredictedRequests resets all changes to the "predicted_requests" field.
+func (m *PoolCapacityAlertEventMutation) ResetPredictedRequests() {
+	m.predicted_requests = nil
+	m.addpredicted_requests = nil
+}
+
+// SetThresholdRequests sets the "threshold_requests" field.
+func (m *PoolCapacityAlertEventMutation) SetThresholdRequests(i int64) {
+	m.threshold_requests = &i
+	m.addthreshold_requests = nil
+}
+
+// ThresholdRequests returns the value of the "threshold_requests" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) ThresholdRequests() (r int64, exists bool) {
+	v := m.threshold_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldThresholdRequests returns the old "threshold_requests" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldThresholdRequests(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldThresholdRequests is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldThresholdRequests requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldThresholdRequests: %w", err)
+	}
+	return oldValue.ThresholdRequests, nil
+}
+
+// AddThresholdRequests adds i to the "threshold_requests" field.
+func (m *PoolCapacityAlertEventMutation) AddThresholdRequests(i int64) {
+	if m.addthreshold_requests != nil {
+		*m.addthreshold_requests += i
+	} else {
+		m.addthreshold_requests = &i
+	}
+}
+
+// AddedThresholdRequests returns the value that was added to the "threshold_requests" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedThresholdRequests() (r int64, exists bool) {
+	v := m.addthreshold_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetThresholdRequests resets all changes to the "threshold_requests" field.
+func (m *PoolCapacityAlertEventMutation) ResetThresholdRequests() {
+	m.threshold_requests = nil
+	m.addthreshold_requests = nil
+}
+
+// SetAccountRequests sets the "account_requests" field.
+func (m *PoolCapacityAlertEventMutation) SetAccountRequests(i int64) {
+	m.account_requests = &i
+	m.addaccount_requests = nil
+}
+
+// AccountRequests returns the value of the "account_requests" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) AccountRequests() (r int64, exists bool) {
+	v := m.account_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountRequests returns the old "account_requests" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldAccountRequests(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountRequests is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountRequests requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountRequests: %w", err)
+	}
+	return oldValue.AccountRequests, nil
+}
+
+// AddAccountRequests adds i to the "account_requests" field.
+func (m *PoolCapacityAlertEventMutation) AddAccountRequests(i int64) {
+	if m.addaccount_requests != nil {
+		*m.addaccount_requests += i
+	} else {
+		m.addaccount_requests = &i
+	}
+}
+
+// AddedAccountRequests returns the value that was added to the "account_requests" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedAccountRequests() (r int64, exists bool) {
+	v := m.addaccount_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAccountRequests clears the value of the "account_requests" field.
+func (m *PoolCapacityAlertEventMutation) ClearAccountRequests() {
+	m.account_requests = nil
+	m.addaccount_requests = nil
+	m.clearedFields[poolcapacityalertevent.FieldAccountRequests] = struct{}{}
+}
+
+// AccountRequestsCleared returns if the "account_requests" field was cleared in this mutation.
+func (m *PoolCapacityAlertEventMutation) AccountRequestsCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertevent.FieldAccountRequests]
+	return ok
+}
+
+// ResetAccountRequests resets all changes to the "account_requests" field.
+func (m *PoolCapacityAlertEventMutation) ResetAccountRequests() {
+	m.account_requests = nil
+	m.addaccount_requests = nil
+	delete(m.clearedFields, poolcapacityalertevent.FieldAccountRequests)
+}
+
+// SetAPIKeyRequests sets the "api_key_requests" field.
+func (m *PoolCapacityAlertEventMutation) SetAPIKeyRequests(i int64) {
+	m.api_key_requests = &i
+	m.addapi_key_requests = nil
+}
+
+// APIKeyRequests returns the value of the "api_key_requests" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) APIKeyRequests() (r int64, exists bool) {
+	v := m.api_key_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyRequests returns the old "api_key_requests" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldAPIKeyRequests(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyRequests is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyRequests requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyRequests: %w", err)
+	}
+	return oldValue.APIKeyRequests, nil
+}
+
+// AddAPIKeyRequests adds i to the "api_key_requests" field.
+func (m *PoolCapacityAlertEventMutation) AddAPIKeyRequests(i int64) {
+	if m.addapi_key_requests != nil {
+		*m.addapi_key_requests += i
+	} else {
+		m.addapi_key_requests = &i
+	}
+}
+
+// AddedAPIKeyRequests returns the value that was added to the "api_key_requests" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedAPIKeyRequests() (r int64, exists bool) {
+	v := m.addapi_key_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAPIKeyRequests clears the value of the "api_key_requests" field.
+func (m *PoolCapacityAlertEventMutation) ClearAPIKeyRequests() {
+	m.api_key_requests = nil
+	m.addapi_key_requests = nil
+	m.clearedFields[poolcapacityalertevent.FieldAPIKeyRequests] = struct{}{}
+}
+
+// APIKeyRequestsCleared returns if the "api_key_requests" field was cleared in this mutation.
+func (m *PoolCapacityAlertEventMutation) APIKeyRequestsCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertevent.FieldAPIKeyRequests]
+	return ok
+}
+
+// ResetAPIKeyRequests resets all changes to the "api_key_requests" field.
+func (m *PoolCapacityAlertEventMutation) ResetAPIKeyRequests() {
+	m.api_key_requests = nil
+	m.addapi_key_requests = nil
+	delete(m.clearedFields, poolcapacityalertevent.FieldAPIKeyRequests)
+}
+
+// SetWalletRequests sets the "wallet_requests" field.
+func (m *PoolCapacityAlertEventMutation) SetWalletRequests(i int64) {
+	m.wallet_requests = &i
+	m.addwallet_requests = nil
+}
+
+// WalletRequests returns the value of the "wallet_requests" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) WalletRequests() (r int64, exists bool) {
+	v := m.wallet_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWalletRequests returns the old "wallet_requests" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldWalletRequests(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWalletRequests is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWalletRequests requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWalletRequests: %w", err)
+	}
+	return oldValue.WalletRequests, nil
+}
+
+// AddWalletRequests adds i to the "wallet_requests" field.
+func (m *PoolCapacityAlertEventMutation) AddWalletRequests(i int64) {
+	if m.addwallet_requests != nil {
+		*m.addwallet_requests += i
+	} else {
+		m.addwallet_requests = &i
+	}
+}
+
+// AddedWalletRequests returns the value that was added to the "wallet_requests" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedWalletRequests() (r int64, exists bool) {
+	v := m.addwallet_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearWalletRequests clears the value of the "wallet_requests" field.
+func (m *PoolCapacityAlertEventMutation) ClearWalletRequests() {
+	m.wallet_requests = nil
+	m.addwallet_requests = nil
+	m.clearedFields[poolcapacityalertevent.FieldWalletRequests] = struct{}{}
+}
+
+// WalletRequestsCleared returns if the "wallet_requests" field was cleared in this mutation.
+func (m *PoolCapacityAlertEventMutation) WalletRequestsCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertevent.FieldWalletRequests]
+	return ok
+}
+
+// ResetWalletRequests resets all changes to the "wallet_requests" field.
+func (m *PoolCapacityAlertEventMutation) ResetWalletRequests() {
+	m.wallet_requests = nil
+	m.addwallet_requests = nil
+	delete(m.clearedFields, poolcapacityalertevent.FieldWalletRequests)
+}
+
+// SetAvgAccountCost sets the "avg_account_cost" field.
+func (m *PoolCapacityAlertEventMutation) SetAvgAccountCost(f float64) {
+	m.avg_account_cost = &f
+	m.addavg_account_cost = nil
+}
+
+// AvgAccountCost returns the value of the "avg_account_cost" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) AvgAccountCost() (r float64, exists bool) {
+	v := m.avg_account_cost
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAvgAccountCost returns the old "avg_account_cost" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldAvgAccountCost(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAvgAccountCost is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAvgAccountCost requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAvgAccountCost: %w", err)
+	}
+	return oldValue.AvgAccountCost, nil
+}
+
+// AddAvgAccountCost adds f to the "avg_account_cost" field.
+func (m *PoolCapacityAlertEventMutation) AddAvgAccountCost(f float64) {
+	if m.addavg_account_cost != nil {
+		*m.addavg_account_cost += f
+	} else {
+		m.addavg_account_cost = &f
+	}
+}
+
+// AddedAvgAccountCost returns the value that was added to the "avg_account_cost" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedAvgAccountCost() (r float64, exists bool) {
+	v := m.addavg_account_cost
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAvgAccountCost resets all changes to the "avg_account_cost" field.
+func (m *PoolCapacityAlertEventMutation) ResetAvgAccountCost() {
+	m.avg_account_cost = nil
+	m.addavg_account_cost = nil
+}
+
+// SetAvgActualCost sets the "avg_actual_cost" field.
+func (m *PoolCapacityAlertEventMutation) SetAvgActualCost(f float64) {
+	m.avg_actual_cost = &f
+	m.addavg_actual_cost = nil
+}
+
+// AvgActualCost returns the value of the "avg_actual_cost" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) AvgActualCost() (r float64, exists bool) {
+	v := m.avg_actual_cost
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAvgActualCost returns the old "avg_actual_cost" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldAvgActualCost(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAvgActualCost is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAvgActualCost requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAvgActualCost: %w", err)
+	}
+	return oldValue.AvgActualCost, nil
+}
+
+// AddAvgActualCost adds f to the "avg_actual_cost" field.
+func (m *PoolCapacityAlertEventMutation) AddAvgActualCost(f float64) {
+	if m.addavg_actual_cost != nil {
+		*m.addavg_actual_cost += f
+	} else {
+		m.addavg_actual_cost = &f
+	}
+}
+
+// AddedAvgActualCost returns the value that was added to the "avg_actual_cost" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedAvgActualCost() (r float64, exists bool) {
+	v := m.addavg_actual_cost
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAvgActualCost resets all changes to the "avg_actual_cost" field.
+func (m *PoolCapacityAlertEventMutation) ResetAvgActualCost() {
+	m.avg_actual_cost = nil
+	m.addavg_actual_cost = nil
+}
+
+// SetAccountRemaining sets the "account_remaining" field.
+func (m *PoolCapacityAlertEventMutation) SetAccountRemaining(f float64) {
+	m.account_remaining = &f
+	m.addaccount_remaining = nil
+}
+
+// AccountRemaining returns the value of the "account_remaining" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) AccountRemaining() (r float64, exists bool) {
+	v := m.account_remaining
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountRemaining returns the old "account_remaining" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldAccountRemaining(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountRemaining is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountRemaining requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountRemaining: %w", err)
+	}
+	return oldValue.AccountRemaining, nil
+}
+
+// AddAccountRemaining adds f to the "account_remaining" field.
+func (m *PoolCapacityAlertEventMutation) AddAccountRemaining(f float64) {
+	if m.addaccount_remaining != nil {
+		*m.addaccount_remaining += f
+	} else {
+		m.addaccount_remaining = &f
+	}
+}
+
+// AddedAccountRemaining returns the value that was added to the "account_remaining" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedAccountRemaining() (r float64, exists bool) {
+	v := m.addaccount_remaining
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAccountRemaining clears the value of the "account_remaining" field.
+func (m *PoolCapacityAlertEventMutation) ClearAccountRemaining() {
+	m.account_remaining = nil
+	m.addaccount_remaining = nil
+	m.clearedFields[poolcapacityalertevent.FieldAccountRemaining] = struct{}{}
+}
+
+// AccountRemainingCleared returns if the "account_remaining" field was cleared in this mutation.
+func (m *PoolCapacityAlertEventMutation) AccountRemainingCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertevent.FieldAccountRemaining]
+	return ok
+}
+
+// ResetAccountRemaining resets all changes to the "account_remaining" field.
+func (m *PoolCapacityAlertEventMutation) ResetAccountRemaining() {
+	m.account_remaining = nil
+	m.addaccount_remaining = nil
+	delete(m.clearedFields, poolcapacityalertevent.FieldAccountRemaining)
+}
+
+// SetAPIKeyRemaining sets the "api_key_remaining" field.
+func (m *PoolCapacityAlertEventMutation) SetAPIKeyRemaining(f float64) {
+	m.api_key_remaining = &f
+	m.addapi_key_remaining = nil
+}
+
+// APIKeyRemaining returns the value of the "api_key_remaining" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) APIKeyRemaining() (r float64, exists bool) {
+	v := m.api_key_remaining
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyRemaining returns the old "api_key_remaining" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldAPIKeyRemaining(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyRemaining is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyRemaining requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyRemaining: %w", err)
+	}
+	return oldValue.APIKeyRemaining, nil
+}
+
+// AddAPIKeyRemaining adds f to the "api_key_remaining" field.
+func (m *PoolCapacityAlertEventMutation) AddAPIKeyRemaining(f float64) {
+	if m.addapi_key_remaining != nil {
+		*m.addapi_key_remaining += f
+	} else {
+		m.addapi_key_remaining = &f
+	}
+}
+
+// AddedAPIKeyRemaining returns the value that was added to the "api_key_remaining" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedAPIKeyRemaining() (r float64, exists bool) {
+	v := m.addapi_key_remaining
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAPIKeyRemaining clears the value of the "api_key_remaining" field.
+func (m *PoolCapacityAlertEventMutation) ClearAPIKeyRemaining() {
+	m.api_key_remaining = nil
+	m.addapi_key_remaining = nil
+	m.clearedFields[poolcapacityalertevent.FieldAPIKeyRemaining] = struct{}{}
+}
+
+// APIKeyRemainingCleared returns if the "api_key_remaining" field was cleared in this mutation.
+func (m *PoolCapacityAlertEventMutation) APIKeyRemainingCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertevent.FieldAPIKeyRemaining]
+	return ok
+}
+
+// ResetAPIKeyRemaining resets all changes to the "api_key_remaining" field.
+func (m *PoolCapacityAlertEventMutation) ResetAPIKeyRemaining() {
+	m.api_key_remaining = nil
+	m.addapi_key_remaining = nil
+	delete(m.clearedFields, poolcapacityalertevent.FieldAPIKeyRemaining)
+}
+
+// SetWalletRemaining sets the "wallet_remaining" field.
+func (m *PoolCapacityAlertEventMutation) SetWalletRemaining(f float64) {
+	m.wallet_remaining = &f
+	m.addwallet_remaining = nil
+}
+
+// WalletRemaining returns the value of the "wallet_remaining" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) WalletRemaining() (r float64, exists bool) {
+	v := m.wallet_remaining
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWalletRemaining returns the old "wallet_remaining" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldWalletRemaining(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWalletRemaining is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWalletRemaining requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWalletRemaining: %w", err)
+	}
+	return oldValue.WalletRemaining, nil
+}
+
+// AddWalletRemaining adds f to the "wallet_remaining" field.
+func (m *PoolCapacityAlertEventMutation) AddWalletRemaining(f float64) {
+	if m.addwallet_remaining != nil {
+		*m.addwallet_remaining += f
+	} else {
+		m.addwallet_remaining = &f
+	}
+}
+
+// AddedWalletRemaining returns the value that was added to the "wallet_remaining" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedWalletRemaining() (r float64, exists bool) {
+	v := m.addwallet_remaining
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearWalletRemaining clears the value of the "wallet_remaining" field.
+func (m *PoolCapacityAlertEventMutation) ClearWalletRemaining() {
+	m.wallet_remaining = nil
+	m.addwallet_remaining = nil
+	m.clearedFields[poolcapacityalertevent.FieldWalletRemaining] = struct{}{}
+}
+
+// WalletRemainingCleared returns if the "wallet_remaining" field was cleared in this mutation.
+func (m *PoolCapacityAlertEventMutation) WalletRemainingCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertevent.FieldWalletRemaining]
+	return ok
+}
+
+// ResetWalletRemaining resets all changes to the "wallet_remaining" field.
+func (m *PoolCapacityAlertEventMutation) ResetWalletRemaining() {
+	m.wallet_remaining = nil
+	m.addwallet_remaining = nil
+	delete(m.clearedFields, poolcapacityalertevent.FieldWalletRemaining)
+}
+
+// SetSampleCount sets the "sample_count" field.
+func (m *PoolCapacityAlertEventMutation) SetSampleCount(i int) {
+	m.sample_count = &i
+	m.addsample_count = nil
+}
+
+// SampleCount returns the value of the "sample_count" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) SampleCount() (r int, exists bool) {
+	v := m.sample_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSampleCount returns the old "sample_count" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldSampleCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSampleCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSampleCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSampleCount: %w", err)
+	}
+	return oldValue.SampleCount, nil
+}
+
+// AddSampleCount adds i to the "sample_count" field.
+func (m *PoolCapacityAlertEventMutation) AddSampleCount(i int) {
+	if m.addsample_count != nil {
+		*m.addsample_count += i
+	} else {
+		m.addsample_count = &i
+	}
+}
+
+// AddedSampleCount returns the value that was added to the "sample_count" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedSampleCount() (r int, exists bool) {
+	v := m.addsample_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSampleCount resets all changes to the "sample_count" field.
+func (m *PoolCapacityAlertEventMutation) ResetSampleCount() {
+	m.sample_count = nil
+	m.addsample_count = nil
+}
+
+// SetBottleneck sets the "bottleneck" field.
+func (m *PoolCapacityAlertEventMutation) SetBottleneck(s string) {
+	m.bottleneck = &s
+}
+
+// Bottleneck returns the value of the "bottleneck" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) Bottleneck() (r string, exists bool) {
+	v := m.bottleneck
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBottleneck returns the old "bottleneck" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldBottleneck(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBottleneck is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBottleneck requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBottleneck: %w", err)
+	}
+	return oldValue.Bottleneck, nil
+}
+
+// ResetBottleneck resets all changes to the "bottleneck" field.
+func (m *PoolCapacityAlertEventMutation) ResetBottleneck() {
+	m.bottleneck = nil
+}
+
+// SetQqbotAppID sets the "qqbot_app_id" field.
+func (m *PoolCapacityAlertEventMutation) SetQqbotAppID(s string) {
+	m.qqbot_app_id = &s
+}
+
+// QqbotAppID returns the value of the "qqbot_app_id" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) QqbotAppID() (r string, exists bool) {
+	v := m.qqbot_app_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQqbotAppID returns the old "qqbot_app_id" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldQqbotAppID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQqbotAppID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQqbotAppID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQqbotAppID: %w", err)
+	}
+	return oldValue.QqbotAppID, nil
+}
+
+// ResetQqbotAppID resets all changes to the "qqbot_app_id" field.
+func (m *PoolCapacityAlertEventMutation) ResetQqbotAppID() {
+	m.qqbot_app_id = nil
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *PoolCapacityAlertEventMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *PoolCapacityAlertEventMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// Where appends a list predicates to the PoolCapacityAlertEventMutation builder.
+func (m *PoolCapacityAlertEventMutation) Where(ps ...predicate.PoolCapacityAlertEvent) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the PoolCapacityAlertEventMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *PoolCapacityAlertEventMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.PoolCapacityAlertEvent, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *PoolCapacityAlertEventMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *PoolCapacityAlertEventMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (PoolCapacityAlertEvent).
+func (m *PoolCapacityAlertEventMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *PoolCapacityAlertEventMutation) Fields() []string {
+	fields := make([]string, 0, 26)
+	if m.state_id != nil {
+		fields = append(fields, poolcapacityalertevent.FieldStateID)
+	}
+	if m.episode != nil {
+		fields = append(fields, poolcapacityalertevent.FieldEpisode)
+	}
+	if m.group_id != nil {
+		fields = append(fields, poolcapacityalertevent.FieldGroupID)
+	}
+	if m.group_generation != nil {
+		fields = append(fields, poolcapacityalertevent.FieldGroupGeneration)
+	}
+	if m.account_id != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAccountID)
+	}
+	if m.api_key_id != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAPIKeyID)
+	}
+	if m.user_id != nil {
+		fields = append(fields, poolcapacityalertevent.FieldUserID)
+	}
+	if m.billing_type != nil {
+		fields = append(fields, poolcapacityalertevent.FieldBillingType)
+	}
+	if m.group_name != nil {
+		fields = append(fields, poolcapacityalertevent.FieldGroupName)
+	}
+	if m.account_name != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAccountName)
+	}
+	if m.api_key_name != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAPIKeyName)
+	}
+	if m.user_email != nil {
+		fields = append(fields, poolcapacityalertevent.FieldUserEmail)
+	}
+	if m.predicted_requests != nil {
+		fields = append(fields, poolcapacityalertevent.FieldPredictedRequests)
+	}
+	if m.threshold_requests != nil {
+		fields = append(fields, poolcapacityalertevent.FieldThresholdRequests)
+	}
+	if m.account_requests != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAccountRequests)
+	}
+	if m.api_key_requests != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAPIKeyRequests)
+	}
+	if m.wallet_requests != nil {
+		fields = append(fields, poolcapacityalertevent.FieldWalletRequests)
+	}
+	if m.avg_account_cost != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAvgAccountCost)
+	}
+	if m.avg_actual_cost != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAvgActualCost)
+	}
+	if m.account_remaining != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAccountRemaining)
+	}
+	if m.api_key_remaining != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAPIKeyRemaining)
+	}
+	if m.wallet_remaining != nil {
+		fields = append(fields, poolcapacityalertevent.FieldWalletRemaining)
+	}
+	if m.sample_count != nil {
+		fields = append(fields, poolcapacityalertevent.FieldSampleCount)
+	}
+	if m.bottleneck != nil {
+		fields = append(fields, poolcapacityalertevent.FieldBottleneck)
+	}
+	if m.qqbot_app_id != nil {
+		fields = append(fields, poolcapacityalertevent.FieldQqbotAppID)
+	}
+	if m.created_at != nil {
+		fields = append(fields, poolcapacityalertevent.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *PoolCapacityAlertEventMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case poolcapacityalertevent.FieldStateID:
+		return m.StateID()
+	case poolcapacityalertevent.FieldEpisode:
+		return m.Episode()
+	case poolcapacityalertevent.FieldGroupID:
+		return m.GroupID()
+	case poolcapacityalertevent.FieldGroupGeneration:
+		return m.GroupGeneration()
+	case poolcapacityalertevent.FieldAccountID:
+		return m.AccountID()
+	case poolcapacityalertevent.FieldAPIKeyID:
+		return m.APIKeyID()
+	case poolcapacityalertevent.FieldUserID:
+		return m.UserID()
+	case poolcapacityalertevent.FieldBillingType:
+		return m.BillingType()
+	case poolcapacityalertevent.FieldGroupName:
+		return m.GroupName()
+	case poolcapacityalertevent.FieldAccountName:
+		return m.AccountName()
+	case poolcapacityalertevent.FieldAPIKeyName:
+		return m.APIKeyName()
+	case poolcapacityalertevent.FieldUserEmail:
+		return m.UserEmail()
+	case poolcapacityalertevent.FieldPredictedRequests:
+		return m.PredictedRequests()
+	case poolcapacityalertevent.FieldThresholdRequests:
+		return m.ThresholdRequests()
+	case poolcapacityalertevent.FieldAccountRequests:
+		return m.AccountRequests()
+	case poolcapacityalertevent.FieldAPIKeyRequests:
+		return m.APIKeyRequests()
+	case poolcapacityalertevent.FieldWalletRequests:
+		return m.WalletRequests()
+	case poolcapacityalertevent.FieldAvgAccountCost:
+		return m.AvgAccountCost()
+	case poolcapacityalertevent.FieldAvgActualCost:
+		return m.AvgActualCost()
+	case poolcapacityalertevent.FieldAccountRemaining:
+		return m.AccountRemaining()
+	case poolcapacityalertevent.FieldAPIKeyRemaining:
+		return m.APIKeyRemaining()
+	case poolcapacityalertevent.FieldWalletRemaining:
+		return m.WalletRemaining()
+	case poolcapacityalertevent.FieldSampleCount:
+		return m.SampleCount()
+	case poolcapacityalertevent.FieldBottleneck:
+		return m.Bottleneck()
+	case poolcapacityalertevent.FieldQqbotAppID:
+		return m.QqbotAppID()
+	case poolcapacityalertevent.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *PoolCapacityAlertEventMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case poolcapacityalertevent.FieldStateID:
+		return m.OldStateID(ctx)
+	case poolcapacityalertevent.FieldEpisode:
+		return m.OldEpisode(ctx)
+	case poolcapacityalertevent.FieldGroupID:
+		return m.OldGroupID(ctx)
+	case poolcapacityalertevent.FieldGroupGeneration:
+		return m.OldGroupGeneration(ctx)
+	case poolcapacityalertevent.FieldAccountID:
+		return m.OldAccountID(ctx)
+	case poolcapacityalertevent.FieldAPIKeyID:
+		return m.OldAPIKeyID(ctx)
+	case poolcapacityalertevent.FieldUserID:
+		return m.OldUserID(ctx)
+	case poolcapacityalertevent.FieldBillingType:
+		return m.OldBillingType(ctx)
+	case poolcapacityalertevent.FieldGroupName:
+		return m.OldGroupName(ctx)
+	case poolcapacityalertevent.FieldAccountName:
+		return m.OldAccountName(ctx)
+	case poolcapacityalertevent.FieldAPIKeyName:
+		return m.OldAPIKeyName(ctx)
+	case poolcapacityalertevent.FieldUserEmail:
+		return m.OldUserEmail(ctx)
+	case poolcapacityalertevent.FieldPredictedRequests:
+		return m.OldPredictedRequests(ctx)
+	case poolcapacityalertevent.FieldThresholdRequests:
+		return m.OldThresholdRequests(ctx)
+	case poolcapacityalertevent.FieldAccountRequests:
+		return m.OldAccountRequests(ctx)
+	case poolcapacityalertevent.FieldAPIKeyRequests:
+		return m.OldAPIKeyRequests(ctx)
+	case poolcapacityalertevent.FieldWalletRequests:
+		return m.OldWalletRequests(ctx)
+	case poolcapacityalertevent.FieldAvgAccountCost:
+		return m.OldAvgAccountCost(ctx)
+	case poolcapacityalertevent.FieldAvgActualCost:
+		return m.OldAvgActualCost(ctx)
+	case poolcapacityalertevent.FieldAccountRemaining:
+		return m.OldAccountRemaining(ctx)
+	case poolcapacityalertevent.FieldAPIKeyRemaining:
+		return m.OldAPIKeyRemaining(ctx)
+	case poolcapacityalertevent.FieldWalletRemaining:
+		return m.OldWalletRemaining(ctx)
+	case poolcapacityalertevent.FieldSampleCount:
+		return m.OldSampleCount(ctx)
+	case poolcapacityalertevent.FieldBottleneck:
+		return m.OldBottleneck(ctx)
+	case poolcapacityalertevent.FieldQqbotAppID:
+		return m.OldQqbotAppID(ctx)
+	case poolcapacityalertevent.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown PoolCapacityAlertEvent field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *PoolCapacityAlertEventMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case poolcapacityalertevent.FieldStateID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStateID(v)
+		return nil
+	case poolcapacityalertevent.FieldEpisode:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEpisode(v)
+		return nil
+	case poolcapacityalertevent.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupID(v)
+		return nil
+	case poolcapacityalertevent.FieldGroupGeneration:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupGeneration(v)
+		return nil
+	case poolcapacityalertevent.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountID(v)
+		return nil
+	case poolcapacityalertevent.FieldAPIKeyID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyID(v)
+		return nil
+	case poolcapacityalertevent.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case poolcapacityalertevent.FieldBillingType:
+		v, ok := value.(int8)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBillingType(v)
+		return nil
+	case poolcapacityalertevent.FieldGroupName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupName(v)
+		return nil
+	case poolcapacityalertevent.FieldAccountName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountName(v)
+		return nil
+	case poolcapacityalertevent.FieldAPIKeyName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyName(v)
+		return nil
+	case poolcapacityalertevent.FieldUserEmail:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserEmail(v)
+		return nil
+	case poolcapacityalertevent.FieldPredictedRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPredictedRequests(v)
+		return nil
+	case poolcapacityalertevent.FieldThresholdRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetThresholdRequests(v)
+		return nil
+	case poolcapacityalertevent.FieldAccountRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountRequests(v)
+		return nil
+	case poolcapacityalertevent.FieldAPIKeyRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyRequests(v)
+		return nil
+	case poolcapacityalertevent.FieldWalletRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWalletRequests(v)
+		return nil
+	case poolcapacityalertevent.FieldAvgAccountCost:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAvgAccountCost(v)
+		return nil
+	case poolcapacityalertevent.FieldAvgActualCost:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAvgActualCost(v)
+		return nil
+	case poolcapacityalertevent.FieldAccountRemaining:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountRemaining(v)
+		return nil
+	case poolcapacityalertevent.FieldAPIKeyRemaining:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyRemaining(v)
+		return nil
+	case poolcapacityalertevent.FieldWalletRemaining:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWalletRemaining(v)
+		return nil
+	case poolcapacityalertevent.FieldSampleCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSampleCount(v)
+		return nil
+	case poolcapacityalertevent.FieldBottleneck:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBottleneck(v)
+		return nil
+	case poolcapacityalertevent.FieldQqbotAppID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQqbotAppID(v)
+		return nil
+	case poolcapacityalertevent.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown PoolCapacityAlertEvent field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedFields() []string {
+	var fields []string
+	if m.addstate_id != nil {
+		fields = append(fields, poolcapacityalertevent.FieldStateID)
+	}
+	if m.addepisode != nil {
+		fields = append(fields, poolcapacityalertevent.FieldEpisode)
+	}
+	if m.addgroup_id != nil {
+		fields = append(fields, poolcapacityalertevent.FieldGroupID)
+	}
+	if m.addgroup_generation != nil {
+		fields = append(fields, poolcapacityalertevent.FieldGroupGeneration)
+	}
+	if m.addaccount_id != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAccountID)
+	}
+	if m.addapi_key_id != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAPIKeyID)
+	}
+	if m.adduser_id != nil {
+		fields = append(fields, poolcapacityalertevent.FieldUserID)
+	}
+	if m.addbilling_type != nil {
+		fields = append(fields, poolcapacityalertevent.FieldBillingType)
+	}
+	if m.addpredicted_requests != nil {
+		fields = append(fields, poolcapacityalertevent.FieldPredictedRequests)
+	}
+	if m.addthreshold_requests != nil {
+		fields = append(fields, poolcapacityalertevent.FieldThresholdRequests)
+	}
+	if m.addaccount_requests != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAccountRequests)
+	}
+	if m.addapi_key_requests != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAPIKeyRequests)
+	}
+	if m.addwallet_requests != nil {
+		fields = append(fields, poolcapacityalertevent.FieldWalletRequests)
+	}
+	if m.addavg_account_cost != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAvgAccountCost)
+	}
+	if m.addavg_actual_cost != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAvgActualCost)
+	}
+	if m.addaccount_remaining != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAccountRemaining)
+	}
+	if m.addapi_key_remaining != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAPIKeyRemaining)
+	}
+	if m.addwallet_remaining != nil {
+		fields = append(fields, poolcapacityalertevent.FieldWalletRemaining)
+	}
+	if m.addsample_count != nil {
+		fields = append(fields, poolcapacityalertevent.FieldSampleCount)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *PoolCapacityAlertEventMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case poolcapacityalertevent.FieldStateID:
+		return m.AddedStateID()
+	case poolcapacityalertevent.FieldEpisode:
+		return m.AddedEpisode()
+	case poolcapacityalertevent.FieldGroupID:
+		return m.AddedGroupID()
+	case poolcapacityalertevent.FieldGroupGeneration:
+		return m.AddedGroupGeneration()
+	case poolcapacityalertevent.FieldAccountID:
+		return m.AddedAccountID()
+	case poolcapacityalertevent.FieldAPIKeyID:
+		return m.AddedAPIKeyID()
+	case poolcapacityalertevent.FieldUserID:
+		return m.AddedUserID()
+	case poolcapacityalertevent.FieldBillingType:
+		return m.AddedBillingType()
+	case poolcapacityalertevent.FieldPredictedRequests:
+		return m.AddedPredictedRequests()
+	case poolcapacityalertevent.FieldThresholdRequests:
+		return m.AddedThresholdRequests()
+	case poolcapacityalertevent.FieldAccountRequests:
+		return m.AddedAccountRequests()
+	case poolcapacityalertevent.FieldAPIKeyRequests:
+		return m.AddedAPIKeyRequests()
+	case poolcapacityalertevent.FieldWalletRequests:
+		return m.AddedWalletRequests()
+	case poolcapacityalertevent.FieldAvgAccountCost:
+		return m.AddedAvgAccountCost()
+	case poolcapacityalertevent.FieldAvgActualCost:
+		return m.AddedAvgActualCost()
+	case poolcapacityalertevent.FieldAccountRemaining:
+		return m.AddedAccountRemaining()
+	case poolcapacityalertevent.FieldAPIKeyRemaining:
+		return m.AddedAPIKeyRemaining()
+	case poolcapacityalertevent.FieldWalletRemaining:
+		return m.AddedWalletRemaining()
+	case poolcapacityalertevent.FieldSampleCount:
+		return m.AddedSampleCount()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *PoolCapacityAlertEventMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case poolcapacityalertevent.FieldStateID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddStateID(v)
+		return nil
+	case poolcapacityalertevent.FieldEpisode:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddEpisode(v)
+		return nil
+	case poolcapacityalertevent.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGroupID(v)
+		return nil
+	case poolcapacityalertevent.FieldGroupGeneration:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGroupGeneration(v)
+		return nil
+	case poolcapacityalertevent.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAccountID(v)
+		return nil
+	case poolcapacityalertevent.FieldAPIKeyID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAPIKeyID(v)
+		return nil
+	case poolcapacityalertevent.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
+	case poolcapacityalertevent.FieldBillingType:
+		v, ok := value.(int8)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBillingType(v)
+		return nil
+	case poolcapacityalertevent.FieldPredictedRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPredictedRequests(v)
+		return nil
+	case poolcapacityalertevent.FieldThresholdRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddThresholdRequests(v)
+		return nil
+	case poolcapacityalertevent.FieldAccountRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAccountRequests(v)
+		return nil
+	case poolcapacityalertevent.FieldAPIKeyRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAPIKeyRequests(v)
+		return nil
+	case poolcapacityalertevent.FieldWalletRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWalletRequests(v)
+		return nil
+	case poolcapacityalertevent.FieldAvgAccountCost:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAvgAccountCost(v)
+		return nil
+	case poolcapacityalertevent.FieldAvgActualCost:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAvgActualCost(v)
+		return nil
+	case poolcapacityalertevent.FieldAccountRemaining:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAccountRemaining(v)
+		return nil
+	case poolcapacityalertevent.FieldAPIKeyRemaining:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAPIKeyRemaining(v)
+		return nil
+	case poolcapacityalertevent.FieldWalletRemaining:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWalletRemaining(v)
+		return nil
+	case poolcapacityalertevent.FieldSampleCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSampleCount(v)
+		return nil
+	}
+	return fmt.Errorf("unknown PoolCapacityAlertEvent numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *PoolCapacityAlertEventMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(poolcapacityalertevent.FieldAccountRequests) {
+		fields = append(fields, poolcapacityalertevent.FieldAccountRequests)
+	}
+	if m.FieldCleared(poolcapacityalertevent.FieldAPIKeyRequests) {
+		fields = append(fields, poolcapacityalertevent.FieldAPIKeyRequests)
+	}
+	if m.FieldCleared(poolcapacityalertevent.FieldWalletRequests) {
+		fields = append(fields, poolcapacityalertevent.FieldWalletRequests)
+	}
+	if m.FieldCleared(poolcapacityalertevent.FieldAccountRemaining) {
+		fields = append(fields, poolcapacityalertevent.FieldAccountRemaining)
+	}
+	if m.FieldCleared(poolcapacityalertevent.FieldAPIKeyRemaining) {
+		fields = append(fields, poolcapacityalertevent.FieldAPIKeyRemaining)
+	}
+	if m.FieldCleared(poolcapacityalertevent.FieldWalletRemaining) {
+		fields = append(fields, poolcapacityalertevent.FieldWalletRemaining)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *PoolCapacityAlertEventMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *PoolCapacityAlertEventMutation) ClearField(name string) error {
+	switch name {
+	case poolcapacityalertevent.FieldAccountRequests:
+		m.ClearAccountRequests()
+		return nil
+	case poolcapacityalertevent.FieldAPIKeyRequests:
+		m.ClearAPIKeyRequests()
+		return nil
+	case poolcapacityalertevent.FieldWalletRequests:
+		m.ClearWalletRequests()
+		return nil
+	case poolcapacityalertevent.FieldAccountRemaining:
+		m.ClearAccountRemaining()
+		return nil
+	case poolcapacityalertevent.FieldAPIKeyRemaining:
+		m.ClearAPIKeyRemaining()
+		return nil
+	case poolcapacityalertevent.FieldWalletRemaining:
+		m.ClearWalletRemaining()
+		return nil
+	}
+	return fmt.Errorf("unknown PoolCapacityAlertEvent nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *PoolCapacityAlertEventMutation) ResetField(name string) error {
+	switch name {
+	case poolcapacityalertevent.FieldStateID:
+		m.ResetStateID()
+		return nil
+	case poolcapacityalertevent.FieldEpisode:
+		m.ResetEpisode()
+		return nil
+	case poolcapacityalertevent.FieldGroupID:
+		m.ResetGroupID()
+		return nil
+	case poolcapacityalertevent.FieldGroupGeneration:
+		m.ResetGroupGeneration()
+		return nil
+	case poolcapacityalertevent.FieldAccountID:
+		m.ResetAccountID()
+		return nil
+	case poolcapacityalertevent.FieldAPIKeyID:
+		m.ResetAPIKeyID()
+		return nil
+	case poolcapacityalertevent.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case poolcapacityalertevent.FieldBillingType:
+		m.ResetBillingType()
+		return nil
+	case poolcapacityalertevent.FieldGroupName:
+		m.ResetGroupName()
+		return nil
+	case poolcapacityalertevent.FieldAccountName:
+		m.ResetAccountName()
+		return nil
+	case poolcapacityalertevent.FieldAPIKeyName:
+		m.ResetAPIKeyName()
+		return nil
+	case poolcapacityalertevent.FieldUserEmail:
+		m.ResetUserEmail()
+		return nil
+	case poolcapacityalertevent.FieldPredictedRequests:
+		m.ResetPredictedRequests()
+		return nil
+	case poolcapacityalertevent.FieldThresholdRequests:
+		m.ResetThresholdRequests()
+		return nil
+	case poolcapacityalertevent.FieldAccountRequests:
+		m.ResetAccountRequests()
+		return nil
+	case poolcapacityalertevent.FieldAPIKeyRequests:
+		m.ResetAPIKeyRequests()
+		return nil
+	case poolcapacityalertevent.FieldWalletRequests:
+		m.ResetWalletRequests()
+		return nil
+	case poolcapacityalertevent.FieldAvgAccountCost:
+		m.ResetAvgAccountCost()
+		return nil
+	case poolcapacityalertevent.FieldAvgActualCost:
+		m.ResetAvgActualCost()
+		return nil
+	case poolcapacityalertevent.FieldAccountRemaining:
+		m.ResetAccountRemaining()
+		return nil
+	case poolcapacityalertevent.FieldAPIKeyRemaining:
+		m.ResetAPIKeyRemaining()
+		return nil
+	case poolcapacityalertevent.FieldWalletRemaining:
+		m.ResetWalletRemaining()
+		return nil
+	case poolcapacityalertevent.FieldSampleCount:
+		m.ResetSampleCount()
+		return nil
+	case poolcapacityalertevent.FieldBottleneck:
+		m.ResetBottleneck()
+		return nil
+	case poolcapacityalertevent.FieldQqbotAppID:
+		m.ResetQqbotAppID()
+		return nil
+	case poolcapacityalertevent.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown PoolCapacityAlertEvent field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *PoolCapacityAlertEventMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *PoolCapacityAlertEventMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *PoolCapacityAlertEventMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *PoolCapacityAlertEventMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *PoolCapacityAlertEventMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown PoolCapacityAlertEvent unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *PoolCapacityAlertEventMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown PoolCapacityAlertEvent edge %s", name)
+}
+
+// PoolCapacityAlertStateMutation represents an operation that mutates the PoolCapacityAlertState nodes in the graph.
+type PoolCapacityAlertStateMutation struct {
+	config
+	op                    Op
+	typ                   string
+	id                    *int64
+	group_id              *int64
+	addgroup_id           *int64
+	group_generation      *int64
+	addgroup_generation   *int64
+	account_id            *int64
+	addaccount_id         *int64
+	api_key_id            *int64
+	addapi_key_id         *int64
+	user_id               *int64
+	adduser_id            *int64
+	billing_type          *int8
+	addbilling_type       *int8
+	status                *string
+	episode               *int64
+	addepisode            *int64
+	predicted_requests    *int64
+	addpredicted_requests *int64
+	account_requests      *int64
+	addaccount_requests   *int64
+	api_key_requests      *int64
+	addapi_key_requests   *int64
+	wallet_requests       *int64
+	addwallet_requests    *int64
+	avg_account_cost      *float64
+	addavg_account_cost   *float64
+	avg_actual_cost       *float64
+	addavg_actual_cost    *float64
+	sample_count          *int
+	addsample_count       *int
+	bottleneck            *string
+	last_evaluated_at     *time.Time
+	last_alerted_at       *time.Time
+	created_at            *time.Time
+	updated_at            *time.Time
+	clearedFields         map[string]struct{}
+	done                  bool
+	oldValue              func(context.Context) (*PoolCapacityAlertState, error)
+	predicates            []predicate.PoolCapacityAlertState
+}
+
+var _ ent.Mutation = (*PoolCapacityAlertStateMutation)(nil)
+
+// poolcapacityalertstateOption allows management of the mutation configuration using functional options.
+type poolcapacityalertstateOption func(*PoolCapacityAlertStateMutation)
+
+// newPoolCapacityAlertStateMutation creates new mutation for the PoolCapacityAlertState entity.
+func newPoolCapacityAlertStateMutation(c config, op Op, opts ...poolcapacityalertstateOption) *PoolCapacityAlertStateMutation {
+	m := &PoolCapacityAlertStateMutation{
+		config:        c,
+		op:            op,
+		typ:           TypePoolCapacityAlertState,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withPoolCapacityAlertStateID sets the ID field of the mutation.
+func withPoolCapacityAlertStateID(id int64) poolcapacityalertstateOption {
+	return func(m *PoolCapacityAlertStateMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *PoolCapacityAlertState
+		)
+		m.oldValue = func(ctx context.Context) (*PoolCapacityAlertState, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().PoolCapacityAlertState.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withPoolCapacityAlertState sets the old PoolCapacityAlertState of the mutation.
+func withPoolCapacityAlertState(node *PoolCapacityAlertState) poolcapacityalertstateOption {
+	return func(m *PoolCapacityAlertStateMutation) {
+		m.oldValue = func(context.Context) (*PoolCapacityAlertState, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m PoolCapacityAlertStateMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m PoolCapacityAlertStateMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *PoolCapacityAlertStateMutation) ID() (id int64, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *PoolCapacityAlertStateMutation) IDs(ctx context.Context) ([]int64, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int64{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().PoolCapacityAlertState.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetGroupID sets the "group_id" field.
+func (m *PoolCapacityAlertStateMutation) SetGroupID(i int64) {
+	m.group_id = &i
+	m.addgroup_id = nil
+}
+
+// GroupID returns the value of the "group_id" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) GroupID() (r int64, exists bool) {
+	v := m.group_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupID returns the old "group_id" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldGroupID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupID: %w", err)
+	}
+	return oldValue.GroupID, nil
+}
+
+// AddGroupID adds i to the "group_id" field.
+func (m *PoolCapacityAlertStateMutation) AddGroupID(i int64) {
+	if m.addgroup_id != nil {
+		*m.addgroup_id += i
+	} else {
+		m.addgroup_id = &i
+	}
+}
+
+// AddedGroupID returns the value that was added to the "group_id" field in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedGroupID() (r int64, exists bool) {
+	v := m.addgroup_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetGroupID resets all changes to the "group_id" field.
+func (m *PoolCapacityAlertStateMutation) ResetGroupID() {
+	m.group_id = nil
+	m.addgroup_id = nil
+}
+
+// SetGroupGeneration sets the "group_generation" field.
+func (m *PoolCapacityAlertStateMutation) SetGroupGeneration(i int64) {
+	m.group_generation = &i
+	m.addgroup_generation = nil
+}
+
+// GroupGeneration returns the value of the "group_generation" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) GroupGeneration() (r int64, exists bool) {
+	v := m.group_generation
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupGeneration returns the old "group_generation" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldGroupGeneration(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupGeneration is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupGeneration requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupGeneration: %w", err)
+	}
+	return oldValue.GroupGeneration, nil
+}
+
+// AddGroupGeneration adds i to the "group_generation" field.
+func (m *PoolCapacityAlertStateMutation) AddGroupGeneration(i int64) {
+	if m.addgroup_generation != nil {
+		*m.addgroup_generation += i
+	} else {
+		m.addgroup_generation = &i
+	}
+}
+
+// AddedGroupGeneration returns the value that was added to the "group_generation" field in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedGroupGeneration() (r int64, exists bool) {
+	v := m.addgroup_generation
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetGroupGeneration resets all changes to the "group_generation" field.
+func (m *PoolCapacityAlertStateMutation) ResetGroupGeneration() {
+	m.group_generation = nil
+	m.addgroup_generation = nil
+}
+
+// SetAccountID sets the "account_id" field.
+func (m *PoolCapacityAlertStateMutation) SetAccountID(i int64) {
+	m.account_id = &i
+	m.addaccount_id = nil
+}
+
+// AccountID returns the value of the "account_id" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) AccountID() (r int64, exists bool) {
+	v := m.account_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountID returns the old "account_id" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldAccountID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountID: %w", err)
+	}
+	return oldValue.AccountID, nil
+}
+
+// AddAccountID adds i to the "account_id" field.
+func (m *PoolCapacityAlertStateMutation) AddAccountID(i int64) {
+	if m.addaccount_id != nil {
+		*m.addaccount_id += i
+	} else {
+		m.addaccount_id = &i
+	}
+}
+
+// AddedAccountID returns the value that was added to the "account_id" field in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedAccountID() (r int64, exists bool) {
+	v := m.addaccount_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAccountID resets all changes to the "account_id" field.
+func (m *PoolCapacityAlertStateMutation) ResetAccountID() {
+	m.account_id = nil
+	m.addaccount_id = nil
+}
+
+// SetAPIKeyID sets the "api_key_id" field.
+func (m *PoolCapacityAlertStateMutation) SetAPIKeyID(i int64) {
+	m.api_key_id = &i
+	m.addapi_key_id = nil
+}
+
+// APIKeyID returns the value of the "api_key_id" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) APIKeyID() (r int64, exists bool) {
+	v := m.api_key_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyID returns the old "api_key_id" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldAPIKeyID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyID: %w", err)
+	}
+	return oldValue.APIKeyID, nil
+}
+
+// AddAPIKeyID adds i to the "api_key_id" field.
+func (m *PoolCapacityAlertStateMutation) AddAPIKeyID(i int64) {
+	if m.addapi_key_id != nil {
+		*m.addapi_key_id += i
+	} else {
+		m.addapi_key_id = &i
+	}
+}
+
+// AddedAPIKeyID returns the value that was added to the "api_key_id" field in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedAPIKeyID() (r int64, exists bool) {
+	v := m.addapi_key_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAPIKeyID resets all changes to the "api_key_id" field.
+func (m *PoolCapacityAlertStateMutation) ResetAPIKeyID() {
+	m.api_key_id = nil
+	m.addapi_key_id = nil
+}
+
+// SetUserID sets the "user_id" field.
+func (m *PoolCapacityAlertStateMutation) SetUserID(i int64) {
+	m.user_id = &i
+	m.adduser_id = nil
+}
+
+// UserID returns the value of the "user_id" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) UserID() (r int64, exists bool) {
+	v := m.user_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserID returns the old "user_id" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldUserID(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserID: %w", err)
+	}
+	return oldValue.UserID, nil
+}
+
+// AddUserID adds i to the "user_id" field.
+func (m *PoolCapacityAlertStateMutation) AddUserID(i int64) {
+	if m.adduser_id != nil {
+		*m.adduser_id += i
+	} else {
+		m.adduser_id = &i
+	}
+}
+
+// AddedUserID returns the value that was added to the "user_id" field in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedUserID() (r int64, exists bool) {
+	v := m.adduser_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUserID resets all changes to the "user_id" field.
+func (m *PoolCapacityAlertStateMutation) ResetUserID() {
+	m.user_id = nil
+	m.adduser_id = nil
+}
+
+// SetBillingType sets the "billing_type" field.
+func (m *PoolCapacityAlertStateMutation) SetBillingType(i int8) {
+	m.billing_type = &i
+	m.addbilling_type = nil
+}
+
+// BillingType returns the value of the "billing_type" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) BillingType() (r int8, exists bool) {
+	v := m.billing_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBillingType returns the old "billing_type" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldBillingType(ctx context.Context) (v int8, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBillingType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBillingType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBillingType: %w", err)
+	}
+	return oldValue.BillingType, nil
+}
+
+// AddBillingType adds i to the "billing_type" field.
+func (m *PoolCapacityAlertStateMutation) AddBillingType(i int8) {
+	if m.addbilling_type != nil {
+		*m.addbilling_type += i
+	} else {
+		m.addbilling_type = &i
+	}
+}
+
+// AddedBillingType returns the value that was added to the "billing_type" field in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedBillingType() (r int8, exists bool) {
+	v := m.addbilling_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetBillingType resets all changes to the "billing_type" field.
+func (m *PoolCapacityAlertStateMutation) ResetBillingType() {
+	m.billing_type = nil
+	m.addbilling_type = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *PoolCapacityAlertStateMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *PoolCapacityAlertStateMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetEpisode sets the "episode" field.
+func (m *PoolCapacityAlertStateMutation) SetEpisode(i int64) {
+	m.episode = &i
+	m.addepisode = nil
+}
+
+// Episode returns the value of the "episode" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) Episode() (r int64, exists bool) {
+	v := m.episode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEpisode returns the old "episode" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldEpisode(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEpisode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEpisode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEpisode: %w", err)
+	}
+	return oldValue.Episode, nil
+}
+
+// AddEpisode adds i to the "episode" field.
+func (m *PoolCapacityAlertStateMutation) AddEpisode(i int64) {
+	if m.addepisode != nil {
+		*m.addepisode += i
+	} else {
+		m.addepisode = &i
+	}
+}
+
+// AddedEpisode returns the value that was added to the "episode" field in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedEpisode() (r int64, exists bool) {
+	v := m.addepisode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetEpisode resets all changes to the "episode" field.
+func (m *PoolCapacityAlertStateMutation) ResetEpisode() {
+	m.episode = nil
+	m.addepisode = nil
+}
+
+// SetPredictedRequests sets the "predicted_requests" field.
+func (m *PoolCapacityAlertStateMutation) SetPredictedRequests(i int64) {
+	m.predicted_requests = &i
+	m.addpredicted_requests = nil
+}
+
+// PredictedRequests returns the value of the "predicted_requests" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) PredictedRequests() (r int64, exists bool) {
+	v := m.predicted_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPredictedRequests returns the old "predicted_requests" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldPredictedRequests(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPredictedRequests is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPredictedRequests requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPredictedRequests: %w", err)
+	}
+	return oldValue.PredictedRequests, nil
+}
+
+// AddPredictedRequests adds i to the "predicted_requests" field.
+func (m *PoolCapacityAlertStateMutation) AddPredictedRequests(i int64) {
+	if m.addpredicted_requests != nil {
+		*m.addpredicted_requests += i
+	} else {
+		m.addpredicted_requests = &i
+	}
+}
+
+// AddedPredictedRequests returns the value that was added to the "predicted_requests" field in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedPredictedRequests() (r int64, exists bool) {
+	v := m.addpredicted_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearPredictedRequests clears the value of the "predicted_requests" field.
+func (m *PoolCapacityAlertStateMutation) ClearPredictedRequests() {
+	m.predicted_requests = nil
+	m.addpredicted_requests = nil
+	m.clearedFields[poolcapacityalertstate.FieldPredictedRequests] = struct{}{}
+}
+
+// PredictedRequestsCleared returns if the "predicted_requests" field was cleared in this mutation.
+func (m *PoolCapacityAlertStateMutation) PredictedRequestsCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertstate.FieldPredictedRequests]
+	return ok
+}
+
+// ResetPredictedRequests resets all changes to the "predicted_requests" field.
+func (m *PoolCapacityAlertStateMutation) ResetPredictedRequests() {
+	m.predicted_requests = nil
+	m.addpredicted_requests = nil
+	delete(m.clearedFields, poolcapacityalertstate.FieldPredictedRequests)
+}
+
+// SetAccountRequests sets the "account_requests" field.
+func (m *PoolCapacityAlertStateMutation) SetAccountRequests(i int64) {
+	m.account_requests = &i
+	m.addaccount_requests = nil
+}
+
+// AccountRequests returns the value of the "account_requests" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) AccountRequests() (r int64, exists bool) {
+	v := m.account_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAccountRequests returns the old "account_requests" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldAccountRequests(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAccountRequests is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAccountRequests requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAccountRequests: %w", err)
+	}
+	return oldValue.AccountRequests, nil
+}
+
+// AddAccountRequests adds i to the "account_requests" field.
+func (m *PoolCapacityAlertStateMutation) AddAccountRequests(i int64) {
+	if m.addaccount_requests != nil {
+		*m.addaccount_requests += i
+	} else {
+		m.addaccount_requests = &i
+	}
+}
+
+// AddedAccountRequests returns the value that was added to the "account_requests" field in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedAccountRequests() (r int64, exists bool) {
+	v := m.addaccount_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAccountRequests clears the value of the "account_requests" field.
+func (m *PoolCapacityAlertStateMutation) ClearAccountRequests() {
+	m.account_requests = nil
+	m.addaccount_requests = nil
+	m.clearedFields[poolcapacityalertstate.FieldAccountRequests] = struct{}{}
+}
+
+// AccountRequestsCleared returns if the "account_requests" field was cleared in this mutation.
+func (m *PoolCapacityAlertStateMutation) AccountRequestsCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertstate.FieldAccountRequests]
+	return ok
+}
+
+// ResetAccountRequests resets all changes to the "account_requests" field.
+func (m *PoolCapacityAlertStateMutation) ResetAccountRequests() {
+	m.account_requests = nil
+	m.addaccount_requests = nil
+	delete(m.clearedFields, poolcapacityalertstate.FieldAccountRequests)
+}
+
+// SetAPIKeyRequests sets the "api_key_requests" field.
+func (m *PoolCapacityAlertStateMutation) SetAPIKeyRequests(i int64) {
+	m.api_key_requests = &i
+	m.addapi_key_requests = nil
+}
+
+// APIKeyRequests returns the value of the "api_key_requests" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) APIKeyRequests() (r int64, exists bool) {
+	v := m.api_key_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAPIKeyRequests returns the old "api_key_requests" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldAPIKeyRequests(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAPIKeyRequests is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAPIKeyRequests requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAPIKeyRequests: %w", err)
+	}
+	return oldValue.APIKeyRequests, nil
+}
+
+// AddAPIKeyRequests adds i to the "api_key_requests" field.
+func (m *PoolCapacityAlertStateMutation) AddAPIKeyRequests(i int64) {
+	if m.addapi_key_requests != nil {
+		*m.addapi_key_requests += i
+	} else {
+		m.addapi_key_requests = &i
+	}
+}
+
+// AddedAPIKeyRequests returns the value that was added to the "api_key_requests" field in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedAPIKeyRequests() (r int64, exists bool) {
+	v := m.addapi_key_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearAPIKeyRequests clears the value of the "api_key_requests" field.
+func (m *PoolCapacityAlertStateMutation) ClearAPIKeyRequests() {
+	m.api_key_requests = nil
+	m.addapi_key_requests = nil
+	m.clearedFields[poolcapacityalertstate.FieldAPIKeyRequests] = struct{}{}
+}
+
+// APIKeyRequestsCleared returns if the "api_key_requests" field was cleared in this mutation.
+func (m *PoolCapacityAlertStateMutation) APIKeyRequestsCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertstate.FieldAPIKeyRequests]
+	return ok
+}
+
+// ResetAPIKeyRequests resets all changes to the "api_key_requests" field.
+func (m *PoolCapacityAlertStateMutation) ResetAPIKeyRequests() {
+	m.api_key_requests = nil
+	m.addapi_key_requests = nil
+	delete(m.clearedFields, poolcapacityalertstate.FieldAPIKeyRequests)
+}
+
+// SetWalletRequests sets the "wallet_requests" field.
+func (m *PoolCapacityAlertStateMutation) SetWalletRequests(i int64) {
+	m.wallet_requests = &i
+	m.addwallet_requests = nil
+}
+
+// WalletRequests returns the value of the "wallet_requests" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) WalletRequests() (r int64, exists bool) {
+	v := m.wallet_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWalletRequests returns the old "wallet_requests" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldWalletRequests(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWalletRequests is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWalletRequests requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWalletRequests: %w", err)
+	}
+	return oldValue.WalletRequests, nil
+}
+
+// AddWalletRequests adds i to the "wallet_requests" field.
+func (m *PoolCapacityAlertStateMutation) AddWalletRequests(i int64) {
+	if m.addwallet_requests != nil {
+		*m.addwallet_requests += i
+	} else {
+		m.addwallet_requests = &i
+	}
+}
+
+// AddedWalletRequests returns the value that was added to the "wallet_requests" field in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedWalletRequests() (r int64, exists bool) {
+	v := m.addwallet_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearWalletRequests clears the value of the "wallet_requests" field.
+func (m *PoolCapacityAlertStateMutation) ClearWalletRequests() {
+	m.wallet_requests = nil
+	m.addwallet_requests = nil
+	m.clearedFields[poolcapacityalertstate.FieldWalletRequests] = struct{}{}
+}
+
+// WalletRequestsCleared returns if the "wallet_requests" field was cleared in this mutation.
+func (m *PoolCapacityAlertStateMutation) WalletRequestsCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertstate.FieldWalletRequests]
+	return ok
+}
+
+// ResetWalletRequests resets all changes to the "wallet_requests" field.
+func (m *PoolCapacityAlertStateMutation) ResetWalletRequests() {
+	m.wallet_requests = nil
+	m.addwallet_requests = nil
+	delete(m.clearedFields, poolcapacityalertstate.FieldWalletRequests)
+}
+
+// SetAvgAccountCost sets the "avg_account_cost" field.
+func (m *PoolCapacityAlertStateMutation) SetAvgAccountCost(f float64) {
+	m.avg_account_cost = &f
+	m.addavg_account_cost = nil
+}
+
+// AvgAccountCost returns the value of the "avg_account_cost" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) AvgAccountCost() (r float64, exists bool) {
+	v := m.avg_account_cost
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAvgAccountCost returns the old "avg_account_cost" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldAvgAccountCost(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAvgAccountCost is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAvgAccountCost requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAvgAccountCost: %w", err)
+	}
+	return oldValue.AvgAccountCost, nil
+}
+
+// AddAvgAccountCost adds f to the "avg_account_cost" field.
+func (m *PoolCapacityAlertStateMutation) AddAvgAccountCost(f float64) {
+	if m.addavg_account_cost != nil {
+		*m.addavg_account_cost += f
+	} else {
+		m.addavg_account_cost = &f
+	}
+}
+
+// AddedAvgAccountCost returns the value that was added to the "avg_account_cost" field in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedAvgAccountCost() (r float64, exists bool) {
+	v := m.addavg_account_cost
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAvgAccountCost resets all changes to the "avg_account_cost" field.
+func (m *PoolCapacityAlertStateMutation) ResetAvgAccountCost() {
+	m.avg_account_cost = nil
+	m.addavg_account_cost = nil
+}
+
+// SetAvgActualCost sets the "avg_actual_cost" field.
+func (m *PoolCapacityAlertStateMutation) SetAvgActualCost(f float64) {
+	m.avg_actual_cost = &f
+	m.addavg_actual_cost = nil
+}
+
+// AvgActualCost returns the value of the "avg_actual_cost" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) AvgActualCost() (r float64, exists bool) {
+	v := m.avg_actual_cost
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAvgActualCost returns the old "avg_actual_cost" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldAvgActualCost(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAvgActualCost is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAvgActualCost requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAvgActualCost: %w", err)
+	}
+	return oldValue.AvgActualCost, nil
+}
+
+// AddAvgActualCost adds f to the "avg_actual_cost" field.
+func (m *PoolCapacityAlertStateMutation) AddAvgActualCost(f float64) {
+	if m.addavg_actual_cost != nil {
+		*m.addavg_actual_cost += f
+	} else {
+		m.addavg_actual_cost = &f
+	}
+}
+
+// AddedAvgActualCost returns the value that was added to the "avg_actual_cost" field in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedAvgActualCost() (r float64, exists bool) {
+	v := m.addavg_actual_cost
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetAvgActualCost resets all changes to the "avg_actual_cost" field.
+func (m *PoolCapacityAlertStateMutation) ResetAvgActualCost() {
+	m.avg_actual_cost = nil
+	m.addavg_actual_cost = nil
+}
+
+// SetSampleCount sets the "sample_count" field.
+func (m *PoolCapacityAlertStateMutation) SetSampleCount(i int) {
+	m.sample_count = &i
+	m.addsample_count = nil
+}
+
+// SampleCount returns the value of the "sample_count" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) SampleCount() (r int, exists bool) {
+	v := m.sample_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSampleCount returns the old "sample_count" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldSampleCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSampleCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSampleCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSampleCount: %w", err)
+	}
+	return oldValue.SampleCount, nil
+}
+
+// AddSampleCount adds i to the "sample_count" field.
+func (m *PoolCapacityAlertStateMutation) AddSampleCount(i int) {
+	if m.addsample_count != nil {
+		*m.addsample_count += i
+	} else {
+		m.addsample_count = &i
+	}
+}
+
+// AddedSampleCount returns the value that was added to the "sample_count" field in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedSampleCount() (r int, exists bool) {
+	v := m.addsample_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSampleCount resets all changes to the "sample_count" field.
+func (m *PoolCapacityAlertStateMutation) ResetSampleCount() {
+	m.sample_count = nil
+	m.addsample_count = nil
+}
+
+// SetBottleneck sets the "bottleneck" field.
+func (m *PoolCapacityAlertStateMutation) SetBottleneck(s string) {
+	m.bottleneck = &s
+}
+
+// Bottleneck returns the value of the "bottleneck" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) Bottleneck() (r string, exists bool) {
+	v := m.bottleneck
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBottleneck returns the old "bottleneck" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldBottleneck(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBottleneck is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBottleneck requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBottleneck: %w", err)
+	}
+	return oldValue.Bottleneck, nil
+}
+
+// ResetBottleneck resets all changes to the "bottleneck" field.
+func (m *PoolCapacityAlertStateMutation) ResetBottleneck() {
+	m.bottleneck = nil
+}
+
+// SetLastEvaluatedAt sets the "last_evaluated_at" field.
+func (m *PoolCapacityAlertStateMutation) SetLastEvaluatedAt(t time.Time) {
+	m.last_evaluated_at = &t
+}
+
+// LastEvaluatedAt returns the value of the "last_evaluated_at" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) LastEvaluatedAt() (r time.Time, exists bool) {
+	v := m.last_evaluated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastEvaluatedAt returns the old "last_evaluated_at" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldLastEvaluatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastEvaluatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastEvaluatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastEvaluatedAt: %w", err)
+	}
+	return oldValue.LastEvaluatedAt, nil
+}
+
+// ResetLastEvaluatedAt resets all changes to the "last_evaluated_at" field.
+func (m *PoolCapacityAlertStateMutation) ResetLastEvaluatedAt() {
+	m.last_evaluated_at = nil
+}
+
+// SetLastAlertedAt sets the "last_alerted_at" field.
+func (m *PoolCapacityAlertStateMutation) SetLastAlertedAt(t time.Time) {
+	m.last_alerted_at = &t
+}
+
+// LastAlertedAt returns the value of the "last_alerted_at" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) LastAlertedAt() (r time.Time, exists bool) {
+	v := m.last_alerted_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLastAlertedAt returns the old "last_alerted_at" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldLastAlertedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLastAlertedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLastAlertedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLastAlertedAt: %w", err)
+	}
+	return oldValue.LastAlertedAt, nil
+}
+
+// ClearLastAlertedAt clears the value of the "last_alerted_at" field.
+func (m *PoolCapacityAlertStateMutation) ClearLastAlertedAt() {
+	m.last_alerted_at = nil
+	m.clearedFields[poolcapacityalertstate.FieldLastAlertedAt] = struct{}{}
+}
+
+// LastAlertedAtCleared returns if the "last_alerted_at" field was cleared in this mutation.
+func (m *PoolCapacityAlertStateMutation) LastAlertedAtCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertstate.FieldLastAlertedAt]
+	return ok
+}
+
+// ResetLastAlertedAt resets all changes to the "last_alerted_at" field.
+func (m *PoolCapacityAlertStateMutation) ResetLastAlertedAt() {
+	m.last_alerted_at = nil
+	delete(m.clearedFields, poolcapacityalertstate.FieldLastAlertedAt)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *PoolCapacityAlertStateMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *PoolCapacityAlertStateMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *PoolCapacityAlertStateMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *PoolCapacityAlertStateMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// Where appends a list predicates to the PoolCapacityAlertStateMutation builder.
+func (m *PoolCapacityAlertStateMutation) Where(ps ...predicate.PoolCapacityAlertState) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the PoolCapacityAlertStateMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *PoolCapacityAlertStateMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.PoolCapacityAlertState, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *PoolCapacityAlertStateMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *PoolCapacityAlertStateMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (PoolCapacityAlertState).
+func (m *PoolCapacityAlertStateMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *PoolCapacityAlertStateMutation) Fields() []string {
+	fields := make([]string, 0, 20)
+	if m.group_id != nil {
+		fields = append(fields, poolcapacityalertstate.FieldGroupID)
+	}
+	if m.group_generation != nil {
+		fields = append(fields, poolcapacityalertstate.FieldGroupGeneration)
+	}
+	if m.account_id != nil {
+		fields = append(fields, poolcapacityalertstate.FieldAccountID)
+	}
+	if m.api_key_id != nil {
+		fields = append(fields, poolcapacityalertstate.FieldAPIKeyID)
+	}
+	if m.user_id != nil {
+		fields = append(fields, poolcapacityalertstate.FieldUserID)
+	}
+	if m.billing_type != nil {
+		fields = append(fields, poolcapacityalertstate.FieldBillingType)
+	}
+	if m.status != nil {
+		fields = append(fields, poolcapacityalertstate.FieldStatus)
+	}
+	if m.episode != nil {
+		fields = append(fields, poolcapacityalertstate.FieldEpisode)
+	}
+	if m.predicted_requests != nil {
+		fields = append(fields, poolcapacityalertstate.FieldPredictedRequests)
+	}
+	if m.account_requests != nil {
+		fields = append(fields, poolcapacityalertstate.FieldAccountRequests)
+	}
+	if m.api_key_requests != nil {
+		fields = append(fields, poolcapacityalertstate.FieldAPIKeyRequests)
+	}
+	if m.wallet_requests != nil {
+		fields = append(fields, poolcapacityalertstate.FieldWalletRequests)
+	}
+	if m.avg_account_cost != nil {
+		fields = append(fields, poolcapacityalertstate.FieldAvgAccountCost)
+	}
+	if m.avg_actual_cost != nil {
+		fields = append(fields, poolcapacityalertstate.FieldAvgActualCost)
+	}
+	if m.sample_count != nil {
+		fields = append(fields, poolcapacityalertstate.FieldSampleCount)
+	}
+	if m.bottleneck != nil {
+		fields = append(fields, poolcapacityalertstate.FieldBottleneck)
+	}
+	if m.last_evaluated_at != nil {
+		fields = append(fields, poolcapacityalertstate.FieldLastEvaluatedAt)
+	}
+	if m.last_alerted_at != nil {
+		fields = append(fields, poolcapacityalertstate.FieldLastAlertedAt)
+	}
+	if m.created_at != nil {
+		fields = append(fields, poolcapacityalertstate.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, poolcapacityalertstate.FieldUpdatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *PoolCapacityAlertStateMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case poolcapacityalertstate.FieldGroupID:
+		return m.GroupID()
+	case poolcapacityalertstate.FieldGroupGeneration:
+		return m.GroupGeneration()
+	case poolcapacityalertstate.FieldAccountID:
+		return m.AccountID()
+	case poolcapacityalertstate.FieldAPIKeyID:
+		return m.APIKeyID()
+	case poolcapacityalertstate.FieldUserID:
+		return m.UserID()
+	case poolcapacityalertstate.FieldBillingType:
+		return m.BillingType()
+	case poolcapacityalertstate.FieldStatus:
+		return m.Status()
+	case poolcapacityalertstate.FieldEpisode:
+		return m.Episode()
+	case poolcapacityalertstate.FieldPredictedRequests:
+		return m.PredictedRequests()
+	case poolcapacityalertstate.FieldAccountRequests:
+		return m.AccountRequests()
+	case poolcapacityalertstate.FieldAPIKeyRequests:
+		return m.APIKeyRequests()
+	case poolcapacityalertstate.FieldWalletRequests:
+		return m.WalletRequests()
+	case poolcapacityalertstate.FieldAvgAccountCost:
+		return m.AvgAccountCost()
+	case poolcapacityalertstate.FieldAvgActualCost:
+		return m.AvgActualCost()
+	case poolcapacityalertstate.FieldSampleCount:
+		return m.SampleCount()
+	case poolcapacityalertstate.FieldBottleneck:
+		return m.Bottleneck()
+	case poolcapacityalertstate.FieldLastEvaluatedAt:
+		return m.LastEvaluatedAt()
+	case poolcapacityalertstate.FieldLastAlertedAt:
+		return m.LastAlertedAt()
+	case poolcapacityalertstate.FieldCreatedAt:
+		return m.CreatedAt()
+	case poolcapacityalertstate.FieldUpdatedAt:
+		return m.UpdatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *PoolCapacityAlertStateMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case poolcapacityalertstate.FieldGroupID:
+		return m.OldGroupID(ctx)
+	case poolcapacityalertstate.FieldGroupGeneration:
+		return m.OldGroupGeneration(ctx)
+	case poolcapacityalertstate.FieldAccountID:
+		return m.OldAccountID(ctx)
+	case poolcapacityalertstate.FieldAPIKeyID:
+		return m.OldAPIKeyID(ctx)
+	case poolcapacityalertstate.FieldUserID:
+		return m.OldUserID(ctx)
+	case poolcapacityalertstate.FieldBillingType:
+		return m.OldBillingType(ctx)
+	case poolcapacityalertstate.FieldStatus:
+		return m.OldStatus(ctx)
+	case poolcapacityalertstate.FieldEpisode:
+		return m.OldEpisode(ctx)
+	case poolcapacityalertstate.FieldPredictedRequests:
+		return m.OldPredictedRequests(ctx)
+	case poolcapacityalertstate.FieldAccountRequests:
+		return m.OldAccountRequests(ctx)
+	case poolcapacityalertstate.FieldAPIKeyRequests:
+		return m.OldAPIKeyRequests(ctx)
+	case poolcapacityalertstate.FieldWalletRequests:
+		return m.OldWalletRequests(ctx)
+	case poolcapacityalertstate.FieldAvgAccountCost:
+		return m.OldAvgAccountCost(ctx)
+	case poolcapacityalertstate.FieldAvgActualCost:
+		return m.OldAvgActualCost(ctx)
+	case poolcapacityalertstate.FieldSampleCount:
+		return m.OldSampleCount(ctx)
+	case poolcapacityalertstate.FieldBottleneck:
+		return m.OldBottleneck(ctx)
+	case poolcapacityalertstate.FieldLastEvaluatedAt:
+		return m.OldLastEvaluatedAt(ctx)
+	case poolcapacityalertstate.FieldLastAlertedAt:
+		return m.OldLastAlertedAt(ctx)
+	case poolcapacityalertstate.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case poolcapacityalertstate.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown PoolCapacityAlertState field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *PoolCapacityAlertStateMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case poolcapacityalertstate.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupID(v)
+		return nil
+	case poolcapacityalertstate.FieldGroupGeneration:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupGeneration(v)
+		return nil
+	case poolcapacityalertstate.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountID(v)
+		return nil
+	case poolcapacityalertstate.FieldAPIKeyID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyID(v)
+		return nil
+	case poolcapacityalertstate.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserID(v)
+		return nil
+	case poolcapacityalertstate.FieldBillingType:
+		v, ok := value.(int8)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBillingType(v)
+		return nil
+	case poolcapacityalertstate.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case poolcapacityalertstate.FieldEpisode:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEpisode(v)
+		return nil
+	case poolcapacityalertstate.FieldPredictedRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPredictedRequests(v)
+		return nil
+	case poolcapacityalertstate.FieldAccountRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAccountRequests(v)
+		return nil
+	case poolcapacityalertstate.FieldAPIKeyRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAPIKeyRequests(v)
+		return nil
+	case poolcapacityalertstate.FieldWalletRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWalletRequests(v)
+		return nil
+	case poolcapacityalertstate.FieldAvgAccountCost:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAvgAccountCost(v)
+		return nil
+	case poolcapacityalertstate.FieldAvgActualCost:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAvgActualCost(v)
+		return nil
+	case poolcapacityalertstate.FieldSampleCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSampleCount(v)
+		return nil
+	case poolcapacityalertstate.FieldBottleneck:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBottleneck(v)
+		return nil
+	case poolcapacityalertstate.FieldLastEvaluatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastEvaluatedAt(v)
+		return nil
+	case poolcapacityalertstate.FieldLastAlertedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLastAlertedAt(v)
+		return nil
+	case poolcapacityalertstate.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case poolcapacityalertstate.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown PoolCapacityAlertState field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedFields() []string {
+	var fields []string
+	if m.addgroup_id != nil {
+		fields = append(fields, poolcapacityalertstate.FieldGroupID)
+	}
+	if m.addgroup_generation != nil {
+		fields = append(fields, poolcapacityalertstate.FieldGroupGeneration)
+	}
+	if m.addaccount_id != nil {
+		fields = append(fields, poolcapacityalertstate.FieldAccountID)
+	}
+	if m.addapi_key_id != nil {
+		fields = append(fields, poolcapacityalertstate.FieldAPIKeyID)
+	}
+	if m.adduser_id != nil {
+		fields = append(fields, poolcapacityalertstate.FieldUserID)
+	}
+	if m.addbilling_type != nil {
+		fields = append(fields, poolcapacityalertstate.FieldBillingType)
+	}
+	if m.addepisode != nil {
+		fields = append(fields, poolcapacityalertstate.FieldEpisode)
+	}
+	if m.addpredicted_requests != nil {
+		fields = append(fields, poolcapacityalertstate.FieldPredictedRequests)
+	}
+	if m.addaccount_requests != nil {
+		fields = append(fields, poolcapacityalertstate.FieldAccountRequests)
+	}
+	if m.addapi_key_requests != nil {
+		fields = append(fields, poolcapacityalertstate.FieldAPIKeyRequests)
+	}
+	if m.addwallet_requests != nil {
+		fields = append(fields, poolcapacityalertstate.FieldWalletRequests)
+	}
+	if m.addavg_account_cost != nil {
+		fields = append(fields, poolcapacityalertstate.FieldAvgAccountCost)
+	}
+	if m.addavg_actual_cost != nil {
+		fields = append(fields, poolcapacityalertstate.FieldAvgActualCost)
+	}
+	if m.addsample_count != nil {
+		fields = append(fields, poolcapacityalertstate.FieldSampleCount)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *PoolCapacityAlertStateMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case poolcapacityalertstate.FieldGroupID:
+		return m.AddedGroupID()
+	case poolcapacityalertstate.FieldGroupGeneration:
+		return m.AddedGroupGeneration()
+	case poolcapacityalertstate.FieldAccountID:
+		return m.AddedAccountID()
+	case poolcapacityalertstate.FieldAPIKeyID:
+		return m.AddedAPIKeyID()
+	case poolcapacityalertstate.FieldUserID:
+		return m.AddedUserID()
+	case poolcapacityalertstate.FieldBillingType:
+		return m.AddedBillingType()
+	case poolcapacityalertstate.FieldEpisode:
+		return m.AddedEpisode()
+	case poolcapacityalertstate.FieldPredictedRequests:
+		return m.AddedPredictedRequests()
+	case poolcapacityalertstate.FieldAccountRequests:
+		return m.AddedAccountRequests()
+	case poolcapacityalertstate.FieldAPIKeyRequests:
+		return m.AddedAPIKeyRequests()
+	case poolcapacityalertstate.FieldWalletRequests:
+		return m.AddedWalletRequests()
+	case poolcapacityalertstate.FieldAvgAccountCost:
+		return m.AddedAvgAccountCost()
+	case poolcapacityalertstate.FieldAvgActualCost:
+		return m.AddedAvgActualCost()
+	case poolcapacityalertstate.FieldSampleCount:
+		return m.AddedSampleCount()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *PoolCapacityAlertStateMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case poolcapacityalertstate.FieldGroupID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGroupID(v)
+		return nil
+	case poolcapacityalertstate.FieldGroupGeneration:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddGroupGeneration(v)
+		return nil
+	case poolcapacityalertstate.FieldAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAccountID(v)
+		return nil
+	case poolcapacityalertstate.FieldAPIKeyID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAPIKeyID(v)
+		return nil
+	case poolcapacityalertstate.FieldUserID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUserID(v)
+		return nil
+	case poolcapacityalertstate.FieldBillingType:
+		v, ok := value.(int8)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBillingType(v)
+		return nil
+	case poolcapacityalertstate.FieldEpisode:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddEpisode(v)
+		return nil
+	case poolcapacityalertstate.FieldPredictedRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPredictedRequests(v)
+		return nil
+	case poolcapacityalertstate.FieldAccountRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAccountRequests(v)
+		return nil
+	case poolcapacityalertstate.FieldAPIKeyRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAPIKeyRequests(v)
+		return nil
+	case poolcapacityalertstate.FieldWalletRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWalletRequests(v)
+		return nil
+	case poolcapacityalertstate.FieldAvgAccountCost:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAvgAccountCost(v)
+		return nil
+	case poolcapacityalertstate.FieldAvgActualCost:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddAvgActualCost(v)
+		return nil
+	case poolcapacityalertstate.FieldSampleCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSampleCount(v)
+		return nil
+	}
+	return fmt.Errorf("unknown PoolCapacityAlertState numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *PoolCapacityAlertStateMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(poolcapacityalertstate.FieldPredictedRequests) {
+		fields = append(fields, poolcapacityalertstate.FieldPredictedRequests)
+	}
+	if m.FieldCleared(poolcapacityalertstate.FieldAccountRequests) {
+		fields = append(fields, poolcapacityalertstate.FieldAccountRequests)
+	}
+	if m.FieldCleared(poolcapacityalertstate.FieldAPIKeyRequests) {
+		fields = append(fields, poolcapacityalertstate.FieldAPIKeyRequests)
+	}
+	if m.FieldCleared(poolcapacityalertstate.FieldWalletRequests) {
+		fields = append(fields, poolcapacityalertstate.FieldWalletRequests)
+	}
+	if m.FieldCleared(poolcapacityalertstate.FieldLastAlertedAt) {
+		fields = append(fields, poolcapacityalertstate.FieldLastAlertedAt)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *PoolCapacityAlertStateMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *PoolCapacityAlertStateMutation) ClearField(name string) error {
+	switch name {
+	case poolcapacityalertstate.FieldPredictedRequests:
+		m.ClearPredictedRequests()
+		return nil
+	case poolcapacityalertstate.FieldAccountRequests:
+		m.ClearAccountRequests()
+		return nil
+	case poolcapacityalertstate.FieldAPIKeyRequests:
+		m.ClearAPIKeyRequests()
+		return nil
+	case poolcapacityalertstate.FieldWalletRequests:
+		m.ClearWalletRequests()
+		return nil
+	case poolcapacityalertstate.FieldLastAlertedAt:
+		m.ClearLastAlertedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown PoolCapacityAlertState nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *PoolCapacityAlertStateMutation) ResetField(name string) error {
+	switch name {
+	case poolcapacityalertstate.FieldGroupID:
+		m.ResetGroupID()
+		return nil
+	case poolcapacityalertstate.FieldGroupGeneration:
+		m.ResetGroupGeneration()
+		return nil
+	case poolcapacityalertstate.FieldAccountID:
+		m.ResetAccountID()
+		return nil
+	case poolcapacityalertstate.FieldAPIKeyID:
+		m.ResetAPIKeyID()
+		return nil
+	case poolcapacityalertstate.FieldUserID:
+		m.ResetUserID()
+		return nil
+	case poolcapacityalertstate.FieldBillingType:
+		m.ResetBillingType()
+		return nil
+	case poolcapacityalertstate.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case poolcapacityalertstate.FieldEpisode:
+		m.ResetEpisode()
+		return nil
+	case poolcapacityalertstate.FieldPredictedRequests:
+		m.ResetPredictedRequests()
+		return nil
+	case poolcapacityalertstate.FieldAccountRequests:
+		m.ResetAccountRequests()
+		return nil
+	case poolcapacityalertstate.FieldAPIKeyRequests:
+		m.ResetAPIKeyRequests()
+		return nil
+	case poolcapacityalertstate.FieldWalletRequests:
+		m.ResetWalletRequests()
+		return nil
+	case poolcapacityalertstate.FieldAvgAccountCost:
+		m.ResetAvgAccountCost()
+		return nil
+	case poolcapacityalertstate.FieldAvgActualCost:
+		m.ResetAvgActualCost()
+		return nil
+	case poolcapacityalertstate.FieldSampleCount:
+		m.ResetSampleCount()
+		return nil
+	case poolcapacityalertstate.FieldBottleneck:
+		m.ResetBottleneck()
+		return nil
+	case poolcapacityalertstate.FieldLastEvaluatedAt:
+		m.ResetLastEvaluatedAt()
+		return nil
+	case poolcapacityalertstate.FieldLastAlertedAt:
+		m.ResetLastAlertedAt()
+		return nil
+	case poolcapacityalertstate.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case poolcapacityalertstate.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown PoolCapacityAlertState field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedIDs(name string) []ent.Value {
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *PoolCapacityAlertStateMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *PoolCapacityAlertStateMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *PoolCapacityAlertStateMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 0)
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *PoolCapacityAlertStateMutation) EdgeCleared(name string) bool {
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *PoolCapacityAlertStateMutation) ClearEdge(name string) error {
+	return fmt.Errorf("unknown PoolCapacityAlertState unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *PoolCapacityAlertStateMutation) ResetEdge(name string) error {
+	return fmt.Errorf("unknown PoolCapacityAlertState edge %s", name)
 }
 
 // PromoCodeMutation represents an operation that mutates the PromoCode nodes in the graph.

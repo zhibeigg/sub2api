@@ -103,6 +103,7 @@ type Config struct {
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
 	BatchImage              BatchImageConfig              `mapstructure:"batch_image"`
 	AnnouncementEmail       AnnouncementEmailConfig       `mapstructure:"announcement_email"`
+	PoolCapacityAlert       PoolCapacityAlertConfig       `mapstructure:"pool_capacity_alert"`
 	QQBotIntegration        QQBotIntegrationConfig        `mapstructure:"qqbot_integration"`
 	ImageStorage            ImageStorageConfig            `mapstructure:"image_storage"`
 }
@@ -298,6 +299,25 @@ type AnnouncementEmailConfig struct {
 	RetryBaseSeconds    int  `mapstructure:"retry_base_seconds"`
 	MaxRetrySeconds     int  `mapstructure:"max_retry_seconds"`
 	SendTimeoutSeconds  int  `mapstructure:"send_timeout_seconds"`
+}
+
+// PoolCapacityAlertConfig controls the bounded post-billing evaluator and the
+// durable administrator notification delivery workers. The product sample size
+// and request threshold are fixed constants in the service layer.
+type PoolCapacityAlertConfig struct {
+	Enabled                  bool `mapstructure:"enabled"`
+	EvaluationWorkerCount    int  `mapstructure:"evaluation_worker_count"`
+	QueueSize                int  `mapstructure:"queue_size"`
+	EvaluationTimeoutSeconds int  `mapstructure:"evaluation_timeout_seconds"`
+	DeliveryWorkerCount      int  `mapstructure:"delivery_worker_count"`
+	DeliveryBatchSize        int  `mapstructure:"delivery_batch_size"`
+	PollIntervalSeconds      int  `mapstructure:"poll_interval_seconds"`
+	LeaseSeconds             int  `mapstructure:"lease_seconds"`
+	MaxAttempts              int  `mapstructure:"max_attempts"`
+	RetryBaseSeconds         int  `mapstructure:"retry_base_seconds"`
+	MaxRetrySeconds          int  `mapstructure:"max_retry_seconds"`
+	SendTimeoutSeconds       int  `mapstructure:"send_timeout_seconds"`
+	ReminderCooldownHours    int  `mapstructure:"reminder_cooldown_hours"`
 }
 
 type BatchImageConfig struct {
@@ -1813,6 +1833,7 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 
 	cfg.RunMode = NormalizeRunMode(cfg.RunMode)
 	normalizeAnnouncementEmailConfig(&cfg.AnnouncementEmail)
+	normalizePoolCapacityAlertConfig(&cfg.PoolCapacityAlert)
 	cfg.Server.Mode = strings.ToLower(strings.TrimSpace(cfg.Server.Mode))
 	if cfg.Server.Mode == "" {
 		cfg.Server.Mode = "debug"
@@ -2149,6 +2170,20 @@ func setDefaults() {
 	viper.SetDefault("announcement_email.retry_base_seconds", 30)
 	viper.SetDefault("announcement_email.max_retry_seconds", 3600)
 	viper.SetDefault("announcement_email.send_timeout_seconds", 30)
+
+	viper.SetDefault("pool_capacity_alert.enabled", true)
+	viper.SetDefault("pool_capacity_alert.evaluation_worker_count", 2)
+	viper.SetDefault("pool_capacity_alert.queue_size", 256)
+	viper.SetDefault("pool_capacity_alert.evaluation_timeout_seconds", 15)
+	viper.SetDefault("pool_capacity_alert.delivery_worker_count", 4)
+	viper.SetDefault("pool_capacity_alert.delivery_batch_size", 50)
+	viper.SetDefault("pool_capacity_alert.poll_interval_seconds", 5)
+	viper.SetDefault("pool_capacity_alert.lease_seconds", 90)
+	viper.SetDefault("pool_capacity_alert.max_attempts", 6)
+	viper.SetDefault("pool_capacity_alert.retry_base_seconds", 30)
+	viper.SetDefault("pool_capacity_alert.max_retry_seconds", 3600)
+	viper.SetDefault("pool_capacity_alert.send_timeout_seconds", 20)
+	viper.SetDefault("pool_capacity_alert.reminder_cooldown_hours", 24)
 
 	viper.SetDefault("batch_image.enabled", false)
 	viper.SetDefault("batch_image.max_items_per_job_default", 200)
@@ -3752,6 +3787,69 @@ func normalizeAnnouncementEmailConfig(cfg *AnnouncementEmailConfig) {
 	minimumLease := cfg.SendTimeoutSeconds + 30
 	if cfg.LeaseSeconds < minimumLease {
 		cfg.LeaseSeconds = minimumLease
+	}
+}
+
+func normalizePoolCapacityAlertConfig(cfg *PoolCapacityAlertConfig) {
+	if cfg.EvaluationWorkerCount < 1 {
+		cfg.EvaluationWorkerCount = 2
+	} else if cfg.EvaluationWorkerCount > 32 {
+		cfg.EvaluationWorkerCount = 32
+	}
+	if cfg.QueueSize < 16 {
+		cfg.QueueSize = 256
+	} else if cfg.QueueSize > 100000 {
+		cfg.QueueSize = 100000
+	}
+	if cfg.EvaluationTimeoutSeconds < 5 {
+		cfg.EvaluationTimeoutSeconds = 15
+	} else if cfg.EvaluationTimeoutSeconds > 300 {
+		cfg.EvaluationTimeoutSeconds = 300
+	}
+	if cfg.DeliveryWorkerCount < 1 {
+		cfg.DeliveryWorkerCount = 4
+	} else if cfg.DeliveryWorkerCount > 32 {
+		cfg.DeliveryWorkerCount = 32
+	}
+	if cfg.DeliveryBatchSize < 1 {
+		cfg.DeliveryBatchSize = 50
+	} else if cfg.DeliveryBatchSize > 500 {
+		cfg.DeliveryBatchSize = 500
+	}
+	if cfg.PollIntervalSeconds < 1 {
+		cfg.PollIntervalSeconds = 5
+	} else if cfg.PollIntervalSeconds > 60 {
+		cfg.PollIntervalSeconds = 60
+	}
+	if cfg.SendTimeoutSeconds < 5 {
+		cfg.SendTimeoutSeconds = 20
+	} else if cfg.SendTimeoutSeconds > 300 {
+		cfg.SendTimeoutSeconds = 300
+	}
+	if cfg.LeaseSeconds < cfg.SendTimeoutSeconds+30 {
+		cfg.LeaseSeconds = cfg.SendTimeoutSeconds + 30
+	} else if cfg.LeaseSeconds > 3600 {
+		cfg.LeaseSeconds = 3600
+	}
+	if cfg.MaxAttempts < 1 {
+		cfg.MaxAttempts = 6
+	} else if cfg.MaxAttempts > 20 {
+		cfg.MaxAttempts = 20
+	}
+	if cfg.RetryBaseSeconds < 1 {
+		cfg.RetryBaseSeconds = 30
+	} else if cfg.RetryBaseSeconds > 3600 {
+		cfg.RetryBaseSeconds = 3600
+	}
+	if cfg.MaxRetrySeconds < cfg.RetryBaseSeconds {
+		cfg.MaxRetrySeconds = cfg.RetryBaseSeconds
+	} else if cfg.MaxRetrySeconds > 86400 {
+		cfg.MaxRetrySeconds = 86400
+	}
+	if cfg.ReminderCooldownHours < 1 {
+		cfg.ReminderCooldownHours = 24
+	} else if cfg.ReminderCooldownHours > 24*30 {
+		cfg.ReminderCooldownHours = 24 * 30
 	}
 }
 

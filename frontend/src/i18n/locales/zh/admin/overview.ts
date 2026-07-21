@@ -947,6 +947,12 @@ export default {
         privacySetOnlyEnabled: '已启用 — Privacy 未设置的账号将被排除',
         disabled: '未启用'
       },
+      poolCapacityAlert: {
+        title: '池账户容量预测提醒',
+        description: '仅在请求实际命中 pool_mode 账户时生效；系统取最终分组最近 50 次成功落账的平均消耗进行估算，预计剩余请求数低于 50 时通知管理员。结果仅为估算。',
+        enabled: '已开启预测提醒',
+        disabled: '默认关闭'
+      },
       enterGroupName: '请输入分组名称',
       optionalDescription: '可选描述',
       platformHint: '选择此分组关联的平台',

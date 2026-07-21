@@ -351,11 +351,14 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	subscriptionExpiryService := service.ProvideSubscriptionExpiryService(userSubscriptionRepository, settingRepository, notificationEmailService, leaderLockCache, db)
 	batchImageWorkerRuntime := service.ProvideBatchImageWorkerRuntime(batchImageRepository, accountRepository, batchImageQueue, usageBillingRepository, usageLogRepository, batchImageModelPricingResolver, apiKeyAuthCacheInvalidator, configConfig)
 	announcementEmailDispatchRuntime := service.ProvideAnnouncementEmailDispatchRuntime(announcementEmailRepository, emailService, notificationEmailService, configConfig)
+	poolCapacityAlertRepository := repository.NewPoolCapacityAlertRepository(db)
+	poolCapacityAlertService := service.ProvidePoolCapacityAlertService(poolCapacityAlertRepository, usageLogRepository, groupRepository, accountRepository, notificationEmailService, qqBotService, configConfig)
+	poolCapacityAlertGatewayBinding := service.ProvidePoolCapacityAlertGatewayBinding(gatewayService, openAIGatewayService, poolCapacityAlertService)
 	scheduledTestRunnerService := service.ProvideScheduledTestRunnerService(scheduledTestPlanRepository, scheduledTestService, accountTestService, rateLimitService, configConfig)
 	paymentOrderExpiryService := service.ProvidePaymentOrderExpiryService(paymentService, leaderLockCache, db)
 	channelMonitorRunner := service.ProvideChannelMonitorRunner(channelMonitorService, settingService)
 	userPlatformQuotaUsageFlusher := service.ProvideUserPlatformQuotaUsageFlusher(configConfig, billingCache, serviceUserPlatformQuotaRepository, timingWheelService)
-	v := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, opsService, opsIngressRejectAggregator, apiKeyService, authCacheInvalidationWorker, schedulerSnapshotService, tokenRefreshService, cursorDashboardMaintenanceService, accountExpiryService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, batchImageCleanupService, openAIImageUploadTempService, batchImageWorkerRuntime, announcementEmailDispatchRuntime, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, userPlatformQuotaUsageFlusher, upstreamBillingProbeService, auditLogService, promptService, runtime)
+	v := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, opsService, opsIngressRejectAggregator, apiKeyService, authCacheInvalidationWorker, schedulerSnapshotService, tokenRefreshService, cursorDashboardMaintenanceService, accountExpiryService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, batchImageCleanupService, openAIImageUploadTempService, batchImageWorkerRuntime, announcementEmailDispatchRuntime, poolCapacityAlertService, poolCapacityAlertGatewayBinding, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, userPlatformQuotaUsageFlusher, upstreamBillingProbeService, auditLogService, promptService, runtime)
 	application := &Application{
 		Server:      httpServer,
 		PromptAudit: promptService,
@@ -410,6 +413,8 @@ func provideCleanup(
 	openAIImageUploadTemp *service.OpenAIImageUploadTempService,
 	batchImageWorker *service.BatchImageWorkerRuntime,
 	announcementEmailRuntime *service.AnnouncementEmailDispatchRuntime,
+	poolCapacityAlert *service.PoolCapacityAlertService,
+	_ *service.PoolCapacityAlertGatewayBinding,
 	pricing *service.PricingService,
 	emailQueue *service.EmailQueueService,
 	billingCache *service.BillingCacheService,
@@ -586,6 +591,12 @@ func provideCleanup(
 			{"SubscriptionService", func() error {
 				if subscriptionService != nil {
 					subscriptionService.Stop()
+				}
+				return nil
+			}},
+			{"PoolCapacityAlertService", func() error {
+				if poolCapacityAlert != nil {
+					poolCapacityAlert.Stop()
 				}
 				return nil
 			}},

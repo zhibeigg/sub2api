@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 19 // v19: include per-user standard-group restriction policy
+const apiKeyAuthSnapshotVersion = 20 // v20: include group pool-capacity alert enabled/generation
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -439,6 +439,8 @@ func groupToAuthSnapshot(g *Group) *APIKeyAuthGroupSnapshot {
 		MessagesDispatchModelConfig:     g.MessagesDispatchModelConfig,
 		ModelsListConfig:                g.ModelsListConfig,
 		RPMLimit:                        g.RPMLimit,
+		PoolCapacityAlertEnabled:        g.PoolCapacityAlertEnabled,
+		PoolCapacityAlertGeneration:     g.PoolCapacityAlertGeneration,
 		PeakRateEnabled:                 g.PeakRateEnabled,
 		PeakStart:                       g.PeakStart,
 		PeakEnd:                         g.PeakEnd,
@@ -547,6 +549,8 @@ func groupFromAuthSnapshot(g *APIKeyAuthGroupSnapshot) *Group {
 		MessagesDispatchModelConfig:     g.MessagesDispatchModelConfig,
 		ModelsListConfig:                g.ModelsListConfig,
 		RPMLimit:                        g.RPMLimit,
+		PoolCapacityAlertEnabled:        g.PoolCapacityAlertEnabled,
+		PoolCapacityAlertGeneration:     g.PoolCapacityAlertGeneration,
 		PeakRateEnabled:                 g.PeakRateEnabled,
 		PeakStart:                       g.PeakStart,
 		PeakEnd:                         g.PeakEnd,

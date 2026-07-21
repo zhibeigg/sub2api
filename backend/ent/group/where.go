@@ -280,6 +280,16 @@ func RpmLimit(v int) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldRpmLimit, v))
 }
 
+// PoolCapacityAlertEnabled applies equality check predicate on the "pool_capacity_alert_enabled" field. It's identical to PoolCapacityAlertEnabledEQ.
+func PoolCapacityAlertEnabled(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldPoolCapacityAlertEnabled, v))
+}
+
+// PoolCapacityAlertGeneration applies equality check predicate on the "pool_capacity_alert_generation" field. It's identical to PoolCapacityAlertGenerationEQ.
+func PoolCapacityAlertGeneration(v int64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldPoolCapacityAlertGeneration, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldCreatedAt, v))
@@ -2103,6 +2113,56 @@ func RpmLimitLT(v int) predicate.Group {
 // RpmLimitLTE applies the LTE predicate on the "rpm_limit" field.
 func RpmLimitLTE(v int) predicate.Group {
 	return predicate.Group(sql.FieldLTE(FieldRpmLimit, v))
+}
+
+// PoolCapacityAlertEnabledEQ applies the EQ predicate on the "pool_capacity_alert_enabled" field.
+func PoolCapacityAlertEnabledEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldPoolCapacityAlertEnabled, v))
+}
+
+// PoolCapacityAlertEnabledNEQ applies the NEQ predicate on the "pool_capacity_alert_enabled" field.
+func PoolCapacityAlertEnabledNEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldPoolCapacityAlertEnabled, v))
+}
+
+// PoolCapacityAlertGenerationEQ applies the EQ predicate on the "pool_capacity_alert_generation" field.
+func PoolCapacityAlertGenerationEQ(v int64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldPoolCapacityAlertGeneration, v))
+}
+
+// PoolCapacityAlertGenerationNEQ applies the NEQ predicate on the "pool_capacity_alert_generation" field.
+func PoolCapacityAlertGenerationNEQ(v int64) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldPoolCapacityAlertGeneration, v))
+}
+
+// PoolCapacityAlertGenerationIn applies the In predicate on the "pool_capacity_alert_generation" field.
+func PoolCapacityAlertGenerationIn(vs ...int64) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldPoolCapacityAlertGeneration, vs...))
+}
+
+// PoolCapacityAlertGenerationNotIn applies the NotIn predicate on the "pool_capacity_alert_generation" field.
+func PoolCapacityAlertGenerationNotIn(vs ...int64) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldPoolCapacityAlertGeneration, vs...))
+}
+
+// PoolCapacityAlertGenerationGT applies the GT predicate on the "pool_capacity_alert_generation" field.
+func PoolCapacityAlertGenerationGT(v int64) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldPoolCapacityAlertGeneration, v))
+}
+
+// PoolCapacityAlertGenerationGTE applies the GTE predicate on the "pool_capacity_alert_generation" field.
+func PoolCapacityAlertGenerationGTE(v int64) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldPoolCapacityAlertGeneration, v))
+}
+
+// PoolCapacityAlertGenerationLT applies the LT predicate on the "pool_capacity_alert_generation" field.
+func PoolCapacityAlertGenerationLT(v int64) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldPoolCapacityAlertGeneration, v))
+}
+
+// PoolCapacityAlertGenerationLTE applies the LTE predicate on the "pool_capacity_alert_generation" field.
+func PoolCapacityAlertGenerationLTE(v int64) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldPoolCapacityAlertGeneration, v))
 }
 
 // HasAPIKeys applies the HasEdge predicate on the "api_keys" edge.

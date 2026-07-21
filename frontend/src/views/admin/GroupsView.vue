@@ -360,6 +360,7 @@
           <template #cell-actions="{ row }">
             <div class="flex items-center gap-1">
               <button
+                data-testid="group-edit"
                 @click="handleEdit(row)"
                 class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400"
               >
@@ -686,6 +687,53 @@
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
         </div>
+
+        <div class="border-t pt-4">
+          <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0">
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ t("admin.groups.poolCapacityAlert.title") }}
+              </label>
+              <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                {{ t("admin.groups.poolCapacityAlert.description") }}
+              </p>
+              <p class="mt-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+                {{
+                  createForm.pool_capacity_alert_enabled
+                    ? t("admin.groups.poolCapacityAlert.enabled")
+                    : t("admin.groups.poolCapacityAlert.disabled")
+                }}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              data-testid="create-pool-capacity-alert-switch"
+              :aria-label="t('admin.groups.poolCapacityAlert.title')"
+              :aria-checked="createForm.pool_capacity_alert_enabled"
+              @click="
+                createForm.pool_capacity_alert_enabled =
+                  !createForm.pool_capacity_alert_enabled
+              "
+              :class="[
+                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+                createForm.pool_capacity_alert_enabled
+                  ? 'bg-primary-500'
+                  : 'bg-gray-300 dark:bg-dark-600',
+              ]"
+            >
+              <span
+                :class="[
+                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                  createForm.pool_capacity_alert_enabled
+                    ? 'translate-x-6'
+                    : 'translate-x-1',
+                ]"
+              />
+            </button>
+          </div>
+        </div>
+
         <div
           v-if="createForm.subscription_type !== 'subscription'"
           data-tour="group-form-exclusive"
@@ -2267,6 +2315,53 @@
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
         </div>
+
+        <div class="border-t pt-4">
+          <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0">
+              <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ t("admin.groups.poolCapacityAlert.title") }}
+              </label>
+              <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                {{ t("admin.groups.poolCapacityAlert.description") }}
+              </p>
+              <p class="mt-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+                {{
+                  editForm.pool_capacity_alert_enabled
+                    ? t("admin.groups.poolCapacityAlert.enabled")
+                    : t("admin.groups.poolCapacityAlert.disabled")
+                }}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              data-testid="edit-pool-capacity-alert-switch"
+              :aria-label="t('admin.groups.poolCapacityAlert.title')"
+              :aria-checked="editForm.pool_capacity_alert_enabled"
+              @click="
+                editForm.pool_capacity_alert_enabled =
+                  !editForm.pool_capacity_alert_enabled
+              "
+              :class="[
+                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+                editForm.pool_capacity_alert_enabled
+                  ? 'bg-primary-500'
+                  : 'bg-gray-300 dark:bg-dark-600',
+              ]"
+            >
+              <span
+                :class="[
+                  'inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                  editForm.pool_capacity_alert_enabled
+                    ? 'translate-x-6'
+                    : 'translate-x-1',
+                ]"
+              />
+            </button>
+          </div>
+        </div>
+
         <div v-if="editForm.subscription_type !== 'subscription'">
           <div class="mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -4229,6 +4324,8 @@ const createForm = reactive({
   copy_accounts_from_group_ids: [] as number[],
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
+  // 池账号容量预测提醒
+  pool_capacity_alert_enabled: false,
 });
 
 // 简单账号类型（用于模型路由选择）
@@ -4589,6 +4686,8 @@ const editForm = reactive({
   copy_accounts_from_group_ids: [] as number[],
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
+  // 池账号容量预测提醒
+  pool_capacity_alert_enabled: false,
 });
 
 type ImagePricingFormState = {
@@ -4978,6 +5077,7 @@ const closeCreateModal = () => {
   createForm.mcp_xml_inject = true;
   createForm.copy_accounts_from_group_ids = [];
   createForm.rpm_limit = 0;
+  createForm.pool_capacity_alert_enabled = false;
   resetModelsListState(createModelsListState);
   createModelRoutingRules.value = [];
   createModelRateMultiplierRows.value = [];
@@ -5228,6 +5328,7 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.mcp_xml_inject = group.mcp_xml_inject ?? true;
   editForm.copy_accounts_from_group_ids = []; // 复制账号字段每次编辑时重置为空
   editForm.rpm_limit = group.rpm_limit ?? 0;
+  editForm.pool_capacity_alert_enabled = group.pool_capacity_alert_enabled ?? false;
   editModelRateMultiplierRows.value = modelRateMultipliersToRows(
     group.model_rate_multipliers,
   );
@@ -5259,6 +5360,7 @@ const closeEditModal = () => {
   editForm.video_price_720p = null;
   editForm.video_price_1080p = null;
   editForm.web_search_price_per_call = null;
+  editForm.pool_capacity_alert_enabled = false;
   resetMessagesDispatchFormState(editForm);
   resetModelsListState(editModelsListState);
   editModelRateMultiplierRows.value = [];

@@ -11,14 +11,16 @@ import (
 
 func TestGroupEntityToService_PreservesMessagesDispatchModelConfig(t *testing.T) {
 	group := &dbent.Group{
-		ID:                    1,
-		Name:                  "openai-dispatch",
-		Platform:              service.PlatformOpenAI,
-		Status:                service.StatusActive,
-		SubscriptionType:      service.SubscriptionTypeStandard,
-		RateMultiplier:        1,
-		AllowMessagesDispatch: true,
-		DefaultMappedModel:    "gpt-5.4",
+		ID:                          1,
+		Name:                        "openai-dispatch",
+		Platform:                    service.PlatformOpenAI,
+		Status:                      service.StatusActive,
+		SubscriptionType:            service.SubscriptionTypeStandard,
+		RateMultiplier:              1,
+		AllowMessagesDispatch:       true,
+		DefaultMappedModel:          "gpt-5.4",
+		PoolCapacityAlertEnabled:    true,
+		PoolCapacityAlertGeneration: 17,
 		MessagesDispatchModelConfig: service.OpenAIMessagesDispatchModelConfig{
 			OpusMappedModel:   "gpt-5.4-nano",
 			SonnetMappedModel: "gpt-5.3-codex",
@@ -32,6 +34,8 @@ func TestGroupEntityToService_PreservesMessagesDispatchModelConfig(t *testing.T)
 	got := groupEntityToService(group)
 	require.NotNil(t, got)
 	require.Equal(t, group.MessagesDispatchModelConfig, got.MessagesDispatchModelConfig)
+	require.True(t, got.PoolCapacityAlertEnabled)
+	require.Equal(t, int64(17), got.PoolCapacityAlertGeneration)
 }
 
 func TestAPIKeyRepository_GetByKeyForAuth_PreservesMessagesDispatchModelConfig_SQLite(t *testing.T) {
@@ -50,6 +54,8 @@ func TestAPIKeyRepository_GetByKeyForAuth_PreservesMessagesDispatchModelConfig_S
 		SetSubscriptionType(service.SubscriptionTypeStandard).
 		SetRateMultiplier(1).
 		SetModelRateMultipliers(modelRateMultipliers).
+		SetPoolCapacityAlertEnabled(true).
+		SetPoolCapacityAlertGeneration(23).
 		SetAllowMessagesDispatch(true).
 		SetDefaultMappedModel("gpt-5.4").
 		SetMessagesDispatchModelConfig(service.OpenAIMessagesDispatchModelConfig{
@@ -78,4 +84,6 @@ func TestAPIKeyRepository_GetByKeyForAuth_PreservesMessagesDispatchModelConfig_S
 	require.NotNil(t, got.Group)
 	require.Equal(t, group.MessagesDispatchModelConfig, got.Group.MessagesDispatchModelConfig)
 	require.Equal(t, modelRateMultipliers, got.Group.ModelRateMultipliers)
+	require.True(t, got.Group.PoolCapacityAlertEnabled)
+	require.Equal(t, int64(23), got.Group.PoolCapacityAlertGeneration)
 }

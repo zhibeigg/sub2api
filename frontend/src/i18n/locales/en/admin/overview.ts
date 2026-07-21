@@ -866,6 +866,12 @@ export default {
         privacySetOnlyEnabled: 'Enabled — accounts with unset Privacy will be excluded',
         disabled: 'Disabled'
       },
+      poolCapacityAlert: {
+        title: 'Pool account capacity forecast alert',
+        description: 'Only applies when a request actually hits a pool_mode account. The estimate uses the final group’s average consumption from its latest 50 successful settlements and notifies administrators when the estimated remaining request count falls below 50. This is only an estimate.',
+        enabled: 'Forecast alerts enabled',
+        disabled: 'Off by default'
+      },
       form: {
         name: 'Name',
         description: 'Description',

@@ -17,6 +17,12 @@ type qqBotRepoStub struct {
 	findBoundErr      error
 	activeBound       bool
 	activeBoundErr    error
+	adminRecipients   []QQBotAdminRecipient
+	listRecipientApp  string
+	activeRecipient   QQBotAdminRecipient
+	activeRecipientOK bool
+	getRecipientApp   string
+	getRecipientID    int64
 	createInput       QQBotChallengeCreateInput
 	createRecord      QQBotBindingRecord
 	createCreated     bool
@@ -34,6 +40,15 @@ func (s *qqBotRepoStub) FindBoundEmail(context.Context, string, string) (string,
 }
 func (s *qqBotRepoStub) HasActiveBoundIdentity(context.Context, string, string) (bool, error) {
 	return s.activeBound, s.activeBoundErr
+}
+func (s *qqBotRepoStub) ListActiveAdminC2CRecipients(_ context.Context, botAppID string) ([]QQBotAdminRecipient, error) {
+	s.listRecipientApp = botAppID
+	return append([]QQBotAdminRecipient(nil), s.adminRecipients...), nil
+}
+func (s *qqBotRepoStub) GetActiveAdminC2CRecipient(_ context.Context, botAppID string, identityChannelID int64) (QQBotAdminRecipient, bool, error) {
+	s.getRecipientApp = botAppID
+	s.getRecipientID = identityChannelID
+	return s.activeRecipient, s.activeRecipientOK, nil
 }
 func (s *qqBotRepoStub) CreateChallenge(_ context.Context, input QQBotChallengeCreateInput) (QQBotBindingRecord, bool, error) {
 	s.createInput = input
@@ -121,6 +136,26 @@ func (s *qqBotSettingRepoStub) GetAll(context.Context) (map[string]string, error
 func (s *qqBotSettingRepoStub) Delete(_ context.Context, key string) error {
 	delete(s.values, key)
 	return nil
+}
+
+type qqBotProactiveTransportStub struct {
+	appID       string
+	active      bool
+	sentAppID   string
+	sentOpenID  string
+	sentContent string
+	err         error
+}
+
+func (s *qqBotProactiveTransportStub) ActiveAppID() (string, bool) {
+	return s.appID, s.active
+}
+
+func (s *qqBotProactiveTransportStub) SendProactiveC2C(_ context.Context, botAppID, openID, content string) error {
+	s.sentAppID = botAppID
+	s.sentOpenID = openID
+	s.sentContent = content
+	return s.err
 }
 
 func TestQQBotPrepareBindingHashesTokenAndQueuesVerificationEmail(t *testing.T) {
@@ -267,4 +302,48 @@ func TestQQBotUpdateSettingsNormalizesIDsAndAudits(t *testing.T) {
 	require.False(t, result.ChannelCheckEnabled)
 	require.Equal(t, float64(8.5), repo.settingsAudit["first_bind_bonus"])
 	require.Equal(t, false, repo.settingsAudit["channel_check_enabled"])
+}
+
+func TestQQBotListProactiveAdminRecipientsUsesActiveAppAndHidesOpenID(t *testing.T) {
+	repo := &qqBotRepoStub{adminRecipients: []QQBotAdminRecipient{
+		{IdentityID: 11, IdentityChannelID: 21, ChannelSubject: "c2c:sensitive-openid"},
+		{IdentityID: 0, IdentityChannelID: 22, ChannelSubject: "c2c:invalid"},
+	}}
+	transport := &qqBotProactiveTransportStub{appID: " app-1 ", active: true}
+	svc := NewQQBotService(repo, nil, nil, nil, nil, nil, &config.Config{})
+	svc.SetProactiveC2CTransport(transport)
+
+	recipients, err := svc.ListProactiveAdminRecipients(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "app-1", repo.listRecipientApp)
+	require.Equal(t, []QQBotAdminRecipient{{IdentityID: 11, IdentityChannelID: 21}}, recipients)
+}
+
+func TestQQBotSendProactiveC2CRevalidatesIdentityChannel(t *testing.T) {
+	repo := &qqBotRepoStub{
+		activeRecipient:   QQBotAdminRecipient{IdentityID: 11, IdentityChannelID: 21, ChannelSubject: " c2c:sensitive-openid "},
+		activeRecipientOK: true,
+	}
+	transport := &qqBotProactiveTransportStub{appID: "app-1", active: true}
+	svc := NewQQBotService(repo, nil, nil, nil, nil, nil, &config.Config{})
+	svc.SetProactiveC2CTransport(transport)
+
+	err := svc.SendProactiveC2CToIdentityChannel(t.Context(), 21, " admin alert ")
+	require.NoError(t, err)
+	require.Equal(t, "app-1", repo.getRecipientApp)
+	require.Equal(t, int64(21), repo.getRecipientID)
+	require.Equal(t, "app-1", transport.sentAppID)
+	require.Equal(t, "sensitive-openid", transport.sentOpenID)
+	require.Equal(t, "admin alert", transport.sentContent)
+}
+
+func TestQQBotSendProactiveC2CRejectsStaleIdentityChannel(t *testing.T) {
+	repo := &qqBotRepoStub{activeRecipientOK: false}
+	transport := &qqBotProactiveTransportStub{appID: "app-1", active: true}
+	svc := NewQQBotService(repo, nil, nil, nil, nil, nil, &config.Config{})
+	svc.SetProactiveC2CTransport(transport)
+
+	err := svc.SendProactiveC2CToIdentityChannel(t.Context(), 21, "admin alert")
+	require.ErrorIs(t, err, ErrQQBotRecipientUnavailable)
+	require.Empty(t, transport.sentOpenID)
 }

@@ -39,6 +39,8 @@ type QQBotService struct {
 	billingCache    BillingCache
 	publicBaseURLMu sync.RWMutex
 	publicBaseURL   string
+	transportMu     sync.RWMutex
+	transport       QQBotProactiveC2CTransport
 	now             func() time.Time
 }
 
@@ -82,6 +84,107 @@ func (s *QQBotService) getPublicBaseURL() string {
 	s.publicBaseURLMu.RLock()
 	defer s.publicBaseURLMu.RUnlock()
 	return s.publicBaseURL
+}
+
+func (s *QQBotService) SetProactiveC2CTransport(transport QQBotProactiveC2CTransport) {
+	if s == nil {
+		return
+	}
+	s.transportMu.Lock()
+	s.transport = transport
+	s.transportMu.Unlock()
+}
+
+func (s *QQBotService) proactiveC2CTransport() QQBotProactiveC2CTransport {
+	if s == nil {
+		return nil
+	}
+	s.transportMu.RLock()
+	defer s.transportMu.RUnlock()
+	return s.transport
+}
+
+func (s *QQBotService) ActiveQQBotAppID() (string, bool) {
+	transport := s.proactiveC2CTransport()
+	if transport == nil {
+		return "", false
+	}
+	appID, active := transport.ActiveAppID()
+	appID = strings.TrimSpace(appID)
+	return appID, active && appID != ""
+}
+
+func (s *QQBotService) SendAdminProactiveAlert(ctx context.Context, identityChannelID int64, content string) error {
+	return s.SendProactiveC2CToIdentityChannel(ctx, identityChannelID, content)
+}
+
+func (s *QQBotService) ListProactiveAdminRecipients(ctx context.Context) ([]QQBotAdminRecipient, error) {
+	if s == nil || s.repo == nil {
+		return nil, ErrQQBotNotConfigured
+	}
+	transport := s.proactiveC2CTransport()
+	if transport == nil {
+		return nil, ErrQQBotNotConfigured
+	}
+	botAppID, active := transport.ActiveAppID()
+	botAppID = strings.TrimSpace(botAppID)
+	if !active || botAppID == "" {
+		return nil, ErrQQBotNotConfigured
+	}
+	recipients, err := s.repo.ListActiveAdminC2CRecipients(ctx, botAppID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]QQBotAdminRecipient, 0, len(recipients))
+	for _, recipient := range recipients {
+		if recipient.IdentityID <= 0 || recipient.IdentityChannelID <= 0 {
+			continue
+		}
+		if _, ok := qqBotC2COpenID(recipient.ChannelSubject); !ok {
+			continue
+		}
+		recipient.ChannelSubject = ""
+		result = append(result, recipient)
+	}
+	return result, nil
+}
+
+func (s *QQBotService) SendProactiveC2CToIdentityChannel(ctx context.Context, identityChannelID int64, content string) error {
+	content = strings.TrimSpace(content)
+	if s == nil || s.repo == nil || identityChannelID <= 0 || content == "" {
+		return ErrQQBotInvalidInput
+	}
+	transport := s.proactiveC2CTransport()
+	if transport == nil {
+		return ErrQQBotNotConfigured
+	}
+	botAppID, active := transport.ActiveAppID()
+	botAppID = strings.TrimSpace(botAppID)
+	if !active || botAppID == "" {
+		return ErrQQBotNotConfigured
+	}
+	recipient, found, err := s.repo.GetActiveAdminC2CRecipient(ctx, botAppID, identityChannelID)
+	if err != nil {
+		return err
+	}
+	if !found || recipient.IdentityID <= 0 || recipient.IdentityChannelID != identityChannelID {
+		return ErrQQBotRecipientUnavailable
+	}
+	openID, ok := qqBotC2COpenID(recipient.ChannelSubject)
+	if !ok {
+		return ErrQQBotRecipientUnavailable
+	}
+	return transport.SendProactiveC2C(ctx, botAppID, openID, content)
+}
+
+func qqBotC2COpenID(channelSubject string) (string, bool) {
+	const prefix = "c2c:"
+	channelSubject = strings.TrimSpace(channelSubject)
+	if !strings.HasPrefix(channelSubject, prefix) {
+		return "", false
+	}
+	openID := strings.TrimSpace(strings.TrimPrefix(channelSubject, prefix))
+	return openID, openID != ""
 }
 
 func (s *QQBotService) HasActiveBoundIdentity(ctx context.Context, botAppID, providerSubject string) (bool, error) {

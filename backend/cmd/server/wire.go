@@ -100,6 +100,8 @@ func provideCleanup(
 	openAIImageUploadTemp *service.OpenAIImageUploadTempService,
 	batchImageWorker *service.BatchImageWorkerRuntime,
 	announcementEmailRuntime *service.AnnouncementEmailDispatchRuntime,
+	poolCapacityAlert *service.PoolCapacityAlertService,
+	_ *service.PoolCapacityAlertGatewayBinding,
 	pricing *service.PricingService,
 	emailQueue *service.EmailQueueService,
 	billingCache *service.BillingCacheService,
@@ -277,6 +279,12 @@ func provideCleanup(
 			{"SubscriptionService", func() error {
 				if subscriptionService != nil {
 					subscriptionService.Stop()
+				}
+				return nil
+			}},
+			{"PoolCapacityAlertService", func() error {
+				if poolCapacityAlert != nil {
+					poolCapacityAlert.Stop()
 				}
 				return nil
 			}},

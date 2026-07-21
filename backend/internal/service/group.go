@@ -93,6 +93,11 @@ type Group struct {
 	// 一旦设置即接管该分组用户的限流（覆盖用户级 rpm_limit），可被 user-group rpm_override 进一步覆盖。
 	RPMLimit int
 
+	// PoolCapacityAlertEnabled 控制该分组是否参与池容量告警。
+	// PoolCapacityAlertGeneration 是内部配置代际，开关变化时递增，用于认证缓存传播与一致性判断。
+	PoolCapacityAlertEnabled    bool
+	PoolCapacityAlertGeneration int64
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 

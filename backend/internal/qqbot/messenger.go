@@ -31,6 +31,7 @@ type Messenger interface {
 	Probe(ctx context.Context) (string, error)
 	SendGroup(ctx context.Context, groupID, messageID, eventID, content string, sequence uint32) error
 	SendC2C(ctx context.Context, userID, messageID, eventID, content string, sequence uint32) error
+	SendProactiveC2C(ctx context.Context, userID, content string) error
 	SendChannel(ctx context.Context, channelID, messageID, eventID, content string, sequence uint32) error
 	SendGroupImage(ctx context.Context, groupID, messageID, eventID, imageURL string, sequence uint32) error
 	SendC2CImage(ctx context.Context, userID, messageID, eventID, imageURL string, sequence uint32) error
@@ -143,6 +144,9 @@ func (m *BotGoMessenger) SendGroup(ctx context.Context, groupID, messageID, even
 }
 func (m *BotGoMessenger) SendC2C(ctx context.Context, userID, messageID, eventID, content string, sequence uint32) error {
 	return m.send(ctx, "/v2/users/"+url.PathEscape(userID)+"/messages", messageID, eventID, content, sequence)
+}
+func (m *BotGoMessenger) SendProactiveC2C(ctx context.Context, userID, content string) error {
+	return m.do(ctx, http.MethodPost, "/v2/users/"+url.PathEscape(userID)+"/messages", botGoMessage{Content: content, MsgType: 0}, nil)
 }
 func (m *BotGoMessenger) SendChannel(ctx context.Context, channelID, messageID, eventID, content string, sequence uint32) error {
 	return m.send(ctx, "/channels/"+url.PathEscape(channelID)+"/messages", messageID, eventID, content, sequence)

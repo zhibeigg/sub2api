@@ -46,11 +46,18 @@ type GroupDuplicateRepository interface {
 	CreateFromSource(ctx context.Context, group *Group, sourceGroupID int64) error
 }
 
-// AdminGroupRepository makes the group-duplication write capability an explicit
-// admin-service dependency without widening gateway-only group test doubles.
+type GroupPoolCapacityAlertRepository interface {
+	// UpdateWithPoolCapacityAlert serializes the alert toggle against all other
+	// admin updates so enabled/generation can never be restored from a stale snapshot.
+	UpdateWithPoolCapacityAlert(ctx context.Context, group *Group, enabled *bool) error
+}
+
+// AdminGroupRepository makes admin-only group write capabilities explicit
+// without widening gateway-only group test doubles.
 type AdminGroupRepository interface {
 	GroupRepository
 	GroupDuplicateRepository
+	GroupPoolCapacityAlertRepository
 }
 
 // GroupSortOrderUpdate 分组排序更新

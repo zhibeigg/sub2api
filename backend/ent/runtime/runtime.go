@@ -30,6 +30,9 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/paymentorder"
 	"github.com/Wei-Shaw/sub2api/ent/paymentproviderinstance"
 	"github.com/Wei-Shaw/sub2api/ent/pendingauthsession"
+	"github.com/Wei-Shaw/sub2api/ent/poolcapacityalertdelivery"
+	"github.com/Wei-Shaw/sub2api/ent/poolcapacityalertevent"
+	"github.com/Wei-Shaw/sub2api/ent/poolcapacityalertstate"
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
@@ -1237,6 +1240,14 @@ func init() {
 	groupDescRpmLimit := groupFields[46].Descriptor()
 	// group.DefaultRpmLimit holds the default value on creation for the rpm_limit field.
 	group.DefaultRpmLimit = groupDescRpmLimit.Default.(int)
+	// groupDescPoolCapacityAlertEnabled is the schema descriptor for pool_capacity_alert_enabled field.
+	groupDescPoolCapacityAlertEnabled := groupFields[47].Descriptor()
+	// group.DefaultPoolCapacityAlertEnabled holds the default value on creation for the pool_capacity_alert_enabled field.
+	group.DefaultPoolCapacityAlertEnabled = groupDescPoolCapacityAlertEnabled.Default.(bool)
+	// groupDescPoolCapacityAlertGeneration is the schema descriptor for pool_capacity_alert_generation field.
+	groupDescPoolCapacityAlertGeneration := groupFields[48].Descriptor()
+	// group.DefaultPoolCapacityAlertGeneration holds the default value on creation for the pool_capacity_alert_generation field.
+	group.DefaultPoolCapacityAlertGeneration = groupDescPoolCapacityAlertGeneration.Default.(int64)
 	idempotencyrecordMixin := schema.IdempotencyRecord{}.Mixin()
 	idempotencyrecordMixinFields0 := idempotencyrecordMixin[0].Fields()
 	_ = idempotencyrecordMixinFields0
@@ -1602,6 +1613,172 @@ func init() {
 	pendingauthsessionDescCompletionCodeHash := pendingauthsessionFields[12].Descriptor()
 	// pendingauthsession.DefaultCompletionCodeHash holds the default value on creation for the completion_code_hash field.
 	pendingauthsession.DefaultCompletionCodeHash = pendingauthsessionDescCompletionCodeHash.Default.(string)
+	poolcapacityalertdeliveryFields := schema.PoolCapacityAlertDelivery{}.Fields()
+	_ = poolcapacityalertdeliveryFields
+	// poolcapacityalertdeliveryDescChannel is the schema descriptor for channel field.
+	poolcapacityalertdeliveryDescChannel := poolcapacityalertdeliveryFields[1].Descriptor()
+	// poolcapacityalertdelivery.ChannelValidator is a validator for the "channel" field. It is called by the builders before save.
+	poolcapacityalertdelivery.ChannelValidator = poolcapacityalertdeliveryDescChannel.Validators[0].(func(string) error)
+	// poolcapacityalertdeliveryDescIdentityChannelID is the schema descriptor for identity_channel_id field.
+	poolcapacityalertdeliveryDescIdentityChannelID := poolcapacityalertdeliveryFields[3].Descriptor()
+	// poolcapacityalertdelivery.DefaultIdentityChannelID holds the default value on creation for the identity_channel_id field.
+	poolcapacityalertdelivery.DefaultIdentityChannelID = poolcapacityalertdeliveryDescIdentityChannelID.Default.(int64)
+	// poolcapacityalertdeliveryDescRecipientEmail is the schema descriptor for recipient_email field.
+	poolcapacityalertdeliveryDescRecipientEmail := poolcapacityalertdeliveryFields[4].Descriptor()
+	// poolcapacityalertdelivery.DefaultRecipientEmail holds the default value on creation for the recipient_email field.
+	poolcapacityalertdelivery.DefaultRecipientEmail = poolcapacityalertdeliveryDescRecipientEmail.Default.(string)
+	// poolcapacityalertdelivery.RecipientEmailValidator is a validator for the "recipient_email" field. It is called by the builders before save.
+	poolcapacityalertdelivery.RecipientEmailValidator = poolcapacityalertdeliveryDescRecipientEmail.Validators[0].(func(string) error)
+	// poolcapacityalertdeliveryDescRecipientName is the schema descriptor for recipient_name field.
+	poolcapacityalertdeliveryDescRecipientName := poolcapacityalertdeliveryFields[5].Descriptor()
+	// poolcapacityalertdelivery.DefaultRecipientName holds the default value on creation for the recipient_name field.
+	poolcapacityalertdelivery.DefaultRecipientName = poolcapacityalertdeliveryDescRecipientName.Default.(string)
+	// poolcapacityalertdelivery.RecipientNameValidator is a validator for the "recipient_name" field. It is called by the builders before save.
+	poolcapacityalertdelivery.RecipientNameValidator = poolcapacityalertdeliveryDescRecipientName.Validators[0].(func(string) error)
+	// poolcapacityalertdeliveryDescLocale is the schema descriptor for locale field.
+	poolcapacityalertdeliveryDescLocale := poolcapacityalertdeliveryFields[6].Descriptor()
+	// poolcapacityalertdelivery.DefaultLocale holds the default value on creation for the locale field.
+	poolcapacityalertdelivery.DefaultLocale = poolcapacityalertdeliveryDescLocale.Default.(string)
+	// poolcapacityalertdelivery.LocaleValidator is a validator for the "locale" field. It is called by the builders before save.
+	poolcapacityalertdelivery.LocaleValidator = poolcapacityalertdeliveryDescLocale.Validators[0].(func(string) error)
+	// poolcapacityalertdeliveryDescStatus is the schema descriptor for status field.
+	poolcapacityalertdeliveryDescStatus := poolcapacityalertdeliveryFields[7].Descriptor()
+	// poolcapacityalertdelivery.DefaultStatus holds the default value on creation for the status field.
+	poolcapacityalertdelivery.DefaultStatus = poolcapacityalertdeliveryDescStatus.Default.(string)
+	// poolcapacityalertdelivery.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	poolcapacityalertdelivery.StatusValidator = poolcapacityalertdeliveryDescStatus.Validators[0].(func(string) error)
+	// poolcapacityalertdeliveryDescAttemptCount is the schema descriptor for attempt_count field.
+	poolcapacityalertdeliveryDescAttemptCount := poolcapacityalertdeliveryFields[8].Descriptor()
+	// poolcapacityalertdelivery.DefaultAttemptCount holds the default value on creation for the attempt_count field.
+	poolcapacityalertdelivery.DefaultAttemptCount = poolcapacityalertdeliveryDescAttemptCount.Default.(int)
+	// poolcapacityalertdeliveryDescMaxAttempts is the schema descriptor for max_attempts field.
+	poolcapacityalertdeliveryDescMaxAttempts := poolcapacityalertdeliveryFields[9].Descriptor()
+	// poolcapacityalertdelivery.DefaultMaxAttempts holds the default value on creation for the max_attempts field.
+	poolcapacityalertdelivery.DefaultMaxAttempts = poolcapacityalertdeliveryDescMaxAttempts.Default.(int)
+	// poolcapacityalertdeliveryDescNextAttemptAt is the schema descriptor for next_attempt_at field.
+	poolcapacityalertdeliveryDescNextAttemptAt := poolcapacityalertdeliveryFields[10].Descriptor()
+	// poolcapacityalertdelivery.DefaultNextAttemptAt holds the default value on creation for the next_attempt_at field.
+	poolcapacityalertdelivery.DefaultNextAttemptAt = poolcapacityalertdeliveryDescNextAttemptAt.Default.(func() time.Time)
+	// poolcapacityalertdeliveryDescLeaseOwner is the schema descriptor for lease_owner field.
+	poolcapacityalertdeliveryDescLeaseOwner := poolcapacityalertdeliveryFields[11].Descriptor()
+	// poolcapacityalertdelivery.LeaseOwnerValidator is a validator for the "lease_owner" field. It is called by the builders before save.
+	poolcapacityalertdelivery.LeaseOwnerValidator = poolcapacityalertdeliveryDescLeaseOwner.Validators[0].(func(string) error)
+	// poolcapacityalertdeliveryDescLastErrorClass is the schema descriptor for last_error_class field.
+	poolcapacityalertdeliveryDescLastErrorClass := poolcapacityalertdeliveryFields[13].Descriptor()
+	// poolcapacityalertdelivery.LastErrorClassValidator is a validator for the "last_error_class" field. It is called by the builders before save.
+	poolcapacityalertdelivery.LastErrorClassValidator = poolcapacityalertdeliveryDescLastErrorClass.Validators[0].(func(string) error)
+	// poolcapacityalertdeliveryDescCreatedAt is the schema descriptor for created_at field.
+	poolcapacityalertdeliveryDescCreatedAt := poolcapacityalertdeliveryFields[16].Descriptor()
+	// poolcapacityalertdelivery.DefaultCreatedAt holds the default value on creation for the created_at field.
+	poolcapacityalertdelivery.DefaultCreatedAt = poolcapacityalertdeliveryDescCreatedAt.Default.(func() time.Time)
+	// poolcapacityalertdeliveryDescUpdatedAt is the schema descriptor for updated_at field.
+	poolcapacityalertdeliveryDescUpdatedAt := poolcapacityalertdeliveryFields[17].Descriptor()
+	// poolcapacityalertdelivery.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	poolcapacityalertdelivery.DefaultUpdatedAt = poolcapacityalertdeliveryDescUpdatedAt.Default.(func() time.Time)
+	// poolcapacityalertdelivery.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	poolcapacityalertdelivery.UpdateDefaultUpdatedAt = poolcapacityalertdeliveryDescUpdatedAt.UpdateDefault.(func() time.Time)
+	poolcapacityalerteventFields := schema.PoolCapacityAlertEvent{}.Fields()
+	_ = poolcapacityalerteventFields
+	// poolcapacityalerteventDescGroupGeneration is the schema descriptor for group_generation field.
+	poolcapacityalerteventDescGroupGeneration := poolcapacityalerteventFields[3].Descriptor()
+	// poolcapacityalertevent.DefaultGroupGeneration holds the default value on creation for the group_generation field.
+	poolcapacityalertevent.DefaultGroupGeneration = poolcapacityalerteventDescGroupGeneration.Default.(int64)
+	// poolcapacityalerteventDescGroupName is the schema descriptor for group_name field.
+	poolcapacityalerteventDescGroupName := poolcapacityalerteventFields[8].Descriptor()
+	// poolcapacityalertevent.DefaultGroupName holds the default value on creation for the group_name field.
+	poolcapacityalertevent.DefaultGroupName = poolcapacityalerteventDescGroupName.Default.(string)
+	// poolcapacityalertevent.GroupNameValidator is a validator for the "group_name" field. It is called by the builders before save.
+	poolcapacityalertevent.GroupNameValidator = poolcapacityalerteventDescGroupName.Validators[0].(func(string) error)
+	// poolcapacityalerteventDescAccountName is the schema descriptor for account_name field.
+	poolcapacityalerteventDescAccountName := poolcapacityalerteventFields[9].Descriptor()
+	// poolcapacityalertevent.DefaultAccountName holds the default value on creation for the account_name field.
+	poolcapacityalertevent.DefaultAccountName = poolcapacityalerteventDescAccountName.Default.(string)
+	// poolcapacityalertevent.AccountNameValidator is a validator for the "account_name" field. It is called by the builders before save.
+	poolcapacityalertevent.AccountNameValidator = poolcapacityalerteventDescAccountName.Validators[0].(func(string) error)
+	// poolcapacityalerteventDescAPIKeyName is the schema descriptor for api_key_name field.
+	poolcapacityalerteventDescAPIKeyName := poolcapacityalerteventFields[10].Descriptor()
+	// poolcapacityalertevent.DefaultAPIKeyName holds the default value on creation for the api_key_name field.
+	poolcapacityalertevent.DefaultAPIKeyName = poolcapacityalerteventDescAPIKeyName.Default.(string)
+	// poolcapacityalertevent.APIKeyNameValidator is a validator for the "api_key_name" field. It is called by the builders before save.
+	poolcapacityalertevent.APIKeyNameValidator = poolcapacityalerteventDescAPIKeyName.Validators[0].(func(string) error)
+	// poolcapacityalerteventDescUserEmail is the schema descriptor for user_email field.
+	poolcapacityalerteventDescUserEmail := poolcapacityalerteventFields[11].Descriptor()
+	// poolcapacityalertevent.DefaultUserEmail holds the default value on creation for the user_email field.
+	poolcapacityalertevent.DefaultUserEmail = poolcapacityalerteventDescUserEmail.Default.(string)
+	// poolcapacityalertevent.UserEmailValidator is a validator for the "user_email" field. It is called by the builders before save.
+	poolcapacityalertevent.UserEmailValidator = poolcapacityalerteventDescUserEmail.Validators[0].(func(string) error)
+	// poolcapacityalerteventDescThresholdRequests is the schema descriptor for threshold_requests field.
+	poolcapacityalerteventDescThresholdRequests := poolcapacityalerteventFields[13].Descriptor()
+	// poolcapacityalertevent.DefaultThresholdRequests holds the default value on creation for the threshold_requests field.
+	poolcapacityalertevent.DefaultThresholdRequests = poolcapacityalerteventDescThresholdRequests.Default.(int64)
+	// poolcapacityalerteventDescSampleCount is the schema descriptor for sample_count field.
+	poolcapacityalerteventDescSampleCount := poolcapacityalerteventFields[22].Descriptor()
+	// poolcapacityalertevent.DefaultSampleCount holds the default value on creation for the sample_count field.
+	poolcapacityalertevent.DefaultSampleCount = poolcapacityalerteventDescSampleCount.Default.(int)
+	// poolcapacityalerteventDescBottleneck is the schema descriptor for bottleneck field.
+	poolcapacityalerteventDescBottleneck := poolcapacityalerteventFields[23].Descriptor()
+	// poolcapacityalertevent.DefaultBottleneck holds the default value on creation for the bottleneck field.
+	poolcapacityalertevent.DefaultBottleneck = poolcapacityalerteventDescBottleneck.Default.(string)
+	// poolcapacityalertevent.BottleneckValidator is a validator for the "bottleneck" field. It is called by the builders before save.
+	poolcapacityalertevent.BottleneckValidator = poolcapacityalerteventDescBottleneck.Validators[0].(func(string) error)
+	// poolcapacityalerteventDescQqbotAppID is the schema descriptor for qqbot_app_id field.
+	poolcapacityalerteventDescQqbotAppID := poolcapacityalerteventFields[24].Descriptor()
+	// poolcapacityalertevent.DefaultQqbotAppID holds the default value on creation for the qqbot_app_id field.
+	poolcapacityalertevent.DefaultQqbotAppID = poolcapacityalerteventDescQqbotAppID.Default.(string)
+	// poolcapacityalertevent.QqbotAppIDValidator is a validator for the "qqbot_app_id" field. It is called by the builders before save.
+	poolcapacityalertevent.QqbotAppIDValidator = poolcapacityalerteventDescQqbotAppID.Validators[0].(func(string) error)
+	// poolcapacityalerteventDescCreatedAt is the schema descriptor for created_at field.
+	poolcapacityalerteventDescCreatedAt := poolcapacityalerteventFields[25].Descriptor()
+	// poolcapacityalertevent.DefaultCreatedAt holds the default value on creation for the created_at field.
+	poolcapacityalertevent.DefaultCreatedAt = poolcapacityalerteventDescCreatedAt.Default.(func() time.Time)
+	poolcapacityalertstateFields := schema.PoolCapacityAlertState{}.Fields()
+	_ = poolcapacityalertstateFields
+	// poolcapacityalertstateDescGroupGeneration is the schema descriptor for group_generation field.
+	poolcapacityalertstateDescGroupGeneration := poolcapacityalertstateFields[1].Descriptor()
+	// poolcapacityalertstate.DefaultGroupGeneration holds the default value on creation for the group_generation field.
+	poolcapacityalertstate.DefaultGroupGeneration = poolcapacityalertstateDescGroupGeneration.Default.(int64)
+	// poolcapacityalertstateDescStatus is the schema descriptor for status field.
+	poolcapacityalertstateDescStatus := poolcapacityalertstateFields[6].Descriptor()
+	// poolcapacityalertstate.DefaultStatus holds the default value on creation for the status field.
+	poolcapacityalertstate.DefaultStatus = poolcapacityalertstateDescStatus.Default.(string)
+	// poolcapacityalertstate.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	poolcapacityalertstate.StatusValidator = poolcapacityalertstateDescStatus.Validators[0].(func(string) error)
+	// poolcapacityalertstateDescEpisode is the schema descriptor for episode field.
+	poolcapacityalertstateDescEpisode := poolcapacityalertstateFields[7].Descriptor()
+	// poolcapacityalertstate.DefaultEpisode holds the default value on creation for the episode field.
+	poolcapacityalertstate.DefaultEpisode = poolcapacityalertstateDescEpisode.Default.(int64)
+	// poolcapacityalertstateDescAvgAccountCost is the schema descriptor for avg_account_cost field.
+	poolcapacityalertstateDescAvgAccountCost := poolcapacityalertstateFields[12].Descriptor()
+	// poolcapacityalertstate.DefaultAvgAccountCost holds the default value on creation for the avg_account_cost field.
+	poolcapacityalertstate.DefaultAvgAccountCost = poolcapacityalertstateDescAvgAccountCost.Default.(float64)
+	// poolcapacityalertstateDescAvgActualCost is the schema descriptor for avg_actual_cost field.
+	poolcapacityalertstateDescAvgActualCost := poolcapacityalertstateFields[13].Descriptor()
+	// poolcapacityalertstate.DefaultAvgActualCost holds the default value on creation for the avg_actual_cost field.
+	poolcapacityalertstate.DefaultAvgActualCost = poolcapacityalertstateDescAvgActualCost.Default.(float64)
+	// poolcapacityalertstateDescSampleCount is the schema descriptor for sample_count field.
+	poolcapacityalertstateDescSampleCount := poolcapacityalertstateFields[14].Descriptor()
+	// poolcapacityalertstate.DefaultSampleCount holds the default value on creation for the sample_count field.
+	poolcapacityalertstate.DefaultSampleCount = poolcapacityalertstateDescSampleCount.Default.(int)
+	// poolcapacityalertstateDescBottleneck is the schema descriptor for bottleneck field.
+	poolcapacityalertstateDescBottleneck := poolcapacityalertstateFields[15].Descriptor()
+	// poolcapacityalertstate.DefaultBottleneck holds the default value on creation for the bottleneck field.
+	poolcapacityalertstate.DefaultBottleneck = poolcapacityalertstateDescBottleneck.Default.(string)
+	// poolcapacityalertstate.BottleneckValidator is a validator for the "bottleneck" field. It is called by the builders before save.
+	poolcapacityalertstate.BottleneckValidator = poolcapacityalertstateDescBottleneck.Validators[0].(func(string) error)
+	// poolcapacityalertstateDescLastEvaluatedAt is the schema descriptor for last_evaluated_at field.
+	poolcapacityalertstateDescLastEvaluatedAt := poolcapacityalertstateFields[16].Descriptor()
+	// poolcapacityalertstate.DefaultLastEvaluatedAt holds the default value on creation for the last_evaluated_at field.
+	poolcapacityalertstate.DefaultLastEvaluatedAt = poolcapacityalertstateDescLastEvaluatedAt.Default.(func() time.Time)
+	// poolcapacityalertstateDescCreatedAt is the schema descriptor for created_at field.
+	poolcapacityalertstateDescCreatedAt := poolcapacityalertstateFields[18].Descriptor()
+	// poolcapacityalertstate.DefaultCreatedAt holds the default value on creation for the created_at field.
+	poolcapacityalertstate.DefaultCreatedAt = poolcapacityalertstateDescCreatedAt.Default.(func() time.Time)
+	// poolcapacityalertstateDescUpdatedAt is the schema descriptor for updated_at field.
+	poolcapacityalertstateDescUpdatedAt := poolcapacityalertstateFields[19].Descriptor()
+	// poolcapacityalertstate.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	poolcapacityalertstate.DefaultUpdatedAt = poolcapacityalertstateDescUpdatedAt.Default.(func() time.Time)
+	// poolcapacityalertstate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	poolcapacityalertstate.UpdateDefaultUpdatedAt = poolcapacityalertstateDescUpdatedAt.UpdateDefault.(func() time.Time)
 	promocodeFields := schema.PromoCode{}.Fields()
 	_ = promocodeFields
 	// promocodeDescCode is the schema descriptor for code field.

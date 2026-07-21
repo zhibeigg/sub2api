@@ -194,11 +194,12 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 	}
 
 	if cmd.APIKeyQuotaCost > 0 {
-		exhausted, err := incrementUsageBillingAPIKeyQuota(ctx, tx, cmd.APIKeyID, cmd.APIKeyQuotaCost, cmd.StrictFunds)
+		exhausted, quotaState, err := incrementUsageBillingAPIKeyQuota(ctx, tx, cmd.APIKeyID, cmd.APIKeyQuotaCost, cmd.StrictFunds)
 		if err != nil {
 			return err
 		}
 		result.APIKeyQuotaExhausted = exhausted
+		result.APIKeyQuotaState = quotaState
 	}
 
 	if cmd.APIKeyRateLimitCost > 0 {
@@ -465,9 +466,10 @@ func userExistsForBilling(ctx context.Context, tx *sql.Tx, userID int64) (bool, 
 	return true, nil
 }
 
-func incrementUsageBillingAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID int64, amount float64, strictMode ...bool) (bool, error) {
+func incrementUsageBillingAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID int64, amount float64, strictMode ...bool) (bool, *service.APIKeyQuotaUsageState, error) {
 	strict := len(strictMode) > 0 && strictMode[0]
 	var exhausted bool
+	state := &service.APIKeyQuotaUsageState{}
 	err := tx.QueryRowContext(ctx, `
 		UPDATE api_keys
 		SET quota_used = quota_used + $1,
@@ -482,23 +484,25 @@ func incrementUsageBillingAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID 
 			updated_at = NOW()
 		WHERE id = $2 AND deleted_at IS NULL
 			AND (NOT $5 OR quota <= 0 OR quota_used + $1 <= quota)
-		RETURNING quota > 0 AND quota_used >= quota AND quota_used - $1 < quota
-	`, amount, apiKeyID, service.StatusAPIKeyActive, service.StatusAPIKeyQuotaExhausted, strict).Scan(&exhausted)
+		RETURNING quota > 0 AND quota_used >= quota AND quota_used - $1 < quota,
+		          quota_used,quota,key,status
+	`, amount, apiKeyID, service.StatusAPIKeyActive, service.StatusAPIKeyQuotaExhausted, strict).
+		Scan(&exhausted, &state.QuotaUsed, &state.Quota, &state.Key, &state.Status)
 	if errors.Is(err, sql.ErrNoRows) {
 		if strict {
 			var exists int
 			if existsErr := tx.QueryRowContext(ctx, `SELECT 1 FROM api_keys WHERE id = $1 AND deleted_at IS NULL`, apiKeyID).Scan(&exists); existsErr == nil {
-				return false, service.ErrAdobeMediaInsufficientFunds
+				return false, nil, service.ErrAdobeMediaInsufficientFunds
 			} else if !errors.Is(existsErr, sql.ErrNoRows) {
-				return false, existsErr
+				return false, nil, existsErr
 			}
 		}
-		return false, service.ErrAPIKeyNotFound
+		return false, nil, service.ErrAPIKeyNotFound
 	}
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
-	return exhausted, nil
+	return exhausted, state, nil
 }
 
 func incrementUsageBillingAPIKeyRateLimit(ctx context.Context, tx *sql.Tx, apiKeyID int64, cost float64) error {
