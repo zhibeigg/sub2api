@@ -360,7 +360,7 @@ func playgroundModelCapabilities(group *Group, model string) []string {
 			return nil
 		}
 		return []string{PlaygroundCapabilityChat}
-	case PlatformAnthropic, PlatformGemini, PlatformAntigravity, PlatformCursor, PlatformKiro:
+	case PlatformAnthropic, PlatformGemini, PlatformAntigravity, PlatformCursor, PlatformOpenCode, PlatformKiro:
 		if isImage || isVideo {
 			return nil
 		}

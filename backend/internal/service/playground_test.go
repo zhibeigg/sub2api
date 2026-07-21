@@ -97,6 +97,22 @@ func TestPlaygroundServiceGetModelOptionsSupportsLegacyGroupAndCustomList(t *tes
 	}, options)
 }
 
+func TestPlaygroundServiceGetModelOptionsSupportsOpenCodeKimiModels(t *testing.T) {
+	groupID := int64(8)
+	group := &Group{ID: groupID, Name: "kimi", Platform: PlatformOpenCode, Status: StatusActive, Hydrated: true}
+	svc := NewPlaygroundService(
+		playgroundAPIKeyReaderStub{key: &APIKey{ID: 4, UserID: 3, GroupID: &groupID, Group: group}},
+		&playgroundModelListerStub{byGroup: map[int64][]string{groupID: {"kimi-k3", "kimi-k2.7-code"}}},
+	)
+
+	options, err := svc.GetModelOptions(context.Background(), 3, 4)
+	require.NoError(t, err)
+	require.Equal(t, []PlaygroundModelOption{
+		{ID: "8::kimi-k2.7-code", GroupID: groupID, GroupName: "kimi", GroupPriority: 0, Model: "kimi-k2.7-code", Platform: PlatformOpenCode, Capabilities: []string{"chat"}, Features: PlaygroundModelFeatures{WebFetch: true}},
+		{ID: "8::kimi-k3", GroupID: groupID, GroupName: "kimi", GroupPriority: 0, Model: "kimi-k3", Platform: PlatformOpenCode, Capabilities: []string{"chat"}, Features: PlaygroundModelFeatures{WebFetch: true}},
+	}, options)
+}
+
 func TestPlaygroundServiceGetModelOptionsDoesNotSynthesizePlatformDefaults(t *testing.T) {
 	groupID := int64(9)
 	group := &Group{ID: groupID, Name: "empty", Platform: PlatformAnthropic, Status: StatusActive, Hydrated: true}
