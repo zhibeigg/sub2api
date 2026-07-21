@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -25,38 +23,25 @@ func (h *OpenAIGatewayHandler) resolveAndApplyImageGroup(c *gin.Context, apiKey 
 	}
 	if !apiKey.HasAllowedGroupBindingByUserRestriction() {
 		middleware2.AbortWithError(c, http.StatusForbidden, "GROUP_NOT_ALLOWED", "当前用户不允许使用任何已绑定的标准分组")
-		return apiKey, false
+		return nil, false
 	}
 	group := h.gatewayService.ResolveEffectiveImageGroupBinding(c.Request.Context(), apiKey, model, endpoint, capability)
 	if group == nil {
 		return apiKey, true
 	}
 	selected := cloneAPIKeyWithGroup(apiKey, group)
-	middleware2.SetOpsFallbackAPIKey(c, selected)
-	c.Set(string(middleware2.ContextKeyAPIKey), selected)
-	ctx := context.WithValue(c.Request.Context(), ctxkey.Group, group)
-	c.Request = c.Request.WithContext(ctx)
-
-	if h.cfg != nil && h.cfg.RunMode == config.RunModeSimple {
-		c.Set(string(middleware2.ContextKeySubscription), nil)
-		return selected, true
+	groupChanged := !sameAPIKeyGroup(apiKey, selected)
+	if err := applyResolvedAPIKeyContext(c, apiKey, selected, h.subscriptionService, h.cfg); err != nil {
+		status, code, message := effectiveGroupSubscriptionErrorDetails(err)
+		h.errorResponse(c, status, code, message)
+		return nil, false
 	}
-	if h.subscriptionService == nil || selected.User == nil {
-		// Production wiring always supplies the service. Preserve lightweight
-		// handler tests that intentionally omit repository-backed dependencies.
-		if apiKey.GroupID != nil && selected.GroupID != nil && *apiKey.GroupID != *selected.GroupID {
-			c.Set(string(middleware2.ContextKeySubscription), nil)
-		}
+	if !groupChanged || h.subscriptionService == nil {
 		return selected, true
 	}
 
-	subscription, err := h.subscriptionService.GetActiveSubscription(c.Request.Context(), selected.User.ID, group.ID)
-	if err != nil {
-		c.Set(string(middleware2.ContextKeySubscription), nil)
-		if group.IsSubscriptionType() {
-			h.errorResponse(c, http.StatusForbidden, "SUBSCRIPTION_NOT_FOUND", "No active subscription found for this group")
-			return selected, false
-		}
+	subscription, ok := middleware2.GetSubscriptionFromContext(c)
+	if !ok || subscription == nil {
 		return selected, true
 	}
 	needsMaintenance, validateErr := h.subscriptionService.ValidateAndCheckLimits(subscription, group)
@@ -64,7 +49,7 @@ func (h *OpenAIGatewayHandler) resolveAndApplyImageGroup(c *gin.Context, apiKey 
 		refreshed, maintenanceErr := h.subscriptionService.EnsureWindowMaintenance(c.Request.Context(), subscription)
 		if maintenanceErr != nil {
 			h.errorResponse(c, http.StatusInternalServerError, "SUBSCRIPTION_MAINTENANCE_FAILED", "Failed to maintain subscription usage windows")
-			return selected, false
+			return nil, false
 		}
 		subscription = refreshed
 		_, validateErr = h.subscriptionService.ValidateAndCheckLimits(subscription, group)
@@ -77,7 +62,7 @@ func (h *OpenAIGatewayHandler) resolveAndApplyImageGroup(c *gin.Context, apiKey 
 			code = "USAGE_LIMIT_EXCEEDED"
 		}
 		h.errorResponse(c, status, code, validateErr.Error())
-		return selected, false
+		return nil, false
 	}
 	c.Set(string(middleware2.ContextKeySubscription), subscription)
 	return selected, true

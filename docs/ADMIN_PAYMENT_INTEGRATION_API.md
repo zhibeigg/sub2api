@@ -12,7 +12,7 @@
 - 用户查询
 - 人工余额修正
 - 前端购买页参数透传
-- 多分组共享额度订阅：套餐使用 `group_ids`（兼容 `group_id`），并支持 `daily_limit_usd`、`weekly_limit_usd`、`monthly_limit_usd`
+- 多分组共享额度订阅：套餐使用 `group_ids`（兼容 `group_id`），并支持 `daily_limit_usd`、`weekly_limit_usd`、`monthly_limit_usd` 与可选 `concurrency_limit`
 - 管理员订阅分配：`POST /api/v1/admin/subscriptions/assign` 可传 `plan_id`，旧 `group_id` 格式继续兼容
 - 独立禁购设置：`balance_disabled` 与 `subscription_disabled`；被禁用类型的新订单会由后端拒绝
 - 内置支付设置与服务商实例管理，包括 EasyPay V1 MD5 / 彩虹易支付 2.0 RSA-SHA256、`qqpay`，以及微信 JSAPI 的 `mp`/`wecom` 双 OAuth 模式
@@ -215,8 +215,12 @@ V2 请求结构示例（仅占位符，不是可用密钥）：
 - `PUT /api/v1/admin/payment/plans/:id`
 
 `plan_type` 支持：
-- `subscription`：`group_ids` 必须且只能包含一个 `subscription` 分组；套餐级 `daily_limit_usd`、`weekly_limit_usd`、`monthly_limit_usd` 会被清空，用户订阅继续读取分组自身限额。
-- `standard_quota`：`group_ids` 可包含一个或多个 `standard`（余额）分组；至少设置一个正数套餐限额，所有分组共享同一订阅实例和用量。
+- `subscription`：`group_ids` 必须且只能包含一个 `subscription` 分组；套餐级 `daily_limit_usd`、`weekly_limit_usd`、`monthly_limit_usd` 与 `concurrency_limit` 会被清空，用户订阅继续读取分组自身限额。
+- `standard_quota`：`group_ids` 可包含一个或多个 `standard`（余额）分组；至少设置一个正数套餐限额，所有分组共享同一订阅实例、用量和可选并发池。
+
+`concurrency_limit` 仅接受 `1`–`2147483647` 的正整数或 `null`。`null` / 省略表示套餐不额外限制并发；更新套餐时传 `concurrency_limit_set: true` 可把 `concurrency_limit: null` 解释为显式清除，而不是“未修改”。`quota_limits_set` 对日/周/月额度保持相同的显式更新语义。
+
+运行时达到订阅实例并发上限时返回 HTTP `429`，并设置 `Retry-After: 1` 与 `X-Sub2API-Error-Code: SUBSCRIPTION_CONCURRENCY_LIMIT_EXCEEDED`；OpenAI 兼容错误体使用 `rate_limit_error`。Responses WebSocket 空闲连接不占套餐槽位，每个 `response.create` turn 独立抢占；槽位不足时以 `1013 Try Again Later` 关闭，连接内切换模型会以 `1008 Policy Violation` 拒绝，客户端需为新模型重新连接。由于 Batch Image 当前只支持余额预冻结/结算，携带有效 `standard_quota` 订阅的 `POST /v1/images/batches` 会 fail-closed 返回 HTTP `409` 和 `BATCH_IMAGE_SUBSCRIPTION_UNSUPPORTED`，不会退回余额计费。
 
 标准共享额度套餐示例：
 ```json
@@ -228,6 +232,7 @@ V2 请求结构示例（仅占位符，不是可用密钥）：
   "daily_limit_usd": 5,
   "weekly_limit_usd": 25,
   "monthly_limit_usd": 80,
+  "concurrency_limit": 4,
   "description": "标准分组共享套餐额度",
   "price": 19.9,
   "validity_days": 30,
@@ -248,6 +253,7 @@ V2 请求结构示例（仅占位符，不是可用密钥）：
   "daily_limit_usd": null,
   "weekly_limit_usd": null,
   "monthly_limit_usd": null,
+  "concurrency_limit": null,
   "description": "使用订阅分组自身限额",
   "price": 9.9,
   "validity_days": 30,
@@ -258,7 +264,7 @@ V2 请求结构示例（仅占位符，不是可用密钥）：
 }
 ```
 
-运行时规则：标准分组存在有效 `standard_quota` 订阅时优先消耗套餐额度且不扣余额；套餐额度耗尽会直接拒绝请求，不会静默改扣余额；套餐过期后，公开标准分组恢复余额计费。旧版多订阅分组套餐会标记为 `legacy_shared_subscription` 并下架，已有订阅和已创建订单继续按快照履约。
+运行时规则：标准分组存在有效 `standard_quota` 订阅时优先消耗套餐额度且不扣余额；套餐额度耗尽会直接拒绝请求，不会静默改扣余额。正整数 `concurrency_limit` 按 `user_subscriptions.id` 订阅实例计数，同一实例的多个标准分组共享并发池，并与用户全局并发、上游账号并发同时生效；`null` 表示不增加套餐层限制。支付下单、管理员分配和用户订阅响应都会携带并发快照，套餐后续编辑不追溯已有实例；订阅列表/详情必须读取实例的 `concurrency_limit`，不能用当前套餐值替代。旧订单或旧订阅缺失字段时按 `null` 兼容。套餐过期后，公开标准分组恢复余额计费。旧版多订阅分组套餐会标记为 `legacy_shared_subscription` 并下架，已有订阅和已创建订单继续按快照履约。
 
 ### 管理员订单报表 API
 
@@ -612,8 +618,12 @@ Plan endpoints:
 - `PUT /api/v1/admin/payment/plans/:id`
 
 Supported `plan_type` values:
-- `subscription`: `group_ids` must contain exactly one `subscription` group. Plan-level daily, weekly, and monthly limits are cleared, and subscriptions use the group's native limits.
-- `standard_quota`: `group_ids` may contain one or more `standard` balance groups. At least one positive plan limit is required, and all included groups share one subscription instance and usage counter.
+- `subscription`: `group_ids` must contain exactly one `subscription` group. Plan-level daily, weekly, monthly, and concurrency limits are cleared, and subscriptions use the group's native limits.
+- `standard_quota`: `group_ids` may contain one or more `standard` balance groups. At least one positive plan limit is required, and all included groups share one subscription instance, usage counter, and optional concurrency pool.
+
+`concurrency_limit` accepts an integer from `1` through `2147483647`, or `null`, only. `null` / omission means the plan adds no concurrency restriction. On plan updates, send `concurrency_limit_set: true` with `concurrency_limit: null` to explicitly clear the value instead of leaving it unchanged. `quota_limits_set` keeps the same explicit-update behavior for daily, weekly, and monthly limits.
+
+At runtime, a saturated subscription-instance pool returns HTTP `429` with `Retry-After: 1` and `X-Sub2API-Error-Code: SUBSCRIPTION_CONCURRENCY_LIMIT_EXCEEDED`; OpenAI-compatible error bodies use `rate_limit_error`. Idle Responses WebSocket connections do not hold a plan slot: each `response.create` turn acquires its own slot. Capacity rejection closes with `1013 Try Again Later`, while switching models on an existing connection is rejected with `1008 Policy Violation`; reconnect for the new model. Because Batch Image currently supports balance hold/settlement only, `POST /v1/images/batches` with an active `standard_quota` subscription fails closed with HTTP `409` and `BATCH_IMAGE_SUBSCRIPTION_UNSUPPORTED` instead of falling back to balance billing.
 
 Standard shared-quota example:
 ```json
@@ -625,6 +635,7 @@ Standard shared-quota example:
   "daily_limit_usd": 5,
   "weekly_limit_usd": 25,
   "monthly_limit_usd": 80,
+  "concurrency_limit": 4,
   "description": "Shared quota across standard groups",
   "price": 19.9,
   "validity_days": 30,
@@ -645,6 +656,7 @@ Native subscription-group example:
   "daily_limit_usd": null,
   "weekly_limit_usd": null,
   "monthly_limit_usd": null,
+  "concurrency_limit": null,
   "description": "Uses the subscription group's own limits",
   "price": 9.9,
   "validity_days": 30,
@@ -655,7 +667,7 @@ Native subscription-group example:
 }
 ```
 
-Runtime behavior: while an active `standard_quota` subscription covers a standard group, plan quota takes priority and the user's balance is not charged. Exhausted plan quota rejects the request instead of silently falling back to balance. After expiration, public standard groups return to balance billing. Legacy multi-subscription-group plans are marked `legacy_shared_subscription` and taken off sale, while existing subscriptions and already-created orders continue from their snapshots.
+Runtime behavior: while an active `standard_quota` subscription covers a standard group, plan quota takes priority and the user's balance is not charged. Exhausted plan quota rejects the request instead of silently falling back to balance. A positive `concurrency_limit` is counted by `user_subscriptions.id`; all standard groups in the same instance share the pool, and user-global plus upstream-account concurrency limits still apply independently. `null` adds no plan-level restriction. Payment creation, admin assignment, and user-subscription responses carry the concurrency snapshot. Later plan edits are not retroactive, so subscription lists/details must read the instance `concurrency_limit` instead of the current plan value. Missing fields in old orders or subscriptions are treated as `null`. After expiration, public standard groups return to balance billing. Legacy multi-subscription-group plans are marked `legacy_shared_subscription` and taken off sale, while existing subscriptions and already-created orders continue from their snapshots.
 
 ### Admin order reporting APIs
 

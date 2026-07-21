@@ -7,6 +7,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -37,12 +38,78 @@ type stubConcurrencyCacheForTest struct {
 
 	// 记录调用
 	releasedAccountIDs       []int64
+	releasedUserIDs          []int64
 	releasedRequestIDs       []string
 	loadBatchCalls           atomic.Int64
 	trackedAPIKeyIDs         []int64
 	trackedAPIKeyRequestIDs  []string
 	releasedAPIKeyIDs        []int64
 	releasedAPIKeyRequestIDs []string
+}
+
+type subscriptionConcurrencyCacheForTest struct {
+	stubConcurrencyCacheForTest
+	subscriptionAcquireResult bool
+	subscriptionAcquireErr    error
+	subscriptionAcquireFn     func(context.Context, int64, int, string) (bool, error)
+	subscriptionRefreshResult bool
+	subscriptionRefreshErr    error
+	subscriptionRefreshFn     func(context.Context, int64, string) (bool, error)
+	subscriptionReleaseErr    error
+	subscriptionReleaseFn     func(context.Context, int64, string) error
+	subscriptionWaitAllowed   bool
+	subscriptionWaitErr       error
+
+	mu                         sync.Mutex
+	acquiredSubscriptionIDs    []int64
+	releasedSubscriptionIDs    []int64
+	subscriptionWaitIncrements int
+	subscriptionWaitDecrements int
+	subscriptionAcquireCalls   atomic.Int64
+	subscriptionRefreshCalls   atomic.Int64
+}
+
+func (c *subscriptionConcurrencyCacheForTest) AcquireSubscriptionSlot(ctx context.Context, subscriptionID int64, maxConcurrency int, requestID string) (bool, error) {
+	c.subscriptionAcquireCalls.Add(1)
+	c.mu.Lock()
+	c.acquiredSubscriptionIDs = append(c.acquiredSubscriptionIDs, subscriptionID)
+	c.mu.Unlock()
+	if c.subscriptionAcquireFn != nil {
+		return c.subscriptionAcquireFn(ctx, subscriptionID, maxConcurrency, requestID)
+	}
+	return c.subscriptionAcquireResult, c.subscriptionAcquireErr
+}
+
+func (c *subscriptionConcurrencyCacheForTest) RefreshSubscriptionSlot(ctx context.Context, subscriptionID int64, requestID string) (bool, error) {
+	c.subscriptionRefreshCalls.Add(1)
+	if c.subscriptionRefreshFn != nil {
+		return c.subscriptionRefreshFn(ctx, subscriptionID, requestID)
+	}
+	return c.subscriptionRefreshResult, c.subscriptionRefreshErr
+}
+
+func (c *subscriptionConcurrencyCacheForTest) ReleaseSubscriptionSlot(ctx context.Context, subscriptionID int64, requestID string) error {
+	c.mu.Lock()
+	c.releasedSubscriptionIDs = append(c.releasedSubscriptionIDs, subscriptionID)
+	c.mu.Unlock()
+	if c.subscriptionReleaseFn != nil {
+		return c.subscriptionReleaseFn(ctx, subscriptionID, requestID)
+	}
+	return c.subscriptionReleaseErr
+}
+
+func (c *subscriptionConcurrencyCacheForTest) IncrementSubscriptionWaitCount(_ context.Context, _ int64, _ int) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.subscriptionWaitIncrements++
+	return c.subscriptionWaitAllowed, c.subscriptionWaitErr
+}
+
+func (c *subscriptionConcurrencyCacheForTest) DecrementSubscriptionWaitCount(_ context.Context, _ int64) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.subscriptionWaitDecrements++
+	return nil
 }
 
 type ingressLeaseCacheForTest struct {
@@ -85,6 +152,7 @@ func (c *ingressLeaseCacheForTest) ReleaseOpenAIWSIngressLease(ctx context.Conte
 }
 
 var _ ConcurrencyCache = (*stubConcurrencyCacheForTest)(nil)
+var _ SubscriptionConcurrencyCache = (*subscriptionConcurrencyCacheForTest)(nil)
 var _ OpenAIWSIngressLeaseCache = (*ingressLeaseCacheForTest)(nil)
 
 func (c *stubConcurrencyCacheForTest) AcquireAccountSlot(_ context.Context, _ int64, _ int, _ string) (bool, error) {
@@ -120,7 +188,9 @@ func (c *stubConcurrencyCacheForTest) GetAccountWaitingCount(_ context.Context, 
 func (c *stubConcurrencyCacheForTest) AcquireUserSlot(_ context.Context, _ int64, _ int, _ string) (bool, error) {
 	return c.acquireResult, c.acquireErr
 }
-func (c *stubConcurrencyCacheForTest) ReleaseUserSlot(_ context.Context, _ int64, _ string) error {
+func (c *stubConcurrencyCacheForTest) ReleaseUserSlot(_ context.Context, userID int64, requestID string) error {
+	c.releasedUserIDs = append(c.releasedUserIDs, userID)
+	c.releasedRequestIDs = append(c.releasedRequestIDs, requestID)
 	return c.releaseErr
 }
 func (c *stubConcurrencyCacheForTest) GetUserConcurrency(_ context.Context, _ int64) (int, error) {
@@ -267,6 +337,241 @@ func TestAcquireUserSlot_UnlimitedConcurrency(t *testing.T) {
 	result, err := svc.AcquireUserSlot(context.Background(), 1, 0)
 	require.NoError(t, err)
 	require.True(t, result.Acquired)
+}
+
+func TestAcquireUserAndSubscriptionSlots(t *testing.T) {
+	t.Run("acquires and releases both scopes", func(t *testing.T) {
+		cache := &subscriptionConcurrencyCacheForTest{
+			stubConcurrencyCacheForTest: stubConcurrencyCacheForTest{acquireResult: true},
+			subscriptionAcquireResult:   true,
+		}
+		result, err := NewConcurrencyService(cache).AcquireUserAndSubscriptionSlots(context.Background(), 10, 4, 20, 2)
+		require.NoError(t, err)
+		require.True(t, result.Acquired)
+		require.Empty(t, result.BlockedScope)
+		require.Equal(t, []int64{20}, cache.acquiredSubscriptionIDs)
+
+		result.ReleaseFunc()
+		require.Equal(t, []int64{20}, cache.releasedSubscriptionIDs)
+		require.Equal(t, []int64{10}, cache.releasedUserIDs)
+	})
+
+	t.Run("subscription rejection releases user slot", func(t *testing.T) {
+		cache := &subscriptionConcurrencyCacheForTest{
+			stubConcurrencyCacheForTest: stubConcurrencyCacheForTest{acquireResult: true},
+			subscriptionAcquireResult:   false,
+		}
+		result, err := NewConcurrencyService(cache).AcquireUserAndSubscriptionSlots(context.Background(), 10, 4, 20, 1)
+		require.NoError(t, err)
+		require.False(t, result.Acquired)
+		require.Equal(t, ConcurrencyScopeSubscription, result.BlockedScope)
+		require.Equal(t, []int64{10}, cache.releasedUserIDs)
+		require.Empty(t, cache.releasedSubscriptionIDs)
+	})
+
+	t.Run("user rejection never touches subscription scope", func(t *testing.T) {
+		cache := &subscriptionConcurrencyCacheForTest{
+			stubConcurrencyCacheForTest: stubConcurrencyCacheForTest{acquireResult: false},
+			subscriptionAcquireResult:   true,
+		}
+		result, err := NewConcurrencyService(cache).AcquireUserAndSubscriptionSlots(context.Background(), 10, 1, 20, 1)
+		require.NoError(t, err)
+		require.False(t, result.Acquired)
+		require.Equal(t, ConcurrencyScopeUser, result.BlockedScope)
+		require.Empty(t, cache.acquiredSubscriptionIDs)
+	})
+
+	t.Run("unlimited subscription remains a no-op", func(t *testing.T) {
+		cache := &subscriptionConcurrencyCacheForTest{
+			stubConcurrencyCacheForTest: stubConcurrencyCacheForTest{acquireResult: true},
+		}
+		result, err := NewConcurrencyService(cache).AcquireUserAndSubscriptionSlots(context.Background(), 10, 2, 20, 0)
+		require.NoError(t, err)
+		require.True(t, result.Acquired)
+		require.Empty(t, cache.acquiredSubscriptionIDs)
+		result.ReleaseFunc()
+		require.Equal(t, []int64{10}, cache.releasedUserIDs)
+	})
+
+	t.Run("configured subscription fails closed when cache lacks capability", func(t *testing.T) {
+		cache := &stubConcurrencyCacheForTest{acquireResult: true}
+		result, err := NewConcurrencyService(cache).AcquireUserAndSubscriptionSlots(context.Background(), 10, 2, 20, 1)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Equal(t, []int64{10}, cache.releasedUserIDs)
+	})
+}
+
+func TestSubscriptionConcurrencyLeaseRefreshAndRelease(t *testing.T) {
+	t.Run("refreshes until idempotent release stops the loop", func(t *testing.T) {
+		cache := &subscriptionConcurrencyCacheForTest{
+			stubConcurrencyCacheForTest: stubConcurrencyCacheForTest{acquireResult: true},
+			subscriptionAcquireResult:   true,
+			subscriptionRefreshResult:   true,
+		}
+		svc := NewConcurrencyService(cache)
+		svc.subscriptionLeaseRefreshInterval = 5 * time.Millisecond
+		svc.subscriptionLeaseRetryInterval = time.Millisecond
+		svc.subscriptionLeaseOperationTO = 100 * time.Millisecond
+
+		result, err := svc.AcquireUserAndSubscriptionSlots(context.Background(), 10, 4, 20, 2)
+		require.NoError(t, err)
+		require.True(t, result.Acquired)
+		require.Eventually(t, func() bool {
+			return cache.subscriptionRefreshCalls.Load() >= 2
+		}, time.Second, time.Millisecond)
+
+		result.ReleaseFunc()
+		result.ReleaseFunc()
+		refreshCallsAfterRelease := cache.subscriptionRefreshCalls.Load()
+		time.Sleep(4 * svc.subscriptionLeaseRefreshInterval)
+		require.Equal(t, refreshCallsAfterRelease, cache.subscriptionRefreshCalls.Load(), "release 后不得继续续租")
+		cache.mu.Lock()
+		require.Equal(t, []int64{20}, cache.acquiredSubscriptionIDs, "release 后不得重抢或复活 lease")
+		require.Equal(t, []int64{20}, cache.releasedSubscriptionIDs)
+		cache.mu.Unlock()
+		require.Equal(t, []int64{10}, cache.releasedUserIDs)
+	})
+
+	t.Run("single and consecutive failures keep retrying", func(t *testing.T) {
+		var attempts atomic.Int64
+		cache := &subscriptionConcurrencyCacheForTest{
+			stubConcurrencyCacheForTest: stubConcurrencyCacheForTest{acquireResult: true},
+			subscriptionAcquireResult:   true,
+			subscriptionRefreshFn: func(context.Context, int64, string) (bool, error) {
+				switch attempts.Add(1) {
+				case 1:
+					return false, errors.New("redis temporarily unavailable")
+				case 2:
+					return false, nil
+				default:
+					return true, nil
+				}
+			},
+		}
+		svc := NewConcurrencyService(cache)
+		svc.subscriptionLeaseRefreshInterval = 5 * time.Millisecond
+		svc.subscriptionLeaseRetryInterval = time.Millisecond
+		svc.subscriptionLeaseOperationTO = 100 * time.Millisecond
+
+		result, err := svc.AcquireUserAndSubscriptionSlots(context.Background(), 10, 4, 20, 2)
+		require.NoError(t, err)
+		require.Eventually(t, func() bool {
+			return attempts.Load() >= 3
+		}, time.Second, time.Millisecond, "续租失败后必须继续保守重试")
+		cache.mu.Lock()
+		require.Len(t, cache.acquiredSubscriptionIDs, 2, "确认 lease 丢失时应为活跃请求保守重抢一次")
+		cache.mu.Unlock()
+		result.ReleaseFunc()
+	})
+
+	t.Run("lease loss callback fires exactly once when reacquire fails", func(t *testing.T) {
+		var acquireAttempts atomic.Int64
+		var callbackCalls atomic.Int64
+		callbackErr := make(chan error, 1)
+		cache := &subscriptionConcurrencyCacheForTest{
+			stubConcurrencyCacheForTest: stubConcurrencyCacheForTest{acquireResult: true},
+			subscriptionAcquireFn: func(context.Context, int64, int, string) (bool, error) {
+				return acquireAttempts.Add(1) == 1, nil
+			},
+			subscriptionRefreshResult: false,
+		}
+		svc := NewConcurrencyService(cache)
+		svc.subscriptionLeaseRefreshInterval = time.Millisecond
+		svc.subscriptionLeaseRetryInterval = time.Millisecond
+		svc.subscriptionLeaseOperationTO = 100 * time.Millisecond
+
+		result, err := svc.AcquireUserAndSubscriptionSlotsWithLeaseLoss(
+			context.Background(),
+			10,
+			4,
+			20,
+			2,
+			func(err error) {
+				if callbackCalls.Add(1) == 1 {
+					callbackErr <- err
+				}
+			},
+		)
+		require.NoError(t, err)
+		select {
+		case err := <-callbackErr:
+			require.ErrorIs(t, err, errSubscriptionConcurrencyLeaseLost)
+		case <-time.After(time.Second):
+			t.Fatal("lease 丢失 callback 未触发")
+		}
+		require.Eventually(t, func() bool {
+			return acquireAttempts.Load() >= 3
+		}, time.Second, time.Millisecond, "应继续进行保守重抢")
+		require.Equal(t, int64(1), callbackCalls.Load(), "重复续租失败不得重复通知")
+		result.ReleaseFunc()
+	})
+
+	t.Run("normal release never reports lease loss", func(t *testing.T) {
+		var callbackCalls atomic.Int64
+		cache := &subscriptionConcurrencyCacheForTest{
+			stubConcurrencyCacheForTest: stubConcurrencyCacheForTest{acquireResult: true},
+			subscriptionAcquireResult:   true,
+			subscriptionRefreshResult:   true,
+		}
+		svc := NewConcurrencyService(cache)
+		svc.subscriptionLeaseRefreshInterval = 20 * time.Millisecond
+		svc.subscriptionLeaseRetryInterval = time.Millisecond
+
+		result, err := svc.AcquireUserAndSubscriptionSlotsWithLeaseLoss(
+			context.Background(),
+			10,
+			4,
+			20,
+			2,
+			func(error) { callbackCalls.Add(1) },
+		)
+		require.NoError(t, err)
+		result.ReleaseFunc()
+		time.Sleep(2 * svc.subscriptionLeaseRefreshInterval)
+		require.Zero(t, callbackCalls.Load())
+	})
+
+	t.Run("release cancels an in-flight refresh before removing slots", func(t *testing.T) {
+		refreshStarted := make(chan struct{})
+		refreshReturned := make(chan struct{})
+		var startedOnce sync.Once
+		var returnedOnce sync.Once
+		var releasedBeforeRefreshReturned atomic.Bool
+		cache := &subscriptionConcurrencyCacheForTest{
+			stubConcurrencyCacheForTest: stubConcurrencyCacheForTest{acquireResult: true},
+			subscriptionAcquireResult:   true,
+			subscriptionRefreshFn: func(ctx context.Context, _ int64, _ string) (bool, error) {
+				startedOnce.Do(func() { close(refreshStarted) })
+				<-ctx.Done()
+				returnedOnce.Do(func() { close(refreshReturned) })
+				return false, ctx.Err()
+			},
+			subscriptionReleaseFn: func(context.Context, int64, string) error {
+				select {
+				case <-refreshReturned:
+				default:
+					releasedBeforeRefreshReturned.Store(true)
+				}
+				return nil
+			},
+		}
+		svc := NewConcurrencyService(cache)
+		svc.subscriptionLeaseRefreshInterval = time.Millisecond
+		svc.subscriptionLeaseRetryInterval = time.Millisecond / 2
+		svc.subscriptionLeaseOperationTO = time.Second
+
+		result, err := svc.AcquireUserAndSubscriptionSlots(context.Background(), 10, 4, 20, 2)
+		require.NoError(t, err)
+		select {
+		case <-refreshStarted:
+		case <-time.After(time.Second):
+			t.Fatal("续租调用未启动")
+		}
+		result.ReleaseFunc()
+		require.False(t, releasedBeforeRefreshReturned.Load(), "必须先停止并等待续租，再释放 Redis 槽位")
+		require.Equal(t, []int64{10}, cache.releasedUserIDs)
+	})
 }
 
 func TestTrackAPIKeySlot_ReleaseDecrements(t *testing.T) {

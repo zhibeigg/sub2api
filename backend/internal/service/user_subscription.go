@@ -15,6 +15,7 @@ type UserSubscription struct {
 	DailyLimitUSD    *float64
 	WeeklyLimitUSD   *float64
 	MonthlyLimitUSD  *float64
+	ConcurrencyLimit *int
 
 	StartsAt  time.Time
 	ExpiresAt time.Time

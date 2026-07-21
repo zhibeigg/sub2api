@@ -12,6 +12,7 @@ import (
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/paymentauditlog"
+	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -929,6 +930,45 @@ func TestExecuteSubscriptionFulfillmentRecoversCommittedAssignmentWithoutExtendi
 		Count(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, assignmentAuditCount)
+}
+
+func TestEnsurePaymentSubscriptionAssignedRejectsRecoveredConcurrencyMismatch(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	order := createPaymentFulfillmentSubscriptionOrder(t, ctx, client, OrderStatusPaid, time.Now())
+	existingLimit := 2
+	requestedLimit := 3
+
+	subRepo := newSubscriptionUserSubRepoStub()
+	subRepo.seed(&UserSubscription{
+		ID:               100,
+		UserID:           order.UserID,
+		GroupID:          *order.SubscriptionGroupID,
+		ConcurrencyLimit: &existingLimit,
+		StartsAt:         time.Now().Add(-time.Hour),
+		ExpiresAt:        time.Now().Add(30 * 24 * time.Hour),
+		Status:           SubscriptionStatusActive,
+		Notes:            paymentSubscriptionOrderNote(order.ID),
+	})
+	groupRepo := &subscriptionGroupRepoStub{
+		group: &Group{ID: *order.SubscriptionGroupID, Status: payment.EntityStatusActive, SubscriptionType: SubscriptionTypeStandard},
+	}
+	svc := &PaymentService{
+		entClient:       client,
+		subscriptionSvc: NewSubscriptionService(groupRepo, subRepo, nil, nil, nil),
+	}
+
+	err := svc.ensurePaymentSubscriptionAssigned(ctx, order, &paymentSubscriptionSnapshot{
+		SchemaVersion:    3,
+		PlanID:           9,
+		PlanType:         domain.SubscriptionPlanTypeStandardQuota,
+		GroupIDs:         []int64{*order.SubscriptionGroupID},
+		ValidityDays:     30,
+		ConcurrencyLimit: &requestedLimit,
+	})
+	require.Error(t, err)
+	require.Equal(t, "SUBSCRIPTION_ASSIGN_CONFLICT", infraerrors.Reason(err))
+	require.Equal(t, 0, subRepo.createCalls)
 }
 
 func TestHasPaymentSubscriptionOrderNoteRequiresIndependentExactLine(t *testing.T) {

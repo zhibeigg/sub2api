@@ -49,6 +49,7 @@ type GatewayHandler struct {
 	kiroGatewayService        *service.KiroGatewayService
 	openCodeGatewayService    *service.OpenCodeGatewayService
 	userService               *service.UserService
+	subscriptionService       *service.SubscriptionService
 	billingCacheService       *service.BillingCacheService
 	usageService              *service.UsageService
 	apiKeyService             *service.APIKeyService
@@ -74,6 +75,7 @@ func NewGatewayHandler(
 	kiroGatewayService *service.KiroGatewayService,
 	openCodeGatewayService *service.OpenCodeGatewayService,
 	userService *service.UserService,
+	subscriptionService *service.SubscriptionService,
 	concurrencyService *service.ConcurrencyService,
 	billingCacheService *service.BillingCacheService,
 	usageService *service.UsageService,
@@ -122,6 +124,7 @@ func NewGatewayHandler(
 		kiroGatewayService:        kiroGatewayService,
 		openCodeGatewayService:    openCodeGatewayService,
 		userService:               userService,
+		subscriptionService:       subscriptionService,
 		billingCacheService:       billingCacheService,
 		usageService:              usageService,
 		apiKeyService:             apiKeyService,
@@ -193,7 +196,12 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 
 	// 多分组：按优先级解析出实际服务分组，再克隆 apiKey 使下游（计费/会话/
 	// 订阅/调度）全部归属该分组。无多分组绑定时返回 nil，保持单分组旧逻辑。
-	apiKey = h.resolveMultiGroupAPIKey(c.Request.Context(), apiKey, reqModel)
+	apiKey, err = h.resolveMultiGroupAPIKey(c, apiKey, reqModel)
+	if err != nil {
+		status, code, message := effectiveGroupSubscriptionErrorDetails(err)
+		h.errorResponse(c, status, code, message)
+		return
+	}
 	if apiKey == nil {
 		middleware2.AbortWithError(c, http.StatusForbidden, "GROUP_NOT_ALLOWED", "当前用户不允许使用任何已绑定的标准分组")
 		return
@@ -1495,23 +1503,88 @@ func cloneAPIKeyWithGroup(apiKey *service.APIKey, group *service.Group) *service
 	return &cloned
 }
 
-// resolveMultiGroupAPIKey resolves the effective group for a multi-group key by
-// priority (first bound group with an available account, else highest priority)
-// and returns a clone bound to that group so all downstream logic (billing,
-// sticky session, subscription, scheduling) attributes to it. Keys without
-// multi-group bindings are returned unchanged (legacy single-group path).
-func (h *GatewayHandler) resolveMultiGroupAPIKey(ctx context.Context, apiKey *service.APIKey, requestedModel string) *service.APIKey {
-	if apiKey == nil || len(apiKey.GroupBindings) == 0 {
-		return apiKey
+func sameAPIKeyGroup(left, right *service.APIKey) bool {
+	if left == nil || right == nil || left.GroupID == nil || right.GroupID == nil {
+		return left != nil && right != nil && left.GroupID == nil && right.GroupID == nil
 	}
-	if !apiKey.HasAllowedGroupBindingByUserRestriction() {
+	return *left.GroupID == *right.GroupID
+}
+
+type activeSubscriptionResolver interface {
+	GetActiveSubscription(ctx context.Context, userID, groupID int64) (*service.UserSubscription, error)
+}
+
+// applyResolvedAPIKeyContext keeps API key, group and subscription context in
+// lockstep after a multi-group request chooses its final service group.
+func applyResolvedAPIKeyContext(
+	c *gin.Context,
+	original *service.APIKey,
+	selected *service.APIKey,
+	subscriptionService activeSubscriptionResolver,
+	cfg *config.Config,
+) error {
+	if c == nil || selected == nil {
 		return nil
 	}
-	group := h.gatewayService.ResolveEffectiveGroupBinding(ctx, apiKey, requestedModel)
-	if group == nil {
-		return apiKey
+	middleware2.SetOpsFallbackAPIKey(c, selected)
+	c.Set(string(middleware2.ContextKeyAPIKey), selected)
+	if selected.Group != nil {
+		c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), ctxkey.Group, selected.Group))
 	}
-	return cloneAPIKeyWithGroup(apiKey, group)
+	if sameAPIKeyGroup(original, selected) {
+		return nil
+	}
+
+	// A changed group must never retain the subscription loaded for the original
+	// authentication-time group. Standard groups without a subscription fall
+	// back to balance billing; native subscription groups remain fail-closed.
+	c.Set(string(middleware2.ContextKeySubscription), nil)
+	if cfg != nil && cfg.RunMode == config.RunModeSimple {
+		return nil
+	}
+	if subscriptionService == nil || selected.User == nil || selected.Group == nil {
+		return nil
+	}
+	subscription, err := subscriptionService.GetActiveSubscription(c.Request.Context(), selected.User.ID, selected.Group.ID)
+	if err != nil {
+		if errors.Is(err, service.ErrSubscriptionNotFound) {
+			if selected.Group.IsSubscriptionType() {
+				return service.ErrSubscriptionNotFound
+			}
+			return nil
+		}
+		return fmt.Errorf("resolve active subscription for effective group: %w", err)
+	}
+	c.Set(string(middleware2.ContextKeySubscription), subscription)
+	return nil
+}
+
+func effectiveGroupSubscriptionErrorDetails(err error) (int, string, string) {
+	if errors.Is(err, service.ErrSubscriptionNotFound) {
+		return http.StatusForbidden, "SUBSCRIPTION_NOT_FOUND", "No active subscription found for this group"
+	}
+	return http.StatusInternalServerError, "SUBSCRIPTION_LOOKUP_FAILED", "Failed to resolve subscription for selected group"
+}
+
+// resolveMultiGroupAPIKey resolves the effective group for a multi-group key by
+// priority and refreshes the request-scoped subscription when that group differs
+// from the authentication-time group.
+func (h *GatewayHandler) resolveMultiGroupAPIKey(c *gin.Context, apiKey *service.APIKey, requestedModel string) (*service.APIKey, error) {
+	if apiKey == nil || len(apiKey.GroupBindings) == 0 {
+		return apiKey, nil
+	}
+	if !apiKey.HasAllowedGroupBindingByUserRestriction() {
+		return nil, nil
+	}
+	group := h.gatewayService.ResolveEffectiveGroupBinding(c.Request.Context(), apiKey, requestedModel)
+	if group == nil {
+		return apiKey, nil
+	}
+	selected := cloneAPIKeyWithGroup(apiKey, group)
+	if err := applyResolvedAPIKeyContext(c, apiKey, selected, h.subscriptionService, h.cfg); err != nil {
+		return nil, err
+	}
+	return selected, nil
 }
 
 // Usage handles getting account balance and usage statistics for CC Switch integration

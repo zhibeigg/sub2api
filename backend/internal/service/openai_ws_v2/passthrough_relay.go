@@ -498,7 +498,6 @@ func runUpstreamToClient(
 		case coderws.MessageBinary:
 			// binary frame 直接透传，不进入 JSON 观测路径（避免无效解析开销）。
 		}
-		emitTurnComplete(onTurnComplete, state, observedEvent)
 		if dropDownstreamWrites != nil && dropDownstreamWrites.Load() {
 			if droppedFrames != nil {
 				droppedFrames.Add(1)
@@ -510,6 +509,9 @@ func runUpstreamToClient(
 				PayloadBytes:    len(payload),
 				WroteDownstream: wroteDownstream,
 			})
+			// 客户端已断开后的 drain 不再具备“成功写客户端”的条件；terminal
+			// 仍代表上游 turn 已完成，需要触发计费/槽位释放。
+			emitTurnComplete(onTurnComplete, state, observedEvent)
 			if observedEvent.terminal {
 				exitCh <- relayExitSignal{
 					stage:           "drain_terminal",
@@ -525,10 +527,10 @@ func runUpstreamToClient(
 			beforeClientWrite(msgType, payload)
 		}
 		writeErr := writeClient(msgType, payload)
-		if afterClientWrite != nil {
-			afterClientWrite(msgType, payload, writeErr)
-		}
 		if writeErr != nil {
+			if afterClientWrite != nil {
+				afterClientWrite(msgType, payload, writeErr)
+			}
 			emitRelayTrace(onTrace, RelayTraceEvent{
 				Stage:           "write_client_failed",
 				Direction:       "upstream_to_client",
@@ -541,6 +543,13 @@ func runUpstreamToClient(
 			return
 		}
 		wroteDownstream = true
+		// terminal 的完成回调必须发生在帧成功写给客户端之后，并且先于
+		// AfterClientWrite 解锁下一 turn，避免下一 turn 抢槽与当前 turn
+		// 的 AfterTurn/释放并发交错。
+		emitTurnComplete(onTurnComplete, state, observedEvent)
+		if afterClientWrite != nil {
+			afterClientWrite(msgType, payload, nil)
+		}
 		if afterWriteClient != nil {
 			afterWriteClient(msgType, payload)
 		}

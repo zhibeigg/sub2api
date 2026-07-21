@@ -86,6 +86,17 @@ func (h *OpenAIGatewayHandler) handleArkVideo(c *gin.Context, isSubmit bool, req
 		return
 	}
 
+	apiKey, err = h.resolveMultiGroupAPIKey(c, apiKey, requestModel)
+	if err != nil {
+		status, code, message := effectiveGroupSubscriptionErrorDetails(err)
+		h.errorResponse(c, status, code, message)
+		return
+	}
+	if apiKey == nil {
+		middleware2.AbortWithError(c, http.StatusForbidden, "GROUP_NOT_ALLOWED", "当前用户不允许使用任何已绑定的标准分组")
+		return
+	}
+
 	reqLog = reqLog.With(zap.String("model", requestModel))
 	setOpsRequestContext(c, requestModel, false)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeSync))

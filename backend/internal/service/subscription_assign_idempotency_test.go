@@ -667,6 +667,7 @@ func TestAssignSubscriptionGroupTypeValidation(t *testing.T) {
 func TestPrepareAssignmentInput_AllowsStandardQuotaPlanMultipleGroups(t *testing.T) {
 	planID := int64(88)
 	daily := 10.0
+	concurrencyLimit := 4
 	groupRepo := &subscriptionGroupRepoStub{groups: map[int64]*Group{
 		1: {ID: 1, SubscriptionType: SubscriptionTypeStandard},
 		2: {ID: 2, SubscriptionType: SubscriptionTypeStandard},
@@ -679,6 +680,7 @@ func TestPrepareAssignmentInput_AllowsStandardQuotaPlanMultipleGroups(t *testing
 		SourcePlanID:     &planID,
 		QuotaSnapshotted: true,
 		DailyLimitUSD:    &daily,
+		ConcurrencyLimit: &concurrencyLimit,
 		ValidityDays:     30,
 	})
 	require.NoError(t, err)
@@ -687,6 +689,7 @@ func TestPrepareAssignmentInput_AllowsStandardQuotaPlanMultipleGroups(t *testing
 	require.Same(t, &planID, prepared.SourcePlanID)
 	require.True(t, prepared.QuotaSnapshotted)
 	require.Equal(t, &daily, prepared.DailyLimitUSD)
+	require.Equal(t, &concurrencyLimit, prepared.ConcurrencyLimit)
 }
 
 func TestPrepareAssignmentInput_RejectsMixedGroupTypes(t *testing.T) {
@@ -707,6 +710,99 @@ func TestPrepareAssignmentInput_RejectsMixedGroupTypes(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Equal(t, "SUBSCRIPTION_GROUP_TYPE_MIXED", infraerrors.Reason(err))
+}
+
+func TestPrepareAssignmentInput_NativeSubscriptionClearsConcurrencyLimit(t *testing.T) {
+	limit := 3
+	svc := NewSubscriptionService(&subscriptionGroupRepoStub{
+		group: &Group{ID: 1, SubscriptionType: SubscriptionTypeSubscription},
+	}, newSubscriptionUserSubRepoStub(), nil, nil, nil)
+
+	prepared, err := svc.prepareAssignmentInput(context.Background(), &AssignSubscriptionInput{
+		UserID:           7,
+		GroupID:          1,
+		ConcurrencyLimit: &limit,
+		ValidityDays:     30,
+	})
+	require.NoError(t, err)
+	require.Nil(t, prepared.ConcurrencyLimit)
+}
+
+func TestAssignSubscription_StandardQuotaCreatesAndRenewsConcurrencySnapshot(t *testing.T) {
+	planID := int64(90)
+	daily := 10.0
+	initialLimit := 2
+	updatedLimit := 5
+	groupRepo := &subscriptionGroupRepoStub{
+		group: &Group{ID: 1, SubscriptionType: SubscriptionTypeStandard},
+	}
+	subRepo := newSubscriptionUserSubRepoStub()
+	svc := NewSubscriptionService(groupRepo, subRepo, nil, nil, nil)
+
+	created, err := svc.AssignSubscription(context.Background(), &AssignSubscriptionInput{
+		UserID:           8,
+		GroupID:          1,
+		SourcePlanID:     &planID,
+		QuotaSnapshotted: true,
+		DailyLimitUSD:    &daily,
+		ConcurrencyLimit: &initialLimit,
+		ValidityDays:     30,
+		Notes:            "plan assignment",
+	})
+	require.NoError(t, err)
+	require.Equal(t, &initialLimit, created.ConcurrencyLimit)
+
+	existing := subRepo.byID[created.ID]
+	existing.Status = SubscriptionStatusExpired
+	existing.ExpiresAt = time.Now().Add(-time.Hour)
+
+	renewed, err := svc.AssignSubscription(context.Background(), &AssignSubscriptionInput{
+		UserID:           8,
+		GroupID:          1,
+		SourcePlanID:     &planID,
+		QuotaSnapshotted: true,
+		DailyLimitUSD:    &daily,
+		ConcurrencyLimit: &updatedLimit,
+		ValidityDays:     30,
+		Notes:            "plan assignment",
+	})
+	require.NoError(t, err)
+	require.Equal(t, created.ID, renewed.ID)
+	require.Equal(t, &updatedLimit, renewed.ConcurrencyLimit)
+}
+
+func TestDetectAssignSemanticConflict_ConcurrencySnapshotMismatch(t *testing.T) {
+	planID := int64(91)
+	daily := 10.0
+	existingLimit := 2
+	requestedLimit := 3
+	start := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	existing := &UserSubscription{
+		UserID:           1,
+		GroupID:          1,
+		GroupIDs:         []int64{1},
+		SourcePlanID:     &planID,
+		QuotaSnapshotted: true,
+		DailyLimitUSD:    &daily,
+		ConcurrencyLimit: &existingLimit,
+		StartsAt:         start,
+		ExpiresAt:        start.AddDate(0, 0, 30),
+		Notes:            "same",
+	}
+
+	reason, conflict := detectAssignSemanticConflict(existing, &AssignSubscriptionInput{
+		UserID:           1,
+		GroupID:          1,
+		GroupIDs:         []int64{1},
+		SourcePlanID:     &planID,
+		QuotaSnapshotted: true,
+		DailyLimitUSD:    &daily,
+		ConcurrencyLimit: &requestedLimit,
+		ValidityDays:     30,
+		Notes:            "same",
+	})
+	require.True(t, conflict)
+	require.Equal(t, "concurrency_limit_mismatch", reason)
 }
 
 type negativeSubscriptionCacheRepoStub struct {

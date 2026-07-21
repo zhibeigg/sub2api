@@ -98,6 +98,13 @@
               }}</span>
             </div>
 
+            <div data-test="subscription-concurrency" class="flex items-center justify-between text-sm">
+              <span class="text-gray-500 dark:text-dark-400">{{ t('userSubscriptions.concurrencyLimit') }}</span>
+              <span class="text-gray-700 dark:text-gray-300">
+                {{ !subscription.quota_snapshotted ? '-' : subscription.concurrency_limit == null ? t('userSubscriptions.noExtraConcurrencyLimit') : t('userSubscriptions.concurrencyValue', { limit: subscription.concurrency_limit }) }}
+              </span>
+            </div>
+
             <!-- Daily Usage -->
             <div v-if="getQuotaLimit(subscription, 'daily')" class="space-y-2">
               <div class="flex items-center justify-between">

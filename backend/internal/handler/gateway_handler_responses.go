@@ -81,6 +81,16 @@ func (h *GatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
+	apiKey, err = h.resolveMultiGroupAPIKey(c, apiKey, reqModel)
+	if err != nil {
+		status, code, message := effectiveGroupSubscriptionErrorDetails(err)
+		h.responsesErrorResponse(c, status, code, message)
+		return
+	}
+	if apiKey == nil {
+		middleware2.AbortWithError(c, http.StatusForbidden, "GROUP_NOT_ALLOWED", "当前用户不允许使用任何已绑定的标准分组")
+		return
+	}
 
 	setOpsRequestContext(c, reqModel, reqStream)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(reqStream, false)))

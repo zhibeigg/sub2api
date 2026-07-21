@@ -10,14 +10,15 @@ import (
 )
 
 type paymentSubscriptionSnapshot struct {
-	SchemaVersion   int      `json:"schema_version"`
-	PlanID          int64    `json:"plan_id"`
-	PlanType        string   `json:"plan_type"`
-	GroupIDs        []int64  `json:"group_ids"`
-	ValidityDays    int      `json:"validity_days"`
-	DailyLimitUSD   *float64 `json:"daily_limit_usd"`
-	WeeklyLimitUSD  *float64 `json:"weekly_limit_usd"`
-	MonthlyLimitUSD *float64 `json:"monthly_limit_usd"`
+	SchemaVersion    int      `json:"schema_version"`
+	PlanID           int64    `json:"plan_id"`
+	PlanType         string   `json:"plan_type"`
+	GroupIDs         []int64  `json:"group_ids"`
+	ValidityDays     int      `json:"validity_days"`
+	DailyLimitUSD    *float64 `json:"daily_limit_usd"`
+	WeeklyLimitUSD   *float64 `json:"weekly_limit_usd"`
+	MonthlyLimitUSD  *float64 `json:"monthly_limit_usd"`
+	ConcurrencyLimit *int     `json:"concurrency_limit"`
 }
 
 func (s *PaymentService) buildSubscriptionSnapshot(ctx context.Context, plan *dbent.SubscriptionPlan) (*paymentSubscriptionSnapshot, error) {
@@ -33,15 +34,20 @@ func (s *PaymentService) buildSubscriptionSnapshot(ctx context.Context, plan *db
 	dailyLimit := plan.DailyLimitUsd
 	weeklyLimit := plan.WeeklyLimitUsd
 	monthlyLimit := plan.MonthlyLimitUsd
+	concurrencyLimit := plan.ConcurrencyLimit
 	if planType == domain.SubscriptionPlanTypeSubscription {
 		dailyLimit = nil
 		weeklyLimit = nil
 		monthlyLimit = nil
 	}
+	if planType != domain.SubscriptionPlanTypeStandardQuota {
+		concurrencyLimit = nil
+	}
 	return &paymentSubscriptionSnapshot{
-		SchemaVersion: 2, PlanID: plan.ID, PlanType: planType, GroupIDs: groupIDs,
+		SchemaVersion: 3, PlanID: plan.ID, PlanType: planType, GroupIDs: groupIDs,
 		ValidityDays:  psComputeValidityDays(plan.ValidityDays, plan.ValidityUnit),
 		DailyLimitUSD: dailyLimit, WeeklyLimitUSD: weeklyLimit, MonthlyLimitUSD: monthlyLimit,
+		ConcurrencyLimit: concurrencyLimit,
 	}, nil
 }
 
@@ -70,6 +76,9 @@ func parsePaymentSubscriptionSnapshot(order *dbent.PaymentOrder) *paymentSubscri
 					} else {
 						snapshot.PlanType = domain.SubscriptionPlanTypeSubscription
 					}
+				}
+				if snapshot.SchemaVersion < 3 || normalizeSubscriptionPlanType(snapshot.PlanType) != domain.SubscriptionPlanTypeStandardQuota {
+					snapshot.ConcurrencyLimit = nil
 				}
 				return &snapshot
 			}

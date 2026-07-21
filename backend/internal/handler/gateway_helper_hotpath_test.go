@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,21 +19,27 @@ import (
 type helperConcurrencyCacheStub struct {
 	mu sync.Mutex
 
-	accountSeq []bool
-	userSeq    []bool
+	accountSeq      []bool
+	userSeq         []bool
+	subscriptionSeq []bool
 
-	accountAcquireCalls int
-	userAcquireCalls    int
-	accountReleaseCalls int
-	userReleaseCalls    int
-	waitAllowed         bool
-	waitIncrementCalls  int
-	waitDecrementCalls  int
-	waitMaxWait         int
-	waitIncrementHook   func()
-	apiKeyTrackCalls    int
-	apiKeyReleaseCalls  int
-	apiKeyTrackIDs      []int64
+	accountAcquireCalls        int
+	userAcquireCalls           int
+	subscriptionAcquireCalls   int
+	accountReleaseCalls        int
+	userReleaseCalls           int
+	subscriptionReleaseCalls   int
+	waitAllowed                bool
+	waitIncrementCalls         int
+	waitDecrementCalls         int
+	waitMaxWait                int
+	subscriptionWaitAllowed    bool
+	subscriptionWaitIncrements int
+	subscriptionWaitDecrements int
+	waitIncrementHook          func()
+	apiKeyTrackCalls           int
+	apiKeyReleaseCalls         int
+	apiKeyTrackIDs             []int64
 }
 
 func (s *helperConcurrencyCacheStub) AcquireAccountSlot(ctx context.Context, accountID int64, maxConcurrency int, requestID string) (bool, error) {
@@ -99,6 +106,43 @@ func (s *helperConcurrencyCacheStub) ReleaseUserSlot(ctx context.Context, userID
 
 func (s *helperConcurrencyCacheStub) GetUserConcurrency(ctx context.Context, userID int64) (int, error) {
 	return 0, nil
+}
+
+func (s *helperConcurrencyCacheStub) AcquireSubscriptionSlot(ctx context.Context, subscriptionID int64, maxConcurrency int, requestID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.subscriptionAcquireCalls++
+	if len(s.subscriptionSeq) == 0 {
+		return false, nil
+	}
+	acquired := s.subscriptionSeq[0]
+	s.subscriptionSeq = s.subscriptionSeq[1:]
+	return acquired, nil
+}
+
+func (s *helperConcurrencyCacheStub) RefreshSubscriptionSlot(ctx context.Context, subscriptionID int64, requestID string) (bool, error) {
+	return true, nil
+}
+
+func (s *helperConcurrencyCacheStub) ReleaseSubscriptionSlot(ctx context.Context, subscriptionID int64, requestID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.subscriptionReleaseCalls++
+	return nil
+}
+
+func (s *helperConcurrencyCacheStub) IncrementSubscriptionWaitCount(ctx context.Context, subscriptionID int64, maxWait int) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.subscriptionWaitIncrements++
+	return s.subscriptionWaitAllowed, nil
+}
+
+func (s *helperConcurrencyCacheStub) DecrementSubscriptionWaitCount(ctx context.Context, subscriptionID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.subscriptionWaitDecrements++
+	return nil
 }
 
 func (s *helperConcurrencyCacheStub) TrackAPIKeySlot(ctx context.Context, apiKeyID int64, requestID string) error {
@@ -292,9 +336,196 @@ func TestAcquireUserSlotWithWait_ImmediateAcquireSkipsWaitQueue(t *testing.T) {
 	release()
 
 	require.Equal(t, 1, cache.userAcquireCalls)
+	require.Equal(t, 0, cache.subscriptionAcquireCalls)
 	require.Equal(t, 0, cache.waitIncrementCalls)
 	require.Equal(t, 0, cache.waitDecrementCalls)
 	require.Equal(t, 1, cache.userReleaseCalls)
+}
+
+func TestAcquireUserSlotWithWait_AcquiresSubscriptionInstanceSlot(t *testing.T) {
+	cache := &helperConcurrencyCacheStub{
+		userSeq:         []bool{true},
+		subscriptionSeq: []bool{true},
+	}
+	concurrency := service.NewConcurrencyService(cache)
+	helper := NewConcurrencyHelper(concurrency, SSEPingFormatNone, 5*time.Millisecond)
+	c, _ := newHelperTestContext(http.MethodPost, "/v1/messages")
+	limit := 1
+	c.Set(string(middleware2.ContextKeySubscription), &service.UserSubscription{ID: 909, ConcurrencyLimit: &limit})
+	streamStarted := false
+
+	release, err := helper.acquireUserSlotWithWaitTimeout(c, 202, 3, time.Second, false, &streamStarted)
+	require.NoError(t, err)
+	require.NotNil(t, release)
+	require.Equal(t, 1, cache.userAcquireCalls)
+	require.Equal(t, 1, cache.subscriptionAcquireCalls)
+
+	release()
+	require.Equal(t, 1, cache.userReleaseCalls)
+	require.Equal(t, 1, cache.subscriptionReleaseCalls)
+}
+
+func TestAcquireUserSlotWithWait_LeaseLossCancelsRequestContext(t *testing.T) {
+	cache := &helperConcurrencyCacheStub{}
+	concurrency := service.NewConcurrencyService(cache)
+	helper := NewConcurrencyHelper(concurrency, SSEPingFormatNone, 5*time.Millisecond)
+	var capturedLeaseLoss func(error)
+	var releaseCalls atomic.Int64
+	helper.requestSlotsAcquire = func(
+		_ context.Context,
+		_ int64,
+		_ int,
+		_ int64,
+		_ int,
+		onLeaseLoss func(error),
+	) (*service.AcquireResult, error) {
+		capturedLeaseLoss = onLeaseLoss
+		return &service.AcquireResult{
+			Acquired:    true,
+			ReleaseFunc: func() { releaseCalls.Add(1) },
+		}, nil
+	}
+	c, _ := newHelperTestContext(http.MethodPost, "/v1/messages")
+	limit := 1
+	c.Set(string(middleware2.ContextKeySubscription), &service.UserSubscription{ID: 912, ConcurrencyLimit: &limit})
+	streamStarted := false
+
+	release, err := helper.acquireUserSlotWithWaitTimeout(c, 202, 3, time.Second, false, &streamStarted)
+	require.NoError(t, err)
+	require.NotNil(t, release)
+	require.NotNil(t, capturedLeaseLoss)
+	requestCtx := c.Request.Context()
+	leaseLostErr := errors.New("subscription lease lost")
+	capturedLeaseLoss(leaseLostErr)
+	select {
+	case <-requestCtx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("lease 丢失后 HTTP 请求 context 未取消")
+	}
+	require.ErrorIs(t, context.Cause(requestCtx), leaseLostErr)
+
+	release()
+	release()
+	require.Equal(t, int64(1), releaseCalls.Load())
+}
+
+func TestAcquireUserSlotWithWait_NormalReleaseOnlyCleansDerivedContext(t *testing.T) {
+	cache := &helperConcurrencyCacheStub{}
+	concurrency := service.NewConcurrencyService(cache)
+	helper := NewConcurrencyHelper(concurrency, SSEPingFormatNone, 5*time.Millisecond)
+	var capturedLeaseLoss func(error)
+	helper.requestSlotsAcquire = func(
+		_ context.Context,
+		_ int64,
+		_ int,
+		_ int64,
+		_ int,
+		onLeaseLoss func(error),
+	) (*service.AcquireResult, error) {
+		capturedLeaseLoss = onLeaseLoss
+		return &service.AcquireResult{Acquired: true, ReleaseFunc: func() {}}, nil
+	}
+	c, _ := newHelperTestContext(http.MethodPost, "/v1/messages")
+	streamStarted := false
+
+	release, err := helper.acquireUserSlotWithWaitTimeout(c, 202, 3, time.Second, false, &streamStarted)
+	require.NoError(t, err)
+	require.NotNil(t, capturedLeaseLoss)
+	requestCtx := c.Request.Context()
+	require.NoError(t, requestCtx.Err())
+
+	release()
+	require.ErrorIs(t, context.Cause(requestCtx), context.Canceled, "正常释放只应清理派生 context")
+}
+
+func TestTryAcquireRequestSlotsForAPIKeyWithLeaseLoss_ForwardsCallback(t *testing.T) {
+	cache := &helperConcurrencyCacheStub{}
+	concurrency := service.NewConcurrencyService(cache)
+	helper := NewConcurrencyHelper(concurrency, SSEPingFormatNone, 5*time.Millisecond)
+	var capturedLeaseLoss func(error)
+	helper.requestSlotsAcquire = func(
+		_ context.Context,
+		_ int64,
+		_ int,
+		_ int64,
+		_ int,
+		onLeaseLoss func(error),
+	) (*service.AcquireResult, error) {
+		capturedLeaseLoss = onLeaseLoss
+		return &service.AcquireResult{Acquired: true, ReleaseFunc: func() {}}, nil
+	}
+	var callbackCalls atomic.Int64
+	leaseLostErr := errors.New("lease lost")
+
+	release, acquired, err := helper.TryAcquireRequestSlotsForAPIKeyWithLeaseLoss(
+		context.Background(),
+		202,
+		3,
+		0,
+		913,
+		1,
+		func(err error) {
+			require.ErrorIs(t, err, leaseLostErr)
+			callbackCalls.Add(1)
+		},
+	)
+	require.NoError(t, err)
+	require.True(t, acquired)
+	require.NotNil(t, release)
+	require.NotNil(t, capturedLeaseLoss)
+	capturedLeaseLoss(leaseLostErr)
+	require.Equal(t, int64(1), callbackCalls.Load())
+	release()
+}
+
+func TestAcquireUserSlotWithWait_SubscriptionWaitIsIsolated(t *testing.T) {
+	cache := &helperConcurrencyCacheStub{
+		userSeq:                 []bool{true, true},
+		subscriptionSeq:         []bool{false, true},
+		subscriptionWaitAllowed: true,
+	}
+	concurrency := service.NewConcurrencyService(cache)
+	helper := NewConcurrencyHelper(concurrency, SSEPingFormatNone, 5*time.Millisecond)
+	c, _ := newHelperTestContext(http.MethodPost, "/v1/messages")
+	limit := 1
+	c.Set(string(middleware2.ContextKeySubscription), &service.UserSubscription{ID: 910, ConcurrencyLimit: &limit})
+	streamStarted := false
+
+	release, err := helper.acquireUserSlotWithWaitTimeout(c, 202, 3, time.Second, false, &streamStarted)
+	require.NoError(t, err)
+	require.NotNil(t, release)
+	require.Equal(t, 0, cache.waitIncrementCalls, "subscription waits must not consume the user-global wait queue")
+	require.Equal(t, 1, cache.subscriptionWaitIncrements)
+	require.Equal(t, 1, cache.subscriptionWaitDecrements)
+	require.Equal(t, 1, cache.userReleaseCalls, "failed subscription acquisition must release the provisional user slot")
+
+	release()
+	require.Equal(t, 2, cache.userReleaseCalls)
+	require.Equal(t, 1, cache.subscriptionReleaseCalls)
+}
+
+func TestAcquireUserSlotWithWait_SubscriptionTimeoutSetsStableErrorHeaders(t *testing.T) {
+	cache := &helperConcurrencyCacheStub{
+		userSeq:                 []bool{true, true, true},
+		subscriptionSeq:         []bool{false, false, false},
+		subscriptionWaitAllowed: true,
+	}
+	concurrency := service.NewConcurrencyService(cache)
+	helper := NewConcurrencyHelper(concurrency, SSEPingFormatNone, 5*time.Millisecond)
+	c, recorder := newHelperTestContext(http.MethodPost, "/v1/messages")
+	limit := 1
+	c.Set(string(middleware2.ContextKeySubscription), &service.UserSubscription{ID: 911, ConcurrencyLimit: &limit})
+	streamStarted := false
+
+	release, err := helper.acquireUserSlotWithWaitTimeout(c, 202, 3, 30*time.Millisecond, false, &streamStarted)
+	require.Nil(t, release)
+	var concurrencyErr *ConcurrencyError
+	require.ErrorAs(t, err, &concurrencyErr)
+	require.Equal(t, service.ConcurrencyScopeSubscription, concurrencyErr.SlotType)
+	require.Equal(t, "1", recorder.Header().Get("Retry-After"))
+	require.Equal(t, subscriptionConcurrencyErrorCode, recorder.Header().Get("X-Sub2API-Error-Code"))
+	require.Equal(t, 1, cache.subscriptionWaitIncrements)
+	require.Equal(t, 1, cache.subscriptionWaitDecrements)
 }
 
 func TestAcquireUserSlotWithWait_TracksAPIKeySlot(t *testing.T) {

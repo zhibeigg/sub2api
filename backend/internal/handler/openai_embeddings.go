@@ -72,6 +72,16 @@ func (h *OpenAIGatewayHandler) Embeddings(c *gin.Context) {
 	}
 	reqModel := modelResult.String()
 	reqLog = reqLog.With(zap.String("model", reqModel))
+	apiKey, err = h.resolveMultiGroupAPIKey(c, apiKey, reqModel)
+	if err != nil {
+		status, code, message := effectiveGroupSubscriptionErrorDetails(err)
+		h.errorResponse(c, status, code, message)
+		return
+	}
+	if apiKey == nil {
+		middleware2.AbortWithError(c, http.StatusForbidden, "GROUP_NOT_ALLOWED", "当前用户不允许使用任何已绑定的标准分组")
+		return
+	}
 	setOpsRequestContext(c, reqModel, false)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeSync))
 	if decision := h.checkSecurityAudit(c, reqLog, apiKey, subject, "openai_embeddings", reqModel, body); decision != nil && !decision.AllowNextStage {

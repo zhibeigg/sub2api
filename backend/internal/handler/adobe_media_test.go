@@ -27,7 +27,7 @@ func TestAdobeModels_IntersectsCustomGroupListWithCatalog(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 	c.Set(string(middleware2.ContextKeyAPIKey), apiKey)
 
-	NewAdobeMediaHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Models(c)
+	NewAdobeMediaHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Models(c)
 	require.Equal(t, http.StatusOK, w.Code)
 	var body struct {
 		Data []struct {
@@ -43,7 +43,7 @@ func TestAdobeUnsupported_ReturnsNotFound(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
-	NewAdobeMediaHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Unsupported(c)
+	NewAdobeMediaHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).Unsupported(c)
 	require.Equal(t, http.StatusNotFound, w.Code)
 }
 
@@ -127,7 +127,7 @@ func TestAdobeMediaAcquireAccountSlot_ReleasesSchedulerSlotOnce(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
 	released := 0
-	h := NewAdobeMediaHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := NewAdobeMediaHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	release, acquired := h.acquireAccountSlot(c, &service.AccountSelectionResult{
 		Account:  &service.Account{ID: 99},
 		Acquired: true,

@@ -50,6 +50,12 @@
             <span v-if="row.original_price" class="ml-1 text-xs text-gray-400 line-through">{{ planCurrencySymbol(row.currency) }}{{ row.original_price.toFixed(2) }}</span>
           </div>
         </template>
+        <template #cell-concurrency_limit="{ value, row }">
+          <span v-if="getPlanType(row) === 'standard_quota'" class="text-sm text-gray-700 dark:text-gray-300">
+            {{ value == null ? t('payment.admin.noExtraConcurrencyLimit') : t('payment.admin.concurrencyValue', { limit: value }) }}
+          </span>
+          <span v-else class="text-sm text-gray-400">-</span>
+        </template>
         <template #cell-validity_days="{ value, row }">
           <span class="text-sm">{{ value }} {{ t('payment.admin.' + (row.validity_unit || 'days')) }}</span>
         </template>
@@ -199,6 +205,7 @@ const planColumns = computed((): Column[] => [
   { key: 'plan_type', label: t('payment.admin.planType') },
   { key: 'group_id', label: t('payment.admin.group') },
   { key: 'price', label: t('payment.admin.price') },
+  { key: 'concurrency_limit', label: t('payment.admin.concurrencyLimit') },
   { key: 'validity_days', label: t('payment.admin.validity') },
   { key: 'for_sale', label: t('payment.admin.forSale') },
   { key: 'sort_order', label: t('payment.admin.sortOrder') },

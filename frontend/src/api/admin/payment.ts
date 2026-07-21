@@ -67,6 +67,7 @@ export interface CreateSubscriptionPlanRequest {
   daily_limit_usd: number | null
   weekly_limit_usd: number | null
   monthly_limit_usd: number | null
+  concurrency_limit: number | null
   description: string
   price: number
   original_price?: number
@@ -79,6 +80,7 @@ export interface CreateSubscriptionPlanRequest {
 
 export interface UpdateSubscriptionPlanRequest extends Partial<CreateSubscriptionPlanRequest> {
   quota_limits_set?: boolean
+  concurrency_limit_set?: boolean
 }
 
 export interface RefundResult {

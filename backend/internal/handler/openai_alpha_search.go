@@ -26,11 +26,11 @@ func (h *OpenAIGatewayHandler) AlphaSearch(c *gin.Context) {
 	requestStart := time.Now()
 
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
-	if !ok || apiKey.Group == nil {
+	if !ok || apiKey == nil {
 		h.errorResponse(c, http.StatusUnauthorized, "authentication_error", "Invalid API key")
 		return
 	}
-	if apiKey.Group.Platform != service.PlatformOpenAI {
+	if (len(apiKey.GroupBindings) == 0 || apiKey.ExplicitGroupSelection) && (apiKey.Group == nil || apiKey.Group.Platform != service.PlatformOpenAI) {
 		h.errorResponse(c, http.StatusNotFound, "not_found_error", "Codex alpha search is only available for OpenAI groups")
 		return
 	}
@@ -76,6 +76,20 @@ func (h *OpenAIGatewayHandler) AlphaSearch(c *gin.Context) {
 	}
 	requestedModel := strings.TrimSpace(modelResult.String())
 	reqLog = reqLog.With(zap.String("model", requestedModel))
+	apiKey, err = h.resolveMultiGroupAPIKey(c, apiKey, requestedModel)
+	if err != nil {
+		status, code, message := effectiveGroupSubscriptionErrorDetails(err)
+		h.errorResponse(c, status, code, message)
+		return
+	}
+	if apiKey == nil {
+		middleware2.AbortWithError(c, http.StatusForbidden, "GROUP_NOT_ALLOWED", "当前用户不允许使用任何已绑定的标准分组")
+		return
+	}
+	if apiKey.Group == nil || apiKey.Group.Platform != service.PlatformOpenAI {
+		h.errorResponse(c, http.StatusNotFound, "not_found_error", "Codex alpha search is only available for OpenAI groups")
+		return
+	}
 	setOpsRequestContext(c, requestedModel, false)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeSync))
 	if decision := h.checkSecurityAudit(c, reqLog, apiKey, subject, "openai_alpha_search", requestedModel, body); decision != nil && !decision.AllowNextStage {

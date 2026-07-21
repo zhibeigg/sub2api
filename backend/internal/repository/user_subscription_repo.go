@@ -37,6 +37,7 @@ func (r *userSubscriptionRepository) Create(ctx context.Context, sub *service.Us
 		SetNillableDailyLimitUsd(sub.DailyLimitUSD).
 		SetNillableWeeklyLimitUsd(sub.WeeklyLimitUSD).
 		SetNillableMonthlyLimitUsd(sub.MonthlyLimitUSD).
+		SetNillableConcurrencyLimit(sub.ConcurrencyLimit).
 		SetExpiresAt(sub.ExpiresAt).
 		SetNillableDailyWindowStart(sub.DailyWindowStart).
 		SetNillableWeeklyWindowStart(sub.WeeklyWindowStart).
@@ -191,6 +192,11 @@ func (r *userSubscriptionRepository) Update(ctx context.Context, sub *service.Us
 		SetNillableAssignedBy(sub.AssignedBy).
 		SetAssignedAt(sub.AssignedAt).
 		SetNotes(sub.Notes)
+	if sub.ConcurrencyLimit == nil {
+		builder.ClearConcurrencyLimit()
+	} else {
+		builder.SetConcurrencyLimit(*sub.ConcurrencyLimit)
+	}
 	updated, err := builder.Save(ctx)
 	if err != nil {
 		return translatePersistenceError(err, service.ErrSubscriptionNotFound, service.ErrSubscriptionAlreadyExists)
@@ -740,6 +746,7 @@ func userSubscriptionEntityToServiceWithStatusMapping(m *dbent.UserSubscription,
 		DailyLimitUSD:      m.DailyLimitUsd,
 		WeeklyLimitUSD:     m.WeeklyLimitUsd,
 		MonthlyLimitUSD:    m.MonthlyLimitUsd,
+		ConcurrencyLimit:   m.ConcurrencyLimit,
 		StartsAt:           m.StartsAt,
 		ExpiresAt:          m.ExpiresAt,
 		Status:             status,

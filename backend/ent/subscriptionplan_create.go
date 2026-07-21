@@ -126,6 +126,20 @@ func (_c *SubscriptionPlanCreate) SetNillableMonthlyLimitUsd(v *float64) *Subscr
 	return _c
 }
 
+// SetConcurrencyLimit sets the "concurrency_limit" field.
+func (_c *SubscriptionPlanCreate) SetConcurrencyLimit(v int) *SubscriptionPlanCreate {
+	_c.mutation.SetConcurrencyLimit(v)
+	return _c
+}
+
+// SetNillableConcurrencyLimit sets the "concurrency_limit" field if the given value is not nil.
+func (_c *SubscriptionPlanCreate) SetNillableConcurrencyLimit(v *int) *SubscriptionPlanCreate {
+	if v != nil {
+		_c.SetConcurrencyLimit(*v)
+	}
+	return _c
+}
+
 // SetCurrency sets the "currency" field.
 func (_c *SubscriptionPlanCreate) SetCurrency(v string) *SubscriptionPlanCreate {
 	_c.mutation.SetCurrency(v)
@@ -495,6 +509,10 @@ func (_c *SubscriptionPlanCreate) createSpec() (*SubscriptionPlan, *sqlgraph.Cre
 		_spec.SetField(subscriptionplan.FieldMonthlyLimitUsd, field.TypeFloat64, value)
 		_node.MonthlyLimitUsd = &value
 	}
+	if value, ok := _c.mutation.ConcurrencyLimit(); ok {
+		_spec.SetField(subscriptionplan.FieldConcurrencyLimit, field.TypeInt, value)
+		_node.ConcurrencyLimit = &value
+	}
 	if value, ok := _c.mutation.Currency(); ok {
 		_spec.SetField(subscriptionplan.FieldCurrency, field.TypeString, value)
 		_node.Currency = value
@@ -784,6 +802,30 @@ func (u *SubscriptionPlanUpsert) AddMonthlyLimitUsd(v float64) *SubscriptionPlan
 // ClearMonthlyLimitUsd clears the value of the "monthly_limit_usd" field.
 func (u *SubscriptionPlanUpsert) ClearMonthlyLimitUsd() *SubscriptionPlanUpsert {
 	u.SetNull(subscriptionplan.FieldMonthlyLimitUsd)
+	return u
+}
+
+// SetConcurrencyLimit sets the "concurrency_limit" field.
+func (u *SubscriptionPlanUpsert) SetConcurrencyLimit(v int) *SubscriptionPlanUpsert {
+	u.Set(subscriptionplan.FieldConcurrencyLimit, v)
+	return u
+}
+
+// UpdateConcurrencyLimit sets the "concurrency_limit" field to the value that was provided on create.
+func (u *SubscriptionPlanUpsert) UpdateConcurrencyLimit() *SubscriptionPlanUpsert {
+	u.SetExcluded(subscriptionplan.FieldConcurrencyLimit)
+	return u
+}
+
+// AddConcurrencyLimit adds v to the "concurrency_limit" field.
+func (u *SubscriptionPlanUpsert) AddConcurrencyLimit(v int) *SubscriptionPlanUpsert {
+	u.Add(subscriptionplan.FieldConcurrencyLimit, v)
+	return u
+}
+
+// ClearConcurrencyLimit clears the value of the "concurrency_limit" field.
+func (u *SubscriptionPlanUpsert) ClearConcurrencyLimit() *SubscriptionPlanUpsert {
+	u.SetNull(subscriptionplan.FieldConcurrencyLimit)
 	return u
 }
 
@@ -1133,6 +1175,34 @@ func (u *SubscriptionPlanUpsertOne) UpdateMonthlyLimitUsd() *SubscriptionPlanUps
 func (u *SubscriptionPlanUpsertOne) ClearMonthlyLimitUsd() *SubscriptionPlanUpsertOne {
 	return u.Update(func(s *SubscriptionPlanUpsert) {
 		s.ClearMonthlyLimitUsd()
+	})
+}
+
+// SetConcurrencyLimit sets the "concurrency_limit" field.
+func (u *SubscriptionPlanUpsertOne) SetConcurrencyLimit(v int) *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.SetConcurrencyLimit(v)
+	})
+}
+
+// AddConcurrencyLimit adds v to the "concurrency_limit" field.
+func (u *SubscriptionPlanUpsertOne) AddConcurrencyLimit(v int) *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.AddConcurrencyLimit(v)
+	})
+}
+
+// UpdateConcurrencyLimit sets the "concurrency_limit" field to the value that was provided on create.
+func (u *SubscriptionPlanUpsertOne) UpdateConcurrencyLimit() *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.UpdateConcurrencyLimit()
+	})
+}
+
+// ClearConcurrencyLimit clears the value of the "concurrency_limit" field.
+func (u *SubscriptionPlanUpsertOne) ClearConcurrencyLimit() *SubscriptionPlanUpsertOne {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.ClearConcurrencyLimit()
 	})
 }
 
@@ -1666,6 +1736,34 @@ func (u *SubscriptionPlanUpsertBulk) UpdateMonthlyLimitUsd() *SubscriptionPlanUp
 func (u *SubscriptionPlanUpsertBulk) ClearMonthlyLimitUsd() *SubscriptionPlanUpsertBulk {
 	return u.Update(func(s *SubscriptionPlanUpsert) {
 		s.ClearMonthlyLimitUsd()
+	})
+}
+
+// SetConcurrencyLimit sets the "concurrency_limit" field.
+func (u *SubscriptionPlanUpsertBulk) SetConcurrencyLimit(v int) *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.SetConcurrencyLimit(v)
+	})
+}
+
+// AddConcurrencyLimit adds v to the "concurrency_limit" field.
+func (u *SubscriptionPlanUpsertBulk) AddConcurrencyLimit(v int) *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.AddConcurrencyLimit(v)
+	})
+}
+
+// UpdateConcurrencyLimit sets the "concurrency_limit" field to the value that was provided on create.
+func (u *SubscriptionPlanUpsertBulk) UpdateConcurrencyLimit() *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.UpdateConcurrencyLimit()
+	})
+}
+
+// ClearConcurrencyLimit clears the value of the "concurrency_limit" field.
+func (u *SubscriptionPlanUpsertBulk) ClearConcurrencyLimit() *SubscriptionPlanUpsertBulk {
+	return u.Update(func(s *SubscriptionPlanUpsert) {
+		s.ClearConcurrencyLimit()
 	})
 }
 

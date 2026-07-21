@@ -295,8 +295,13 @@ func TestRelay_ClientDisconnect_DrainCapturesLateUsage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
+	completedTurns := 0
 	result, relayExit := Relay(ctx, clientConn, upstreamConn, firstPayload, RelayOptions{
 		UpstreamDrainTimeout: 400 * time.Millisecond,
+		OnTurnComplete: func(turn RelayTurnResult) {
+			completedTurns++
+			require.Equal(t, "resp_drain", turn.RequestID)
+		},
 	})
 	require.NotNil(t, relayExit)
 	require.Equal(t, "client_disconnected", relayExit.Stage)
@@ -308,6 +313,7 @@ func TestRelay_ClientDisconnect_DrainCapturesLateUsage(t *testing.T) {
 	require.Equal(t, int64(1), result.ClientToUpstreamFrames)
 	require.Equal(t, int64(0), result.UpstreamToClientFrames)
 	require.Equal(t, int64(1), result.DroppedDownstreamFrames)
+	require.Equal(t, 1, completedTurns, "drain terminal must still complete accounting and release lifecycle state")
 }
 
 func TestRelay_IdleTimeout(t *testing.T) {
@@ -470,6 +476,54 @@ func TestRelay_OnTurnComplete_PerTerminalEvent(t *testing.T) {
 	require.Equal(t, 4, turns[1].Usage.OutputTokens)
 	require.Equal(t, 5, result.Usage.InputTokens)
 	require.Equal(t, 5, result.Usage.OutputTokens)
+}
+
+func TestRelay_OnTurnComplete_RunsOnlyAfterTerminalWriteSucceeds(t *testing.T) {
+	t.Parallel()
+
+	terminalPayload := []byte(`{"type":"response.completed","response":{"id":"resp_commit","usage":{"input_tokens":2,"output_tokens":1}}}`)
+	clientConn := newPassthroughTestFrameConn(nil, false)
+	upstreamConn := newPassthroughTestFrameConn([]passthroughTestFrame{
+		{msgType: coderws.MessageText, payload: terminalPayload},
+	}, true)
+
+	callbackSawCommittedWrite := false
+	_, relayExit := Relay(
+		context.Background(),
+		clientConn,
+		upstreamConn,
+		[]byte(`{"type":"response.create","model":"gpt-5.3-codex","input":[]}`),
+		RelayOptions{
+			OnTurnComplete: func(turn RelayTurnResult) {
+				writes := clientConn.Writes()
+				callbackSawCommittedWrite = len(writes) == 1 && string(writes[0].payload) == string(terminalPayload)
+			},
+		},
+	)
+	require.Nil(t, relayExit)
+	require.True(t, callbackSawCommittedWrite, "terminal completion must run after the client write commits")
+}
+
+func TestRelay_OnTurnComplete_NotCalledWhenTerminalWriteFails(t *testing.T) {
+	t.Parallel()
+
+	upstreamConn := newPassthroughTestFrameConn([]passthroughTestFrame{
+		{
+			msgType: coderws.MessageText,
+			payload: []byte(`{"type":"response.completed","response":{"id":"resp_write_failed","usage":{"input_tokens":2,"output_tokens":1}}}`),
+		},
+	}, true)
+	callbackCalls := 0
+	_, relayExit := Relay(
+		context.Background(),
+		&errorOnWriteFrameConn{},
+		upstreamConn,
+		[]byte(`{"type":"response.create","model":"gpt-5.3-codex","input":[]}`),
+		RelayOptions{OnTurnComplete: func(RelayTurnResult) { callbackCalls++ }},
+	)
+	require.NotNil(t, relayExit)
+	require.Equal(t, "write_client", relayExit.Stage)
+	require.Zero(t, callbackCalls, "failed terminal writes must be released by the relay error path, not OnTurnComplete")
 }
 
 func TestRelay_OnTurnComplete_ProvidesTurnMetrics(t *testing.T) {

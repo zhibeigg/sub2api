@@ -280,6 +280,98 @@ func (s *ConcurrencyCacheSuite) TestUserSlot_TTL() {
 	s.AssertTTLWithin(ttl, 1*time.Second, testSlotTTL)
 }
 
+func (s *ConcurrencyCacheSuite) TestSubscriptionSlot_IsolatedBySubscriptionInstance() {
+	firstSubscriptionID := int64(7001)
+	secondSubscriptionID := int64(7002)
+
+	ok, err := s.rawCache.AcquireSubscriptionSlot(s.ctx, firstSubscriptionID, 1, "first")
+	require.NoError(s.T(), err)
+	require.True(s.T(), ok)
+
+	ok, err = s.rawCache.AcquireSubscriptionSlot(s.ctx, firstSubscriptionID, 1, "second")
+	require.NoError(s.T(), err)
+	require.False(s.T(), ok, "the same subscription instance must share one pool across all covered groups")
+
+	ok, err = s.rawCache.AcquireSubscriptionSlot(s.ctx, secondSubscriptionID, 1, "other-subscription")
+	require.NoError(s.T(), err)
+	require.True(s.T(), ok, "different subscription instances must remain isolated")
+
+	require.NoError(s.T(), s.rawCache.ReleaseSubscriptionSlot(s.ctx, firstSubscriptionID, "first"))
+	ok, err = s.rawCache.AcquireSubscriptionSlot(s.ctx, firstSubscriptionID, 1, "second")
+	require.NoError(s.T(), err)
+	require.True(s.T(), ok, "released capacity must be reusable immediately")
+
+	ttl, err := s.rdb.TTL(s.ctx, subscriptionSlotKey(firstSubscriptionID)).Result()
+	require.NoError(s.T(), err)
+	s.AssertTTLWithin(ttl, 1*time.Second, testSlotTTL)
+}
+
+func (s *ConcurrencyCacheSuite) TestSubscriptionSlot_RefreshOnlyExistingMember() {
+	subscriptionID := int64(7003)
+	requestID := "long-running-request"
+	otherRequestID := "other-live-request"
+	key := subscriptionSlotKey(subscriptionID)
+
+	ok, err := s.rawCache.AcquireSubscriptionSlot(s.ctx, subscriptionID, 2, requestID)
+	require.NoError(s.T(), err)
+	require.True(s.T(), ok)
+	ok, err = s.rawCache.AcquireSubscriptionSlot(s.ctx, subscriptionID, 2, otherRequestID)
+	require.NoError(s.T(), err)
+	require.True(s.T(), ok)
+
+	now, err := s.rawCache.redisUnixSeconds(s.ctx)
+	require.NoError(s.T(), err)
+	oldScore := now - 10
+	require.NoError(s.T(), s.rdb.ZAdd(s.ctx, key, redis.Z{Score: float64(oldScore), Member: requestID}).Err())
+	require.NoError(s.T(), s.rdb.Expire(s.ctx, key, 5*time.Second).Err())
+
+	refreshed, err := s.rawCache.RefreshSubscriptionSlot(s.ctx, subscriptionID, requestID)
+	require.NoError(s.T(), err)
+	require.True(s.T(), refreshed)
+	score, err := s.rdb.ZScore(s.ctx, key, requestID).Result()
+	require.NoError(s.T(), err)
+	require.Greater(s.T(), int64(score), oldScore, "existing member timestamp must advance")
+	ttl, err := s.rdb.TTL(s.ctx, key).Result()
+	require.NoError(s.T(), err)
+	s.AssertTTLWithin(ttl, time.Second, testSlotTTL)
+
+	require.NoError(s.T(), s.rawCache.ReleaseSubscriptionSlot(s.ctx, subscriptionID, requestID))
+	require.NoError(s.T(), s.rdb.Expire(s.ctx, key, 5*time.Second).Err())
+	refreshed, err = s.rawCache.RefreshSubscriptionSlot(s.ctx, subscriptionID, requestID)
+	require.NoError(s.T(), err)
+	require.False(s.T(), refreshed, "released member must not be recreated")
+	_, err = s.rdb.ZScore(s.ctx, key, requestID).Result()
+	require.ErrorIs(s.T(), err, redis.Nil)
+	_, err = s.rdb.ZScore(s.ctx, key, otherRequestID).Result()
+	require.NoError(s.T(), err, "refreshing a missing member must preserve other live members")
+	ttl, err = s.rdb.TTL(s.ctx, key).Result()
+	require.NoError(s.T(), err)
+	require.Greater(s.T(), ttl, time.Duration(0))
+	require.LessOrEqual(s.T(), ttl, 5*time.Second, "missing-member refresh must not extend the key TTL")
+}
+
+func (s *ConcurrencyCacheSuite) TestSubscriptionWaitQueue_IsolatedAndBounded() {
+	subscriptionID := int64(7010)
+	otherSubscriptionID := int64(7011)
+
+	ok, err := s.rawCache.IncrementSubscriptionWaitCount(s.ctx, subscriptionID, 1)
+	require.NoError(s.T(), err)
+	require.True(s.T(), ok)
+	ok, err = s.rawCache.IncrementSubscriptionWaitCount(s.ctx, subscriptionID, 1)
+	require.NoError(s.T(), err)
+	require.False(s.T(), ok)
+	ok, err = s.rawCache.IncrementSubscriptionWaitCount(s.ctx, otherSubscriptionID, 1)
+	require.NoError(s.T(), err)
+	require.True(s.T(), ok)
+
+	require.NoError(s.T(), s.rawCache.DecrementSubscriptionWaitCount(s.ctx, subscriptionID))
+	value, err := s.rdb.Get(s.ctx, subscriptionWaitKey(subscriptionID)).Int()
+	if !errors.Is(err, redis.Nil) {
+		require.NoError(s.T(), err)
+	}
+	require.Zero(s.T(), value)
+}
+
 func (s *ConcurrencyCacheSuite) TestAPIKeySlot_TrackReleaseAndBatchCount() {
 	cache := s.apiKeyConcurrencyCache()
 	apiKeyID := int64(300)

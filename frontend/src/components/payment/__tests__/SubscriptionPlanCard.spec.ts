@@ -10,6 +10,9 @@ const messages = vi.hoisted<Record<string, string>>(() => ({
   'payment.planCard.dailyLimit': 'Daily',
   'payment.planCard.weeklyLimit': 'Weekly',
   'payment.planCard.monthlyLimit': 'Monthly',
+  'payment.planCard.concurrency': 'Concurrency limit',
+  'payment.planCard.concurrencyValue': 'Concurrency {limit}',
+  'payment.planCard.noExtraConcurrencyLimit': 'No additional limit',
   'payment.planCard.quota': 'Quota',
   'payment.planCard.sharedQuota': 'Shared plan quota',
   'payment.planCard.nativeQuota': 'Native group quota',
@@ -22,7 +25,13 @@ const messages = vi.hoisted<Record<string, string>>(() => ({
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
-    t: (key: string) => messages[key] || key,
+    t: (key: string, params?: Record<string, unknown>) => {
+      const message = messages[key] || key
+      return Object.entries(params || {}).reduce(
+        (result, [name, value]) => result.replace(`{${name}}`, String(value)),
+        message,
+      )
+    },
   }),
 }))
 
@@ -60,6 +69,7 @@ function makePlan(overrides: Partial<SubscriptionPlan> = {}): SubscriptionPlan {
     daily_limit_usd: 99,
     weekly_limit_usd: 199,
     monthly_limit_usd: 299,
+    concurrency_limit: null,
     for_sale: true,
     sort_order: 0,
     ...overrides,
@@ -118,6 +128,28 @@ describe('SubscriptionPlanCard quota display', () => {
     expect(text).toContain('$120')
     expect(text).toContain('OpenAI')
     expect(text).toContain('Claude')
+  })
+
+  it('shows a positive standard-plan concurrency limit', () => {
+    const wrapper = mountPlanCard(makePlan({
+      plan_type: 'standard_quota',
+      concurrency_limit: 5,
+    }))
+
+    expect(wrapper.find('[data-test="plan-concurrency"]').text()).toContain('Concurrency 5')
+  })
+
+  it('shows no additional concurrency limit when the standard plan value is null', () => {
+    const wrapper = mountPlanCard(makePlan({
+      plan_type: 'standard_quota',
+      concurrency_limit: null,
+    }))
+
+    expect(wrapper.find('[data-test="plan-concurrency"]').text()).toContain('No additional limit')
+  })
+
+  it('does not show plan concurrency for native subscription plans', () => {
+    expect(mountPlanCard(makePlan({ plan_type: 'subscription' })).find('[data-test="plan-concurrency"]').exists()).toBe(false)
   })
 
   it('shows the single subscription group native quotas instead of plan-level quotas', () => {

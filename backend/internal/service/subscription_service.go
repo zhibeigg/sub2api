@@ -236,6 +236,7 @@ type AssignSubscriptionInput struct {
 	DailyLimitUSD    *float64
 	WeeklyLimitUSD   *float64
 	MonthlyLimitUSD  *float64
+	ConcurrencyLimit *int
 	ValidityDays     int
 	AssignedBy       int64
 	Notes            string
@@ -270,11 +271,13 @@ func (s *SubscriptionService) BuildPlanAssignmentInput(ctx context.Context, user
 	dailyLimit := plan.DailyLimitUsd
 	weeklyLimit := plan.WeeklyLimitUsd
 	monthlyLimit := plan.MonthlyLimitUsd
+	concurrencyLimit := plan.ConcurrencyLimit
 	quotaSnapshotted := planType == domain.SubscriptionPlanTypeStandardQuota
 	if !quotaSnapshotted {
 		dailyLimit = nil
 		weeklyLimit = nil
 		monthlyLimit = nil
+		concurrencyLimit = nil
 	}
 	if err := validatePlanSemantics(planType, groupIDs, dailyLimit, weeklyLimit, monthlyLimit); err != nil {
 		return nil, err
@@ -286,7 +289,8 @@ func (s *SubscriptionService) BuildPlanAssignmentInput(ctx context.Context, user
 		UserID: userID, GroupID: groupIDs[0], GroupIDs: groupIDs, SourcePlanID: &plan.ID,
 		QuotaSnapshotted: quotaSnapshotted, DailyLimitUSD: dailyLimit,
 		WeeklyLimitUSD: weeklyLimit, MonthlyLimitUSD: monthlyLimit,
-		ValidityDays: validityDays, AssignedBy: assignedBy, Notes: notes,
+		ConcurrencyLimit: concurrencyLimit,
+		ValidityDays:     validityDays, AssignedBy: assignedBy, Notes: notes,
 	}, nil
 }
 
@@ -337,8 +341,14 @@ func (s *SubscriptionService) prepareAssignmentInput(ctx context.Context, input 
 		if prepared.DailyLimitUSD == nil && prepared.WeeklyLimitUSD == nil && prepared.MonthlyLimitUSD == nil {
 			return nil, infraerrors.BadRequest("PLAN_QUOTA_REQUIRED", "standard group subscriptions require at least one quota limit")
 		}
-	} else if !prepared.QuotaSnapshotted && len(prepared.GroupIDs) != 1 {
-		return nil, infraerrors.BadRequest("SUBSCRIPTION_GROUP_COUNT_INVALID", "native subscription assignments require exactly one group")
+		if err := validatePlanConcurrencyLimit(prepared.ConcurrencyLimit); err != nil {
+			return nil, err
+		}
+	} else {
+		prepared.ConcurrencyLimit = nil
+		if !prepared.QuotaSnapshotted && len(prepared.GroupIDs) != 1 {
+			return nil, infraerrors.BadRequest("SUBSCRIPTION_GROUP_COUNT_INVALID", "native subscription assignments require exactly one group")
+		}
 	}
 	return &prepared, nil
 }
@@ -397,6 +407,13 @@ func equalOptionalFloat(left, right *float64) bool {
 		return left == nil && right == nil
 	}
 	return math.Abs(*left-*right) < 1e-9
+}
+
+func equalOptionalInt(left, right *int) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
 }
 
 // AssignSubscription 分配订阅给用户（不允许重复分配）
@@ -536,6 +553,7 @@ func (s *SubscriptionService) updateExistingSubscriptionTerm(
 			updated.DailyLimitUSD = input.DailyLimitUSD
 			updated.WeeklyLimitUSD = input.WeeklyLimitUSD
 			updated.MonthlyLimitUSD = input.MonthlyLimitUSD
+			updated.ConcurrencyLimit = input.ConcurrencyLimit
 		}
 		if err := s.userSubRepo.Update(txCtx, &updated); err != nil {
 			return fmt.Errorf("update subscription term: %w", err)
@@ -615,7 +633,8 @@ func (s *SubscriptionService) createSubscription(ctx context.Context, input *Ass
 		UserID: input.UserID, GroupID: input.GroupID, GroupIDs: append([]int64(nil), input.GroupIDs...),
 		SourcePlanID: input.SourcePlanID, QuotaSnapshotted: input.QuotaSnapshotted,
 		DailyLimitUSD: input.DailyLimitUSD, WeeklyLimitUSD: input.WeeklyLimitUSD, MonthlyLimitUSD: input.MonthlyLimitUSD,
-		StartsAt: now, ExpiresAt: expiresAt, Status: SubscriptionStatusActive,
+		ConcurrencyLimit: input.ConcurrencyLimit,
+		StartsAt:         now, ExpiresAt: expiresAt, Status: SubscriptionStatusActive,
 		AssignedAt: now, Notes: input.Notes, CreatedAt: now, UpdatedAt: now,
 	}
 	// 只有当 AssignedBy > 0 时才设置（0 表示系统分配，如兑换码）
@@ -783,6 +802,9 @@ func detectAssignSemanticConflict(existing *UserSubscription, input *AssignSubsc
 			!equalOptionalFloat(existing.WeeklyLimitUSD, input.WeeklyLimitUSD) ||
 			!equalOptionalFloat(existing.MonthlyLimitUSD, input.MonthlyLimitUSD) {
 			return "quota_limits_mismatch", true
+		}
+		if !equalOptionalInt(existing.ConcurrencyLimit, input.ConcurrencyLimit) {
+			return "concurrency_limit_mismatch", true
 		}
 	}
 

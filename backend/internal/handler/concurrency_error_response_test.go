@@ -27,6 +27,22 @@ func TestConcurrencyErrorResponse(t *testing.T) {
 			wantMessage: "Concurrency limit exceeded for account, please retry later",
 		},
 		{
+			name:        "subscription scope returns stable error type",
+			err:         &ConcurrencyError{SlotType: "subscription", IsTimeout: true},
+			slotType:    "user",
+			wantStatus:  http.StatusTooManyRequests,
+			wantType:    "subscription_concurrency_limit_exceeded",
+			wantMessage: "Subscription concurrency limit exceeded, please retry later",
+		},
+		{
+			name:        "subscription wait queue uses stable error type",
+			err:         &WaitQueueFullError{SlotType: "subscription"},
+			slotType:    "user",
+			wantStatus:  http.StatusTooManyRequests,
+			wantType:    "subscription_concurrency_limit_exceeded",
+			wantMessage: "Subscription concurrency limit exceeded, please retry later",
+		},
+		{
 			name:        "client cancellation is not classified as concurrency limit",
 			err:         context.Canceled,
 			slotType:    "user",

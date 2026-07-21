@@ -68,6 +68,56 @@ func TestParsePaymentSubscriptionSnapshot_V2PlanTypeQuotaSemantics(t *testing.T)
 	}
 }
 
+func TestParsePaymentSubscriptionSnapshot_V3ConcurrencyLimit(t *testing.T) {
+	limit := 6
+	order := &dbent.PaymentOrder{SubscriptionSnapshot: map[string]any{
+		"schema_version":    3,
+		"plan_id":           101,
+		"plan_type":         domain.SubscriptionPlanTypeStandardQuota,
+		"group_ids":         []any{int64(11), int64(12)},
+		"validity_days":     30,
+		"daily_limit_usd":   10.0,
+		"concurrency_limit": limit,
+	}}
+
+	snapshot := parsePaymentSubscriptionSnapshot(order)
+	require.NotNil(t, snapshot)
+	require.Equal(t, 3, snapshot.SchemaVersion)
+	require.Equal(t, &limit, snapshot.ConcurrencyLimit)
+
+	mapped := subscriptionSnapshotMap(snapshot)
+	require.EqualValues(t, 3, mapped["schema_version"])
+	require.EqualValues(t, limit, mapped["concurrency_limit"])
+}
+
+func TestParsePaymentSubscriptionSnapshot_OldAndNonStandardSnapshotsIgnoreConcurrencyLimit(t *testing.T) {
+	for _, tt := range []struct {
+		name          string
+		schemaVersion int
+		planType      string
+	}{
+		{name: "v2 standard quota", schemaVersion: 2, planType: domain.SubscriptionPlanTypeStandardQuota},
+		{name: "v3 subscription", schemaVersion: 3, planType: domain.SubscriptionPlanTypeSubscription},
+		{name: "v3 legacy", schemaVersion: 3, planType: domain.SubscriptionPlanTypeLegacySharedSubscription},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			order := &dbent.PaymentOrder{SubscriptionSnapshot: map[string]any{
+				"schema_version":    tt.schemaVersion,
+				"plan_id":           101,
+				"plan_type":         tt.planType,
+				"group_ids":         []any{int64(11)},
+				"validity_days":     30,
+				"daily_limit_usd":   10.0,
+				"concurrency_limit": 9,
+			}}
+
+			snapshot := parsePaymentSubscriptionSnapshot(order)
+			require.NotNil(t, snapshot)
+			require.Nil(t, snapshot.ConcurrencyLimit)
+		})
+	}
+}
+
 func TestParsePaymentSubscriptionSnapshot_LegacyVersionsRemainCompatible(t *testing.T) {
 	t.Run("schema v0 snapshot infers subscription", func(t *testing.T) {
 		order := &dbent.PaymentOrder{SubscriptionSnapshot: map[string]any{

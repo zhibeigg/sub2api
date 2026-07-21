@@ -82,6 +82,20 @@
           </div>
         </div>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.sharedQuotaHint') }}</p>
+        <div class="mt-3">
+          <label class="mb-1 block text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.concurrencyLimit') }}</label>
+          <input
+            v-model.number="planForm.concurrency_limit"
+            data-test="concurrency-limit"
+            type="number"
+            step="1"
+            min="1"
+            :max="MAX_PLAN_CONCURRENCY_LIMIT"
+            class="input"
+            :placeholder="t('payment.admin.noExtraConcurrencyLimit')"
+          />
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('payment.admin.concurrencyLimitHint') }}</p>
+        </div>
       </div>
 
       <div><label class="input-label">{{ t('payment.admin.planDescription') }} <span class="text-red-500">*</span></label><textarea v-model="planForm.description" rows="2" class="input" required></textarea></div>
@@ -172,7 +186,9 @@ const { t } = useI18n()
 const appStore = useAppStore()
 
 const saving = ref(false)
+const MAX_PLAN_CONCURRENCY_LIMIT = 2_147_483_647
 type QuotaInput = number | null | ''
+type ConcurrencyInput = number | null | ''
 type FormalSubscriptionPlanType = Exclude<SubscriptionPlanType, 'legacy_shared_subscription'>
 const planForm = reactive({
   name: '',
@@ -181,6 +197,7 @@ const planForm = reactive({
   daily_limit_usd: null as QuotaInput,
   weekly_limit_usd: null as QuotaInput,
   monthly_limit_usd: null as QuotaInput,
+  concurrency_limit: null as ConcurrencyInput,
   description: '',
   price: 0,
   original_price: 0,
@@ -267,9 +284,10 @@ watch(() => props.show, (visible) => {
       name: props.plan.name,
       plan_type: planType,
       group_ids: planType === 'subscription' ? groupIds.slice(0, 1) : [...groupIds],
-      daily_limit_usd: planType === 'subscription' ? null : (props.plan.daily_limit_usd ?? null),
-      weekly_limit_usd: planType === 'subscription' ? null : (props.plan.weekly_limit_usd ?? null),
-      monthly_limit_usd: planType === 'subscription' ? null : (props.plan.monthly_limit_usd ?? null),
+      daily_limit_usd: planType === 'standard_quota' ? (props.plan.daily_limit_usd ?? null) : null,
+      weekly_limit_usd: planType === 'standard_quota' ? (props.plan.weekly_limit_usd ?? null) : null,
+      monthly_limit_usd: planType === 'standard_quota' ? (props.plan.monthly_limit_usd ?? null) : null,
+      concurrency_limit: planType === 'standard_quota' ? (props.plan.concurrency_limit ?? null) : null,
       description: props.plan.description,
       price: props.plan.price,
       original_price: props.plan.original_price || 0,
@@ -288,6 +306,7 @@ watch(() => props.show, (visible) => {
       daily_limit_usd: null,
       weekly_limit_usd: null,
       monthly_limit_usd: null,
+      concurrency_limit: null,
       description: '',
       price: 0,
       original_price: 0,
@@ -317,6 +336,7 @@ function handlePlanTypeChange(planType: FormalSubscriptionPlanType) {
   planForm.daily_limit_usd = null
   planForm.weekly_limit_usd = null
   planForm.monthly_limit_usd = null
+  planForm.concurrency_limit = null
 }
 
 function normalizeQuota(value: QuotaInput): number | null {
@@ -325,13 +345,24 @@ function normalizeQuota(value: QuotaInput): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+function normalizeConcurrencyLimit(value: ConcurrencyInput): number | null {
+  if (value === '' || value == null) return null
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) && parsed > 0 && parsed <= MAX_PLAN_CONCURRENCY_LIMIT ? parsed : null
+}
+
+function isConcurrencyLimitInvalid(value: ConcurrencyInput): boolean {
+  return value !== '' && value != null && normalizeConcurrencyLimit(value) == null
+}
+
 /** Build request payload with snake_case keys matching backend JSON tags */
 function buildPlanPayload() {
   const features = planFeaturesText.value.split('\n').map(f => f.trim()).filter(Boolean).join('\n')
   const groupIds = planForm.plan_type === 'subscription'
     ? planForm.group_ids.slice(0, 1)
     : [...planForm.group_ids]
-  const quotaLimits = planForm.plan_type === 'standard_quota'
+  const isStandardQuota = planForm.plan_type === 'standard_quota'
+  const quotaLimits = isStandardQuota
     ? {
         daily_limit_usd: normalizeQuota(planForm.daily_limit_usd),
         weekly_limit_usd: normalizeQuota(planForm.weekly_limit_usd),
@@ -342,13 +373,17 @@ function buildPlanPayload() {
         weekly_limit_usd: null,
         monthly_limit_usd: null,
       }
+  const concurrencyLimit = isStandardQuota
+    ? normalizeConcurrencyLimit(planForm.concurrency_limit)
+    : null
   return {
     name: planForm.name,
     plan_type: planForm.plan_type,
     group_id: groupIds[0] ?? null,
     group_ids: groupIds,
     ...quotaLimits,
-    ...(props.plan ? { quota_limits_set: true } : {}),
+    concurrency_limit: concurrencyLimit,
+    ...(props.plan ? { quota_limits_set: true, concurrency_limit_set: true } : {}),
     description: planForm.description,
     price: planForm.price,
     original_price: planForm.original_price || 0,
@@ -371,6 +406,10 @@ async function handleSavePlan() {
     return
   }
   if (planForm.plan_type === 'standard_quota') {
+    if (isConcurrencyLimitInvalid(planForm.concurrency_limit)) {
+      appStore.showError(t('payment.admin.concurrencyLimitInvalid'))
+      return
+    }
     const quotaLimits = [
       normalizeQuota(planForm.daily_limit_usd),
       normalizeQuota(planForm.weekly_limit_usd),

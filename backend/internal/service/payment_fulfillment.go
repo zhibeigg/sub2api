@@ -626,6 +626,9 @@ func (s *PaymentService) ensurePaymentSubscriptionAssigned(ctx context.Context, 
 		existing, lookupErr := s.subscriptionSvc.userSubRepo.GetByUserIDAndGroupID(txCtx, o.UserID, groupID)
 		switch {
 		case lookupErr == nil && existing != nil && hasPaymentSubscriptionOrderNote(existing.Notes, orderNote):
+			if !equalOptionalInt(existing.ConcurrencyLimit, snapshot.ConcurrencyLimit) {
+				return ErrSubscriptionAssignConflict.WithMetadata(map[string]string{"conflict_reason": "concurrency_limit_mismatch"})
+			}
 			recoveredFromNote = true
 		case lookupErr != nil && !errors.Is(lookupErr, ErrSubscriptionNotFound):
 			return fmt.Errorf("check existing subscription assignment: %w", lookupErr)
@@ -635,8 +638,8 @@ func (s *PaymentService) ensurePaymentSubscriptionAssigned(ctx context.Context, 
 				UserID: o.UserID, GroupID: groupID, GroupIDs: snapshot.GroupIDs,
 				SourcePlanID: &planID, QuotaSnapshotted: snapshot.quotaSnapshotted(),
 				DailyLimitUSD: snapshot.DailyLimitUSD, WeeklyLimitUSD: snapshot.WeeklyLimitUSD,
-				MonthlyLimitUSD: snapshot.MonthlyLimitUSD, ValidityDays: days,
-				AssignedBy: 0, Notes: orderNote,
+				MonthlyLimitUSD: snapshot.MonthlyLimitUSD, ConcurrencyLimit: snapshot.ConcurrencyLimit,
+				ValidityDays: days, AssignedBy: 0, Notes: orderNote,
 			}, true); err != nil {
 				return fmt.Errorf("assign subscription: %w", err)
 			}
@@ -646,8 +649,8 @@ func (s *PaymentService) ensurePaymentSubscriptionAssigned(ctx context.Context, 
 			"groupID": groupID, "groupIDs": snapshot.GroupIDs, "planID": snapshot.PlanID,
 			"planType": snapshot.PlanType, "quotaSnapshotted": snapshot.quotaSnapshotted(),
 			"dailyLimitUSD": snapshot.DailyLimitUSD, "weeklyLimitUSD": snapshot.WeeklyLimitUSD,
-			"monthlyLimitUSD": snapshot.MonthlyLimitUSD, "validityDays": days,
-			"recoveredFromNote": recoveredFromNote,
+			"monthlyLimitUSD": snapshot.MonthlyLimitUSD, "concurrencyLimit": snapshot.ConcurrencyLimit,
+			"validityDays": days, "recoveredFromNote": recoveredFromNote,
 		})
 		if _, err := txClient.PaymentAuditLog.Create().
 			SetOrderID(strconv.FormatInt(o.ID, 10)).

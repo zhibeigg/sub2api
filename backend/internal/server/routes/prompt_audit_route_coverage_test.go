@@ -93,8 +93,8 @@ func TestResponsesWebSocketHasFirstAndSubsequentTurnPromptGates(t *testing.T) {
 	wsSource := string(handlerSource)[wsStart:]
 	require.Less(t,
 		strings.Index(wsSource, `"first_turn"`),
-		strings.Index(wsSource, `TryAcquireUserSlotForAPIKey`),
-		"the first response.create gate must precede per-request user/account slots",
+		strings.Index(wsSource, `tryAcquireTurnRequestSlots`),
+		"the first response.create gate must precede per-request user/subscription/account slots",
 	)
 }
 

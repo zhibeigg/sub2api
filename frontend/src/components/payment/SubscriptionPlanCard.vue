@@ -68,6 +68,12 @@
           <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.monthlyLimit') }}</span>
           <span class="font-medium text-gray-700 dark:text-gray-300">${{ quotaLimits.monthly }}</span>
         </div>
+        <div v-if="planType === 'standard_quota'" data-test="plan-concurrency" class="col-span-2 flex items-center justify-between">
+          <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.concurrency') }}</span>
+          <span class="font-medium text-gray-700 dark:text-gray-300">
+            {{ plan.concurrency_limit == null ? t('payment.planCard.noExtraConcurrencyLimit') : t('payment.planCard.concurrencyValue', { limit: plan.concurrency_limit }) }}
+          </span>
+        </div>
         <div v-if="quotaLimits.daily == null && quotaLimits.weekly == null && quotaLimits.monthly == null" class="flex items-center justify-between">
           <span class="text-gray-400 dark:text-dark-500">{{ t('payment.planCard.quota') }}</span>
           <span class="font-medium text-gray-700 dark:text-gray-300">{{ t('payment.planCard.unlimited') }}</span>

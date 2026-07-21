@@ -2,7 +2,7 @@
 
 Sub2API has a built-in payment system that enables user self-service top-up without deploying a separate payment service.
 
-Subscription plans have two modes. A `subscription` plan binds exactly one subscription group and uses that group's native limits. A `standard_quota` plan binds one or more standard balance groups and defines shared daily, weekly, or monthly USD plan limits. Plan type, group access, limits, and validity are snapshotted when purchased or assigned, so later plan edits do not retroactively change existing subscriptions. Administrators can also hide balance recharge and subscription purchase independently; the backend rejects new orders of the disabled type.
+Subscription plans have two modes. A `subscription` plan binds exactly one subscription group and uses that group's native limits. A `standard_quota` plan binds one or more standard balance groups and defines shared daily, weekly, or monthly USD plan limits plus an optional subscription-instance `concurrency_limit`. Plan type, group access, quota limits, concurrency limit, and validity are snapshotted when purchased or assigned, so later plan edits do not retroactively change existing subscriptions. Administrators can also hide balance recharge and subscription purchase independently; the backend rejects new orders of the disabled type.
 
 ### Subscription plan types
 
@@ -11,7 +11,9 @@ Subscription plans have two modes. A `subscription` plan binds exactly one subsc
 | `subscription` | Subscription groups | Exactly 1 | The group's native daily/weekly/monthly limits | The subscription group is no longer available |
 | `standard_quota` | Standard balance groups | One or more | Shared plan-level limits; at least one period is required | Public standard groups return to balance billing; exclusive groups require separate access |
 
-An active `standard_quota` subscription takes priority over balance billing. Exhausted plan quota rejects the request instead of silently charging balance. Legacy multi-subscription-group plans are retained as read-only `legacy_shared_subscription` plans and taken off sale; existing subscriptions and order snapshots remain valid.
+`concurrency_limit` applies only to `standard_quota`. `NULL`, omission, or an empty admin field means the plan adds no concurrency restriction; valid integers range from `1` through `2147483647` and are counted by `user_subscriptions.id`. All standard groups bound to the same subscription instance share one concurrency pool, while separate subscription instances do not consume one another's slots. This limit neither replaces nor raises the user's global concurrency or the upstream account concurrency: a request must satisfy all three layers. Saturation returns HTTP `429` with `Retry-After: 1` and `X-Sub2API-Error-Code: SUBSCRIPTION_CONCURRENCY_LIMIT_EXCEEDED`. Responses WebSocket acquires per turn and rejects in-connection model changes; Batch Image currently fails closed with `409 BATCH_IMAGE_SUBSCRIPTION_UNSUPPORTED` for active shared-quota subscriptions because that asynchronous API only supports balance settlement.
+
+An active `standard_quota` subscription takes priority over balance billing. Exhausted plan quota rejects the request instead of silently charging balance. The plan concurrency value is copied into the payment-order and user-subscription snapshots, so later plan edits affect only future purchases or assignments. Admin subscription lists and My Subscriptions display the instance snapshot, never the current plan value. Old orders and existing subscriptions without the field are treated as `NULL` and remain unrestricted by the plan. Legacy multi-subscription-group plans are retained as read-only `legacy_shared_subscription` plans and taken off sale; existing subscriptions and order snapshots remain valid.
 
 ---
 

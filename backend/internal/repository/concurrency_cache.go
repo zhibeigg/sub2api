@@ -28,6 +28,8 @@ const (
 	accountSlotKeyPrefix = "concurrency:account:"
 	// 格式: concurrency:user:{userID}
 	userSlotKeyPrefix = "concurrency:user:"
+	// 格式: concurrency:subscription:{subscriptionID}
+	subscriptionSlotKeyPrefix = "concurrency:subscription:"
 	// 格式: concurrency:api_key:{apiKeyID}
 	apiKeySlotKeyPrefix = "concurrency:api_key:"
 	// API-key-scoped client WebSocket ingress leases use a shorter TTL than
@@ -36,6 +38,8 @@ const (
 	openAIWSIngressLeaseTTLSeconds = 60
 	// 等待队列计数器格式: concurrency:wait:{userID}
 	waitQueueKeyPrefix = "concurrency:wait:"
+	// 订阅实例等待队列计数器格式: concurrency:subscription_wait:{subscriptionID}
+	subscriptionWaitKeyPrefix = "concurrency:subscription_wait:"
 	// 账号级等待队列计数器格式: wait:account:{accountID}
 	accountWaitKeyPrefix = "wait:account:"
 
@@ -137,6 +141,24 @@ var (
 		local expireBefore = now - ttl
 
 		redis.call('ZREMRANGEBYSCORE', key, '-inf', expireBefore)
+		redis.call('ZADD', key, now, requestID)
+		redis.call('EXPIRE', key, ttl)
+		return 1
+	`)
+
+	// refreshSubscriptionSlotScript atomically refreshes a live subscription
+	// request lease. Expired or explicitly released members are never recreated.
+	refreshSubscriptionSlotScript = redis.NewScript(`
+		redis.replicate_commands()
+		local key = KEYS[1]
+		local ttl = tonumber(ARGV[1])
+		local requestID = ARGV[2]
+		local now = tonumber(redis.call('TIME')[1])
+		local expireBefore = now - ttl
+		redis.call('ZREMRANGEBYSCORE', key, '-inf', expireBefore)
+		if redis.call('ZSCORE', key, requestID) == false then
+			return 0
+		end
 		redis.call('ZADD', key, now, requestID)
 		redis.call('EXPIRE', key, ttl)
 		return 1
@@ -326,6 +348,10 @@ func userSlotKey(userID int64) string {
 	return fmt.Sprintf("%s%d", userSlotKeyPrefix, userID)
 }
 
+func subscriptionSlotKey(subscriptionID int64) string {
+	return fmt.Sprintf("%s%d", subscriptionSlotKeyPrefix, subscriptionID)
+}
+
 func apiKeySlotKey(apiKeyID int64) string {
 	return fmt.Sprintf("%s%d", apiKeySlotKeyPrefix, apiKeyID)
 }
@@ -336,6 +362,10 @@ func openAIWSIngressLeaseKey(apiKeyID int64) string {
 
 func waitQueueKey(userID int64) string {
 	return fmt.Sprintf("%s%d", waitQueueKeyPrefix, userID)
+}
+
+func subscriptionWaitKey(subscriptionID int64) string {
+	return fmt.Sprintf("%s%d", subscriptionWaitKeyPrefix, subscriptionID)
 }
 
 func accountWaitKey(accountID int64) string {
@@ -663,6 +693,44 @@ func (c *concurrencyCache) GetUserConcurrency(ctx context.Context, userID int64)
 	return result, nil
 }
 
+// Subscription slot operations intentionally rely on key TTL and acquire-time
+// expiry cleanup rather than the user/account operational active indexes. This
+// keeps subscription-instance leases isolated from startup process cleanup.
+func (c *concurrencyCache) AcquireSubscriptionSlot(ctx context.Context, subscriptionID int64, maxConcurrency int, requestID string) (bool, error) {
+	if c == nil || c.rdb == nil || subscriptionID <= 0 || maxConcurrency <= 0 || requestID == "" {
+		return false, nil
+	}
+	result, _, err := runScriptInt64Pair(ctx, c.rdb, acquireScript, []string{subscriptionSlotKey(subscriptionID)}, maxConcurrency, c.slotTTLSeconds, requestID)
+	if err != nil {
+		return false, err
+	}
+	return result == 1, nil
+}
+
+func (c *concurrencyCache) RefreshSubscriptionSlot(ctx context.Context, subscriptionID int64, requestID string) (bool, error) {
+	if c == nil || c.rdb == nil || subscriptionID <= 0 || requestID == "" {
+		return false, nil
+	}
+	result, err := refreshSubscriptionSlotScript.Run(
+		ctx,
+		c.rdb,
+		[]string{subscriptionSlotKey(subscriptionID)},
+		c.slotTTLSeconds,
+		requestID,
+	).Int()
+	if err != nil {
+		return false, err
+	}
+	return result == 1, nil
+}
+
+func (c *concurrencyCache) ReleaseSubscriptionSlot(ctx context.Context, subscriptionID int64, requestID string) error {
+	if c == nil || c.rdb == nil || subscriptionID <= 0 || requestID == "" {
+		return nil
+	}
+	return c.rdb.ZRem(ctx, subscriptionSlotKey(subscriptionID), requestID).Err()
+}
+
 func (c *concurrencyCache) TrackAPIKeySlot(ctx context.Context, apiKeyID int64, requestID string) error {
 	key := apiKeySlotKey(apiKeyID)
 	_, err := trackSlotScript.Run(ctx, c.rdb, []string{key}, c.slotTTLSeconds, requestID).Result()
@@ -775,6 +843,25 @@ func (c *concurrencyCache) DecrementWaitCount(ctx context.Context, userID int64)
 		// 等待数减少后重新判断是否还需要保留索引。
 		c.refreshUserActiveIndex(ctx, userID)
 	}
+	return err
+}
+
+func (c *concurrencyCache) IncrementSubscriptionWaitCount(ctx context.Context, subscriptionID int64, maxWait int) (bool, error) {
+	if c == nil || c.rdb == nil || subscriptionID <= 0 {
+		return false, nil
+	}
+	result, _, err := runScriptInt64Pair(ctx, c.rdb, incrementWaitScript, []string{subscriptionWaitKey(subscriptionID)}, maxWait, c.waitQueueTTLSeconds)
+	if err != nil {
+		return false, err
+	}
+	return result == 1, nil
+}
+
+func (c *concurrencyCache) DecrementSubscriptionWaitCount(ctx context.Context, subscriptionID int64) error {
+	if c == nil || c.rdb == nil || subscriptionID <= 0 {
+		return nil
+	}
+	_, err := decrementWaitScript.Run(ctx, c.rdb, []string{subscriptionWaitKey(subscriptionID)}).Result()
 	return err
 }
 

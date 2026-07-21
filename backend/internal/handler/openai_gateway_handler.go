@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -62,21 +63,24 @@ func resolveOpenAIMessagesDispatchMappedModel(apiKey *service.APIKey, requestedM
 	return strings.TrimSpace(apiKey.Group.ResolveMessagesDispatchModel(requestedModel))
 }
 
-// resolveMultiGroupAPIKey resolves the effective group for a multi-group key by
-// priority and returns a clone bound to it (so billing/session/subscription/
-// scheduling all attribute to it). Single-group keys are returned unchanged.
-func (h *OpenAIGatewayHandler) resolveMultiGroupAPIKey(ctx context.Context, apiKey *service.APIKey, requestedModel string) *service.APIKey {
+// resolveMultiGroupAPIKey resolves the effective group and refreshes the
+// request-scoped subscription so concurrency and billing use the same instance.
+func (h *OpenAIGatewayHandler) resolveMultiGroupAPIKey(c *gin.Context, apiKey *service.APIKey, requestedModel string) (*service.APIKey, error) {
 	if apiKey == nil || len(apiKey.GroupBindings) == 0 {
-		return apiKey
+		return apiKey, nil
 	}
 	if !apiKey.HasAllowedGroupBindingByUserRestriction() {
-		return nil
+		return nil, nil
 	}
-	group := h.gatewayService.ResolveEffectiveGroupBinding(ctx, apiKey, requestedModel)
+	group := h.gatewayService.ResolveEffectiveGroupBinding(c.Request.Context(), apiKey, requestedModel)
 	if group == nil {
-		return apiKey
+		return apiKey, nil
 	}
-	return cloneAPIKeyWithGroup(apiKey, group)
+	selected := cloneAPIKeyWithGroup(apiKey, group)
+	if err := applyResolvedAPIKeyContext(c, apiKey, selected, h.subscriptionService, h.cfg); err != nil {
+		return nil, err
+	}
+	return selected, nil
 }
 
 type openAIModelBodyReplaceFunc func([]byte, string) []byte
@@ -283,7 +287,12 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 		return
 	}
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
-	apiKey = h.resolveMultiGroupAPIKey(c.Request.Context(), apiKey, reqModel)
+	apiKey, err = h.resolveMultiGroupAPIKey(c, apiKey, reqModel)
+	if err != nil {
+		status, code, message := effectiveGroupSubscriptionErrorDetails(err)
+		h.errorResponse(c, status, code, message)
+		return
+	}
 	if apiKey == nil {
 		middleware2.AbortWithError(c, http.StatusForbidden, "GROUP_NOT_ALLOWED", "当前用户不允许使用任何已绑定的标准分组")
 		return
@@ -885,7 +894,12 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 	}
 	reqModel := modelResult.String()
 	routingModel := service.NormalizeOpenAICompatRequestedModel(reqModel)
-	apiKey = h.resolveMultiGroupAPIKey(c.Request.Context(), apiKey, reqModel)
+	apiKey, err = h.resolveMultiGroupAPIKey(c, apiKey, reqModel)
+	if err != nil {
+		status, code, message := effectiveGroupSubscriptionErrorDetails(err)
+		h.anthropicErrorResponse(c, status, code, message)
+		return
+	}
 	if apiKey == nil {
 		middleware2.AbortWithError(c, http.StatusForbidden, "GROUP_NOT_ALLOWED", "当前用户不允许使用任何已绑定的标准分组")
 		return
@@ -1443,8 +1457,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	if ingressLease != nil {
 		defer ingressLease.Release()
 		ctx = ingressLease.Context()
-		c.Request = c.Request.WithContext(ctx)
 	}
+	connectionCtx, cancelConnection := context.WithCancelCause(ctx)
+	defer cancelConnection(context.Canceled)
+	ctx = connectionCtx
+	c.Request = c.Request.WithContext(ctx)
 
 	wsConn, err := coderws.Accept(c.Writer, c.Request, &coderws.AcceptOptions{
 		CompressionMode: coderws.CompressionContextTakeover,
@@ -1464,6 +1481,10 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	defer func() {
 		_ = wsConn.CloseNow()
 	}()
+	connectionLifecycle := newOpenAIWSConnectionLifecycle(cancelConnection, wsConn)
+	onTurnLeaseLost := connectionLifecycle.OnTurnLeaseLost
+	cancelConnectionWithClose := connectionLifecycle.CancelWithClose
+	isTurnLeaseLost := connectionLifecycle.TurnLeaseLost
 	wsConn.SetReadLimit(service.ResolveOpenAIWSClientReadLimitBytes(h.cfg))
 
 	firstMessageTimeout := service.ResolveOpenAIWSClientFirstMessageTimeout(h.cfg)
@@ -1505,6 +1526,20 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "model is required in first response.create payload")
 		return
 	}
+	apiKey, err = h.resolveMultiGroupAPIKey(c, apiKey, reqModel)
+	if err != nil {
+		if errors.Is(err, service.ErrSubscriptionNotFound) {
+			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "no active subscription found for selected group")
+		} else {
+			closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "failed to resolve subscription for selected group")
+		}
+		return
+	}
+	if apiKey == nil {
+		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "no allowed group available for this API key")
+		return
+	}
+	ctx = c.Request.Context()
 	previousResponseID := strings.TrimSpace(gjson.GetBytes(firstMessage, "previous_response_id").String())
 	previousResponseIDKind := service.ClassifyOpenAIPreviousResponseIDKind(previousResponseID)
 	if previousResponseID != "" && previousResponseIDKind == service.OpenAIPreviousResponseIDKindMessageID {
@@ -1548,25 +1583,101 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	// 解析渠道级模型映射
 	channelMappingWS, _ := h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, reqModel)
 
+	var turnStateMu sync.Mutex
 	var currentUserRelease func()
 	var currentAccountRelease func()
+	var currentSubscription *service.UserSubscription
+	setCurrentSubscription := func(subscription *service.UserSubscription) {
+		turnStateMu.Lock()
+		currentSubscription = subscription
+		turnStateMu.Unlock()
+		setOpenAIWSTurnSubscriptionContext(c, subscription)
+	}
+	getCurrentSubscription := func() *service.UserSubscription {
+		turnStateMu.Lock()
+		defer turnStateMu.Unlock()
+		return currentSubscription
+	}
+	reloadTurnSubscription := func() (*service.UserSubscription, error) {
+		var subscriptionResolver activeSubscriptionResolver
+		if h.subscriptionService != nil {
+			subscriptionResolver = h.subscriptionService
+			if apiKey.User != nil && apiKey.Group != nil {
+				h.subscriptionService.InvalidateSubCacheSync(apiKey.User.ID, apiKey.Group.ID)
+			}
+		}
+		subscription, reloadErr := resolveOpenAIWSTurnSubscription(ctx, apiKey, subscriptionResolver, h.cfg)
+		if reloadErr != nil {
+			return nil, reloadErr
+		}
+		setCurrentSubscription(subscription)
+		return subscription, nil
+	}
+	tryAcquireTurnRequestSlots := func(subscription *service.UserSubscription) (func(), bool, error) {
+		subscriptionID := int64(0)
+		subscriptionMaxConcurrency := 0
+		if subscription != nil && subscription.ID > 0 && subscription.ConcurrencyLimit != nil && *subscription.ConcurrencyLimit > 0 {
+			subscriptionID = subscription.ID
+			subscriptionMaxConcurrency = *subscription.ConcurrencyLimit
+		}
+		return h.concurrencyHelper.TryAcquireRequestSlotsForAPIKeyWithLeaseLoss(
+			ctx,
+			subject.UserID,
+			subject.Concurrency,
+			apiKey.ID,
+			subscriptionID,
+			subscriptionMaxConcurrency,
+			onTurnLeaseLost,
+		)
+	}
+	setCurrentUserRelease := func(release func()) {
+		turnStateMu.Lock()
+		currentUserRelease = wrapReleaseOnDone(ctx, release)
+		turnStateMu.Unlock()
+	}
+	setCurrentAccountRelease := func(release func()) {
+		turnStateMu.Lock()
+		currentAccountRelease = wrapReleaseOnDone(ctx, release)
+		turnStateMu.Unlock()
+	}
 	releaseAccountSlot := func() {
-		if currentAccountRelease != nil {
-			currentAccountRelease()
-			currentAccountRelease = nil
+		turnStateMu.Lock()
+		release := currentAccountRelease
+		currentAccountRelease = nil
+		turnStateMu.Unlock()
+		if release != nil {
+			release()
 		}
 	}
 	releaseTurnSlots := func() {
-		releaseAccountSlot()
-		if currentUserRelease != nil {
-			currentUserRelease()
-			currentUserRelease = nil
+		turnStateMu.Lock()
+		accountRelease := currentAccountRelease
+		userRelease := currentUserRelease
+		currentAccountRelease = nil
+		currentUserRelease = nil
+		turnStateMu.Unlock()
+		if accountRelease != nil {
+			accountRelease()
+		}
+		if userRelease != nil {
+			userRelease()
 		}
 	}
 	// 必须尽早注册，确保任何 early return 都能释放已获取的并发槽位。
 	defer releaseTurnSlots()
 
-	userReleaseFunc, userAcquired, err := h.concurrencyHelper.TryAcquireUserSlotForAPIKey(ctx, subject.UserID, subject.Concurrency, apiKey.ID)
+	subscription, err := reloadTurnSubscription()
+	if err != nil {
+		reqLog.Warn("openai.websocket_subscription_reload_failed", zap.Error(err))
+		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "failed to resolve active subscription")
+		return
+	}
+	if err := h.billingCacheService.CheckBillingEligibility(ctx, apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
+		reqLog.Info("openai.websocket_billing_eligibility_check_failed", zap.Error(err))
+		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "billing check failed")
+		return
+	}
+	userReleaseFunc, userAcquired, err := tryAcquireTurnRequestSlots(subscription)
 	if err != nil {
 		reqLog.Warn("openai.websocket_user_slot_acquire_failed", zap.Error(err))
 		closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "failed to acquire user concurrency slot")
@@ -1576,14 +1687,17 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "too many concurrent requests, please retry later")
 		return
 	}
-	currentUserRelease = wrapReleaseOnDone(ctx, userReleaseFunc)
+	setCurrentUserRelease(userReleaseFunc)
 	ensureUserSlotHeld := func() bool {
-		if currentUserRelease != nil {
+		turnStateMu.Lock()
+		held := currentUserRelease != nil
+		turnStateMu.Unlock()
+		if held {
 			return true
 		}
-		userReleaseFunc, userAcquired, err := h.concurrencyHelper.TryAcquireUserSlotForAPIKey(ctx, subject.UserID, subject.Concurrency, apiKey.ID)
-		if err != nil {
-			reqLog.Warn("openai.websocket_user_slot_reacquire_failed", zap.Error(err))
+		userReleaseFunc, userAcquired, acquireErr := tryAcquireTurnRequestSlots(getCurrentSubscription())
+		if acquireErr != nil {
+			reqLog.Warn("openai.websocket_user_slot_reacquire_failed", zap.Error(acquireErr))
 			closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "failed to acquire user concurrency slot")
 			return false
 		}
@@ -1591,20 +1705,14 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "too many concurrent requests, please retry later")
 			return false
 		}
-		currentUserRelease = wrapReleaseOnDone(ctx, userReleaseFunc)
+		setCurrentUserRelease(userReleaseFunc)
 		return true
 	}
 
-	subscription, _ := middleware2.GetSubscriptionFromContext(c)
 	requestPlatform := openAICompatibleRequestPlatform(apiKey)
 	requiredTransport := service.OpenAIUpstreamTransportResponsesWebsocketV2Ingress
 	if requestPlatform == service.PlatformGrok {
 		requiredTransport = service.OpenAIUpstreamTransportHTTPSSE
-	}
-	if err := h.billingCacheService.CheckBillingEligibility(ctx, apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
-		reqLog.Info("openai.websocket_billing_eligibility_check_failed", zap.Error(err))
-		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "billing check failed")
-		return
 	}
 
 	sessionHash := h.gatewayService.GenerateSessionHashWithFallback(
@@ -1731,7 +1839,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			}
 			accountReleaseFunc = fastReleaseFunc
 		}
-		currentAccountRelease = wrapReleaseOnDone(ctx, accountReleaseFunc)
+		setCurrentAccountRelease(accountReleaseFunc)
 		if err := h.gatewayService.BindStickySession(ctx, apiKey.GroupID, sessionHash, account.ID); err != nil {
 			reqLog.Warn("openai.websocket_bind_sticky_session_failed", zap.Int64("account_id", account.ID), zap.Error(err))
 		}
@@ -1774,6 +1882,9 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if model == "" {
 					model = strings.TrimSpace(gjson.GetBytes(payload, "model").String())
 				}
+				if err := validateOpenAIWSFixedRequestModel(reqModel, model); err != nil {
+					return err
+				}
 				if model == "" {
 					model = reqModel
 				}
@@ -1791,22 +1902,29 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				if turn == 1 {
 					return nil
 				}
-				// 防御式清理：避免异常路径下旧槽位覆盖导致泄漏。
+				// BeforeRequest 已完成模型锁定和安全审核；在写上游前重新加载
+				// 最终固定 group 的订阅、复检计费并重新获取本 turn 全部槽位。
 				releaseTurnSlots()
-				// 非首轮 turn 需要重新抢占并发槽位，避免长连接空闲占槽。
-				userReleaseFunc, userAcquired, err := h.concurrencyHelper.TryAcquireUserSlotForAPIKey(ctx, subject.UserID, subject.Concurrency, apiKey.ID)
-				if err != nil {
-					return service.NewOpenAIWSClientCloseError(coderws.StatusInternalError, "failed to acquire user concurrency slot", err)
+				subscription, reloadErr := reloadTurnSubscription()
+				if reloadErr != nil {
+					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "failed to resolve active subscription", reloadErr)
+				}
+				if billingErr := h.billingCacheService.CheckBillingEligibility(ctx, apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); billingErr != nil {
+					return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "billing check failed", billingErr)
+				}
+				userReleaseFunc, userAcquired, acquireErr := tryAcquireTurnRequestSlots(subscription)
+				if acquireErr != nil {
+					return service.NewOpenAIWSClientCloseError(coderws.StatusInternalError, "failed to acquire user concurrency slot", acquireErr)
 				}
 				if !userAcquired {
 					return service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "too many concurrent requests, please retry later", nil)
 				}
-				accountReleaseFunc, accountAcquired, err := h.concurrencyHelper.TryAcquireAccountSlot(ctx, account.ID, accountMaxConcurrency)
-				if err != nil {
+				accountReleaseFunc, accountAcquired, accountErr := h.concurrencyHelper.TryAcquireAccountSlot(ctx, account.ID, accountMaxConcurrency)
+				if accountErr != nil {
 					if userReleaseFunc != nil {
 						userReleaseFunc()
 					}
-					return service.NewOpenAIWSClientCloseError(coderws.StatusInternalError, "failed to acquire account concurrency slot", err)
+					return service.NewOpenAIWSClientCloseError(coderws.StatusInternalError, "failed to acquire account concurrency slot", accountErr)
 				}
 				if !accountAcquired {
 					if userReleaseFunc != nil {
@@ -1814,16 +1932,16 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					}
 					return service.NewOpenAIWSClientCloseError(coderws.StatusTryAgainLater, "account is busy, please retry later", nil)
 				}
-				currentUserRelease = wrapReleaseOnDone(ctx, userReleaseFunc)
-				currentAccountRelease = wrapReleaseOnDone(ctx, accountReleaseFunc)
+				setCurrentUserRelease(userReleaseFunc)
+				setCurrentAccountRelease(accountReleaseFunc)
 				return nil
 			},
 			AfterTurn: func(turn int, result *service.OpenAIForwardResult, turnErr error) {
-				// F1: cyber 标记按 turn 生命周期清理——defer 保证任意早返回路径都执行；
-				// CyberBlocked 必须在 submit 前同步预捕获（task 闭包由 worker 池异步执行，
-				// 届时 defer 已清除标记）。
+				// 保持槽位直到本 turn 的同步入账结束，确保下一 turn 的订阅/余额
+				// 重载和资格检查必然观察到上一 turn 的扣减结果。
+				defer releaseTurnSlots()
 				defer clearCyberPolicyTurnState(c)
-				releaseTurnSlots()
+				subscription := getCurrentSubscription()
 				h.recordCyberPolicyIfMarked(c, apiKey, account, subscription, reqModel, turnErr != nil, cyberBlockKey, channelMappingWS.ToUsageFields(reqModel, ""), requestPayloadHash)
 				if service.GetOpsCyberPolicy(c) != nil {
 					cyberBlockedThisConn = true
@@ -1855,30 +1973,31 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				upstreamEndpoint := resolveOpenAIUpstreamEndpoint(c, account, result)
 				quotaPlatform := service.QuotaPlatform(c.Request.Context(), apiKey)
 				cyberBlocked := service.GetOpsCyberPolicy(c) != nil
-				h.submitOpenAIUsageRecordTask(ctx, result, func(taskCtx context.Context) {
-					if err := h.gatewayService.RecordUsage(taskCtx, &service.OpenAIRecordUsageInput{
-						Result:             result,
-						APIKey:             apiKey,
-						User:               apiKey.User,
-						Account:            account,
-						Subscription:       subscription,
-						InboundEndpoint:    inboundEndpoint,
-						UpstreamEndpoint:   upstreamEndpoint,
-						UserAgent:          userAgent,
-						IPAddress:          clientIP,
-						RequestPayloadHash: requestPayloadHash,
-						APIKeyService:      h.apiKeyService,
-						QuotaPlatform:      quotaPlatform,
-						ChannelUsageFields: channelMappingWS.ToUsageFields(reqModel, result.UpstreamModel),
-						CyberBlocked:       cyberBlocked,
-					}); err != nil {
-						reqLog.Error("openai.websocket_record_usage_failed",
-							zap.Int64("account_id", account.ID),
-							zap.String("request_id", result.RequestID),
-							zap.Error(err),
-						)
-					}
-				})
+				usageCtx, cancelUsage := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+				defer cancelUsage()
+				if recordErr := h.gatewayService.RecordUsage(usageCtx, &service.OpenAIRecordUsageInput{
+					Result:             result,
+					APIKey:             apiKey,
+					User:               apiKey.User,
+					Account:            account,
+					Subscription:       subscription,
+					InboundEndpoint:    inboundEndpoint,
+					UpstreamEndpoint:   upstreamEndpoint,
+					UserAgent:          userAgent,
+					IPAddress:          clientIP,
+					RequestPayloadHash: requestPayloadHash,
+					APIKeyService:      h.apiKeyService,
+					QuotaPlatform:      quotaPlatform,
+					ChannelUsageFields: channelMappingWS.ToUsageFields(reqModel, result.UpstreamModel),
+					CyberBlocked:       cyberBlocked,
+				}); recordErr != nil {
+					reqLog.Error("openai.websocket_record_usage_failed",
+						zap.Int64("account_id", account.ID),
+						zap.String("request_id", result.RequestID),
+						zap.Error(recordErr),
+					)
+					cancelConnectionWithClose(recordErr, "usage accounting failed; please reconnect")
+				}
 			},
 		}
 
@@ -1903,20 +2022,35 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		requestPayloadHash = service.HashUsageRequestPayload(wsFirstMessage)
 
 		if err := h.gatewayService.ProxyResponsesWebSocketFromClient(ctx, c, wsConn, account, token, wsFirstMessage, hooks); err != nil {
-			var failoverErr *service.UpstreamFailoverError
-			if errors.As(err, &failoverErr) {
-				if handleWSFailover(account, failoverErr) {
-					continue
-				}
-				return
-			}
-
-			if errors.Is(context.Cause(ctx), service.ErrOpenAIWSIngressLeaseLost) {
+			cause := context.Cause(ctx)
+			if errors.Is(cause, service.ErrOpenAIWSIngressLeaseLost) {
 				reqLog.Warn("openai.websocket_ingress_lease_lost",
 					zap.Int64("account_id", account.ID),
 					zap.Error(err),
 				)
 				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "websocket ingress capacity lease lost; please reconnect")
+				return
+			}
+			if isTurnLeaseLost() {
+				reqLog.Warn("openai.websocket_turn_lease_lost",
+					zap.Int64("account_id", account.ID),
+					zap.Error(cause),
+				)
+				return
+			}
+			if cause != nil {
+				reqLog.Info("openai.websocket_connection_context_canceled",
+					zap.Int64("account_id", account.ID),
+					zap.Error(cause),
+				)
+				return
+			}
+
+			var failoverErr *service.UpstreamFailoverError
+			if errors.As(err, &failoverErr) {
+				if handleWSFailover(account, failoverErr) {
+					continue
+				}
 				return
 			}
 
@@ -2507,6 +2641,103 @@ func openAIWSIngressFallbackSessionSeed(userID, apiKeyID int64, groupID *int64) 
 		gid = *groupID
 	}
 	return fmt.Sprintf("openai_ws_ingress:%d:%d:%d", gid, userID, apiKeyID)
+}
+
+func validateOpenAIWSFixedRequestModel(initialModel, requestedModel string) error {
+	initialModel = strings.TrimSpace(initialModel)
+	requestedModel = strings.TrimSpace(requestedModel)
+	// 后续 response.create 省略 model 时沿用首轮 scope；显式模型（包括
+	// adapter 从 session.update 捕获的 session.model）必须与首轮一致。
+	if requestedModel == "" || requestedModel == initialModel {
+		return nil
+	}
+	reason := "model switching is not supported on this websocket connection; reconnect to use a different model"
+	return service.NewOpenAIWSClientCloseError(
+		coderws.StatusPolicyViolation,
+		reason,
+		fmt.Errorf("openai websocket model switch rejected: initial=%q requested=%q", initialModel, requestedModel),
+	)
+}
+
+func resolveOpenAIWSTurnSubscription(
+	ctx context.Context,
+	apiKey *service.APIKey,
+	resolver activeSubscriptionResolver,
+	cfg *config.Config,
+) (*service.UserSubscription, error) {
+	if cfg != nil && cfg.RunMode == config.RunModeSimple {
+		return nil, nil
+	}
+	if apiKey == nil || apiKey.User == nil || apiKey.Group == nil {
+		return nil, nil
+	}
+	if resolver == nil {
+		return nil, errors.New("subscription service is unavailable")
+	}
+	subscription, err := resolver.GetActiveSubscription(ctx, apiKey.User.ID, apiKey.Group.ID)
+	if err == nil {
+		return subscription, nil
+	}
+	if errors.Is(err, service.ErrSubscriptionNotFound) && !apiKey.Group.IsSubscriptionType() {
+		// standard quota group may fall back to balance billing when its
+		// subscription expires between turns.
+		return nil, nil
+	}
+	return nil, fmt.Errorf("reload active subscription for websocket turn: %w", err)
+}
+
+func setOpenAIWSTurnSubscriptionContext(c *gin.Context, subscription *service.UserSubscription) {
+	if c == nil {
+		return
+	}
+	c.Set(string(middleware2.ContextKeySubscription), subscription)
+}
+
+type openAIWSConnectionLifecycle struct {
+	cancel context.CancelCauseFunc
+	conn   *coderws.Conn
+
+	failureOnce sync.Once
+	mu          sync.Mutex
+	leaseLost   bool
+}
+
+func newOpenAIWSConnectionLifecycle(cancel context.CancelCauseFunc, conn *coderws.Conn) *openAIWSConnectionLifecycle {
+	return &openAIWSConnectionLifecycle{cancel: cancel, conn: conn}
+}
+
+func (l *openAIWSConnectionLifecycle) CancelWithClose(cause error, reason string) {
+	if l == nil {
+		return
+	}
+	if cause == nil {
+		cause = errors.New("websocket connection canceled")
+	}
+	l.failureOnce.Do(func() {
+		if l.cancel != nil {
+			l.cancel(cause)
+		}
+		closeOpenAIClientWS(l.conn, coderws.StatusTryAgainLater, reason)
+	})
+}
+
+func (l *openAIWSConnectionLifecycle) OnTurnLeaseLost(leaseErr error) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	l.leaseLost = true
+	l.mu.Unlock()
+	l.CancelWithClose(leaseErr, "websocket concurrency lease lost; please reconnect")
+}
+
+func (l *openAIWSConnectionLifecycle) TurnLeaseLost() bool {
+	if l == nil {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.leaseLost
 }
 
 func isOpenAIWSUpgradeRequest(r *http.Request) bool {

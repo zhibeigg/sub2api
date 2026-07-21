@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -888,6 +889,82 @@ func TestOpenAIResponses_FunctionCallOutputHTTPGuidanceDoesNotSuggestPreviousRes
 	require.NotContains(t, w.Body.String(), "reuse previous_response_id")
 }
 
+func TestValidateOpenAIWSFixedRequestModel(t *testing.T) {
+	t.Parallel()
+
+	require.NoError(t, validateOpenAIWSFixedRequestModel("gpt-5.1", ""), "omitted follow-up model must inherit the first-turn scope")
+	require.NoError(t, validateOpenAIWSFixedRequestModel(" gpt-5.1 ", "gpt-5.1"))
+
+	err := validateOpenAIWSFixedRequestModel("gpt-5.1", "gpt-5.2")
+	require.Error(t, err)
+	var closeErr *service.OpenAIWSClientCloseError
+	require.ErrorAs(t, err, &closeErr)
+	require.Equal(t, coderws.StatusPolicyViolation, closeErr.StatusCode())
+	require.Contains(t, closeErr.Reason(), "model switching is not supported")
+}
+
+func TestResolveOpenAIWSTurnSubscription(t *testing.T) {
+	t.Parallel()
+
+	user := &service.User{ID: 71}
+	standardGroup := &service.Group{ID: 81, SubscriptionType: service.SubscriptionTypeStandard}
+	nativeGroup := &service.Group{ID: 82, SubscriptionType: service.SubscriptionTypeSubscription}
+	standardKey := &service.APIKey{User: user, Group: standardGroup}
+	nativeKey := &service.APIKey{User: user, Group: nativeGroup}
+	standardCfg := &config.Config{RunMode: config.RunModeStandard}
+
+	t.Run("returns refreshed active subscription", func(t *testing.T) {
+		subscription := &service.UserSubscription{ID: 91, UserID: user.ID, GroupID: standardGroup.ID}
+		resolver := &activeSubscriptionResolverStub{subscription: subscription}
+		got, err := resolveOpenAIWSTurnSubscription(context.Background(), standardKey, resolver, standardCfg)
+		require.NoError(t, err)
+		require.Same(t, subscription, got)
+		require.Equal(t, 1, resolver.calls)
+	})
+
+	t.Run("standard group falls back to balance when subscription expires", func(t *testing.T) {
+		resolver := &activeSubscriptionResolverStub{err: service.ErrSubscriptionNotFound}
+		got, err := resolveOpenAIWSTurnSubscription(context.Background(), standardKey, resolver, standardCfg)
+		require.NoError(t, err)
+		require.Nil(t, got)
+	})
+
+	t.Run("native subscription group remains fail closed", func(t *testing.T) {
+		resolver := &activeSubscriptionResolverStub{err: service.ErrSubscriptionNotFound}
+		_, err := resolveOpenAIWSTurnSubscription(context.Background(), nativeKey, resolver, standardCfg)
+		require.ErrorIs(t, err, service.ErrSubscriptionNotFound)
+	})
+
+	t.Run("repository error remains fail closed", func(t *testing.T) {
+		lookupErr := errors.New("subscription repository unavailable")
+		resolver := &activeSubscriptionResolverStub{err: lookupErr}
+		_, err := resolveOpenAIWSTurnSubscription(context.Background(), standardKey, resolver, standardCfg)
+		require.ErrorIs(t, err, lookupErr)
+	})
+
+	t.Run("simple mode does not require subscription repository", func(t *testing.T) {
+		got, err := resolveOpenAIWSTurnSubscription(context.Background(), standardKey, nil, &config.Config{RunMode: config.RunModeSimple})
+		require.NoError(t, err)
+		require.Nil(t, got)
+	})
+}
+
+func TestOpenAIWSConnectionLifecycle_LeaseLossCancelsConnectionContext(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancelCause(context.Background())
+	lifecycle := newOpenAIWSConnectionLifecycle(cancel, nil)
+	leaseErr := errors.New("subscription concurrency lease lost")
+	lifecycle.OnTurnLeaseLost(leaseErr)
+
+	require.ErrorIs(t, context.Cause(ctx), leaseErr)
+	require.True(t, lifecycle.TurnLeaseLost())
+
+	otherErr := errors.New("later failure")
+	lifecycle.CancelWithClose(otherErr, "ignored")
+	require.ErrorIs(t, context.Cause(ctx), leaseErr, "first cancellation cause must remain stable")
+}
+
 func TestOpenAIResponsesWebSocket_SetsClientTransportWSWhenUpgradeValid(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -1369,6 +1446,10 @@ func TestOpenAIResponsesWebSocket_PassthroughUsageLogLeavesUserAgentNilWhenMissi
 	require.Equal(t, "medium", *got.log.ReasoningEffort)
 }
 
+func TestOpenAIResponsesWebSocket_WaitsForSynchronousUsageBeforeNextTurn(t *testing.T) {
+	runOpenAIResponsesWebSocketSynchronousTurnAccountingCase(t)
+}
+
 func TestSetOpenAIClientTransportHTTP(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -1489,11 +1570,13 @@ func newOpenAIHandlerForPreviousResponseIDValidation(t *testing.T, cache *concur
 			},
 		}
 	}
+	cfg := &config.Config{RunMode: config.RunModeSimple}
 	return &OpenAIGatewayHandler{
 		gatewayService:      &service.OpenAIGatewayService{},
-		billingCacheService: &service.BillingCacheService{},
+		billingCacheService: service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil),
 		apiKeyService:       &service.APIKeyService{},
 		concurrencyHelper:   NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second),
+		cfg:                 cfg,
 	}
 }
 
@@ -1621,10 +1704,14 @@ func (s *openAIWSFailoverHandlerAccountRepoStub) SetRateLimited(ctx context.Cont
 
 type openAIWSUsageHandlerUsageLogRepoStub struct {
 	service.UsageLogRepository
-	created chan *service.UsageLog
+	created      chan *service.UsageLog
+	beforeCreate func(*service.UsageLog)
 }
 
 func (s *openAIWSUsageHandlerUsageLogRepoStub) Create(ctx context.Context, log *service.UsageLog) (bool, error) {
+	if s.beforeCreate != nil {
+		s.beforeCreate(log)
+	}
 	if s.created != nil {
 		s.created <- log
 	}
@@ -1886,6 +1973,7 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
 		apiKeyService:       &service.APIKeyService{},
 		concurrencyHelper:   NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second),
 		maxAccountSwitches:  3,
+		cfg:                 cfg,
 	}
 
 	apiKey := &service.APIKey{
@@ -2072,6 +2160,7 @@ func TestOpenAIResponsesWebSocket_FirstOutputTimeoutWithoutDownstreamReusesClien
 		apiKeyService:       &service.APIKeyService{},
 		concurrencyHelper:   NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second),
 		maxAccountSwitches:  3,
+		cfg:                 cfg,
 	}
 
 	apiKey := &service.APIKey{
@@ -2143,6 +2232,196 @@ func TestOpenAIResponsesWebSocket_FirstOutputTimeoutWithoutDownstreamReusesClien
 	require.Equal(t, int32(1), firstConnections.Load())
 	require.Equal(t, int32(1), secondConnections.Load())
 	require.NotContains(t, accountRepo.rateLimitedIDs, int64(9913), "healthy failover account must not be penalized")
+}
+
+func runOpenAIResponsesWebSocketSynchronousTurnAccountingCase(t *testing.T) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	secondUpstreamRequest := make(chan struct{}, 1)
+	upstreamErr := make(chan error, 1)
+	upstreamServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := coderws.Accept(w, r, &coderws.AcceptOptions{CompressionMode: coderws.CompressionContextTakeover})
+		if err != nil {
+			upstreamErr <- err
+			return
+		}
+		defer func() { _ = conn.CloseNow() }()
+		for turn := 1; turn <= 2; turn++ {
+			readCtx, cancelRead := context.WithTimeout(r.Context(), 3*time.Second)
+			_, _, readErr := conn.Read(readCtx)
+			cancelRead()
+			if readErr != nil {
+				upstreamErr <- readErr
+				return
+			}
+			if turn == 2 {
+				secondUpstreamRequest <- struct{}{}
+			}
+			responseID := "resp_sync_first"
+			if turn == 2 {
+				responseID = "resp_sync_second"
+			}
+			payload := fmt.Sprintf(`{"type":"response.completed","response":{"id":%q,"model":"gpt-5.4","usage":{"input_tokens":2,"output_tokens":1}}}`, responseID)
+			writeCtx, cancelWrite := context.WithTimeout(r.Context(), 3*time.Second)
+			writeErr := conn.Write(writeCtx, coderws.MessageText, []byte(payload))
+			cancelWrite()
+			if writeErr != nil {
+				upstreamErr <- writeErr
+				return
+			}
+		}
+		upstreamErr <- nil
+	}))
+	defer upstreamServer.Close()
+
+	usageStarted := make(chan struct{})
+	allowUsage := make(chan struct{})
+	var usageCalls atomic.Int32
+	usageRepo := &openAIWSUsageHandlerUsageLogRepoStub{
+		created: make(chan *service.UsageLog, 2),
+		beforeCreate: func(*service.UsageLog) {
+			if usageCalls.Add(1) == 1 {
+				close(usageStarted)
+				<-allowUsage
+			}
+		},
+	}
+	groupID := int64(4301)
+	account := service.Account{
+		ID:          9931,
+		Name:        "openai-ws-sync-accounting",
+		Platform:    service.PlatformOpenAI,
+		Type:        service.AccountTypeAPIKey,
+		Status:      service.StatusActive,
+		Schedulable: true,
+		Concurrency: 1,
+		Credentials: map[string]any{"api_key": "sk-test", "base_url": upstreamServer.URL},
+		Extra: map[string]any{
+			"openai_apikey_responses_websockets_v2_enabled": true,
+			"openai_apikey_responses_websockets_v2_mode":    service.OpenAIWSIngressModePassthrough,
+		},
+	}
+	cfg := &config.Config{}
+	cfg.RunMode = config.RunModeSimple
+	cfg.Default.RateMultiplier = 1
+	cfg.Security.URLAllowlist.Enabled = false
+	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
+	cfg.Gateway.OpenAIWS.Enabled = true
+	cfg.Gateway.OpenAIWS.APIKeyEnabled = true
+	cfg.Gateway.OpenAIWS.ResponsesWebsocketsV2 = true
+	cfg.Gateway.OpenAIWS.ModeRouterV2Enabled = true
+	cfg.Gateway.OpenAIWS.DialTimeoutSeconds = 3
+	cfg.Gateway.OpenAIWS.ReadTimeoutSeconds = 3
+	cfg.Gateway.OpenAIWS.WriteTimeoutSeconds = 3
+	cfg.Gateway.OpenAIWS.IngressInterTurnIdleTimeoutSeconds = 3
+
+	accountRepo := &openAIWSUsageHandlerAccountRepoStub{account: account}
+	billingCacheSvc := service.NewBillingCacheService(nil, nil, nil, nil, nil, nil, cfg, nil)
+	gatewaySvc := service.NewOpenAIGatewayService(
+		accountRepo, usageRepo, nil, nil, nil, nil, nil, cfg, nil, nil,
+		service.NewBillingService(cfg, nil), nil, billingCacheSvc, nil,
+		&service.DeferredService{}, nil, nil, nil, nil, nil, nil, nil,
+	)
+	cache := &concurrencyCacheMock{
+		acquireUserSlotFn: func(context.Context, int64, int, string) (bool, error) { return true, nil },
+		acquireAccountSlotFn: func(context.Context, int64, int, string) (bool, error) {
+			return true, nil
+		},
+	}
+	concurrencyHelper := NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second)
+	var requestSlotAcquireCalls atomic.Int32
+	var missingLeaseCallback atomic.Bool
+	concurrencyHelper.requestSlotsAcquire = func(
+		_ context.Context,
+		_ int64,
+		_ int,
+		_ int64,
+		_ int,
+		onLeaseLoss func(error),
+	) (*service.AcquireResult, error) {
+		requestSlotAcquireCalls.Add(1)
+		if onLeaseLoss == nil {
+			missingLeaseCallback.Store(true)
+		}
+		return &service.AcquireResult{Acquired: true, ReleaseFunc: func() {}}, nil
+	}
+	h := &OpenAIGatewayHandler{
+		gatewayService:      gatewaySvc,
+		billingCacheService: billingCacheSvc,
+		apiKeyService:       &service.APIKeyService{},
+		concurrencyHelper:   concurrencyHelper,
+		cfg:                 cfg,
+	}
+	apiKey := &service.APIKey{
+		ID:      1831,
+		GroupID: &groupID,
+		User:    &service.User{ID: 1731, Status: service.StatusActive},
+		Group:   &service.Group{ID: groupID, Platform: service.PlatformOpenAI, Status: service.StatusActive},
+	}
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(middleware.ContextKeyAPIKey), apiKey)
+		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: apiKey.User.ID, Concurrency: 1})
+		c.Next()
+	})
+	router.GET("/openai/v1/responses", h.ResponsesWebSocket)
+	handlerServer := httptest.NewServer(router)
+	defer handlerServer.Close()
+
+	dialCtx, cancelDial := context.WithTimeout(context.Background(), 3*time.Second)
+	clientConn, _, err := coderws.Dial(dialCtx, "ws"+strings.TrimPrefix(handlerServer.URL, "http")+"/openai/v1/responses", nil)
+	cancelDial()
+	require.NoError(t, err)
+	defer func() { _ = clientConn.CloseNow() }()
+
+	writeTurn := func(payload string) {
+		writeCtx, cancelWrite := context.WithTimeout(context.Background(), 3*time.Second)
+		writeErr := clientConn.Write(writeCtx, coderws.MessageText, []byte(payload))
+		cancelWrite()
+		require.NoError(t, writeErr)
+	}
+	readTurn := func() []byte {
+		readCtx, cancelRead := context.WithTimeout(context.Background(), 3*time.Second)
+		_, payload, readErr := clientConn.Read(readCtx)
+		cancelRead()
+		require.NoError(t, readErr)
+		return payload
+	}
+
+	writeTurn(`{"type":"response.create","model":"gpt-5.4","stream":false}`)
+	first := readTurn()
+	require.Equal(t, "resp_sync_first", gjson.GetBytes(first, "response.id").String())
+	select {
+	case <-usageStarted:
+	case <-time.After(time.Second):
+		t.Fatal("first turn synchronous usage recording did not start")
+	}
+
+	writeTurn(`{"type":"response.create","previous_response_id":"resp_sync_first"}`)
+	select {
+	case <-secondUpstreamRequest:
+		t.Fatal("second turn reached upstream before first turn usage recording completed")
+	case <-time.After(150 * time.Millisecond):
+	}
+	close(allowUsage)
+	select {
+	case <-secondUpstreamRequest:
+	case <-time.After(3 * time.Second):
+		t.Fatal("second turn did not reach upstream after first turn usage recording completed")
+	}
+	second := readTurn()
+	require.Equal(t, "resp_sync_second", gjson.GetBytes(second, "response.id").String())
+	require.Eventually(t, func() bool { return usageCalls.Load() == 2 }, time.Second, 10*time.Millisecond)
+	require.Equal(t, int32(2), requestSlotAcquireCalls.Load(), "each turn must reacquire the combined user/subscription slots")
+	require.False(t, missingLeaseCallback.Load(), "every turn slot acquisition must carry the lease-loss callback")
+	require.NoError(t, clientConn.Close(coderws.StatusNormalClosure, "done"))
+	select {
+	case err := <-upstreamErr:
+		require.NoError(t, err)
+	case <-time.After(3 * time.Second):
+		t.Fatal("upstream synchronous accounting test did not exit")
+	}
 }
 
 func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSUsageLogCase) openAIResponsesWSUsageLogResult {
@@ -2278,6 +2557,7 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		billingCacheService: billingCacheSvc,
 		apiKeyService:       &service.APIKeyService{},
 		concurrencyHelper:   NewConcurrencyHelper(service.NewConcurrencyService(cache), SSEPingFormatNone, time.Second),
+		cfg:                 cfg,
 	}
 
 	apiKey := &service.APIKey{

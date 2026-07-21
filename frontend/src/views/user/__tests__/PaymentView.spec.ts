@@ -40,7 +40,11 @@ vi.mock('vue-i18n', async () => {
   return {
     ...actual,
     useI18n: () => ({
-      t: (key: string) => key,
+      t: (key: string, params?: Record<string, unknown>) => {
+        if (key === 'payment.planCard.concurrencyValue') return `Concurrency ${params?.limit}`
+        if (key === 'payment.planCard.noExtraConcurrencyLimit') return 'No additional limit'
+        return key
+      },
     }),
   }
 })
@@ -140,6 +144,7 @@ function checkoutInfoWithPlansFixture(options: {
     daily_limit_usd: null,
     weekly_limit_usd: null,
     monthly_limit_usd: null,
+    concurrency_limit: null,
     features: [],
     group_platform: 'openai',
     sort_order: 1,
@@ -302,6 +307,26 @@ describe('PaymentView subscription confirmation amounts', () => {
 
     expect(usdWrapper.text()).toContain(formatPaymentAmount(7.99, 'USD'))
     expect(usdWrapper.text()).toContain(formatPaymentAmount(9.99, 'USD'))
+  })
+
+  it('shows the selected standard plan concurrency configuration', async () => {
+    const limitedWrapper = await mountSubscriptionConfirm({
+      plan: {
+        plan_type: 'standard_quota',
+        concurrency_limit: 5,
+      },
+    })
+
+    expect(limitedWrapper.find('[data-test="selected-plan-concurrency"]').text()).toContain('Concurrency 5')
+
+    const unlimitedWrapper = await mountSubscriptionConfirm({
+      plan: {
+        plan_type: 'standard_quota',
+        concurrency_limit: null,
+      },
+    })
+
+    expect(unlimitedWrapper.find('[data-test="selected-plan-concurrency"]').text()).toContain('No additional limit')
   })
 
   it('adds fee rate after CNY rate conversion to match backend pay_amount', async () => {

@@ -30,7 +30,11 @@ vi.mock('vue-i18n', async (importOriginal) => {
   return {
     ...actual,
     useI18n: () => ({
-      t: (key: string) => key,
+      t: (key: string, params?: Record<string, unknown>) => {
+        if (key === 'payment.admin.concurrencyValue') return `Concurrency ${params?.limit}`
+        if (key === 'payment.admin.noExtraConcurrencyLimit') return 'No additional limit'
+        return key
+      },
     }),
   }
 })
@@ -41,6 +45,7 @@ const DataTableStub = {
     <div>
       <div v-for="row in data" :key="row.id">
         <slot name="cell-price" :value="row.price" :row="row" />
+        <slot name="cell-concurrency_limit" :value="row.concurrency_limit" :row="row" />
       </div>
     </div>
   `,
@@ -55,7 +60,9 @@ describe('AdminPaymentPlansView', () => {
         {
           id: 1,
           name: 'CNY plan',
+          plan_type: 'standard_quota',
           group_id: 1,
+          concurrency_limit: 6,
           price: 499,
           original_price: 599,
           currency: 'CNY',
@@ -68,7 +75,9 @@ describe('AdminPaymentPlansView', () => {
         {
           id: 2,
           name: 'Legacy plan',
+          plan_type: 'subscription',
           group_id: 1,
+          concurrency_limit: null,
           price: 10,
           original_price: 0,
           currency: '',
@@ -102,5 +111,7 @@ describe('AdminPaymentPlansView', () => {
     expect(wrapper.text()).toContain('¥499.00CNY')
     expect(wrapper.text()).toContain('¥599.00')
     expect(wrapper.text()).toContain('$10.00')
+    expect(wrapper.text()).toContain('Concurrency 6')
+    expect(wrapper.text()).not.toContain('No additional limit')
   })
 })

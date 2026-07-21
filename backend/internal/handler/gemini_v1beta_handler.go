@@ -153,12 +153,10 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		zap.Any("group_id", apiKey.GroupID),
 	)
 
-	// 检查平台：优先使用强制平台（/antigravity 路由，中间件已设置 request.Context），否则要求 gemini 分组
-	if !middleware.HasForcePlatform(c) {
-		if apiKey.Group == nil || apiKey.Group.Platform != service.PlatformGemini {
-			googleError(c, http.StatusBadRequest, "API key group platform is not gemini")
-			return
-		}
+	// 保持单分组与显式分组的旧拒绝顺序；仅未固定的多分组请求延后到模型解析后决定最终分组。
+	if !middleware.HasForcePlatform(c) && (len(apiKey.GroupBindings) == 0 || apiKey.ExplicitGroupSelection) && (apiKey.Group == nil || apiKey.Group.Platform != service.PlatformGemini) {
+		googleError(c, http.StatusBadRequest, "API key group platform is not gemini")
+		return
 	}
 
 	modelName, action, err := parseGeminiModelAction(strings.TrimPrefix(c.Param("modelAction"), "/"))
@@ -181,6 +179,22 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 	}
 	if len(body) == 0 {
 		googleError(c, http.StatusBadRequest, "Request body is empty")
+		return
+	}
+
+	apiKey, err = h.resolveMultiGroupAPIKey(c, apiKey, modelName)
+	if err != nil {
+		status, _, message := effectiveGroupSubscriptionErrorDetails(err)
+		googleError(c, status, message)
+		return
+	}
+	if apiKey == nil {
+		middleware.AbortWithError(c, http.StatusForbidden, "GROUP_NOT_ALLOWED", "当前用户不允许使用任何已绑定的标准分组")
+		return
+	}
+	// 检查平台：优先使用强制平台（/antigravity 路由，中间件已设置 request.Context），否则要求最终解析分组为 gemini。
+	if !middleware.HasForcePlatform(c) && (apiKey.Group == nil || apiKey.Group.Platform != service.PlatformGemini) {
+		googleError(c, http.StatusBadRequest, "API key group platform is not gemini")
 		return
 	}
 

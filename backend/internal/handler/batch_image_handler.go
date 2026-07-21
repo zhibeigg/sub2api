@@ -34,6 +34,9 @@ func (h *BatchImageHandler) Submit(c *gin.Context) {
 		batchImageError(c, service.ErrBatchImageInvalidItems)
 		return
 	}
+	if !h.resolveSubmitContext(c, &req) {
+		return
+	}
 	owner, ok := batchImageOwnerFromContext(c)
 	if !ok {
 		batchImageError(c, infraerrors.New(http.StatusUnauthorized, "API_KEY_REQUIRED", "API key is required"))
@@ -48,6 +51,36 @@ func (h *BatchImageHandler) Submit(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, got)
+}
+
+func (h *BatchImageHandler) resolveSubmitContext(c *gin.Context, req *service.BatchImageSubmitRequest) bool {
+	if h == nil || h.openAI == nil || req == nil {
+		return true
+	}
+	apiKey, ok := middleware.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil {
+		batchImageError(c, infraerrors.New(http.StatusUnauthorized, "API_KEY_REQUIRED", "API key is required"))
+		return false
+	}
+	resolvedAPIKey, err := h.openAI.resolveMultiGroupAPIKey(c, apiKey, req.Model)
+	if err != nil {
+		status, code, message := effectiveGroupSubscriptionErrorDetails(err)
+		batchImageError(c, infraerrors.New(status, code, message))
+		return false
+	}
+	if resolvedAPIKey == nil {
+		batchImageError(c, infraerrors.New(http.StatusForbidden, "GROUP_NOT_ALLOWED", "当前用户不允许使用任何已绑定的标准分组"))
+		return false
+	}
+	if subscription, exists := middleware.GetSubscriptionFromContext(c); exists && subscription != nil && subscription.QuotaSnapshotted {
+		batchImageError(c, infraerrors.New(
+			http.StatusConflict,
+			"BATCH_IMAGE_SUBSCRIPTION_UNSUPPORTED",
+			"batch image API does not support standard_quota subscriptions",
+		))
+		return false
+	}
+	return true
 }
 
 func (h *BatchImageHandler) checkSecurityAuditBeforeSubmit(c *gin.Context, req *service.BatchImageSubmitRequest) bool {

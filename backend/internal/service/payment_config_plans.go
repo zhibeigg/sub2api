@@ -103,6 +103,9 @@ func validatePlanPatch(req UpdatePlanRequest) error {
 			return err
 		}
 	}
+	if err := validatePlanConcurrencyLimit(req.ConcurrencyLimit); err != nil {
+		return err
+	}
 	return validatePlanQuotaLimits(req.DailyLimitUSD, req.WeeklyLimitUSD, req.MonthlyLimitUSD)
 }
 
@@ -116,6 +119,28 @@ func validatePlanQuotaLimits(limits ...*float64) error {
 		}
 	}
 	return nil
+}
+
+const maxPlanConcurrencyLimit = 1<<31 - 1
+
+func validatePlanConcurrencyLimit(limit *int) error {
+	if limit == nil {
+		return nil
+	}
+	if *limit <= 0 || *limit > maxPlanConcurrencyLimit {
+		return infraerrors.BadRequest("PLAN_CONCURRENCY_INVALID", "concurrency limit must be a positive integer or null")
+	}
+	return nil
+}
+
+func normalizePlanConcurrencyLimit(planType string, limit *int) (*int, error) {
+	if err := validatePlanConcurrencyLimit(limit); err != nil {
+		return nil, err
+	}
+	if normalizeSubscriptionPlanType(planType) != domain.SubscriptionPlanTypeStandardQuota {
+		return nil, nil
+	}
+	return limit, nil
 }
 
 func validatePlanSemantics(planType string, groupIDs []int64, dailyLimit, weeklyLimit, monthlyLimit *float64) error {
@@ -177,27 +202,28 @@ type PlanGroupInfo struct {
 
 // SubscriptionPlanResponse keeps legacy plan fields while exposing multi-group data.
 type SubscriptionPlanResponse struct {
-	ID              int64           `json:"id"`
-	PlanType        string          `json:"plan_type"`
-	GroupID         int64           `json:"group_id"`
-	GroupIDs        []int64         `json:"group_ids"`
-	Groups          []PlanGroupInfo `json:"groups"`
-	Name            string          `json:"name"`
-	Description     string          `json:"description"`
-	Price           float64         `json:"price"`
-	OriginalPrice   *float64        `json:"original_price,omitempty"`
-	Currency        string          `json:"currency"`
-	DailyLimitUSD   *float64        `json:"daily_limit_usd"`
-	WeeklyLimitUSD  *float64        `json:"weekly_limit_usd"`
-	MonthlyLimitUSD *float64        `json:"monthly_limit_usd"`
-	ValidityDays    int             `json:"validity_days"`
-	ValidityUnit    string          `json:"validity_unit"`
-	Features        string          `json:"features"`
-	ProductName     string          `json:"product_name"`
-	ForSale         bool            `json:"for_sale"`
-	SortOrder       int             `json:"sort_order"`
-	CreatedAt       any             `json:"created_at"`
-	UpdatedAt       any             `json:"updated_at"`
+	ID               int64           `json:"id"`
+	PlanType         string          `json:"plan_type"`
+	GroupID          int64           `json:"group_id"`
+	GroupIDs         []int64         `json:"group_ids"`
+	Groups           []PlanGroupInfo `json:"groups"`
+	Name             string          `json:"name"`
+	Description      string          `json:"description"`
+	Price            float64         `json:"price"`
+	OriginalPrice    *float64        `json:"original_price,omitempty"`
+	Currency         string          `json:"currency"`
+	DailyLimitUSD    *float64        `json:"daily_limit_usd"`
+	WeeklyLimitUSD   *float64        `json:"weekly_limit_usd"`
+	MonthlyLimitUSD  *float64        `json:"monthly_limit_usd"`
+	ConcurrencyLimit *int            `json:"concurrency_limit"`
+	ValidityDays     int             `json:"validity_days"`
+	ValidityUnit     string          `json:"validity_unit"`
+	Features         string          `json:"features"`
+	ProductName      string          `json:"product_name"`
+	ForSale          bool            `json:"for_sale"`
+	SortOrder        int             `json:"sort_order"`
+	CreatedAt        any             `json:"created_at"`
+	UpdatedAt        any             `json:"updated_at"`
 }
 
 func planGroupInfoFromEntity(g *dbent.Group) PlanGroupInfo {
@@ -288,7 +314,8 @@ func (s *PaymentConfigService) PlanResponses(ctx context.Context, plans []*dbent
 			ID: plan.ID, PlanType: normalizeSubscriptionPlanType(plan.PlanType), GroupID: plan.GroupID, GroupIDs: groupIDs, Groups: groups,
 			Name: plan.Name, Description: plan.Description, Price: plan.Price, OriginalPrice: plan.OriginalPrice, Currency: plan.Currency,
 			DailyLimitUSD: plan.DailyLimitUsd, WeeklyLimitUSD: plan.WeeklyLimitUsd, MonthlyLimitUSD: plan.MonthlyLimitUsd,
-			ValidityDays: plan.ValidityDays, ValidityUnit: plan.ValidityUnit, Features: plan.Features,
+			ConcurrencyLimit: plan.ConcurrencyLimit,
+			ValidityDays:     plan.ValidityDays, ValidityUnit: plan.ValidityUnit, Features: plan.Features,
 			ProductName: plan.ProductName, ForSale: plan.ForSale, SortOrder: plan.SortOrder,
 			CreatedAt: plan.CreatedAt, UpdatedAt: plan.UpdatedAt,
 		})
@@ -373,7 +400,12 @@ func (s *PaymentConfigService) CreatePlan(ctx context.Context, req CreatePlanReq
 	if err := validatePlanQuotaLimits(req.DailyLimitUSD, req.WeeklyLimitUSD, req.MonthlyLimitUSD); err != nil {
 		return nil, err
 	}
-	if planType == domain.SubscriptionPlanTypeSubscription {
+	concurrencyLimit, err := normalizePlanConcurrencyLimit(planType, req.ConcurrencyLimit)
+	if err != nil {
+		return nil, err
+	}
+	req.ConcurrencyLimit = concurrencyLimit
+	if planType != domain.SubscriptionPlanTypeStandardQuota {
 		req.DailyLimitUSD = nil
 		req.WeeklyLimitUSD = nil
 		req.MonthlyLimitUSD = nil
@@ -402,7 +434,8 @@ func (s *PaymentConfigService) CreatePlan(ctx context.Context, req CreatePlanReq
 		SetNillableOriginalPrice(req.OriginalPrice).
 		SetNillableDailyLimitUsd(req.DailyLimitUSD).
 		SetNillableWeeklyLimitUsd(req.WeeklyLimitUSD).
-		SetNillableMonthlyLimitUsd(req.MonthlyLimitUSD)
+		SetNillableMonthlyLimitUsd(req.MonthlyLimitUSD).
+		SetNillableConcurrencyLimit(req.ConcurrencyLimit)
 	plan, err := b.Save(ctx)
 	if err != nil {
 		return nil, err
@@ -451,10 +484,18 @@ func (s *PaymentConfigService) UpdatePlan(ctx context.Context, id int64, req Upd
 		weeklyLimit = req.WeeklyLimitUSD
 		monthlyLimit = req.MonthlyLimitUSD
 	}
-	if planType == domain.SubscriptionPlanTypeSubscription {
+	concurrencyLimit := existing.ConcurrencyLimit
+	if req.ConcurrencyLimitSet || req.ConcurrencyLimit != nil {
+		concurrencyLimit = req.ConcurrencyLimit
+	}
+	if planType != domain.SubscriptionPlanTypeStandardQuota {
 		dailyLimit = nil
 		weeklyLimit = nil
 		monthlyLimit = nil
+	}
+	concurrencyLimit, err = normalizePlanConcurrencyLimit(planType, concurrencyLimit)
+	if err != nil {
+		return nil, err
 	}
 	if err := validatePlanQuotaLimits(dailyLimit, weeklyLimit, monthlyLimit); err != nil {
 		return nil, err
@@ -531,6 +572,11 @@ func (s *PaymentConfigService) UpdatePlan(ctx context.Context, id int64, req Upd
 		u.ClearMonthlyLimitUsd()
 	} else {
 		u.SetMonthlyLimitUsd(*monthlyLimit)
+	}
+	if concurrencyLimit == nil {
+		u.ClearConcurrencyLimit()
+	} else {
+		u.SetConcurrencyLimit(*concurrencyLimit)
 	}
 	if _, err := u.Save(ctx); err != nil {
 		return nil, err

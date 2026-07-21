@@ -12,6 +12,10 @@ const statusClientClosedRequest = 499
 func concurrencyErrorResponse(err error, slotType string) (int, string, string) {
 	var waitQueueFullErr *WaitQueueFullError
 	if errors.As(err, &waitQueueFullErr) {
+		if waitQueueFullErr.SlotType == "subscription" {
+			return http.StatusTooManyRequests, "subscription_concurrency_limit_exceeded",
+				"Subscription concurrency limit exceeded, please retry later"
+		}
 		return http.StatusTooManyRequests, "rate_limit_error",
 			"Too many pending requests, please retry later"
 	}
@@ -20,6 +24,10 @@ func concurrencyErrorResponse(err error, slotType string) (int, string, string) 
 	if errors.As(err, &concurrencyErr) {
 		if concurrencyErr.SlotType != "" {
 			slotType = concurrencyErr.SlotType
+		}
+		if slotType == "subscription" {
+			return http.StatusTooManyRequests, "subscription_concurrency_limit_exceeded",
+				"Subscription concurrency limit exceeded, please retry later"
 		}
 		return http.StatusTooManyRequests, "rate_limit_error",
 			fmt.Sprintf("Concurrency limit exceeded for %s, please retry later", slotType)

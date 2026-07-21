@@ -61,6 +61,18 @@ type APIKeyConcurrencyCache interface {
 	GetAPIKeyConcurrencyBatch(ctx context.Context, apiKeyIDs []int64) (map[int64]int, error)
 }
 
+// SubscriptionConcurrencyCache is an optional capability implemented by caches
+// that can enforce request concurrency per user-subscription instance. Keeping
+// it separate avoids widening ConcurrencyCache for callers that only need the
+// existing user/account scopes.
+type SubscriptionConcurrencyCache interface {
+	AcquireSubscriptionSlot(ctx context.Context, subscriptionID int64, maxConcurrency int, requestID string) (bool, error)
+	RefreshSubscriptionSlot(ctx context.Context, subscriptionID int64, requestID string) (bool, error)
+	ReleaseSubscriptionSlot(ctx context.Context, subscriptionID int64, requestID string) error
+	IncrementSubscriptionWaitCount(ctx context.Context, subscriptionID int64, maxWait int) (bool, error)
+	DecrementSubscriptionWaitCount(ctx context.Context, subscriptionID int64) error
+}
+
 // OpenAIWSIngressLeaseCache owns the short-lived distributed lease used to
 // bound live client WebSocket sessions. It is deliberately independent of the
 // request-slot namespace: idle ingress connections do not occupy turn slots.
@@ -225,11 +237,26 @@ const (
 	maxAccountLoadBatchCacheEntries = 256
 	apiKeyConcurrencyFetchTimeout   = 3 * time.Second
 	apiKeySlotTrackTimeout          = 2 * time.Second
+
+	// Subscription slots use a minimum one-minute Redis TTL in the repository.
+	// Refreshing every 20 seconds leaves multiple retry opportunities before expiry.
+	defaultSubscriptionLeaseRefreshInterval = 20 * time.Second
+	defaultSubscriptionLeaseRetryInterval   = 2 * time.Second
+	subscriptionLeaseOperationTimeout       = 2 * time.Second
+	subscriptionLeaseReleaseTimeout         = 5 * time.Second
 )
+
+var errSubscriptionConcurrencyLeaseLost = errors.New("subscription concurrency lease lost")
 
 // ConcurrencyService 管理账号和用户的并发限制。
 type ConcurrencyService struct {
 	cache ConcurrencyCache
+
+	// These timings are copied into each subscription lease at acquisition time.
+	// Tests in this package may shorten them without changing production defaults.
+	subscriptionLeaseRefreshInterval time.Duration
+	subscriptionLeaseRetryInterval   time.Duration
+	subscriptionLeaseOperationTO     time.Duration
 
 	accountLoadCacheTTL atomic.Int64
 	accountLoadCacheMu  sync.RWMutex
@@ -245,8 +272,11 @@ type cachedAccountLoadBatch struct {
 // NewConcurrencyService 创建并发控制服务。
 func NewConcurrencyService(cache ConcurrencyCache) *ConcurrencyService {
 	svc := &ConcurrencyService{
-		cache:            cache,
-		accountLoadCache: make(map[string]cachedAccountLoadBatch),
+		cache:                            cache,
+		subscriptionLeaseRefreshInterval: defaultSubscriptionLeaseRefreshInterval,
+		subscriptionLeaseRetryInterval:   defaultSubscriptionLeaseRetryInterval,
+		subscriptionLeaseOperationTO:     subscriptionLeaseOperationTimeout,
+		accountLoadCache:                 make(map[string]cachedAccountLoadBatch),
 	}
 	svc.SetAccountLoadBatchCacheTTL(defaultAccountLoadBatchCacheTTL)
 	return svc
@@ -306,10 +336,16 @@ func (s *ConcurrencyService) SetAccountLoadBatchCacheTTL(ttl time.Duration) {
 	}
 }
 
-// AcquireResult represents the result of acquiring a concurrency slot
+const (
+	ConcurrencyScopeUser         = "user"
+	ConcurrencyScopeSubscription = "subscription"
+)
+
+// AcquireResult represents the result of acquiring one or more concurrency slots.
 type AcquireResult struct {
-	Acquired    bool
-	ReleaseFunc func() // Must be called when done (typically via defer)
+	Acquired     bool
+	ReleaseFunc  func() // Must be called when done (typically via defer)
+	BlockedScope string // Set when Acquired is false for a scoped request acquisition.
 }
 
 type AccountWithConcurrency struct {
@@ -409,8 +445,298 @@ func (s *ConcurrencyService) AcquireUserSlot(ctx context.Context, userID int64, 
 	}
 
 	return &AcquireResult{
-		Acquired:    false,
-		ReleaseFunc: nil,
+		Acquired:     false,
+		ReleaseFunc:  nil,
+		BlockedScope: ConcurrencyScopeUser,
+	}, nil
+}
+
+const (
+	subscriptionLeaseActive uint32 = iota
+	subscriptionLeaseLossNotified
+	subscriptionLeaseStopping
+)
+
+type subscriptionConcurrencyLease struct {
+	cache          SubscriptionConcurrencyCache
+	subscriptionID int64
+	maxConcurrency int
+	requestID      string
+	userRelease    func()
+
+	refreshInterval time.Duration
+	retryInterval   time.Duration
+	operationTO     time.Duration
+
+	cancel      context.CancelFunc
+	refreshDone chan struct{}
+	releaseOnce sync.Once
+	lifecycle   atomic.Uint32
+	onLeaseLoss func(error)
+}
+
+func (l *subscriptionConcurrencyLease) Release() {
+	if l == nil {
+		return
+	}
+	l.releaseOnce.Do(func() {
+		l.markStopping()
+		// Stop and join the refresher before removing the Redis member. Besides
+		// preventing leaks, this ordering guarantees an in-flight refresh cannot
+		// race with release and extend a lease after the caller is done.
+		if l.cancel != nil {
+			l.cancel()
+		}
+		if l.refreshDone != nil {
+			<-l.refreshDone
+		}
+
+		if l.cache != nil && l.subscriptionID > 0 && l.requestID != "" {
+			releaseCtx, releaseCancel := context.WithTimeout(context.Background(), subscriptionLeaseReleaseTimeout)
+			if err := l.cache.ReleaseSubscriptionSlot(releaseCtx, l.subscriptionID, l.requestID); err != nil {
+				logger.L().Warn("subscription_concurrency_lease_release_failed",
+					zap.Int64("subscription_id", l.subscriptionID),
+					zap.String("request_id", l.requestID),
+					zap.Error(err),
+				)
+			}
+			releaseCancel()
+		}
+		if l.userRelease != nil {
+			l.userRelease()
+		}
+	})
+}
+
+func (l *subscriptionConcurrencyLease) markStopping() {
+	if l == nil {
+		return
+	}
+	for {
+		state := l.lifecycle.Load()
+		if state == subscriptionLeaseStopping || l.lifecycle.CompareAndSwap(state, subscriptionLeaseStopping) {
+			return
+		}
+	}
+}
+
+func (l *subscriptionConcurrencyLease) notifyLeaseLoss() {
+	if l == nil || l.onLeaseLoss == nil {
+		return
+	}
+	// Compete atomically with normal Release. Whichever transition wins defines
+	// the outcome: a release that started first suppresses a false loss report;
+	// a confirmed loss that won first invokes the callback exactly once.
+	if !l.lifecycle.CompareAndSwap(subscriptionLeaseActive, subscriptionLeaseLossNotified) {
+		return
+	}
+	l.onLeaseLoss(errSubscriptionConcurrencyLeaseLost)
+}
+
+func (l *subscriptionConcurrencyLease) refreshLoop(ctx context.Context) {
+	defer close(l.refreshDone)
+	timer := time.NewTimer(l.refreshInterval)
+	defer timer.Stop()
+
+	consecutiveFailures := 0
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+			confirmed, err := l.refreshOrReacquire(ctx)
+			if ctx.Err() != nil {
+				return
+			}
+
+			nextDelay := l.refreshInterval
+			if err == nil && confirmed {
+				if consecutiveFailures > 0 {
+					logger.L().Info("subscription_concurrency_lease_refresh_recovered",
+						zap.Int64("subscription_id", l.subscriptionID),
+						zap.String("request_id", l.requestID),
+						zap.Int("previous_failures", consecutiveFailures),
+					)
+				}
+				consecutiveFailures = 0
+			} else {
+				consecutiveFailures++
+				nextDelay = l.retryInterval
+				l.logRefreshFailure(err, consecutiveFailures)
+			}
+			timer.Reset(nextDelay)
+		}
+	}
+}
+
+func (l *subscriptionConcurrencyLease) refreshOrReacquire(ctx context.Context) (bool, error) {
+	refreshCtx, refreshCancel := context.WithTimeout(ctx, l.operationTO)
+	owned, err := l.cache.RefreshSubscriptionSlot(refreshCtx, l.subscriptionID, l.requestID)
+	refreshCancel()
+	if err != nil || owned {
+		return owned, err
+	}
+
+	// A confirmed missing member means the distributed constraint has already
+	// lapsed. While the request is still active, conservatively try to reserve
+	// the same lease again. Release cancels and joins this loop before ZREM, so
+	// this recovery path cannot recreate a lease after an explicit release.
+	reacquireCtx, reacquireCancel := context.WithTimeout(ctx, l.operationTO)
+	reacquired, reacquireErr := l.cache.AcquireSubscriptionSlot(
+		reacquireCtx,
+		l.subscriptionID,
+		l.maxConcurrency,
+		l.requestID,
+	)
+	reacquireCancel()
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
+	if reacquireErr != nil {
+		l.notifyLeaseLoss()
+		return false, reacquireErr
+	}
+	if !reacquired {
+		l.notifyLeaseLoss()
+		return false, errSubscriptionConcurrencyLeaseLost
+	}
+	logger.L().Warn("subscription_concurrency_lease_reacquired_after_loss",
+		zap.Int64("subscription_id", l.subscriptionID),
+		zap.String("request_id", l.requestID),
+	)
+	return true, nil
+}
+
+func (l *subscriptionConcurrencyLease) logRefreshFailure(err error, consecutiveFailures int) {
+	// Continuous Redis failures are retried at a much shorter interval. Log the
+	// first failure and periodic reminders to avoid silently losing enforcement
+	// without flooding logs for every long-running request.
+	if consecutiveFailures != 1 && consecutiveFailures%15 != 0 {
+		return
+	}
+	if errors.Is(err, errSubscriptionConcurrencyLeaseLost) {
+		logger.L().Error("subscription_concurrency_lease_lost",
+			zap.Int64("subscription_id", l.subscriptionID),
+			zap.String("request_id", l.requestID),
+			zap.Int("consecutive_failures", consecutiveFailures),
+			zap.Error(err),
+		)
+		return
+	}
+	logger.L().Warn("subscription_concurrency_lease_refresh_failed",
+		zap.Int64("subscription_id", l.subscriptionID),
+		zap.String("request_id", l.requestID),
+		zap.Int("consecutive_failures", consecutiveFailures),
+		zap.Error(err),
+	)
+}
+
+func (s *ConcurrencyService) subscriptionLeaseTimings() (time.Duration, time.Duration, time.Duration) {
+	refreshInterval := s.subscriptionLeaseRefreshInterval
+	if refreshInterval <= 0 {
+		refreshInterval = defaultSubscriptionLeaseRefreshInterval
+	}
+	retryInterval := s.subscriptionLeaseRetryInterval
+	if retryInterval <= 0 || retryInterval >= refreshInterval {
+		retryInterval = refreshInterval / 10
+		if retryInterval <= 0 {
+			retryInterval = time.Millisecond
+		}
+	}
+	operationTO := s.subscriptionLeaseOperationTO
+	if operationTO <= 0 {
+		operationTO = subscriptionLeaseOperationTimeout
+	}
+	return refreshInterval, retryInterval, operationTO
+}
+
+// AcquireUserAndSubscriptionSlots preserves the existing API for callers that
+// do not need an active notification when the distributed subscription lease is lost.
+func (s *ConcurrencyService) AcquireUserAndSubscriptionSlots(
+	ctx context.Context,
+	userID int64,
+	userMaxConcurrency int,
+	subscriptionID int64,
+	subscriptionMaxConcurrency int,
+) (*AcquireResult, error) {
+	return s.AcquireUserAndSubscriptionSlotsWithLeaseLoss(
+		ctx,
+		userID,
+		userMaxConcurrency,
+		subscriptionID,
+		subscriptionMaxConcurrency,
+		nil,
+	)
+}
+
+// AcquireUserAndSubscriptionSlotsWithLeaseLoss acquires the existing user-global
+// slot and an optional subscription-instance slot. If Redis confirms that the
+// active subscription member disappeared and it cannot be reacquired under the
+// original limit, onLeaseLoss is invoked exactly once for this acquisition.
+func (s *ConcurrencyService) AcquireUserAndSubscriptionSlotsWithLeaseLoss(
+	ctx context.Context,
+	userID int64,
+	userMaxConcurrency int,
+	subscriptionID int64,
+	subscriptionMaxConcurrency int,
+	onLeaseLoss func(error),
+) (*AcquireResult, error) {
+	userResult, err := s.AcquireUserSlot(ctx, userID, userMaxConcurrency)
+	if err != nil {
+		return nil, err
+	}
+	if !userResult.Acquired {
+		userResult.BlockedScope = ConcurrencyScopeUser
+		return userResult, nil
+	}
+
+	if subscriptionID <= 0 || subscriptionMaxConcurrency <= 0 {
+		return userResult, nil
+	}
+	if s == nil || s.cache == nil {
+		userResult.ReleaseFunc()
+		return nil, errors.New("subscription concurrency cache is unavailable")
+	}
+	cache, ok := s.cache.(SubscriptionConcurrencyCache)
+	if !ok {
+		userResult.ReleaseFunc()
+		return nil, errors.New("subscription concurrency cache is unsupported")
+	}
+
+	requestID := generateRequestID()
+	acquired, err := cache.AcquireSubscriptionSlot(ctx, subscriptionID, subscriptionMaxConcurrency, requestID)
+	if err != nil {
+		userResult.ReleaseFunc()
+		return nil, err
+	}
+	if !acquired {
+		userResult.ReleaseFunc()
+		return &AcquireResult{
+			Acquired:     false,
+			BlockedScope: ConcurrencyScopeSubscription,
+		}, nil
+	}
+
+	refreshInterval, retryInterval, operationTO := s.subscriptionLeaseTimings()
+	refreshCtx, refreshCancel := context.WithCancel(context.Background())
+	lease := &subscriptionConcurrencyLease{
+		cache:           cache,
+		subscriptionID:  subscriptionID,
+		maxConcurrency:  subscriptionMaxConcurrency,
+		requestID:       requestID,
+		userRelease:     userResult.ReleaseFunc,
+		refreshInterval: refreshInterval,
+		retryInterval:   retryInterval,
+		operationTO:     operationTO,
+		cancel:          refreshCancel,
+		refreshDone:     make(chan struct{}),
+		onLeaseLoss:     onLeaseLoss,
+	}
+	go lease.refreshLoop(refreshCtx)
+
+	return &AcquireResult{
+		Acquired:    true,
+		ReleaseFunc: lease.Release,
 	}, nil
 }
 
@@ -520,6 +846,42 @@ func (s *ConcurrencyService) DecrementWaitCount(ctx context.Context, userID int6
 
 	if err := s.cache.DecrementWaitCount(bgCtx, userID); err != nil {
 		logger.LegacyPrintf("service.concurrency", "Warning: decrement wait count failed for user %d: %v", userID, err)
+	}
+}
+
+// IncrementSubscriptionWaitCount bounds pending requests for one subscription
+// instance without sharing queue capacity with the user's balance traffic or
+// other subscription instances.
+func (s *ConcurrencyService) IncrementSubscriptionWaitCount(ctx context.Context, subscriptionID int64, maxWait int) (bool, error) {
+	if s == nil || s.cache == nil || subscriptionID <= 0 {
+		return true, nil
+	}
+	cache, ok := s.cache.(SubscriptionConcurrencyCache)
+	if !ok {
+		return false, errors.New("subscription concurrency cache is unsupported")
+	}
+	result, err := cache.IncrementSubscriptionWaitCount(ctx, subscriptionID, maxWait)
+	if err != nil {
+		logger.LegacyPrintf("service.concurrency", "Warning: increment wait count failed for subscription %d: %v", subscriptionID, err)
+		return true, nil
+	}
+	return result, nil
+}
+
+// DecrementSubscriptionWaitCount removes one pending request from the scoped
+// wait counter, even when the original request context has been cancelled.
+func (s *ConcurrencyService) DecrementSubscriptionWaitCount(ctx context.Context, subscriptionID int64) {
+	if s == nil || s.cache == nil || subscriptionID <= 0 {
+		return
+	}
+	cache, ok := s.cache.(SubscriptionConcurrencyCache)
+	if !ok {
+		return
+	}
+	bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := cache.DecrementSubscriptionWaitCount(bgCtx, subscriptionID); err != nil {
+		logger.LegacyPrintf("service.concurrency", "Warning: decrement wait count failed for subscription %d: %v", subscriptionID, err)
 	}
 }
 

@@ -3,8 +3,11 @@
 package service
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 
+	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -262,4 +265,109 @@ func TestNormalizePlanCurrency_NonLetter(t *testing.T) {
 	_, err := normalizePlanCurrency("N2D")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "currency")
+}
+
+func TestValidatePlanConcurrencyLimit(t *testing.T) {
+	valid := 5
+	maxValid := maxPlanConcurrencyLimit
+	zero := 0
+	negative := -1
+	tooLarge := maxPlanConcurrencyLimit + 1
+
+	for _, limit := range []*int{nil, &valid, &maxValid} {
+		require.NoError(t, validatePlanConcurrencyLimit(limit))
+	}
+	for _, limit := range []*int{&zero, &negative, &tooLarge} {
+		err := validatePlanConcurrencyLimit(limit)
+		require.Error(t, err)
+		require.Equal(t, "PLAN_CONCURRENCY_INVALID", infraerrors.Reason(err))
+	}
+}
+
+func TestNormalizePlanConcurrencyLimit_OnlyStandardQuotaKeepsValue(t *testing.T) {
+	limit := 7
+
+	standardLimit, err := normalizePlanConcurrencyLimit(domain.SubscriptionPlanTypeStandardQuota, &limit)
+	require.NoError(t, err)
+	require.Equal(t, &limit, standardLimit)
+
+	for _, planType := range []string{
+		domain.SubscriptionPlanTypeSubscription,
+		domain.SubscriptionPlanTypeLegacySharedSubscription,
+	} {
+		normalized, err := normalizePlanConcurrencyLimit(planType, &limit)
+		require.NoError(t, err)
+		require.Nil(t, normalized)
+	}
+}
+
+func TestUpdatePlanRequest_ExplicitNullConcurrencyLimit(t *testing.T) {
+	var req UpdatePlanRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"concurrency_limit":null,"concurrency_limit_set":true}`), &req))
+	require.True(t, req.ConcurrencyLimitSet)
+	require.Nil(t, req.ConcurrencyLimit)
+}
+
+func TestPaymentConfigService_PlanConcurrencyCRUDAndTypeSwitch(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	standardGroup, err := client.Group.Create().
+		SetName("standard-concurrency").
+		SetSubscriptionType(domain.SubscriptionTypeStandard).
+		Save(ctx)
+	require.NoError(t, err)
+	subscriptionGroup, err := client.Group.Create().
+		SetName("native-subscription-concurrency").
+		SetSubscriptionType(domain.SubscriptionTypeSubscription).
+		Save(ctx)
+	require.NoError(t, err)
+
+	daily := 10.0
+	initialLimit := 4
+	svc := NewPaymentConfigService(client, nil, nil)
+	plan, err := svc.CreatePlan(ctx, CreatePlanRequest{
+		PlanType:         domain.SubscriptionPlanTypeStandardQuota,
+		GroupIDs:         []int64{standardGroup.ID},
+		Name:             "Standard Quota",
+		Price:            9.99,
+		DailyLimitUSD:    &daily,
+		ConcurrencyLimit: &initialLimit,
+		ValidityDays:     30,
+		ValidityUnit:     "day",
+		ForSale:          true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, &initialLimit, plan.ConcurrencyLimit)
+	responses := svc.PlanResponses(ctx, []*dbent.SubscriptionPlan{plan})
+	require.Len(t, responses, 1)
+	require.Equal(t, &initialLimit, responses[0].ConcurrencyLimit)
+
+	assignment, err := NewSubscriptionService(nil, nil, nil, client, nil).
+		BuildPlanAssignmentInput(ctx, 100, plan.ID, 0, 200, "admin assignment")
+	require.NoError(t, err)
+	require.Equal(t, &initialLimit, assignment.ConcurrencyLimit)
+
+	snapshot, err := (&PaymentService{configService: svc}).buildSubscriptionSnapshot(ctx, plan)
+	require.NoError(t, err)
+	require.Equal(t, 3, snapshot.SchemaVersion)
+	require.Equal(t, &initialLimit, snapshot.ConcurrencyLimit)
+
+	plan, err = svc.UpdatePlan(ctx, plan.ID, UpdatePlanRequest{ConcurrencyLimitSet: true})
+	require.NoError(t, err)
+	require.Nil(t, plan.ConcurrencyLimit)
+
+	updatedLimit := 6
+	plan, err = svc.UpdatePlan(ctx, plan.ID, UpdatePlanRequest{ConcurrencyLimit: &updatedLimit})
+	require.NoError(t, err)
+	require.Equal(t, &updatedLimit, plan.ConcurrencyLimit)
+
+	nativeType := domain.SubscriptionPlanTypeSubscription
+	plan, err = svc.UpdatePlan(ctx, plan.ID, UpdatePlanRequest{
+		PlanType: &nativeType,
+		GroupIDs: []int64{subscriptionGroup.ID},
+	})
+	require.NoError(t, err)
+	require.Equal(t, domain.SubscriptionPlanTypeSubscription, plan.PlanType)
+	require.Nil(t, plan.ConcurrencyLimit)
+	require.Nil(t, plan.DailyLimitUsd)
 }

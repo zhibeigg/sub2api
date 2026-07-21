@@ -135,6 +135,7 @@ describe('PlanEditDialog plan types', () => {
     expect((selector.props('groups') as AdminGroup[]).map(group => group.id)).toEqual([1, 2])
     expect(selector.findAll('input[type="checkbox"]')).toHaveLength(2)
     expect(wrapper.find('[data-test="shared-quota-section"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="concurrency-limit"]').exists()).toBe(true)
 
     await selectGroup(wrapper, 0)
     await selectGroup(wrapper, 1)
@@ -149,6 +150,7 @@ describe('PlanEditDialog plan types', () => {
       group_ids: [1, 2],
       daily_limit_usd: 5,
       monthly_limit_usd: 50,
+      concurrency_limit: 4,
     })
     const wrapper = mountDialog(null, { plan })
     await reopen(wrapper)
@@ -170,7 +172,49 @@ describe('PlanEditDialog plan types', () => {
       weekly_limit_usd: null,
       monthly_limit_usd: null,
       quota_limits_set: true,
+      concurrency_limit: null,
+      concurrency_limit_set: true,
     }))
+  })
+
+  it('refills an existing concurrency snapshot and explicitly clears it on update', async () => {
+    const wrapper = mountDialog(null, {
+      plan: makePlan({
+        plan_type: 'standard_quota',
+        group_id: 1,
+        group_ids: [1],
+        daily_limit_usd: 5,
+        concurrency_limit: 8,
+      }),
+    })
+    await reopen(wrapper)
+
+    expect((wrapper.find('[data-test="concurrency-limit"]').element as HTMLInputElement).value).toBe('8')
+
+    await wrapper.find('[data-test="concurrency-limit"]').setValue('')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(adminPaymentAPI.updatePlan).toHaveBeenCalledWith(7, expect.objectContaining({
+      concurrency_limit: null,
+      concurrency_limit_set: true,
+    }))
+  })
+
+  it('rejects zero, negative, and fractional concurrency limits', async () => {
+    for (const invalidValue of ['0', '-1', '1.5', '2147483648']) {
+      const wrapper = mountDialog()
+      await wrapper.find('[data-test="plan-type-standard_quota"]').setValue(true)
+      await selectGroup(wrapper)
+      await wrapper.find('[data-test="daily-limit"]').setValue('5')
+      await wrapper.find('[data-test="concurrency-limit"]').setValue(invalidValue)
+      await wrapper.find('[data-test="plan-price"]').setValue('10')
+      await wrapper.find('form').trigger('submit')
+
+      expect(showError).toHaveBeenLastCalledWith('payment.admin.concurrencyLimitInvalid')
+      wrapper.unmount()
+    }
+    expect(adminPaymentAPI.createPlan).not.toHaveBeenCalled()
   })
 
   it('requires a positive standard quota before saving', async () => {
@@ -190,6 +234,7 @@ describe('PlanEditDialog plan types', () => {
     await selectGroup(wrapper, 0)
     await selectGroup(wrapper, 1)
     await wrapper.find('[data-test="daily-limit"]').setValue('5')
+    await wrapper.find('[data-test="concurrency-limit"]').setValue('3')
     await wrapper.find('[data-test="plan-price"]').setValue('10')
     await wrapper.find('form').trigger('submit')
     await flushPromises()
@@ -201,6 +246,7 @@ describe('PlanEditDialog plan types', () => {
       daily_limit_usd: 5,
       weekly_limit_usd: null,
       monthly_limit_usd: null,
+      concurrency_limit: 3,
     }))
   })
 
@@ -241,6 +287,7 @@ function makePlan(overrides: Partial<SubscriptionPlan> = {}): SubscriptionPlan {
     daily_limit_usd: null,
     weekly_limit_usd: null,
     monthly_limit_usd: null,
+    concurrency_limit: null,
     ...overrides,
   }
 }

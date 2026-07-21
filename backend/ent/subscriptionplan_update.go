@@ -222,6 +222,33 @@ func (_u *SubscriptionPlanUpdate) ClearMonthlyLimitUsd() *SubscriptionPlanUpdate
 	return _u
 }
 
+// SetConcurrencyLimit sets the "concurrency_limit" field.
+func (_u *SubscriptionPlanUpdate) SetConcurrencyLimit(v int) *SubscriptionPlanUpdate {
+	_u.mutation.ResetConcurrencyLimit()
+	_u.mutation.SetConcurrencyLimit(v)
+	return _u
+}
+
+// SetNillableConcurrencyLimit sets the "concurrency_limit" field if the given value is not nil.
+func (_u *SubscriptionPlanUpdate) SetNillableConcurrencyLimit(v *int) *SubscriptionPlanUpdate {
+	if v != nil {
+		_u.SetConcurrencyLimit(*v)
+	}
+	return _u
+}
+
+// AddConcurrencyLimit adds value to the "concurrency_limit" field.
+func (_u *SubscriptionPlanUpdate) AddConcurrencyLimit(v int) *SubscriptionPlanUpdate {
+	_u.mutation.AddConcurrencyLimit(v)
+	return _u
+}
+
+// ClearConcurrencyLimit clears the value of the "concurrency_limit" field.
+func (_u *SubscriptionPlanUpdate) ClearConcurrencyLimit() *SubscriptionPlanUpdate {
+	_u.mutation.ClearConcurrencyLimit()
+	return _u
+}
+
 // SetCurrency sets the "currency" field.
 func (_u *SubscriptionPlanUpdate) SetCurrency(v string) *SubscriptionPlanUpdate {
 	_u.mutation.SetCurrency(v)
@@ -551,6 +578,15 @@ func (_u *SubscriptionPlanUpdate) sqlSave(ctx context.Context) (_node int, err e
 	}
 	if _u.mutation.MonthlyLimitUsdCleared() {
 		_spec.ClearField(subscriptionplan.FieldMonthlyLimitUsd, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.ConcurrencyLimit(); ok {
+		_spec.SetField(subscriptionplan.FieldConcurrencyLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedConcurrencyLimit(); ok {
+		_spec.AddField(subscriptionplan.FieldConcurrencyLimit, field.TypeInt, value)
+	}
+	if _u.mutation.ConcurrencyLimitCleared() {
+		_spec.ClearField(subscriptionplan.FieldConcurrencyLimit, field.TypeInt)
 	}
 	if value, ok := _u.mutation.Currency(); ok {
 		_spec.SetField(subscriptionplan.FieldCurrency, field.TypeString, value)
@@ -893,6 +929,33 @@ func (_u *SubscriptionPlanUpdateOne) AddMonthlyLimitUsd(v float64) *Subscription
 // ClearMonthlyLimitUsd clears the value of the "monthly_limit_usd" field.
 func (_u *SubscriptionPlanUpdateOne) ClearMonthlyLimitUsd() *SubscriptionPlanUpdateOne {
 	_u.mutation.ClearMonthlyLimitUsd()
+	return _u
+}
+
+// SetConcurrencyLimit sets the "concurrency_limit" field.
+func (_u *SubscriptionPlanUpdateOne) SetConcurrencyLimit(v int) *SubscriptionPlanUpdateOne {
+	_u.mutation.ResetConcurrencyLimit()
+	_u.mutation.SetConcurrencyLimit(v)
+	return _u
+}
+
+// SetNillableConcurrencyLimit sets the "concurrency_limit" field if the given value is not nil.
+func (_u *SubscriptionPlanUpdateOne) SetNillableConcurrencyLimit(v *int) *SubscriptionPlanUpdateOne {
+	if v != nil {
+		_u.SetConcurrencyLimit(*v)
+	}
+	return _u
+}
+
+// AddConcurrencyLimit adds value to the "concurrency_limit" field.
+func (_u *SubscriptionPlanUpdateOne) AddConcurrencyLimit(v int) *SubscriptionPlanUpdateOne {
+	_u.mutation.AddConcurrencyLimit(v)
+	return _u
+}
+
+// ClearConcurrencyLimit clears the value of the "concurrency_limit" field.
+func (_u *SubscriptionPlanUpdateOne) ClearConcurrencyLimit() *SubscriptionPlanUpdateOne {
+	_u.mutation.ClearConcurrencyLimit()
 	return _u
 }
 
@@ -1255,6 +1318,15 @@ func (_u *SubscriptionPlanUpdateOne) sqlSave(ctx context.Context) (_node *Subscr
 	}
 	if _u.mutation.MonthlyLimitUsdCleared() {
 		_spec.ClearField(subscriptionplan.FieldMonthlyLimitUsd, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.ConcurrencyLimit(); ok {
+		_spec.SetField(subscriptionplan.FieldConcurrencyLimit, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedConcurrencyLimit(); ok {
+		_spec.AddField(subscriptionplan.FieldConcurrencyLimit, field.TypeInt, value)
+	}
+	if _u.mutation.ConcurrencyLimitCleared() {
+		_spec.ClearField(subscriptionplan.FieldConcurrencyLimit, field.TypeInt)
 	}
 	if value, ok := _u.mutation.Currency(); ok {
 		_spec.SetField(subscriptionplan.FieldCurrency, field.TypeString, value)

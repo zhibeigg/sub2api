@@ -102,11 +102,11 @@ func openAIWSPassthroughPolicyModelForFrame(account *Account, payload []byte) st
 // derived from a session.update frame's session.model field. Returns "" when
 // the frame is not a session.update event or carries no session.model. Used
 // by the per-frame policy filter (client→upstream direction) to keep
-// capturedSessionModel in sync with the session-level model the client may
-// rotate mid-session.
+// capturedSessionModel in sync with session.update. The ingress hook also uses
+// the captured request model to reject a later response.create that would
+// switch away from the first-turn scheduling/billing scope.
 //
-// Realtime / Responses WS lets the client change the session model after
-// the WS handshake via:
+// Realtime / Responses WS can carry a session model update after the handshake:
 //
 //	{"type":"session.update","session":{"model":"gpt-5.5", ...}}
 //
@@ -847,11 +847,16 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			}
 			eventType := strings.TrimSpace(gjson.GetBytes(payload, "type").String())
 			isResponseCreate := eventType == "response.create"
+			turnNo := 0
 			acceptedTurn := false
 			if isResponseCreate {
 				if !turnLifecycle.beginResponseCreate(clientFrameConn.markTurnStarted) {
 					err := errors.New("overlapping response.create is not supported")
 					return payload, nil, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, err.Error(), err)
+				}
+				turnNo = int(completedTurns.Load()) + 1
+				if turnNo < 2 {
+					turnNo = 2
 				}
 				defer func() {
 					if !acceptedTurn {
@@ -869,10 +874,6 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				}
 			}
 			if isResponseCreate && hooks != nil && hooks.BeforeRequest != nil {
-				turnNo := int(completedTurns.Load()) + 1
-				if turnNo < 2 {
-					turnNo = 2
-				}
 				requestModel := usageMeta.requestModelForFrame(payload)
 				if requestModel == "" {
 					requestModel = capturedSessionModel
@@ -881,13 +882,19 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					return payload, nil, err
 				}
 			}
-			// 在评估策略前先刷新 capturedSessionModel：客户端可能通过
-			// session.update 修改 session-level model（Realtime /
-			// Responses WS 协议允许），如果不刷新就会出现
-			// "首帧 model=gpt-4o（pass）→ session.update 改成 gpt-5.5
-			// → 不带 model 的 response.create fallback 到 gpt-4o" 的
-			// 绕过路径。这里只看 session.update 事件中的 session.model
-			// 字段，response.create 自己的 model 仍然由其本帧字段决定。
+			if isResponseCreate && hooks != nil && hooks.BeforeTurn != nil {
+				// 首轮槽位由 handler 在建立上游连接前获取；passthrough relay
+				// 只会从这里读到后续 response.create，因此每个后续 turn
+				// 都必须在写上游前重新获取用户/订阅/账号槽。
+				if err := hooks.BeforeTurn(turnNo); err != nil {
+					return payload, nil, err
+				}
+			}
+			// 在评估策略前刷新 capturedSessionModel：session.update 的
+			// session.model 既用于后续无 model 的 response.create 策略解析，
+			// 也会通过 usageMeta 传给 ingress BeforeRequest，确保与首轮模型
+			// 不同的隐式切换 fail-closed。response.create 自己的 model 仍以
+			// 本帧字段优先。
 			if updated := openAIWSPassthroughPolicyModelFromSessionFrame(account, payload); updated != "" {
 				capturedSessionModel = updated
 			}

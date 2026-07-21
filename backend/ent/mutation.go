@@ -43576,6 +43576,8 @@ type SubscriptionPlanMutation struct {
 	addweekly_limit_usd  *float64
 	monthly_limit_usd    *float64
 	addmonthly_limit_usd *float64
+	concurrency_limit    *int
+	addconcurrency_limit *int
 	currency             *string
 	validity_days        *int
 	addvalidity_days     *int
@@ -44197,6 +44199,76 @@ func (m *SubscriptionPlanMutation) ResetMonthlyLimitUsd() {
 	delete(m.clearedFields, subscriptionplan.FieldMonthlyLimitUsd)
 }
 
+// SetConcurrencyLimit sets the "concurrency_limit" field.
+func (m *SubscriptionPlanMutation) SetConcurrencyLimit(i int) {
+	m.concurrency_limit = &i
+	m.addconcurrency_limit = nil
+}
+
+// ConcurrencyLimit returns the value of the "concurrency_limit" field in the mutation.
+func (m *SubscriptionPlanMutation) ConcurrencyLimit() (r int, exists bool) {
+	v := m.concurrency_limit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldConcurrencyLimit returns the old "concurrency_limit" field's value of the SubscriptionPlan entity.
+// If the SubscriptionPlan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubscriptionPlanMutation) OldConcurrencyLimit(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldConcurrencyLimit is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldConcurrencyLimit requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldConcurrencyLimit: %w", err)
+	}
+	return oldValue.ConcurrencyLimit, nil
+}
+
+// AddConcurrencyLimit adds i to the "concurrency_limit" field.
+func (m *SubscriptionPlanMutation) AddConcurrencyLimit(i int) {
+	if m.addconcurrency_limit != nil {
+		*m.addconcurrency_limit += i
+	} else {
+		m.addconcurrency_limit = &i
+	}
+}
+
+// AddedConcurrencyLimit returns the value that was added to the "concurrency_limit" field in this mutation.
+func (m *SubscriptionPlanMutation) AddedConcurrencyLimit() (r int, exists bool) {
+	v := m.addconcurrency_limit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearConcurrencyLimit clears the value of the "concurrency_limit" field.
+func (m *SubscriptionPlanMutation) ClearConcurrencyLimit() {
+	m.concurrency_limit = nil
+	m.addconcurrency_limit = nil
+	m.clearedFields[subscriptionplan.FieldConcurrencyLimit] = struct{}{}
+}
+
+// ConcurrencyLimitCleared returns if the "concurrency_limit" field was cleared in this mutation.
+func (m *SubscriptionPlanMutation) ConcurrencyLimitCleared() bool {
+	_, ok := m.clearedFields[subscriptionplan.FieldConcurrencyLimit]
+	return ok
+}
+
+// ResetConcurrencyLimit resets all changes to the "concurrency_limit" field.
+func (m *SubscriptionPlanMutation) ResetConcurrencyLimit() {
+	m.concurrency_limit = nil
+	m.addconcurrency_limit = nil
+	delete(m.clearedFields, subscriptionplan.FieldConcurrencyLimit)
+}
+
 // SetCurrency sets the "currency" field.
 func (m *SubscriptionPlanMutation) SetCurrency(s string) {
 	m.currency = &s
@@ -44703,7 +44775,7 @@ func (m *SubscriptionPlanMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SubscriptionPlanMutation) Fields() []string {
-	fields := make([]string, 0, 18)
+	fields := make([]string, 0, 19)
 	if m.group_id != nil {
 		fields = append(fields, subscriptionplan.FieldGroupID)
 	}
@@ -44730,6 +44802,9 @@ func (m *SubscriptionPlanMutation) Fields() []string {
 	}
 	if m.monthly_limit_usd != nil {
 		fields = append(fields, subscriptionplan.FieldMonthlyLimitUsd)
+	}
+	if m.concurrency_limit != nil {
+		fields = append(fields, subscriptionplan.FieldConcurrencyLimit)
 	}
 	if m.currency != nil {
 		fields = append(fields, subscriptionplan.FieldCurrency)
@@ -44784,6 +44859,8 @@ func (m *SubscriptionPlanMutation) Field(name string) (ent.Value, bool) {
 		return m.WeeklyLimitUsd()
 	case subscriptionplan.FieldMonthlyLimitUsd:
 		return m.MonthlyLimitUsd()
+	case subscriptionplan.FieldConcurrencyLimit:
+		return m.ConcurrencyLimit()
 	case subscriptionplan.FieldCurrency:
 		return m.Currency()
 	case subscriptionplan.FieldValidityDays:
@@ -44829,6 +44906,8 @@ func (m *SubscriptionPlanMutation) OldField(ctx context.Context, name string) (e
 		return m.OldWeeklyLimitUsd(ctx)
 	case subscriptionplan.FieldMonthlyLimitUsd:
 		return m.OldMonthlyLimitUsd(ctx)
+	case subscriptionplan.FieldConcurrencyLimit:
+		return m.OldConcurrencyLimit(ctx)
 	case subscriptionplan.FieldCurrency:
 		return m.OldCurrency(ctx)
 	case subscriptionplan.FieldValidityDays:
@@ -44919,6 +44998,13 @@ func (m *SubscriptionPlanMutation) SetField(name string, value ent.Value) error 
 		}
 		m.SetMonthlyLimitUsd(v)
 		return nil
+	case subscriptionplan.FieldConcurrencyLimit:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetConcurrencyLimit(v)
+		return nil
 	case subscriptionplan.FieldCurrency:
 		v, ok := value.(string)
 		if !ok {
@@ -45008,6 +45094,9 @@ func (m *SubscriptionPlanMutation) AddedFields() []string {
 	if m.addmonthly_limit_usd != nil {
 		fields = append(fields, subscriptionplan.FieldMonthlyLimitUsd)
 	}
+	if m.addconcurrency_limit != nil {
+		fields = append(fields, subscriptionplan.FieldConcurrencyLimit)
+	}
 	if m.addvalidity_days != nil {
 		fields = append(fields, subscriptionplan.FieldValidityDays)
 	}
@@ -45034,6 +45123,8 @@ func (m *SubscriptionPlanMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedWeeklyLimitUsd()
 	case subscriptionplan.FieldMonthlyLimitUsd:
 		return m.AddedMonthlyLimitUsd()
+	case subscriptionplan.FieldConcurrencyLimit:
+		return m.AddedConcurrencyLimit()
 	case subscriptionplan.FieldValidityDays:
 		return m.AddedValidityDays()
 	case subscriptionplan.FieldSortOrder:
@@ -45089,6 +45180,13 @@ func (m *SubscriptionPlanMutation) AddField(name string, value ent.Value) error 
 		}
 		m.AddMonthlyLimitUsd(v)
 		return nil
+	case subscriptionplan.FieldConcurrencyLimit:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddConcurrencyLimit(v)
+		return nil
 	case subscriptionplan.FieldValidityDays:
 		v, ok := value.(int)
 		if !ok {
@@ -45123,6 +45221,9 @@ func (m *SubscriptionPlanMutation) ClearedFields() []string {
 	if m.FieldCleared(subscriptionplan.FieldMonthlyLimitUsd) {
 		fields = append(fields, subscriptionplan.FieldMonthlyLimitUsd)
 	}
+	if m.FieldCleared(subscriptionplan.FieldConcurrencyLimit) {
+		fields = append(fields, subscriptionplan.FieldConcurrencyLimit)
+	}
 	return fields
 }
 
@@ -45148,6 +45249,9 @@ func (m *SubscriptionPlanMutation) ClearField(name string) error {
 		return nil
 	case subscriptionplan.FieldMonthlyLimitUsd:
 		m.ClearMonthlyLimitUsd()
+		return nil
+	case subscriptionplan.FieldConcurrencyLimit:
+		m.ClearConcurrencyLimit()
 		return nil
 	}
 	return fmt.Errorf("unknown SubscriptionPlan nullable field %s", name)
@@ -45183,6 +45287,9 @@ func (m *SubscriptionPlanMutation) ResetField(name string) error {
 		return nil
 	case subscriptionplan.FieldMonthlyLimitUsd:
 		m.ResetMonthlyLimitUsd()
+		return nil
+	case subscriptionplan.FieldConcurrencyLimit:
+		m.ResetConcurrencyLimit()
 		return nil
 	case subscriptionplan.FieldCurrency:
 		m.ResetCurrency()
@@ -59636,6 +59743,8 @@ type UserSubscriptionMutation struct {
 	addweekly_limit_usd      *float64
 	monthly_limit_usd        *float64
 	addmonthly_limit_usd     *float64
+	concurrency_limit        *int
+	addconcurrency_limit     *int
 	starts_at                *time.Time
 	expires_at               *time.Time
 	status                   *string
@@ -60254,6 +60363,76 @@ func (m *UserSubscriptionMutation) ResetMonthlyLimitUsd() {
 	m.monthly_limit_usd = nil
 	m.addmonthly_limit_usd = nil
 	delete(m.clearedFields, usersubscription.FieldMonthlyLimitUsd)
+}
+
+// SetConcurrencyLimit sets the "concurrency_limit" field.
+func (m *UserSubscriptionMutation) SetConcurrencyLimit(i int) {
+	m.concurrency_limit = &i
+	m.addconcurrency_limit = nil
+}
+
+// ConcurrencyLimit returns the value of the "concurrency_limit" field in the mutation.
+func (m *UserSubscriptionMutation) ConcurrencyLimit() (r int, exists bool) {
+	v := m.concurrency_limit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldConcurrencyLimit returns the old "concurrency_limit" field's value of the UserSubscription entity.
+// If the UserSubscription object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserSubscriptionMutation) OldConcurrencyLimit(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldConcurrencyLimit is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldConcurrencyLimit requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldConcurrencyLimit: %w", err)
+	}
+	return oldValue.ConcurrencyLimit, nil
+}
+
+// AddConcurrencyLimit adds i to the "concurrency_limit" field.
+func (m *UserSubscriptionMutation) AddConcurrencyLimit(i int) {
+	if m.addconcurrency_limit != nil {
+		*m.addconcurrency_limit += i
+	} else {
+		m.addconcurrency_limit = &i
+	}
+}
+
+// AddedConcurrencyLimit returns the value that was added to the "concurrency_limit" field in this mutation.
+func (m *UserSubscriptionMutation) AddedConcurrencyLimit() (r int, exists bool) {
+	v := m.addconcurrency_limit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearConcurrencyLimit clears the value of the "concurrency_limit" field.
+func (m *UserSubscriptionMutation) ClearConcurrencyLimit() {
+	m.concurrency_limit = nil
+	m.addconcurrency_limit = nil
+	m.clearedFields[usersubscription.FieldConcurrencyLimit] = struct{}{}
+}
+
+// ConcurrencyLimitCleared returns if the "concurrency_limit" field was cleared in this mutation.
+func (m *UserSubscriptionMutation) ConcurrencyLimitCleared() bool {
+	_, ok := m.clearedFields[usersubscription.FieldConcurrencyLimit]
+	return ok
+}
+
+// ResetConcurrencyLimit resets all changes to the "concurrency_limit" field.
+func (m *UserSubscriptionMutation) ResetConcurrencyLimit() {
+	m.concurrency_limit = nil
+	m.addconcurrency_limit = nil
+	delete(m.clearedFields, usersubscription.FieldConcurrencyLimit)
 }
 
 // SetStartsAt sets the "starts_at" field.
@@ -61076,7 +61255,7 @@ func (m *UserSubscriptionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserSubscriptionMutation) Fields() []string {
-	fields := make([]string, 0, 22)
+	fields := make([]string, 0, 23)
 	if m.created_at != nil {
 		fields = append(fields, usersubscription.FieldCreatedAt)
 	}
@@ -61106,6 +61285,9 @@ func (m *UserSubscriptionMutation) Fields() []string {
 	}
 	if m.monthly_limit_usd != nil {
 		fields = append(fields, usersubscription.FieldMonthlyLimitUsd)
+	}
+	if m.concurrency_limit != nil {
+		fields = append(fields, usersubscription.FieldConcurrencyLimit)
 	}
 	if m.starts_at != nil {
 		fields = append(fields, usersubscription.FieldStartsAt)
@@ -61171,6 +61353,8 @@ func (m *UserSubscriptionMutation) Field(name string) (ent.Value, bool) {
 		return m.WeeklyLimitUsd()
 	case usersubscription.FieldMonthlyLimitUsd:
 		return m.MonthlyLimitUsd()
+	case usersubscription.FieldConcurrencyLimit:
+		return m.ConcurrencyLimit()
 	case usersubscription.FieldStartsAt:
 		return m.StartsAt()
 	case usersubscription.FieldExpiresAt:
@@ -61224,6 +61408,8 @@ func (m *UserSubscriptionMutation) OldField(ctx context.Context, name string) (e
 		return m.OldWeeklyLimitUsd(ctx)
 	case usersubscription.FieldMonthlyLimitUsd:
 		return m.OldMonthlyLimitUsd(ctx)
+	case usersubscription.FieldConcurrencyLimit:
+		return m.OldConcurrencyLimit(ctx)
 	case usersubscription.FieldStartsAt:
 		return m.OldStartsAt(ctx)
 	case usersubscription.FieldExpiresAt:
@@ -61327,6 +61513,13 @@ func (m *UserSubscriptionMutation) SetField(name string, value ent.Value) error 
 		}
 		m.SetMonthlyLimitUsd(v)
 		return nil
+	case usersubscription.FieldConcurrencyLimit:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetConcurrencyLimit(v)
+		return nil
 	case usersubscription.FieldStartsAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -61428,6 +61621,9 @@ func (m *UserSubscriptionMutation) AddedFields() []string {
 	if m.addmonthly_limit_usd != nil {
 		fields = append(fields, usersubscription.FieldMonthlyLimitUsd)
 	}
+	if m.addconcurrency_limit != nil {
+		fields = append(fields, usersubscription.FieldConcurrencyLimit)
+	}
 	if m.adddaily_usage_usd != nil {
 		fields = append(fields, usersubscription.FieldDailyUsageUsd)
 	}
@@ -61451,6 +61647,8 @@ func (m *UserSubscriptionMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedWeeklyLimitUsd()
 	case usersubscription.FieldMonthlyLimitUsd:
 		return m.AddedMonthlyLimitUsd()
+	case usersubscription.FieldConcurrencyLimit:
+		return m.AddedConcurrencyLimit()
 	case usersubscription.FieldDailyUsageUsd:
 		return m.AddedDailyUsageUsd()
 	case usersubscription.FieldWeeklyUsageUsd:
@@ -61486,6 +61684,13 @@ func (m *UserSubscriptionMutation) AddField(name string, value ent.Value) error 
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddMonthlyLimitUsd(v)
+		return nil
+	case usersubscription.FieldConcurrencyLimit:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddConcurrencyLimit(v)
 		return nil
 	case usersubscription.FieldDailyUsageUsd:
 		v, ok := value.(float64)
@@ -61531,6 +61736,9 @@ func (m *UserSubscriptionMutation) ClearedFields() []string {
 	if m.FieldCleared(usersubscription.FieldMonthlyLimitUsd) {
 		fields = append(fields, usersubscription.FieldMonthlyLimitUsd)
 	}
+	if m.FieldCleared(usersubscription.FieldConcurrencyLimit) {
+		fields = append(fields, usersubscription.FieldConcurrencyLimit)
+	}
 	if m.FieldCleared(usersubscription.FieldDailyWindowStart) {
 		fields = append(fields, usersubscription.FieldDailyWindowStart)
 	}
@@ -61574,6 +61782,9 @@ func (m *UserSubscriptionMutation) ClearField(name string) error {
 		return nil
 	case usersubscription.FieldMonthlyLimitUsd:
 		m.ClearMonthlyLimitUsd()
+		return nil
+	case usersubscription.FieldConcurrencyLimit:
+		m.ClearConcurrencyLimit()
 		return nil
 	case usersubscription.FieldDailyWindowStart:
 		m.ClearDailyWindowStart()
@@ -61627,6 +61838,9 @@ func (m *UserSubscriptionMutation) ResetField(name string) error {
 		return nil
 	case usersubscription.FieldMonthlyLimitUsd:
 		m.ResetMonthlyLimitUsd()
+		return nil
+	case usersubscription.FieldConcurrencyLimit:
+		m.ResetConcurrencyLimit()
 		return nil
 	case usersubscription.FieldStartsAt:
 		m.ResetStartsAt()

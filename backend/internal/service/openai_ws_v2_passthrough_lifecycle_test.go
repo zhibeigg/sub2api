@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -154,6 +155,17 @@ func startPassthroughLifecycleServer(
 	account *Account,
 ) (*httptest.Server, <-chan error) {
 	t.Helper()
+	return startPassthroughLifecycleServerWithHooks(t, controlCtx, svc, account, nil)
+}
+
+func startPassthroughLifecycleServerWithHooks(
+	t *testing.T,
+	controlCtx context.Context,
+	svc *OpenAIGatewayService,
+	account *Account,
+	hooks *OpenAIWSIngressHooks,
+) (*httptest.Server, <-chan error) {
+	t.Helper()
 	serverErr := make(chan error, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := coderws.Accept(w, r, &coderws.AcceptOptions{CompressionMode: coderws.CompressionContextTakeover})
@@ -184,7 +196,7 @@ func startPassthroughLifecycleServer(
 		req := r.Clone(controlCtx)
 		req.Header = req.Header.Clone()
 		ginCtx.Request = req
-		serverErr <- svc.ProxyResponsesWebSocketFromClient(controlCtx, ginCtx, conn, account, "sk-test", firstMessage, nil)
+		serverErr <- svc.ProxyResponsesWebSocketFromClient(controlCtx, ginCtx, conn, account, "sk-test", firstMessage, hooks)
 	}))
 	return server, serverErr
 }
@@ -411,6 +423,157 @@ func TestPassthroughLifecycle_RejectsOverlappingResponseCreate(t *testing.T) {
 	}
 }
 
+func TestPassthroughLifecycle_FollowupTurnRunsAfterTurnBeforeReacquire(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	controlCtx, cancelControl := context.WithCancelCause(context.Background())
+	defer cancelControl(context.Canceled)
+	upstream := newStagedPassthroughConn()
+	upstream.Send(`{"type":"response.completed","response":{"id":"resp_scope_first","model":"gpt-5.1","usage":{"input_tokens":1,"output_tokens":1}}}`)
+
+	var afterTurns atomic.Int32
+	var beforeTurns atomic.Int32
+	var capturedModel atomic.Pointer[string]
+	hooks := &OpenAIWSIngressHooks{
+		InitialRequestModel: "gpt-5.1",
+		BeforeRequest: func(turn int, _ []byte, originalModel string) error {
+			if turn != 2 {
+				return errors.New("unexpected follow-up turn number")
+			}
+			model := originalModel
+			capturedModel.Store(&model)
+			return nil
+		},
+		BeforeTurn: func(turn int) error {
+			if turn != 2 {
+				return errors.New("unexpected reacquire turn number")
+			}
+			if afterTurns.Load() != 1 {
+				return errors.New("first turn did not finish before follow-up reacquire")
+			}
+			beforeTurns.Add(1)
+			return nil
+		},
+		AfterTurn: func(_ int, _ *OpenAIForwardResult, _ error) {
+			afterTurns.Add(1)
+		},
+	}
+	server, serverErr := startPassthroughLifecycleServerWithHooks(
+		t,
+		controlCtx,
+		newPassthroughLifecycleService(passthroughLifecycleConfig(), upstream),
+		passthroughLifecycleAccount(),
+		hooks,
+	)
+	defer server.Close()
+	clientConn := dialPassthroughLifecycleClient(t, server)
+	defer func() { _ = clientConn.CloseNow() }()
+
+	require.Equal(t, "response.create", gjson.GetBytes(requirePassthroughUpstreamWrite(t, upstream, time.Second), "type").String())
+	completed, err := readPassthroughLifecycleFrame(t, clientConn, 3*time.Second)
+	require.NoError(t, err)
+	require.Equal(t, "resp_scope_first", gjson.GetBytes(completed, "response.id").String())
+
+	writeCtx, cancelWrite := context.WithTimeout(context.Background(), time.Second)
+	err = clientConn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"response.create","previous_response_id":"resp_scope_first"}`))
+	cancelWrite()
+	require.NoError(t, err)
+	followup := requirePassthroughUpstreamWrite(t, upstream, time.Second)
+	require.Equal(t, "response.create", gjson.GetBytes(followup, "type").String())
+	require.Empty(t, gjson.GetBytes(followup, "model").String(), "omitted model should remain omitted upstream")
+	upstream.Send(`{"type":"response.completed","response":{"id":"resp_scope_second","model":"gpt-5.1","usage":{"input_tokens":1,"output_tokens":1}}}`)
+	completed, err = readPassthroughLifecycleFrame(t, clientConn, 3*time.Second)
+	require.NoError(t, err)
+	require.Equal(t, "resp_scope_second", gjson.GetBytes(completed, "response.id").String())
+
+	require.Equal(t, int32(1), beforeTurns.Load())
+	require.Eventually(t, func() bool { return afterTurns.Load() == 2 }, time.Second, 10*time.Millisecond)
+	model := capturedModel.Load()
+	require.NotNil(t, model)
+	require.Equal(t, "gpt-5.1", *model, "omitted follow-up model must inherit the first-turn request model")
+	require.NoError(t, clientConn.Close(coderws.StatusNormalClosure, "done"))
+	select {
+	case <-serverErr:
+	case <-time.After(3 * time.Second):
+		t.Fatal("follow-up turn lifecycle test did not exit")
+	}
+}
+
+func TestPassthroughLifecycle_SessionModelSwitchIsRejectedBeforeFollowupForward(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	controlCtx, cancelControl := context.WithCancelCause(context.Background())
+	defer cancelControl(context.Canceled)
+	upstream := newStagedPassthroughConn()
+	upstream.Send(`{"type":"response.completed","response":{"id":"resp_model_first","model":"gpt-5.1","usage":{"input_tokens":1,"output_tokens":1}}}`)
+
+	var beforeTurnCalls atomic.Int32
+	var capturedModel atomic.Pointer[string]
+	hooks := &OpenAIWSIngressHooks{
+		InitialRequestModel: "gpt-5.1",
+		BeforeRequest: func(_ int, _ []byte, originalModel string) error {
+			model := originalModel
+			capturedModel.Store(&model)
+			if model != "" && model != "gpt-5.1" {
+				reason := "model switching is not supported on this websocket connection; reconnect to use a different model"
+				return NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, reason, errors.New("model switch rejected"))
+			}
+			return nil
+		},
+		BeforeTurn: func(int) error {
+			beforeTurnCalls.Add(1)
+			return nil
+		},
+	}
+	server, serverErr := startPassthroughLifecycleServerWithHooks(
+		t,
+		controlCtx,
+		newPassthroughLifecycleService(passthroughLifecycleConfig(), upstream),
+		passthroughLifecycleAccount(),
+		hooks,
+	)
+	defer server.Close()
+	clientConn := dialPassthroughLifecycleClient(t, server)
+	defer func() { _ = clientConn.CloseNow() }()
+
+	require.Equal(t, "response.create", gjson.GetBytes(requirePassthroughUpstreamWrite(t, upstream, time.Second), "type").String())
+	_, err := readPassthroughLifecycleFrame(t, clientConn, 3*time.Second)
+	require.NoError(t, err)
+
+	writeCtx, cancelWrite := context.WithTimeout(context.Background(), time.Second)
+	err = clientConn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"session.update","session":{"model":"gpt-5.2"}}`))
+	cancelWrite()
+	require.NoError(t, err)
+	sessionUpdate := requirePassthroughUpstreamWrite(t, upstream, time.Second)
+	require.Equal(t, "session.update", gjson.GetBytes(sessionUpdate, "type").String())
+
+	writeCtx, cancelWrite = context.WithTimeout(context.Background(), time.Second)
+	err = clientConn.Write(writeCtx, coderws.MessageText, []byte(`{"type":"response.create","previous_response_id":"resp_model_first"}`))
+	cancelWrite()
+	require.NoError(t, err)
+
+	_, err = readPassthroughLifecycleFrame(t, clientConn, 3*time.Second)
+	var closeErr coderws.CloseError
+	require.ErrorAs(t, err, &closeErr)
+	require.Equal(t, coderws.StatusPolicyViolation, closeErr.Code)
+	require.Contains(t, closeErr.Reason, "model switching is not supported")
+	model := capturedModel.Load()
+	require.NotNil(t, model)
+	require.Equal(t, "gpt-5.2", *model, "response.create without model must expose the session.update model to the ingress contract")
+	require.Zero(t, beforeTurnCalls.Load(), "model rejection must happen before acquiring follow-up turn slots")
+	select {
+	case unexpected := <-upstream.writes:
+		t.Fatalf("rejected follow-up response.create reached upstream: %s", unexpected)
+	case <-time.After(150 * time.Millisecond):
+	}
+	select {
+	case err := <-serverErr:
+		var clientCloseErr *OpenAIWSClientCloseError
+		require.ErrorAs(t, err, &clientCloseErr)
+		require.Equal(t, coderws.StatusPolicyViolation, clientCloseErr.StatusCode())
+	case <-time.After(3 * time.Second):
+		t.Fatal("session model switch did not terminate passthrough")
+	}
+}
+
 func TestPassthroughLifecycle_ActiveTurnActivityRefreshesReadTimeout(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	controlCtx, cancelControl := context.WithCancelCause(context.Background())
@@ -502,7 +665,16 @@ func TestPassthroughLifecycle_FirstOutputTimeoutRemainsBounded(t *testing.T) {
 	controlCtx, cancelControl := context.WithCancelCause(context.Background())
 	defer cancelControl(context.Canceled)
 	upstream := newStagedPassthroughConn()
-	server, serverErr := startPassthroughLifecycleServer(t, controlCtx, newPassthroughLifecycleService(passthroughLifecycleConfig(), upstream), passthroughLifecycleAccount())
+	var afterTurnCalls atomic.Int32
+	server, serverErr := startPassthroughLifecycleServerWithHooks(
+		t,
+		controlCtx,
+		newPassthroughLifecycleService(passthroughLifecycleConfig(), upstream),
+		passthroughLifecycleAccount(),
+		&OpenAIWSIngressHooks{AfterTurn: func(_ int, _ *OpenAIForwardResult, _ error) {
+			afterTurnCalls.Add(1)
+		}},
+	)
 	defer server.Close()
 	clientConn := dialPassthroughLifecycleClient(t, server)
 	defer func() { _ = clientConn.CloseNow() }()
@@ -516,6 +688,7 @@ func TestPassthroughLifecycle_FirstOutputTimeoutRemainsBounded(t *testing.T) {
 	case <-time.After(2500 * time.Millisecond):
 		t.Fatal("passthrough first output was left unbounded")
 	}
+	require.Equal(t, int32(1), afterTurnCalls.Load(), "exceptional turn exit must release exactly once")
 }
 
 func TestPassthroughLifecycle_ResponseCreatedTimeoutClosesWithoutFailover(t *testing.T) {

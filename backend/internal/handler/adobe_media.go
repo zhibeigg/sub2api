@@ -31,11 +31,13 @@ type AdobeMediaHandler struct {
 	ops                *service.OpsService
 	firefly            *service.AdobeFireflyAdapter
 	contentModeration  *service.ContentModerationService
+	subscriptions      *service.SubscriptionService
 	concurrency        *ConcurrencyHelper
 	maxAccountSwitches int
+	cfg                *config.Config
 }
 
-func NewAdobeMediaHandler(store service.AdobeVideoTaskStore, runtime *service.AdobeVideoService, gateway *service.OpenAIGatewayService, billing *service.BillingCacheService, apiKeys *service.APIKeyService, ops *service.OpsService, fireflyAdapter *service.AdobeFireflyAdapter, contentModeration *service.ContentModerationService, concurrencyService *service.ConcurrencyService, cfg *config.Config) *AdobeMediaHandler {
+func NewAdobeMediaHandler(store service.AdobeVideoTaskStore, runtime *service.AdobeVideoService, gateway *service.OpenAIGatewayService, billing *service.BillingCacheService, apiKeys *service.APIKeyService, ops *service.OpsService, fireflyAdapter *service.AdobeFireflyAdapter, contentModeration *service.ContentModerationService, subscriptionService *service.SubscriptionService, concurrencyService *service.ConcurrencyService, cfg *config.Config) *AdobeMediaHandler {
 	var concurrency *ConcurrencyHelper
 	if concurrencyService != nil {
 		concurrency = NewConcurrencyHelper(concurrencyService, "", 0)
@@ -46,12 +48,30 @@ func NewAdobeMediaHandler(store service.AdobeVideoTaskStore, runtime *service.Ad
 	}
 	return &AdobeMediaHandler{
 		store: store, runtime: runtime, gateway: gateway, billing: billing, apiKeys: apiKeys,
-		ops: ops, firefly: fireflyAdapter, contentModeration: contentModeration, concurrency: concurrency,
-		maxAccountSwitches: maxAccountSwitches,
+		ops: ops, firefly: fireflyAdapter, contentModeration: contentModeration, subscriptions: subscriptionService,
+		concurrency: concurrency, maxAccountSwitches: maxAccountSwitches, cfg: cfg,
 	}
 }
 
 func (h *AdobeMediaHandler) SetRuntime(runtime *service.AdobeVideoService) { h.runtime = runtime }
+
+func (h *AdobeMediaHandler) resolveMultiGroupAPIKey(c *gin.Context, apiKey *service.APIKey, requestedModel string) (*service.APIKey, error) {
+	if apiKey == nil || len(apiKey.GroupBindings) == 0 {
+		return apiKey, nil
+	}
+	if !apiKey.HasAllowedGroupBindingByUserRestriction() {
+		return nil, nil
+	}
+	group := h.gateway.ResolveEffectiveGroupBinding(c.Request.Context(), apiKey, requestedModel)
+	if group == nil {
+		return apiKey, nil
+	}
+	selected := cloneAPIKeyWithGroup(apiKey, group)
+	if err := applyResolvedAPIKeyContext(c, apiKey, selected, h.subscriptions, h.cfg); err != nil {
+		return nil, err
+	}
+	return selected, nil
+}
 
 func (h *AdobeMediaHandler) checkContentModeration(c *gin.Context, apiKey *service.APIKey, subject middleware2.AuthSubject, model, prompt string) bool {
 	if h == nil || h.contentModeration == nil {
@@ -178,6 +198,20 @@ func (h *AdobeMediaHandler) Images(c *gin.Context) {
 	resolved, err := firefly.ResolveImageModel(req.Model, req.Size, req.Quality)
 	if err != nil {
 		writeAdobeGatewayError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+		return
+	}
+	requestedModel := strings.TrimSpace(req.Model)
+	if requestedModel == "" {
+		requestedModel = resolved.ModelID
+	}
+	apiKey, err = h.resolveMultiGroupAPIKey(c, apiKey, requestedModel)
+	if err != nil {
+		status, code, message := effectiveGroupSubscriptionErrorDetails(err)
+		writeAdobeGatewayError(c, status, code, message)
+		return
+	}
+	if apiKey == nil {
+		writeAdobeGatewayError(c, http.StatusForbidden, "GROUP_NOT_ALLOWED", "当前用户不允许使用任何已绑定的标准分组")
 		return
 	}
 	setOpsRequestContext(c, req.Model, false)
@@ -789,6 +823,16 @@ func (h *AdobeMediaHandler) VideoGeneration(c *gin.Context) {
 	}
 	if err := firefly.ValidateVideoReferenceCount(resolved, len(req.References)); err != nil {
 		writeAdobeGatewayError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+		return
+	}
+	apiKey, err = h.resolveMultiGroupAPIKey(c, apiKey, requestedModel)
+	if err != nil {
+		status, code, message := effectiveGroupSubscriptionErrorDetails(err)
+		writeAdobeGatewayError(c, status, code, message)
+		return
+	}
+	if apiKey == nil {
+		writeAdobeGatewayError(c, http.StatusForbidden, "GROUP_NOT_ALLOWED", "当前用户不允许使用任何已绑定的标准分组")
 		return
 	}
 	setOpsRequestContext(c, requestedModel, false)

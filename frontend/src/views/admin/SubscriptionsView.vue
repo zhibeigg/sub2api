@@ -216,6 +216,12 @@
 
           <template #cell-usage="{ row }">
             <div class="min-w-[280px] space-y-2">
+              <div data-test="subscription-concurrency" class="flex items-center justify-between gap-3 text-xs">
+                <span class="font-medium text-gray-500 dark:text-gray-400">{{ t('admin.subscriptions.concurrencyLimit') }}</span>
+                <span class="text-gray-700 dark:text-gray-300">
+                  {{ !row.quota_snapshotted ? '-' : row.concurrency_limit == null ? t('admin.subscriptions.noExtraConcurrencyLimit') : t('admin.subscriptions.concurrencyValue', { limit: row.concurrency_limit }) }}
+                </span>
+              </div>
               <!-- Daily Usage -->
               <div v-if="getQuotaLimit(row, 'daily')" class="usage-row">
                 <div class="flex items-center gap-2">
@@ -526,6 +532,7 @@
             <span>{{ t('admin.subscriptions.daily') }}: {{ formatQuotaLimit(selectedAssignPlan.daily_limit_usd) }}</span>
             <span>{{ t('admin.subscriptions.weekly') }}: {{ formatQuotaLimit(selectedAssignPlan.weekly_limit_usd) }}</span>
             <span>{{ t('admin.subscriptions.monthly') }}: {{ formatQuotaLimit(selectedAssignPlan.monthly_limit_usd) }}</span>
+            <span>{{ t('admin.subscriptions.concurrencyLimit') }}: {{ selectedAssignPlan.concurrency_limit == null ? t('admin.subscriptions.noExtraConcurrencyLimit') : t('admin.subscriptions.concurrencyValue', { limit: selectedAssignPlan.concurrency_limit }) }}</span>
           </div>
         </div>
         <div>
