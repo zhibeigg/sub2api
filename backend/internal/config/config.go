@@ -2263,6 +2263,19 @@ func setDefaults() {
 	viper.SetDefault("opencode.quota_stale_ttl_seconds", 1800)
 	viper.SetDefault("opencode.quota_request_timeout_seconds", 15)
 
+	// Kiro - zero values preserve the built-in pkg/kiro defaults while making
+	// every field reachable from environment-only deployments.
+	viper.SetDefault("kiro.client.kiro_version", "")
+	viper.SetDefault("kiro.client.node_version", "")
+	viper.SetDefault("kiro.client.system_version", "")
+	viper.SetDefault("kiro.filter.claude_code", false)
+	viper.SetDefault("kiro.filter.env_noise", false)
+	viper.SetDefault("kiro.filter.strip_boundaries", false)
+	viper.SetDefault("kiro.filter.rules", []KiroPromptFilterRule{})
+	viper.SetDefault("kiro.thinking.suffix", "")
+	viper.SetDefault("kiro.thinking.openai_format", "")
+	viper.SetDefault("kiro.thinking.claude_format", "")
+
 	// Cursor official Cloud Agents API (user or service-account API Key)
 	viper.SetDefault("cursor.base_url", "https://api.cursor.com")
 	viper.SetDefault("cursor.chat_base_url", "https://api2.cursor.sh")

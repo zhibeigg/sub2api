@@ -142,7 +142,7 @@ func TestToUserSupportedModels_FiltersByAllowedPlatforms(t *testing.T) {
 		{Name: "gpt-4o", Platform: "openai", Pricing: nil},
 	}
 	allowed := map[string]struct{}{"anthropic": {}}
-	out := toUserSupportedModels(src, allowed)
+	out := toUserSupportedModelsWithRates(src, allowed, nil, nil, nil, time.Time{})
 	require.Len(t, out, 1)
 	require.Equal(t, "claude-sonnet-4-6", out[0].Name)
 	require.Empty(t, out[0].MediaType)
@@ -155,7 +155,7 @@ func TestToUserSupportedModels_MapsMediaType(t *testing.T) {
 		{Name: "gpt-5.4", Platform: service.PlatformOpenAI},
 	}
 
-	out := toUserSupportedModels(src, nil)
+	out := toUserSupportedModelsWithRates(src, nil, nil, nil, nil, time.Time{})
 	require.Len(t, out, 3)
 	require.Equal(t, "image", out[0].MediaType)
 	require.Equal(t, "video", out[1].MediaType)
@@ -163,11 +163,11 @@ func TestToUserSupportedModels_MapsMediaType(t *testing.T) {
 }
 
 func TestToUserSupportedModels_UsesBillingModelForMediaType(t *testing.T) {
-	out := toUserSupportedModels([]service.SupportedModel{{
+	out := toUserSupportedModelsWithRates([]service.SupportedModel{{
 		Name:         "public-image-alias",
 		BillingModel: "gpt-image-2",
 		Platform:     service.PlatformOpenAI,
-	}}, nil)
+	}}, nil, nil, nil, nil, time.Time{})
 
 	require.Len(t, out, 1)
 	require.Equal(t, "public-image-alias", out[0].Name)
@@ -180,7 +180,7 @@ func TestToUserSupportedModels_NilAllowedPlatformsKeepsAll(t *testing.T) {
 		{Name: "a", Platform: "anthropic"},
 		{Name: "b", Platform: "openai"},
 	}
-	require.Len(t, toUserSupportedModels(src, nil), 2)
+	require.Len(t, toUserSupportedModelsWithRates(src, nil, nil, nil, nil, time.Time{}), 2)
 }
 
 func TestUserAvailableChannel_FieldWhitelist(t *testing.T) {
@@ -314,7 +314,7 @@ func TestBuildPlatformSections_GroupsByPlatform(t *testing.T) {
 		{ID: 2, Name: "g-ant", Platform: "anthropic"},
 		{ID: 3, Name: "g-empty", Platform: ""},
 	}
-	sections := buildPlatformSections(ch, visible)
+	sections := buildPlatformSectionsWithRates(ch, visible, nil, nil, time.Time{})
 	require.Len(t, sections, 2)
 	require.Equal(t, "anthropic", sections[0].Platform)
 	require.Equal(t, "openai", sections[1].Platform)

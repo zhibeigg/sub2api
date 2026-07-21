@@ -162,7 +162,11 @@ func (s *OpenCodeQuotaService) refresh(ctx context.Context, account *Account) (*
 	if err != nil {
 		return nil, err
 	}
-	return cloneOpenCodeQuotaInfo(value.(*OpenCodeQuotaInfo), "verified", ""), nil
+	info, ok := value.(*OpenCodeQuotaInfo)
+	if !ok || info == nil {
+		return nil, fmt.Errorf("OpenCode Go quota refresh returned an unexpected result")
+	}
+	return cloneOpenCodeQuotaInfo(info, "verified", ""), nil
 }
 
 func (s *OpenCodeQuotaService) fetchQuota(ctx context.Context, account *Account) (*opencodepkg.QuotaData, error) {
@@ -241,7 +245,7 @@ func (s *OpenCodeQuotaService) callWorkspaceServer(ctx context.Context, account 
 	if err != nil {
 		return nil, 0, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	responseBody, err := io.ReadAll(io.LimitReader(response.Body, openCodeQuotaBodyLimit+1))
 	if err != nil {
 		return nil, response.StatusCode, err
@@ -265,7 +269,7 @@ func (s *OpenCodeQuotaService) fetchQuotaPage(ctx context.Context, account *Acco
 	if err != nil {
 		return nil, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	responseBody, err := io.ReadAll(io.LimitReader(response.Body, openCodeQuotaBodyLimit+1))
 	if err != nil {
 		return nil, err

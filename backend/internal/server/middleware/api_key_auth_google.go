@@ -125,7 +125,7 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 		}
 		// 简易模式：跳过余额和订阅检查
 		if cfg.RunMode == config.RunModeSimple {
-			if !validateAPIKeyGroupAllowed(apiKey, nil) {
+			if !validateAPIKeyGroupAllowed(apiKey, nil, false) {
 				service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonAPIKeyGroupUnavailable)
 				MarkIngressRejected(c, IngressRejectGroupNotAllowed)
 				abortWithGoogleError(c, 403, "API Key 所属专属分组不再允许当前用户使用")
@@ -180,7 +180,7 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 				subscription = sub
 			}
 		}
-		if !validateAPIKeyGroupAllowed(apiKey, subscription) {
+		if !validateAPIKeyGroupAllowed(apiKey, subscription, true) {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonAPIKeyGroupUnavailable)
 			MarkIngressRejected(c, IngressRejectGroupNotAllowed)
 			abortWithGoogleError(c, 403, "API Key 所属专属分组不再允许当前用户使用")

@@ -449,7 +449,7 @@ func (s *OpenAIGatewayService) SetCursorGatewayService(g *CursorGatewayService) 
 
 func (s *OpenAIGatewayService) requireCursorGatewayService() (*CursorGatewayService, error) {
 	if s == nil || s.cursorGatewayService == nil {
-		return nil, errors.New("Cursor gateway service is not configured")
+		return nil, errors.New("cursor gateway service is not configured")
 	}
 	return s.cursorGatewayService, nil
 }

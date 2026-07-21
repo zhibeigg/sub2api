@@ -206,7 +206,7 @@ func TestCursorMixedSchedulingRequiresConfiguredGateway(t *testing.T) {
 	c, _ := newCursorGatewayTestContext(t, "/v1/chat/completions", string(body), 28)
 
 	_, err := (&OpenAIGatewayService{}).ForwardAsChatCompletions(context.Background(), c, cursorAPIKeyAccount(), body, "", "")
-	require.ErrorContains(t, err, "Cursor gateway service is not configured")
+	require.ErrorContains(t, err, "cursor gateway service is not configured")
 }
 
 func TestCursorGatewayFetchDashboardUsageRefreshesExpiredToken(t *testing.T) {

@@ -436,6 +436,7 @@ func TestAPIContracts(t *testing.T) {
 						"daily_usage_usd": 1.23,
 						"weekly_usage_usd": 2.34,
 						"monthly_usage_usd": 3.45,
+						"concurrency_limit": null,
 						"quota_snapshotted": false,
 						"created_at": "2025-01-02T03:04:05Z",
 						"updated_at": "2025-01-02T03:04:05Z"
@@ -1711,6 +1712,10 @@ func (stubGroupRepo) GetByIDLite(ctx context.Context, id int64) (*service.Group,
 }
 
 func (stubGroupRepo) Update(ctx context.Context, group *service.Group) error {
+	return errors.New("not implemented")
+}
+
+func (stubGroupRepo) UpdateWithPoolCapacityAlert(ctx context.Context, group *service.Group, enabled *bool) error {
 	return errors.New("not implemented")
 }
 

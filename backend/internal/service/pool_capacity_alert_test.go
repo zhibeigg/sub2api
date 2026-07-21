@@ -404,10 +404,8 @@ func (s *poolCapacityBalanceReaderStub) GetPoolBalance(context.Context, *Account
 type poolCapacityDispatchRepo struct {
 	mu              sync.Mutex
 	pending         []PoolCapacityAlertDelivery
-	claimed         []PoolCapacityAlertDelivery
 	claimLimits     []int
 	currentOverride map[int64]bool
-	currentErr      error
 	sent            []int64
 	cancelled       []int64
 	failed          []int64

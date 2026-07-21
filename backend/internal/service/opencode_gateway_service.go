@@ -105,7 +105,7 @@ func (s *OpenCodeGatewayService) forward(ctx context.Context, c *gin.Context, ac
 	if err != nil {
 		return nil, opencodeNetworkFailure(err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return nil, s.handleHTTPFailure(c, account, request, response, meta.UpstreamModel)
@@ -276,7 +276,7 @@ func (s *OpenCodeGatewayService) FetchModels(ctx context.Context, c *gin.Context
 	if err != nil {
 		return nil, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, opencodeNetworkFailure(err)
@@ -298,7 +298,7 @@ func (s *OpenCodeGatewayService) ListModels(ctx context.Context, account *Accoun
 	if err != nil {
 		return nil, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(response.Body, upstreamModelsBodyLimit+1))
 	if err != nil {
 		return nil, opencodeNetworkFailure(err)
@@ -321,7 +321,7 @@ func (s *OpenCodeGatewayService) TestConnection(ctx context.Context, account *Ac
 	if err != nil {
 		return nil, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if _, err := io.Copy(io.Discard, response.Body); err != nil {
 		return nil, opencodeNetworkFailure(err)
 	}
@@ -358,7 +358,7 @@ func (s *OpenCodeGatewayService) fetchModels(ctx context.Context, account *Accou
 		return nil, "", opencodeNetworkFailure(err)
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		defer response.Body.Close()
+		defer func() { _ = response.Body.Close() }()
 		return nil, "", s.handleHTTPFailure(nil, account, request, response, "")
 	}
 	return response, endpoint, nil

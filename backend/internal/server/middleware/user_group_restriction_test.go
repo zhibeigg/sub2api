@@ -28,14 +28,14 @@ func TestValidateAPIKeyGroupAllowedDefersUnpinnedMultiGroupRestriction(t *testin
 		},
 	}
 
-	require.True(t, validateAPIKeyGroupAllowed(key, nil), "an allowed fallback must survive middleware validation")
+	require.True(t, validateAPIKeyGroupAllowed(key, nil, true), "an allowed fallback must survive middleware validation")
 
 	key.GroupBindings = key.GroupBindings[:1]
-	require.False(t, validateAPIKeyGroupAllowed(key, nil), "all-restricted multi-group keys must be rejected")
+	require.False(t, validateAPIKeyGroupAllowed(key, nil, true), "all-restricted multi-group keys must be rejected")
 
 	key.GroupBindings = append(key.GroupBindings, service.APIKeyGroupBinding{GroupID: allowed.ID, Priority: 1, Group: allowed})
 	key.ExplicitGroupSelection = true
-	require.False(t, validateAPIKeyGroupAllowed(key, nil), "an explicitly selected restricted group must not fall back")
+	require.False(t, validateAPIKeyGroupAllowed(key, nil, true), "an explicitly selected restricted group must not fall back")
 }
 
 func TestAbortIfAPIKeyGroupNotAllowedReturnsStableErrorCode(t *testing.T) {
@@ -55,7 +55,7 @@ func TestAbortIfAPIKeyGroupNotAllowedReturnsStableErrorCode(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
 
-	require.True(t, abortIfAPIKeyGroupNotAllowed(c, key, nil))
+	require.True(t, abortIfAPIKeyGroupNotAllowed(c, key, nil, true))
 	require.Equal(t, http.StatusForbidden, w.Code)
 	require.Contains(t, w.Body.String(), "GROUP_NOT_ALLOWED")
 }
@@ -72,6 +72,7 @@ func TestValidateAPIKeyGroupAllowedDoesNotApplyStandardRestrictionToSubscription
 		Group:   group,
 	}
 
-	require.False(t, validateAPIKeyGroupAllowed(key, nil))
-	require.True(t, validateAPIKeyGroupAllowed(key, &service.UserSubscription{UserID: 7, GroupID: group.ID}))
+	require.False(t, validateAPIKeyGroupAllowed(key, nil, true))
+	require.True(t, validateAPIKeyGroupAllowed(key, nil, false), "capacity and billing introspection may proceed without an active subscription")
+	require.True(t, validateAPIKeyGroupAllowed(key, &service.UserSubscription{UserID: 7, GroupID: group.ID}, true))
 }

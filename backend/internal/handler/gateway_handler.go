@@ -838,19 +838,20 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			}
 			// 记录 Forward 前已写入字节数，Forward 后若增加则说明 SSE 内容已发，禁止 failover
 			writerSizeBeforeForward := c.Writer.Size()
-			if account.Platform == service.PlatformAntigravity && account.Type != service.AccountTypeAPIKey {
+			switch {
+			case account.Platform == service.PlatformAntigravity && account.Type != service.AccountTypeAPIKey:
 				result, err = h.antigravityGatewayService.Forward(requestCtx, c, account, attemptBody, hasBoundSession)
-			} else if account.Platform == service.PlatformCursor {
+			case account.Platform == service.PlatformCursor:
 				result, err = h.cursorGatewayService.Forward(requestCtx, c, account, attemptBody)
-			} else if account.Platform == service.PlatformKiro && account.Type != service.AccountTypeAPIKey {
+			case account.Platform == service.PlatformKiro && account.Type != service.AccountTypeAPIKey:
 				result, err = h.kiroGatewayService.Forward(requestCtx, c, account, attemptBody)
-			} else if account.Platform == service.PlatformOpenCode {
+			case account.Platform == service.PlatformOpenCode:
 				if h.openCodeGatewayService == nil {
 					err = errors.New("OpenCode Go gateway service is not configured")
 				} else {
 					result, err = h.openCodeGatewayService.ForwardMessages(requestCtx, c, account, attemptBody)
 				}
-			} else {
+			default:
 				result, err = h.gatewayService.Forward(requestCtx, c, account, attemptParsedReq)
 			}
 

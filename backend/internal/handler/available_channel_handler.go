@@ -228,15 +228,6 @@ func (h *AvailableChannelHandler) list(c *gin.Context, enabled func(*gin.Context
 	response.Success(c, out)
 }
 
-// buildPlatformSections 把一个渠道按 visibleGroups 的平台集合拆成有序的 section 列表。
-// 测试和无用户倍率上下文的调用使用此兼容包装；线上 List 使用 WithRates 版本。
-func buildPlatformSections(
-	ch service.AvailableChannel,
-	visibleGroups []userAvailableGroup,
-) []userChannelPlatformSection {
-	return buildPlatformSectionsWithRates(ch, visibleGroups, nil, nil, time.Time{})
-}
-
 func buildPlatformSectionsWithRates(
 	ch service.AvailableChannel,
 	visibleGroups []userAvailableGroup,
@@ -320,16 +311,6 @@ func filterUserVisibleGroups(
 		})
 	}
 	return visible
-}
-
-// toUserSupportedModels 将 service 层支持模型转换为用户 DTO（字段白名单）。
-// 仅保留平台在 allowedPlatforms 中的条目，防止跨平台模型信息泄漏。
-// allowedPlatforms 为 nil 时不做平台过滤（保留全部，供测试或明确无过滤场景使用）。
-func toUserSupportedModels(
-	src []service.SupportedModel,
-	allowedPlatforms map[string]struct{},
-) []userSupportedModel {
-	return toUserSupportedModelsWithRates(src, allowedPlatforms, nil, nil, nil, time.Time{})
 }
 
 func toUserSupportedModelsWithRates(
