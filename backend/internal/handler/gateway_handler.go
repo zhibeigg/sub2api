@@ -98,9 +98,11 @@ func NewGatewayHandler(
 		}
 	}
 
-	// OpenAI groups can select Kiro/OpenCode accounts only through explicit
-	// mixed scheduling; inject their native forwarders before either handler runs.
+	// OpenAI-compatible groups can select Cursor/Kiro/OpenCode accounts only
+	// through explicit mixed scheduling; inject their native forwarders before
+	// either handler runs.
 	if openAIGatewayService != nil {
+		openAIGatewayService.SetCursorGatewayService(cursorGatewayService)
 		openAIGatewayService.SetKiroGatewayService(kiroGatewayService)
 		openAIGatewayService.SetOpenCodeGatewayService(openCodeGatewayService)
 	}

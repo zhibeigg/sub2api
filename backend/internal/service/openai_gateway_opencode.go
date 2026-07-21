@@ -10,6 +10,10 @@ func (s *OpenAIGatewayService) requireOpenCodeGatewayService() (*OpenCodeGateway
 }
 
 func openCodeForwardResultToOpenAI(result *ForwardResult) *OpenAIForwardResult {
+	return compatibleForwardResultToOpenAI(result)
+}
+
+func compatibleForwardResultToOpenAI(result *ForwardResult) *OpenAIForwardResult {
 	if result == nil {
 		return nil
 	}

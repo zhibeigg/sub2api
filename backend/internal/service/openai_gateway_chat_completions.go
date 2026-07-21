@@ -58,6 +58,14 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	promptCacheKey string,
 	defaultMappedModel string,
 ) (*OpenAIForwardResult, error) {
+	if account != nil && account.IsCursor() {
+		gateway, err := s.requireCursorGatewayService()
+		if err != nil {
+			return nil, err
+		}
+		result, err := gateway.Forward(ctx, c, account, body)
+		return compatibleForwardResultToOpenAI(result), err
+	}
 	if account != nil && account.IsOpenCode() {
 		gateway, err := s.requireOpenCodeGatewayService()
 		if err != nil {

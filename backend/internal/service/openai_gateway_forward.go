@@ -19,6 +19,14 @@ import (
 
 // Forward forwards request to OpenAI API
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
+	if account != nil && account.IsCursor() {
+		gateway, err := s.requireCursorGatewayService()
+		if err != nil {
+			return nil, err
+		}
+		result, err := gateway.ForwardResponses(ctx, c, account, body)
+		return compatibleForwardResultToOpenAI(result), err
+	}
 	if account != nil && account.IsOpenCode() {
 		gateway, err := s.requireOpenCodeGatewayService()
 		if err != nil {

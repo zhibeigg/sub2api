@@ -135,6 +135,80 @@ func cursorAPIKeyAccount() *Account {
 	return &Account{ID: 1, Platform: PlatformCursor, Type: AccountTypeAPIKey, Concurrency: 1, Credentials: map[string]any{"api_key": "cursor-key"}}
 }
 
+func TestOpenAIGatewayRoutesMixedScheduledCursorAcrossCompatibleProtocols(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		path    string
+		body    string
+		forward func(context.Context, *OpenAIGatewayService, *gin.Context, *Account, []byte) (*OpenAIForwardResult, error)
+	}{
+		{
+			name: "chat_completions",
+			path: "/v1/chat/completions",
+			body: `{"model":"grok-4.5","stream":false,"messages":[{"role":"user","content":"hi"}]}`,
+			forward: func(ctx context.Context, svc *OpenAIGatewayService, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
+				return svc.ForwardAsChatCompletions(ctx, c, account, body, "", "")
+			},
+		},
+		{
+			name: "responses",
+			path: "/v1/responses",
+			body: `{"model":"grok-4.5","stream":false,"store":false,"input":"hi"}`,
+			forward: func(ctx context.Context, svc *OpenAIGatewayService, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
+				return svc.Forward(ctx, c, account, body)
+			},
+		},
+		{
+			name: "anthropic_messages",
+			path: "/v1/messages",
+			body: `{"model":"grok-4.5","stream":false,"max_tokens":128,"messages":[{"role":"user","content":"hi"}]}`,
+			forward: func(ctx context.Context, svc *OpenAIGatewayService, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
+				return svc.ForwardAsAnthropic(ctx, c, account, body, "", "")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			upstream := &cursorGatewayUpstreamStub{outputs: []string{"cursor answer"}}
+			cursorGateway := newCursorGatewayForTest(upstream, nil)
+			openAIGateway := &OpenAIGatewayService{}
+			openAIGateway.SetCursorGatewayService(cursorGateway)
+			account := cursorAPIKeyAccount()
+			account.Credentials["model_mapping"] = map[string]string{"grok-4.5": "grok-4.5"}
+			c, recorder := newCursorGatewayTestContext(t, tt.path, tt.body, 28)
+
+			result, err := tt.forward(context.Background(), openAIGateway, c, account, []byte(tt.body))
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Equal(t, 7, result.Usage.InputTokens)
+			require.Equal(t, 3, result.Usage.OutputTokens)
+			require.NotContains(t, recorder.Body.String(), "api_key not found in credentials")
+
+			requests, bodies, accountIDs, concurrencies := upstream.snapshot()
+			require.NotEmpty(t, requests)
+			require.Equal(t, http.MethodPost, requests[0].Method)
+			require.Equal(t, "/v1/agents", requests[0].URL.Path)
+			require.Equal(t, "Bearer cursor-key", requests[0].Header.Get("Authorization"))
+			require.Contains(t, bodies[0], "grok-4.5")
+			require.Equal(t, int64(1), accountIDs[0])
+			require.Equal(t, 1, concurrencies[0])
+		})
+	}
+}
+
+func TestCursorMixedSchedulingRequiresConfiguredGateway(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"model":"grok-4.5","stream":false,"messages":[{"role":"user","content":"hi"}]}`)
+	c, _ := newCursorGatewayTestContext(t, "/v1/chat/completions", string(body), 28)
+
+	_, err := (&OpenAIGatewayService{}).ForwardAsChatCompletions(context.Background(), c, cursorAPIKeyAccount(), body, "", "")
+	require.ErrorContains(t, err, "Cursor gateway service is not configured")
+}
+
 func TestCursorGatewayFetchDashboardUsageRefreshesExpiredToken(t *testing.T) {
 	upstream := &cursorGatewayUpstreamStub{dashboardRequiresRefresh: true}
 	svc := newCursorGatewayForTest(upstream, nil)

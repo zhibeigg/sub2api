@@ -406,6 +406,7 @@ type OpenAIGatewayService struct {
 	balanceNotifyService   *BalanceNotifyService
 	settingService         *SettingService
 	userPlatformQuotaRepo  UserPlatformQuotaRepository
+	cursorGatewayService   *CursorGatewayService
 	kiroGatewayService     *KiroGatewayService
 	openCodeGatewayService *OpenCodeGatewayService
 
@@ -436,6 +437,20 @@ type OpenAIGatewayService struct {
 	codexModelsManifestCache            codexModelsManifestCache
 	openaiCompatSessionResponses        sync.Map
 	openaiCompatAnthropicDigestSessions sync.Map
+}
+
+// SetCursorGatewayService injects the Cursor gateway service so mixed-scheduling
+// Cursor accounts selected for OpenAI-compatible endpoints are forwarded through
+// Cursor's own upstream instead of the OpenAI/Grok credential path. Optional.
+func (s *OpenAIGatewayService) SetCursorGatewayService(g *CursorGatewayService) {
+	s.cursorGatewayService = g
+}
+
+func (s *OpenAIGatewayService) requireCursorGatewayService() (*CursorGatewayService, error) {
+	if s == nil || s.cursorGatewayService == nil {
+		return nil, errors.New("Cursor gateway service is not configured")
+	}
+	return s.cursorGatewayService, nil
 }
 
 // SetKiroGatewayService injects the Kiro gateway service so mixed-scheduling
