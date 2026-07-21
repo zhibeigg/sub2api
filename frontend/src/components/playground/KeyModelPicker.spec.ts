@@ -11,7 +11,6 @@ vi.mock('@/api/keys', () => ({
 vi.mock('@/api/playground', () => ({
   default: { listModelOptions: (...args: unknown[]) => listModelOptions(...args) }
 }))
-vi.mock('@/utils/platformColors', () => ({ platformLabel: (platform: string) => platform }))
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 
 function deferred<T>() {
@@ -30,13 +29,38 @@ const imageOption = {
   group_id: 1, group_name: 'first', group_priority: 0, model: 'gpt-image-1', platform: 'openai', capabilities: ['image'] as const
 }
 
-describe('KeyModelPicker model loading race', () => {
+describe('KeyModelPicker model options', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     listKeys.mockResolvedValue({ items: [
       { id: 1, name: 'one', key: 'secret-one' },
       { id: 2, name: 'two', key: 'secret-two' }
     ] })
+  })
+
+  it('shows the deduplicated model union without group or platform suffixes', async () => {
+    listModelOptions.mockResolvedValue([
+      firstOption,
+      { ...firstOption, group_id: 9, group_name: 'duplicate', platform: 'grok' },
+      secondOption
+    ])
+    const wrapper = mount(KeyModelPicker, {
+      props: { keyId: 1, option: null, capability: 'chat' },
+      global: {
+        stubs: { Icon: true },
+        mocks: { $t: (key: string) => key }
+      }
+    })
+    await flushPromises()
+
+    const modelSelect = wrapper.findAll('select')[1]
+    expect(modelSelect.findAll('option').map((option) => option.text())).toEqual([
+      'playground.selectModel',
+      'first-model',
+      'second-model'
+    ])
+    expect(modelSelect.text()).not.toContain('first · openai')
+    expect(modelSelect.text()).not.toContain('duplicate')
   })
 
   it('re-synchronizes the resolved key when capability changes', async () => {

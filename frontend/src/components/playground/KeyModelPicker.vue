@@ -29,7 +29,7 @@
           {{ compatibleOptions.length === 0 ? t('playground.noModels') : t('playground.selectModel') }}
         </option>
         <option v-for="item in compatibleOptions" :key="playgroundOptionKey(item)" :value="playgroundOptionKey(item)">
-          {{ item.model }} · {{ item.group_name || t('playground.groupFallback', { id: item.group_id }) }} · {{ platformLabel(item.platform) }}
+          {{ item.model }}
         </option>
       </select>
     </div>
@@ -42,7 +42,6 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import keysAPI from '@/api/keys'
 import playgroundAPI from '@/api/playground'
-import { platformLabel } from '@/utils/platformColors'
 import type { ApiKey } from '@/types'
 import {
   playgroundOptionKey,
@@ -80,9 +79,16 @@ let optionsController: AbortController | null = null
 const containerClass = computed(() => props.layout === 'stacked'
   ? 'flex flex-col gap-3'
   : 'flex flex-col gap-3 sm:flex-row sm:items-end')
-const compatibleOptions = computed(() =>
-  options.value.filter((item) => item.capabilities.includes(props.capability))
-)
+const compatibleOptions = computed(() => {
+  const seen = new Set<string>()
+  return options.value.filter((item) => {
+    if (!item.capabilities.includes(props.capability)) return false
+    const modelKey = item.model.trim().toLowerCase()
+    if (!modelKey || seen.has(modelKey)) return false
+    seen.add(modelKey)
+    return true
+  })
+})
 
 function resolvedKeyValue(keyId = props.keyId): string {
   return keys.value.find((key) => key.id === keyId)?.key ?? ''

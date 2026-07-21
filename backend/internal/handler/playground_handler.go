@@ -42,7 +42,7 @@ func (h *PlaygroundHandler) FetchURL(c *gin.Context) {
 	response.Success(c, gin.H{"results": results})
 }
 
-// GetModelOptions returns credential-free, group-aware model choices for one owned API key.
+// GetModelOptions returns the credential-free, deduplicated model union for one owned API key.
 func (h *PlaygroundHandler) GetModelOptions(c *gin.Context) {
 	subject, ok := middleware2.GetAuthSubjectFromContext(c)
 	if !ok {

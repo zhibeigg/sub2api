@@ -76,7 +76,7 @@ func (s *PlaygroundService) GetModelOptions(ctx context.Context, userID, apiKeyI
 	}
 
 	bindings := playgroundBindings(apiKey)
-	options := make([]PlaygroundModelOption, 0)
+	optionsByModel := make(map[string]PlaygroundModelOption)
 	for _, binding := range bindings {
 		group := binding.Group
 		if group == nil || group.ID <= 0 || !group.IsActive() {
@@ -101,7 +101,14 @@ func (s *PlaygroundService) GetModelOptions(ctx context.Context, userID, apiKeyI
 			if len(capabilities) == 0 {
 				continue
 			}
-			options = append(options, PlaygroundModelOption{
+			modelKey := strings.ToLower(strings.TrimSpace(model))
+			if modelKey == "" {
+				continue
+			}
+			if _, exists := optionsByModel[modelKey]; exists {
+				continue
+			}
+			optionsByModel[modelKey] = PlaygroundModelOption{
 				ID:            fmt.Sprintf("%d::%s", group.ID, model),
 				GroupID:       group.ID,
 				GroupName:     group.Name,
@@ -110,9 +117,22 @@ func (s *PlaygroundService) GetModelOptions(ctx context.Context, userID, apiKeyI
 				Platform:      group.Platform,
 				Capabilities:  capabilities,
 				Features:      playgroundModelFeatures(group, model, capabilities),
-			})
+			}
 		}
 	}
+
+	options := make([]PlaygroundModelOption, 0, len(optionsByModel))
+	for _, option := range optionsByModel {
+		options = append(options, option)
+	}
+	sort.SliceStable(options, func(i, j int) bool {
+		left := strings.ToLower(options[i].Model)
+		right := strings.ToLower(options[j].Model)
+		if left != right {
+			return left < right
+		}
+		return options[i].Model < options[j].Model
+	})
 	return options, nil
 }
 
@@ -140,26 +160,15 @@ func playgroundModelsForGroup(group *Group, available []string) []string {
 	if group == nil {
 		return nil
 	}
-	fallback := playgroundDefaultModelIDs(group.Platform)
-	source := available
-	if group.Platform == PlatformAnthropic && len(available) > 0 {
-		source = mergePlaygroundModelIDs(available, fallback)
-	}
+	source := normalizePlaygroundModels(available)
 	if group.CustomModelsListEnabled() {
-		return filterPlaygroundCustomModels(source, fallback, group.ModelsListConfig.Models)
+		return filterPlaygroundCustomModels(source, group.ModelsListConfig.Models)
 	}
-	if len(source) == 0 {
-		return fallback
-	}
-	return normalizePlaygroundModels(source)
+	return source
 }
 
-func filterPlaygroundCustomModels(available, fallback, selected []string) []string {
-	source := available
-	if len(source) == 0 {
-		source = fallback
-	}
-	allowed := normalizePlaygroundModels(source)
+func filterPlaygroundCustomModels(available, selected []string) []string {
+	allowed := normalizePlaygroundModels(available)
 	seen := make(map[string]struct{}, len(selected))
 	out := make([]string, 0, len(selected))
 	for _, model := range selected {

@@ -189,7 +189,7 @@ export interface PlaygroundWebContent {
   contentType?: string
 }
 
-/** List group-aware model options using the JWT session; no API key value is sent or returned. */
+/** List the deduplicated model union for one key; hidden route metadata is retained and no key value is returned. */
 export async function listModelOptions(apiKeyId: number, signal?: AbortSignal): Promise<PlaygroundModelOption[]> {
   const { data } = await apiClient.get<PlaygroundModelOption[]>(`/playground/api-keys/${apiKeyId}/model-options`, { signal })
   return Array.isArray(data) ? data : []

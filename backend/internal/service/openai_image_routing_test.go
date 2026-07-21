@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -153,6 +154,49 @@ func TestPlaygroundCatalogExpandsWildcardMappingsForNonOpenAIPlatforms(t *testin
 	require.True(t, routable)
 	require.Contains(t, models, "grok-4.5")
 	require.Contains(t, models, "grok-imagine")
+}
+
+func TestPlaygroundCatalogUsesModelSquareChannelModelsAsAuthoritativeSet(t *testing.T) {
+	groupID := int64(28)
+	account := Account{
+		ID:          138,
+		Platform:    PlatformCursor,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		GroupIDs:    []int64{groupID},
+		Credentials: map[string]any{"model_mapping": map[string]any{
+			"grok-4.3":         "grok-4.3",
+			"grok-4.5":         "grok-4.5",
+			"gpt-5.5":          "gpt-5.5",
+			"gemini-3.5-flash": "gemini-3.5-flash",
+		}},
+		Extra: map[string]any{"mixed_scheduling": true},
+	}
+	channel := &Channel{
+		ID:     6,
+		Name:   "Cursor",
+		Status: StatusActive,
+		ModelPricing: []ChannelModelPricing{
+			{Platform: PlatformGrok, Models: []string{"grok-4.3", "grok-4.5"}},
+			{Platform: PlatformGemini, Models: []string{"gemini-3.5-flash"}},
+		},
+	}
+	channelService := &ChannelService{}
+	channelService.cache.Store(&channelCache{
+		channelByGroupID: map[int64]*Channel{groupID: channel},
+		byID:             map[int64]*Channel{channel.ID: channel},
+		groupPlatform:    map[int64]string{groupID: PlatformGrok},
+		loadedAt:         time.Now(),
+	})
+	svc := &GatewayService{
+		accountRepo:    openAIPlaygroundCatalogRepo{accounts: []Account{account}},
+		channelService: channelService,
+	}
+
+	models, routable := svc.GetAvailablePlaygroundModels(context.Background(), &groupID, PlatformGrok)
+	require.True(t, routable)
+	require.Equal(t, []string{"grok-4.3", "grok-4.5"}, models)
 }
 
 func TestOpenAIPlaygroundCatalogOAuthDoesNotAdvertiseDALLERoutes(t *testing.T) {

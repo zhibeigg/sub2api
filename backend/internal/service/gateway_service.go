@@ -1253,11 +1253,13 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 
 // GetAvailablePlaygroundModels returns models from accounts that are currently
 // schedulable for the selected group, including mixed-scheduling candidates.
-// The boolean is false when the group has no routable account at all. A true
-// result with an empty model slice means routable accounts exist without an
-// explicit mapping, so the caller may use the platform's default catalog.
+// When the group belongs to an active channel, the same platform-scoped
+// mapping/pricing catalog used by the model square is authoritative; account
+// capabilities only filter that catalog and never add extra display models.
+// The boolean is false only when the group has no routable account at all.
 func (s *GatewayService) GetAvailablePlaygroundModels(ctx context.Context, groupID *int64, platform string) ([]string, bool) {
 	platform = NormalizePlatform(platform)
+	channelCandidates, useChannelCatalog := s.getChannelPlaygroundModels(ctx, groupID, platform)
 	accounts, useMixed, err := s.listSchedulableAccounts(ctx, groupID, platform, false)
 	if err != nil || len(accounts) == 0 {
 		return nil, false
@@ -1286,21 +1288,26 @@ func (s *GatewayService) GetAvailablePlaygroundModels(ctx context.Context, group
 				hasWildcardMapping = true
 				continue
 			}
-			candidates = append(candidates, model)
+			if !useChannelCatalog {
+				candidates = append(candidates, model)
+			}
 		}
 	}
 	if len(routableAccounts) == 0 {
 		return nil, false
 	}
 
-	// Expand platform defaults when an unrestricted account exists or mappings
-	// contain wildcards. OpenAI always includes its image catalog candidates so
-	// API-key and OAuth accounts can be filtered by their real execution path.
-	if hasEmptyMapping || hasWildcardMapping || platform == PlatformOpenAI {
-		candidates = append(candidates, playgroundDefaultModelIDs(platform)...)
-	}
-	if platform == PlatformOpenAI {
-		candidates = append(candidates, openAIPlaygroundCatalogCandidates(routableAccounts)...)
+	if useChannelCatalog {
+		candidates = append(candidates, channelCandidates...)
+	} else {
+		// Legacy groups without an active channel retain their previous fallback:
+		// unrestricted/wildcard accounts expand the platform default catalog.
+		if hasEmptyMapping || hasWildcardMapping || platform == PlatformOpenAI {
+			candidates = append(candidates, playgroundDefaultModelIDs(platform)...)
+		}
+		if platform == PlatformOpenAI {
+			candidates = append(candidates, openAIPlaygroundCatalogCandidates(routableAccounts)...)
+		}
 	}
 
 	modelSet := make(map[string]struct{})
@@ -1326,6 +1333,30 @@ func (s *GatewayService) GetAvailablePlaygroundModels(ctx context.Context, group
 	}
 	sort.Strings(models)
 	return models, true
+}
+
+func (s *GatewayService) getChannelPlaygroundModels(ctx context.Context, groupID *int64, platform string) ([]string, bool) {
+	if s == nil || s.channelService == nil || groupID == nil || *groupID <= 0 {
+		return nil, false
+	}
+	channel, err := s.channelService.GetChannelForGroup(ctx, *groupID)
+	if err != nil || channel == nil {
+		// Production playground/model-square behavior is channel-backed. Once a
+		// ChannelService is configured, a missing/unreadable channel is an
+		// authoritative empty catalog rather than permission to synthesize defaults.
+		return nil, true
+	}
+
+	models := make([]string, 0)
+	for _, model := range channel.SupportedModels() {
+		if NormalizePlatform(model.Platform) != platform {
+			continue
+		}
+		if name := strings.TrimSpace(model.Name); name != "" {
+			models = append(models, name)
+		}
+	}
+	return normalizePlaygroundModels(models), true
 }
 
 func (s *GatewayService) InvalidateAvailableModelsCache(groupID *int64, platform string) {

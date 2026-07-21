@@ -51,12 +51,12 @@ func (s *playgroundModelListerStub) GetAvailableModels(_ context.Context, groupI
 	return append([]string(nil), s.byGroup[*groupID]...)
 }
 
-func TestPlaygroundServiceGetModelOptionsAggregatesBindingsByPriority(t *testing.T) {
+func TestPlaygroundServiceGetModelOptionsAggregatesAndDeduplicatesBindingsByPriority(t *testing.T) {
 	first := &Group{ID: 20, Name: "media", Platform: PlatformGrok, Status: StatusActive, AllowImageGeneration: true, Hydrated: true}
-	second := &Group{ID: 10, Name: "chat", Platform: PlatformAnthropic, Status: StatusActive, Hydrated: true, ModelsListConfig: GroupModelsListConfig{Enabled: true, Models: []string{"claude-sonnet-custom"}}}
+	second := &Group{ID: 10, Name: "chat", Platform: PlatformAnthropic, Status: StatusActive, Hydrated: true, ModelsListConfig: GroupModelsListConfig{Enabled: true, Models: []string{"claude-sonnet-custom", "grok-4.5"}}}
 	models := &playgroundModelListerStub{byGroup: map[int64][]string{
 		20: {"grok-4.5", "grok-imagine-image", "grok-imagine-video-1.5"},
-		10: {"claude-sonnet-custom"},
+		10: {"claude-sonnet-custom", "grok-4.5"},
 	}}
 	svc := NewPlaygroundService(playgroundAPIKeyReaderStub{key: &APIKey{
 		ID: 8, UserID: 7,
@@ -70,10 +70,10 @@ func TestPlaygroundServiceGetModelOptionsAggregatesBindingsByPriority(t *testing
 	require.NoError(t, err)
 	require.Equal(t, []int64{20, 10}, models.calls)
 	require.Equal(t, []PlaygroundModelOption{
+		{ID: "10::claude-sonnet-custom", GroupID: 10, GroupName: "chat", GroupPriority: 5, Model: "claude-sonnet-custom", Platform: PlatformAnthropic, Capabilities: []string{"chat"}, Features: PlaygroundModelFeatures{Responses: true, WebSearch: true, WebFetch: true}},
 		{ID: "20::grok-4.5", GroupID: 20, GroupName: "media", GroupPriority: 1, Model: "grok-4.5", Platform: PlatformGrok, Capabilities: []string{"chat"}, Features: PlaygroundModelFeatures{Responses: true, WebSearch: true, CodeExecution: true, WebFetch: true}},
 		{ID: "20::grok-imagine-image", GroupID: 20, GroupName: "media", GroupPriority: 1, Model: "grok-imagine-image", Platform: PlatformGrok, Capabilities: []string{"image"}},
 		{ID: "20::grok-imagine-video-1.5", GroupID: 20, GroupName: "media", GroupPriority: 1, Model: "grok-imagine-video-1.5", Platform: PlatformGrok, Capabilities: []string{"video"}},
-		{ID: "10::claude-sonnet-custom", GroupID: 10, GroupName: "chat", GroupPriority: 5, Model: "claude-sonnet-custom", Platform: PlatformAnthropic, Capabilities: []string{"chat"}, Features: PlaygroundModelFeatures{Responses: true, WebSearch: true, WebFetch: true}},
 	}, options)
 }
 
@@ -84,14 +84,30 @@ func TestPlaygroundServiceGetModelOptionsSupportsLegacyGroupAndCustomList(t *tes
 		AllowImageGeneration: true,
 		ModelsListConfig:     GroupModelsListConfig{Enabled: true, Models: []string{"gpt-image-2", "missing-model", "gpt-5.4"}},
 	}
-	svc := NewPlaygroundService(playgroundAPIKeyReaderStub{key: &APIKey{ID: 3, UserID: 2, GroupID: &groupID, Group: group}}, &playgroundModelListerStub{})
+	svc := NewPlaygroundService(
+		playgroundAPIKeyReaderStub{key: &APIKey{ID: 3, UserID: 2, GroupID: &groupID, Group: group}},
+		&playgroundModelListerStub{byGroup: map[int64][]string{groupID: {"gpt-image-2", "gpt-5.4"}}},
+	)
 
 	options, err := svc.GetModelOptions(context.Background(), 2, 3)
 	require.NoError(t, err)
 	require.Equal(t, []PlaygroundModelOption{
-		{ID: "9::gpt-image-2", GroupID: groupID, GroupName: "custom", GroupPriority: 0, Model: "gpt-image-2", Platform: PlatformOpenAI, Capabilities: []string{"image"}},
 		{ID: "9::gpt-5.4", GroupID: groupID, GroupName: "custom", GroupPriority: 0, Model: "gpt-5.4", Platform: PlatformOpenAI, Capabilities: []string{"chat"}, Features: PlaygroundModelFeatures{ImageInput: true, Responses: true, WebSearch: true, CodeExecution: true, WebFetch: true}},
+		{ID: "9::gpt-image-2", GroupID: groupID, GroupName: "custom", GroupPriority: 0, Model: "gpt-image-2", Platform: PlatformOpenAI, Capabilities: []string{"image"}},
 	}, options)
+}
+
+func TestPlaygroundServiceGetModelOptionsDoesNotSynthesizePlatformDefaults(t *testing.T) {
+	groupID := int64(9)
+	group := &Group{ID: groupID, Name: "empty", Platform: PlatformAnthropic, Status: StatusActive, Hydrated: true}
+	svc := NewPlaygroundService(
+		playgroundAPIKeyReaderStub{key: &APIKey{ID: 3, UserID: 2, GroupID: &groupID, Group: group}},
+		&playgroundModelListerStub{},
+	)
+
+	options, err := svc.GetModelOptions(context.Background(), 2, 3)
+	require.NoError(t, err)
+	require.Empty(t, options)
 }
 
 func TestPlaygroundServiceGetModelOptionsHidesUnsupportedCompatibilityModels(t *testing.T) {
