@@ -577,6 +577,21 @@ func TestLoadAnnouncementEmailConfigAndBounds(t *testing.T) {
 	require.GreaterOrEqual(t, cfg.AnnouncementEmail.LeaseSeconds, cfg.AnnouncementEmail.SendTimeoutSeconds+30)
 }
 
+func TestLoadAccountCapacityConfigAndBounds(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("ACCOUNT_CAPACITY_UPSTREAM_TIMEOUT_SECONDS", "99")
+	t.Setenv("ACCOUNT_CAPACITY_SUCCESS_CACHE_SECONDS", "9999")
+	t.Setenv("ACCOUNT_CAPACITY_ERROR_CACHE_SECONDS", "0")
+	t.Setenv("ACCOUNT_CAPACITY_STALE_CACHE_SECONDS", "1")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, 60, cfg.AccountCapacity.UpstreamTimeoutSeconds)
+	require.Equal(t, 3600, cfg.AccountCapacity.SuccessCacheSeconds)
+	require.Equal(t, 30, cfg.AccountCapacity.ErrorCacheSeconds)
+	require.Equal(t, 3600, cfg.AccountCapacity.StaleCacheSeconds)
+}
+
 func TestLoadPoolCapacityAlertConfigAndBounds(t *testing.T) {
 	resetViperWithJWTSecret(t)
 	t.Setenv("POOL_CAPACITY_ALERT_ENABLED", "false")

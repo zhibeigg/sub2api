@@ -182,6 +182,7 @@ func ProvideAccountUsageService(
 	cache *UsageCache,
 	identityCache IdentityCache,
 	tlsFPProfileService *TLSFingerprintProfileService,
+	capacityService *AccountCapacityService,
 	adobeTokenProvider *AdobeTokenProvider,
 	cursorGatewayService *CursorGatewayService,
 	cursorDashboardAuthService *CursorDashboardAuthService,
@@ -193,6 +194,7 @@ func ProvideAccountUsageService(
 	service.SetCursorUsageProber(cursorGatewayService)
 	service.SetCursorDashboardFetcher(cursorDashboardAuthService)
 	service.SetKiroUsageService(kiroUsageService)
+	service.SetAccountCapacityService(capacityService)
 	if openAIQuotaService != nil {
 		service.agentIdentityWS = openAIQuotaService.agentIdentityWS
 	}
@@ -927,6 +929,7 @@ var ProviderSet = wire.NewSet(
 	NewKiroGatewayService,
 	NewOpenCodeGatewayService,
 	NewOpenCodeQuotaService,
+	NewAccountCapacityService,
 	ProvideRateLimitService,
 	ProvideAccountUsageService,
 	ProvideAccountTestServiceWithAgentIdentity,

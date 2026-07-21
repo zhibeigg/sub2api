@@ -316,9 +316,10 @@ export async function clearError(id: number): Promise<Account> {
 }
 
 /**
- * Get account usage information (5h/7d window)
+ * Get account usage information, including official usage windows and the optional
+ * normalized capacity summary (verified balance, estimate, stale snapshot, or state).
  * @param id - Account ID
- * @returns Account usage info
+ * @returns Account usage info with an optional capacity field
  */
 export async function getUsage(id: number, source?: 'passive' | 'active', force?: boolean): Promise<AccountUsageInfo> {
   const params: Record<string, string> = {}

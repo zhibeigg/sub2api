@@ -37,13 +37,17 @@ func TestProvideTimingWheelService_Success(t *testing.T) {
 	svc.Stop()
 }
 
-func TestProvideAccountUsageServiceInjectsKiroUsageService(t *testing.T) {
+func TestProvideAccountUsageServiceInjectsOptionalServices(t *testing.T) {
 	kiroUsageService := &KiroUsageService{}
+	capacityService := &AccountCapacityService{}
 	svc := ProvideAccountUsageService(
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, kiroUsageService,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, capacityService, nil, nil, nil, kiroUsageService,
 	)
 	if svc.kiroUsageService != kiroUsageService {
 		t.Fatal("KiroUsageService was not injected into AccountUsageService")
+	}
+	if svc.capacityService != capacityService {
+		t.Fatal("AccountCapacityService was not injected into AccountUsageService")
 	}
 }
 

@@ -1722,4 +1722,190 @@ describe('AccountUsageCell', () => {
     expect(wrapper.text()).not.toContain('7d S')
     expect(wrapper.text()).not.toContain('7d F')
   })
+
+  it.each([
+    { type: 'apikey' as const, id: 5101 },
+    { type: 'bedrock' as const, id: 5102 }
+  ])('池模式 $type 账号会自动查询容量并在手动刷新时强制更新', async ({ type, id }) => {
+    getUsage.mockResolvedValue({
+      capacity: {
+        mode: 'upstream_balance',
+        state: 'verified',
+        provider: 'sub2api',
+        authoritative: true,
+        remaining: 42.5,
+        total: 100,
+        used: 57.5,
+        unit: 'USD',
+        estimated_remaining_requests: 85,
+        average_cost_per_request: 0.5,
+        sample_requests: 20,
+        fetched_at: '2026-07-21T08:00:00Z'
+      }
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({
+          id,
+          platform: 'anthropic',
+          type,
+          credentials: { pool_mode: true }
+        }),
+        manualRefreshToken: 0,
+        todayStats: {
+          requests: 3,
+          tokens: 1200,
+          cost: 1.25,
+          standard_cost: 1.25,
+          user_cost: 1
+        }
+      },
+      global: { stubs: { UsageProgressBar: true, AccountQuotaInfo: true } }
+    })
+
+    await flushPromises()
+
+    expect(getUsage).toHaveBeenCalledWith(id)
+    expect(wrapper.get('[data-testid="capacity-state"]').text())
+      .toBe('admin.accounts.usageWindow.capacity.verifiedUpstream')
+    expect(wrapper.get('[data-testid="capacity-remaining"]').text()).toContain('$42.5')
+    expect(wrapper.find('[data-testid="capacity-estimated-requests"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('3 req')
+
+    await wrapper.setProps({ manualRefreshToken: 1 })
+    await flushPromises()
+    expect(getUsage).toHaveBeenLastCalledWith(id, undefined, true)
+  })
+
+  it.each([
+    {
+      id: 5201,
+      state: 'stale' as const,
+      expected: 'admin.accounts.usageWindow.capacity.staleSnapshot'
+    },
+    {
+      id: 5202,
+      state: 'estimated' as const,
+      expected: 'admin.accounts.usageWindow.capacity.estimatedWindow'
+    }
+  ])('非池官方窗口会保留窗口展示并明确标注 $state capacity', async ({ id, state, expected }) => {
+    getUsage.mockResolvedValue({
+      five_hour: {
+        utilization: 25,
+        resets_at: '2026-07-21T12:00:00Z',
+        remaining_seconds: 3600
+      },
+      capacity: {
+        mode: 'usage_window',
+        state,
+        authoritative: false,
+        remaining: 75,
+        total: 100,
+        used: 25,
+        unit: '%',
+        estimated_remaining_requests: 30,
+        sample_requests: 10,
+        fetched_at: '2026-07-21T08:00:00Z'
+      }
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({ id, platform: 'openai', type: 'oauth', extra: {} })
+      },
+      global: {
+        stubs: {
+          UsageProgressBar: {
+            props: ['label', 'utilization'],
+            template: '<div class="usage-bar">{{ label }}|{{ utilization }}</div>'
+          },
+          AccountQuotaInfo: true,
+          OpenAIQuotaResetCell: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('5h|25')
+    expect(wrapper.get('[data-testid="capacity-state"]').text()).toBe(expected)
+    expect(wrapper.get('[data-testid="capacity-remaining"]').text()).toContain('75 %')
+  })
+
+  it('非池 API Key 配置本地额度时自动查询并展示估算容量', async () => {
+    getUsage.mockResolvedValue({
+      source: 'local',
+      capacity: {
+        mode: 'local_quota',
+        state: 'estimated',
+        provider: 'local',
+        authoritative: false,
+        remaining: 8,
+        total: 10,
+        used: 2,
+        unit: 'USD',
+        estimated_remaining_requests: 16,
+        average_cost_per_request: 0.5,
+        sample_requests: 4
+      }
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({
+          id: 5250,
+          platform: 'openai',
+          type: 'apikey',
+          quota_limit: 10,
+          quota_used: 2,
+          extra: {}
+        })
+      },
+      global: { stubs: { UsageProgressBar: true, AccountQuotaInfo: true } }
+    })
+
+    await flushPromises()
+
+    expect(getUsage).toHaveBeenCalledWith(5250)
+    expect(wrapper.get('[data-testid="capacity-state"]').text())
+      .toBe('admin.accounts.usageWindow.capacity.estimatedWindow')
+    expect(wrapper.get('[data-testid="capacity-remaining"]').text()).toContain('$8')
+    expect(wrapper.find('[data-testid="capacity-estimated-requests"]').exists()).toBe(true)
+  })
+
+  it('unknown capacity 保持未知状态且不渲染为 0', async () => {
+    getUsage.mockResolvedValue({
+      capacity: {
+        mode: 'upstream_balance',
+        state: 'unknown',
+        authoritative: false,
+        remaining: null,
+        total: null,
+        used: null,
+        estimated_remaining_requests: null
+      }
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({ id: 5301, platform: 'openai', type: 'oauth', extra: {} })
+      },
+      global: {
+        stubs: {
+          UsageProgressBar: true,
+          AccountQuotaInfo: true,
+          OpenAIQuotaResetCell: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="capacity-state"]').text())
+      .toBe('admin.accounts.usageWindow.capacity.unknown')
+    expect(wrapper.find('[data-testid="capacity-metrics"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Remaining 0')
+    expect(wrapper.text()).not.toContain('剩余 0')
+  })
 })

@@ -1214,8 +1214,30 @@ export interface AdobeCreditsInfo {
   error?: string | null
 }
 
+export type AccountCapacityMode = 'upstream_balance' | 'usage_window' | 'local_quota'
+export type AccountCapacityState = 'verified' | 'estimated' | 'stale' | 'unsupported' | 'unknown' | 'unlimited'
+
+export interface AccountCapacityInfo {
+  mode: AccountCapacityMode
+  state: AccountCapacityState
+  provider?: 'sub2api' | 'local'
+  scope?: string
+  authoritative: boolean
+  remaining?: number | null
+  total?: number | null
+  used?: number | null
+  unit?: string
+  estimated_remaining_requests?: number | null
+  average_cost_per_request?: number | null
+  sample_requests?: number
+  fetched_at?: string | null
+  reset_at?: string | null
+  message_code?: string
+}
+
 export interface AccountUsageInfo {
   source?: 'passive' | 'active' | 'local'
+  capacity?: AccountCapacityInfo | null
   updated_at: string | null
   five_hour: UsageProgress | null
   seven_day: UsageProgress | null
@@ -1265,6 +1287,8 @@ export interface AccountUsageInfo {
     minimum_balance?: number
   }> | null
   adobe_credits?: AdobeCreditsInfo | null
+  // 无官方窗口的 API Key/Bedrock 本地容量估算样本。
+  local_usage?: WindowStats | null
   // Cursor 本地用量、Cloud API Key 探测与官方套餐快照
   cursor_local_usage?: WindowStats | null
   cursor_api_key_configured?: boolean

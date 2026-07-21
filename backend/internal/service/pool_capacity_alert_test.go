@@ -193,6 +193,122 @@ func TestPoolCapacityCalculationsUsePostBillingStateAndFloorRequests(t *testing.
 	require.InDelta(t, wallet, *walletRemaining, 1e-12)
 }
 
+func TestCalculatePoolUpstreamCapacityRequiresVerifiedSupportedUnits(t *testing.T) {
+	average := decimal.NewFromInt(1)
+	remaining := 49.99
+	requests, amount, known := calculatePoolUpstreamCapacity(&AccountCapacitySnapshot{
+		Mode:          AccountCapacityModeUpstreamBalance,
+		State:         AccountCapacityStateVerified,
+		Authoritative: true,
+		Remaining:     &remaining,
+		Unit:          "USD",
+	}, average)
+	require.True(t, known)
+	require.Equal(t, int64(49), *requests)
+	require.InDelta(t, remaining, *amount, 1e-12)
+
+	requests, amount, known = calculatePoolUpstreamCapacity(&AccountCapacitySnapshot{
+		Mode:          AccountCapacityModeUpstreamBalance,
+		State:         AccountCapacityStateVerified,
+		Authoritative: true,
+		Remaining:     &remaining,
+		Unit:          "requests",
+	}, average)
+	require.True(t, known)
+	require.Equal(t, int64(49), *requests)
+	require.Nil(t, amount)
+
+	for _, snapshot := range []*AccountCapacitySnapshot{
+		{Mode: AccountCapacityModeUpstreamBalance, State: AccountCapacityStateStale, Authoritative: false, Remaining: &remaining, Unit: "USD"},
+		{Mode: AccountCapacityModeUpstreamBalance, State: AccountCapacityStateVerified, Authoritative: true, Remaining: &remaining, Unit: "EUR"},
+		{Mode: AccountCapacityModeUsageWindow, State: AccountCapacityStateEstimated, Authoritative: false, Remaining: &remaining, Unit: "requests"},
+	} {
+		_, _, known = calculatePoolUpstreamCapacity(snapshot, average)
+		require.False(t, known)
+	}
+}
+
+func TestPoolCapacityAlertEvaluateUsesVerifiedUpstreamWithLocalSafetyLimit(t *testing.T) {
+	group := &Group{ID: 17, Name: "production", PoolCapacityAlertEnabled: true, PoolCapacityAlertGeneration: 4}
+	account := &Account{
+		ID:          21,
+		Name:        "pool-account",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Credentials: map[string]any{"pool_mode": true, "base_url": "https://relay.example.com", "api_key": "key"},
+		Extra:       map[string]any{"quota_limit": 100.0, "quota_used": 60.0},
+	}
+	upstreamRemaining := 49.0
+	repo := &poolCapacityDispatchRepo{}
+	reader := &poolCapacityBalanceReaderStub{snapshot: &AccountCapacitySnapshot{
+		Mode:          AccountCapacityModeUpstreamBalance,
+		State:         AccountCapacityStateVerified,
+		Authoritative: true,
+		Remaining:     &upstreamRemaining,
+		Unit:          "USD",
+	}}
+	svc := &PoolCapacityAlertService{
+		repo:           repo,
+		usageReader:    poolCapacityUsageReaderStub{summary: &PoolCapacityCostSummary{Count: 49, AccountCostSum: decimal.NewFromInt(49), ActualCostSum: decimal.NewFromInt(49)}},
+		groupRepo:      poolCapacityGroupRepoStub{group: group},
+		accountRepo:    &stubOpenAIAccountRepo{accounts: []Account{*account}},
+		capacityReader: reader,
+	}
+	err := svc.evaluate(context.Background(), poolCapacityAlertTask{
+		RequestID:          "request-50",
+		GroupID:            group.ID,
+		GroupGeneration:    group.PoolCapacityAlertGeneration,
+		AccountID:          account.ID,
+		APIKeyID:           31,
+		UserID:             41,
+		IsSubscriptionBill: true,
+		CurrentAccountCost: 1,
+		CurrentActualCost:  1,
+		AccountQuotaState:  &AccountQuotaState{TotalLimit: 100, TotalUsed: 60},
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, reader.calls)
+	require.Len(t, repo.evaluations, 1)
+	evaluation := repo.evaluations[0]
+	require.Equal(t, int64(40), *evaluation.AccountRequests, "local quota remains a safety upper bound")
+	require.Equal(t, int64(40), *evaluation.PredictedRequests)
+	require.InDelta(t, 40, *evaluation.AccountRemaining, 1e-12)
+	require.Equal(t, "account", evaluation.Bottleneck)
+}
+
+func TestPoolCapacityAlertEvaluateSkipsStaleBalanceWithoutStateTransition(t *testing.T) {
+	group := &Group{ID: 17, PoolCapacityAlertEnabled: true, PoolCapacityAlertGeneration: 4}
+	account := Account{ID: 21, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"pool_mode": true}}
+	remaining := 10.0
+	repo := &poolCapacityDispatchRepo{}
+	svc := &PoolCapacityAlertService{
+		repo:        repo,
+		usageReader: poolCapacityUsageReaderStub{summary: &PoolCapacityCostSummary{Count: 49, AccountCostSum: decimal.NewFromInt(49), ActualCostSum: decimal.NewFromInt(49)}},
+		groupRepo:   poolCapacityGroupRepoStub{group: group},
+		accountRepo: &stubOpenAIAccountRepo{accounts: []Account{account}},
+		capacityReader: &poolCapacityBalanceReaderStub{snapshot: &AccountCapacitySnapshot{
+			Mode:          AccountCapacityModeUpstreamBalance,
+			State:         AccountCapacityStateStale,
+			Authoritative: false,
+			Remaining:     &remaining,
+			Unit:          "USD",
+		}},
+	}
+	err := svc.evaluate(context.Background(), poolCapacityAlertTask{
+		RequestID:          "request-50",
+		GroupID:            group.ID,
+		GroupGeneration:    group.PoolCapacityAlertGeneration,
+		AccountID:          account.ID,
+		APIKeyID:           31,
+		UserID:             41,
+		IsSubscriptionBill: true,
+		CurrentAccountCost: 1,
+		CurrentActualCost:  1,
+	})
+	require.NoError(t, err)
+	require.Empty(t, repo.evaluations, "stale balance must not recover or create an alert episode")
+}
+
 func TestPoolCapacityAlertDispatchClaimsOnlyImmediatelySendableWave(t *testing.T) {
 	repo := &poolCapacityDispatchRepo{}
 	for id := int64(1); id <= 5; id++ {
@@ -255,6 +371,36 @@ func TestPoolCapacityAlertSendCancelsUnavailableQQBotRecipientWithoutRetry(t *te
 	require.Empty(t, repo.failed)
 }
 
+type poolCapacityUsageReaderStub struct {
+	summary *PoolCapacityCostSummary
+	err     error
+}
+
+func (s poolCapacityUsageReaderStub) GetRecentPoolCapacityCostSummary(context.Context, int64, string, int64, int) (*PoolCapacityCostSummary, error) {
+	return s.summary, s.err
+}
+
+type poolCapacityGroupRepoStub struct {
+	GroupRepository
+	group *Group
+	err   error
+}
+
+func (s poolCapacityGroupRepoStub) GetByIDLite(context.Context, int64) (*Group, error) {
+	return s.group, s.err
+}
+
+type poolCapacityBalanceReaderStub struct {
+	snapshot *AccountCapacitySnapshot
+	err      error
+	calls    int
+}
+
+func (s *poolCapacityBalanceReaderStub) GetPoolBalance(context.Context, *Account, bool) (*AccountCapacitySnapshot, error) {
+	s.calls++
+	return cloneAccountCapacitySnapshot(s.snapshot), s.err
+}
+
 type poolCapacityDispatchRepo struct {
 	mu              sync.Mutex
 	pending         []PoolCapacityAlertDelivery
@@ -265,9 +411,13 @@ type poolCapacityDispatchRepo struct {
 	sent            []int64
 	cancelled       []int64
 	failed          []int64
+	evaluations     []PoolCapacityEvaluation
 }
 
-func (r *poolCapacityDispatchRepo) EvaluateAndMaybeCreateEvent(context.Context, PoolCapacityEvaluation, time.Time) (*PoolCapacityAlertEvent, error) {
+func (r *poolCapacityDispatchRepo) EvaluateAndMaybeCreateEvent(_ context.Context, evaluation PoolCapacityEvaluation, _ time.Time) (*PoolCapacityAlertEvent, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.evaluations = append(r.evaluations, evaluation)
 	return nil, nil
 }
 

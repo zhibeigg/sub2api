@@ -103,6 +103,7 @@ type Config struct {
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
 	BatchImage              BatchImageConfig              `mapstructure:"batch_image"`
 	AnnouncementEmail       AnnouncementEmailConfig       `mapstructure:"announcement_email"`
+	AccountCapacity         AccountCapacityConfig         `mapstructure:"account_capacity"`
 	PoolCapacityAlert       PoolCapacityAlertConfig       `mapstructure:"pool_capacity_alert"`
 	QQBotIntegration        QQBotIntegrationConfig        `mapstructure:"qqbot_integration"`
 	ImageStorage            ImageStorageConfig            `mapstructure:"image_storage"`
@@ -299,6 +300,15 @@ type AnnouncementEmailConfig struct {
 	RetryBaseSeconds    int  `mapstructure:"retry_base_seconds"`
 	MaxRetrySeconds     int  `mapstructure:"max_retry_seconds"`
 	SendTimeoutSeconds  int  `mapstructure:"send_timeout_seconds"`
+}
+
+// AccountCapacityConfig controls bounded upstream balance probes and their
+// short-lived in-process cache.
+type AccountCapacityConfig struct {
+	UpstreamTimeoutSeconds int `mapstructure:"upstream_timeout_seconds"`
+	SuccessCacheSeconds    int `mapstructure:"success_cache_seconds"`
+	ErrorCacheSeconds      int `mapstructure:"error_cache_seconds"`
+	StaleCacheSeconds      int `mapstructure:"stale_cache_seconds"`
 }
 
 // PoolCapacityAlertConfig controls the bounded post-billing evaluator and the
@@ -1833,6 +1843,7 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 
 	cfg.RunMode = NormalizeRunMode(cfg.RunMode)
 	normalizeAnnouncementEmailConfig(&cfg.AnnouncementEmail)
+	normalizeAccountCapacityConfig(&cfg.AccountCapacity)
 	normalizePoolCapacityAlertConfig(&cfg.PoolCapacityAlert)
 	cfg.Server.Mode = strings.ToLower(strings.TrimSpace(cfg.Server.Mode))
 	if cfg.Server.Mode == "" {
@@ -2170,6 +2181,11 @@ func setDefaults() {
 	viper.SetDefault("announcement_email.retry_base_seconds", 30)
 	viper.SetDefault("announcement_email.max_retry_seconds", 3600)
 	viper.SetDefault("announcement_email.send_timeout_seconds", 30)
+
+	viper.SetDefault("account_capacity.upstream_timeout_seconds", 10)
+	viper.SetDefault("account_capacity.success_cache_seconds", 60)
+	viper.SetDefault("account_capacity.error_cache_seconds", 30)
+	viper.SetDefault("account_capacity.stale_cache_seconds", 300)
 
 	viper.SetDefault("pool_capacity_alert.enabled", true)
 	viper.SetDefault("pool_capacity_alert.evaluation_worker_count", 2)
@@ -3787,6 +3803,32 @@ func normalizeAnnouncementEmailConfig(cfg *AnnouncementEmailConfig) {
 	minimumLease := cfg.SendTimeoutSeconds + 30
 	if cfg.LeaseSeconds < minimumLease {
 		cfg.LeaseSeconds = minimumLease
+	}
+}
+
+func normalizeAccountCapacityConfig(cfg *AccountCapacityConfig) {
+	if cfg.UpstreamTimeoutSeconds < 1 {
+		cfg.UpstreamTimeoutSeconds = 10
+	} else if cfg.UpstreamTimeoutSeconds > 60 {
+		cfg.UpstreamTimeoutSeconds = 60
+	}
+	if cfg.SuccessCacheSeconds < 1 {
+		cfg.SuccessCacheSeconds = 60
+	} else if cfg.SuccessCacheSeconds > 3600 {
+		cfg.SuccessCacheSeconds = 3600
+	}
+	if cfg.ErrorCacheSeconds < 1 {
+		cfg.ErrorCacheSeconds = 30
+	} else if cfg.ErrorCacheSeconds > 3600 {
+		cfg.ErrorCacheSeconds = 3600
+	}
+	if cfg.StaleCacheSeconds < cfg.SuccessCacheSeconds {
+		cfg.StaleCacheSeconds = 300
+		if cfg.StaleCacheSeconds < cfg.SuccessCacheSeconds {
+			cfg.StaleCacheSeconds = cfg.SuccessCacheSeconds
+		}
+	} else if cfg.StaleCacheSeconds > 86400 {
+		cfg.StaleCacheSeconds = 86400
 	}
 }
 

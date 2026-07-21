@@ -164,13 +164,14 @@ type poolCapacityAlertTask struct {
 // PoolCapacityAlertService evaluates predictions asynchronously and dispatches
 // durable email / QQ deliveries outside request and usage-record workers.
 type PoolCapacityAlertService struct {
-	repo          PoolCapacityAlertRepository
-	usageReader   PoolCapacityUsageReader
-	groupRepo     GroupRepository
-	accountRepo   AccountRepository
-	notifications *NotificationEmailService
-	qqNotifier    PoolCapacityQQNotifier
-	cfg           *config.Config
+	repo           PoolCapacityAlertRepository
+	usageReader    PoolCapacityUsageReader
+	groupRepo      GroupRepository
+	accountRepo    AccountRepository
+	capacityReader PoolBalanceReader
+	notifications  *NotificationEmailService
+	qqNotifier     PoolCapacityQQNotifier
+	cfg            *config.Config
 
 	owner string
 	queue chan poolCapacityAlertTask
@@ -185,6 +186,7 @@ func NewPoolCapacityAlertService(
 	usageLogRepo UsageLogRepository,
 	groupRepo GroupRepository,
 	accountRepo AccountRepository,
+	capacityReader PoolBalanceReader,
 	notifications *NotificationEmailService,
 	qqNotifier PoolCapacityQQNotifier,
 	cfg *config.Config,
@@ -199,15 +201,16 @@ func NewPoolCapacityAlertService(
 	}
 	host, _ := os.Hostname()
 	return &PoolCapacityAlertService{
-		repo:          repo,
-		usageReader:   usageReader,
-		groupRepo:     groupRepo,
-		accountRepo:   accountRepo,
-		notifications: notifications,
-		qqNotifier:    qqNotifier,
-		cfg:           cfg,
-		owner:         fmt.Sprintf("%s:%d:%d", host, os.Getpid(), time.Now().UnixNano()),
-		queue:         make(chan poolCapacityAlertTask, queueSize),
+		repo:           repo,
+		usageReader:    usageReader,
+		groupRepo:      groupRepo,
+		accountRepo:    accountRepo,
+		capacityReader: capacityReader,
+		notifications:  notifications,
+		qqNotifier:     qqNotifier,
+		cfg:            cfg,
+		owner:          fmt.Sprintf("%s:%d:%d", host, os.Getpid(), time.Now().UnixNano()),
+		queue:          make(chan poolCapacityAlertTask, queueSize),
 	}
 }
 
@@ -216,11 +219,12 @@ func ProvidePoolCapacityAlertService(
 	usageLogRepo UsageLogRepository,
 	groupRepo GroupRepository,
 	accountRepo AccountRepository,
+	capacityService *AccountCapacityService,
 	notifications *NotificationEmailService,
 	qqNotifier PoolCapacityQQNotifier,
 	cfg *config.Config,
 ) *PoolCapacityAlertService {
-	svc := NewPoolCapacityAlertService(repo, usageLogRepo, groupRepo, accountRepo, notifications, qqNotifier, cfg)
+	svc := NewPoolCapacityAlertService(repo, usageLogRepo, groupRepo, accountRepo, capacityService, notifications, qqNotifier, cfg)
 	svc.Start()
 	return svc
 }
@@ -241,7 +245,7 @@ func ProvidePoolCapacityAlertGatewayBinding(gateway *GatewayService, openAI *Ope
 }
 
 func (s *PoolCapacityAlertService) Start() {
-	if s == nil || s.repo == nil || s.usageReader == nil || s.groupRepo == nil || s.accountRepo == nil {
+	if s == nil || s.repo == nil || s.usageReader == nil || s.groupRepo == nil || s.accountRepo == nil || s.capacityReader == nil {
 		return
 	}
 	if s.cfg != nil && !s.cfg.PoolCapacityAlert.Enabled {
@@ -421,10 +425,25 @@ func (s *PoolCapacityAlertService) evaluate(ctx context.Context, task poolCapaci
 		return nil
 	}
 
-	accountRequests, accountRemaining, accountKnown := calculatePoolAccountCapacity(account, task.AccountQuotaState, avgAccount)
-	if account.HasAnyQuotaLimit() && !accountKnown {
+	if s.capacityReader == nil {
 		return nil
 	}
+	upstreamCapacity, capacityErr := s.capacityReader.GetPoolBalance(ctx, account, false)
+	if capacityErr != nil {
+		if errors.Is(capacityErr, context.Canceled) || errors.Is(capacityErr, context.DeadlineExceeded) {
+			return capacityErr
+		}
+		return nil
+	}
+	upstreamRequests, upstreamRemaining, upstreamKnown := calculatePoolUpstreamCapacity(upstreamCapacity, avgAccount)
+	if !upstreamKnown {
+		return nil
+	}
+	localRequests, localRemaining, localKnown := calculatePoolAccountCapacity(account, task.AccountQuotaState, avgAccount)
+	if account.HasAnyQuotaLimit() && !localKnown {
+		return nil
+	}
+	accountRequests, accountRemaining := minimumAccountCapacity(upstreamRequests, upstreamRemaining, localRequests, localRemaining)
 	apiKeyRequests, apiKeyRemaining, apiKeyKnown := calculatePoolAPIKeyCapacity(task, avgActual)
 	if task.APIKeyQuota > 0 && !apiKeyKnown {
 		return nil
@@ -482,6 +501,43 @@ func averagePoolCapacityCosts(history *PoolCapacityCostSummary, currentAccountCo
 	avgAccount := accountSum.Div(divisor)
 	avgActual := actualSum.Div(divisor)
 	return avgAccount, avgActual, avgAccount.IsPositive() && avgActual.IsPositive()
+}
+
+func calculatePoolUpstreamCapacity(snapshot *AccountCapacitySnapshot, average decimal.Decimal) (*int64, *float64, bool) {
+	if snapshot == nil || snapshot.Mode != AccountCapacityModeUpstreamBalance || !snapshot.Authoritative {
+		return nil, nil, false
+	}
+	if snapshot.State == AccountCapacityStateUnlimited {
+		return nil, nil, true
+	}
+	if snapshot.State != AccountCapacityStateVerified || snapshot.Remaining == nil || *snapshot.Remaining < 0 || math.IsNaN(*snapshot.Remaining) || math.IsInf(*snapshot.Remaining, 0) {
+		return nil, nil, false
+	}
+
+	remaining := *snapshot.Remaining
+	switch strings.ToLower(strings.TrimSpace(snapshot.Unit)) {
+	case "usd", "$":
+		if !average.IsPositive() {
+			return nil, nil, false
+		}
+		requests := decimal.NewFromFloat(remaining).Div(average).Floor().IntPart()
+		return &requests, cloneFloat64Ptr(snapshot.Remaining), true
+	case "request", "requests":
+		requests := decimal.NewFromFloat(remaining).Floor().IntPart()
+		return &requests, nil, true
+	default:
+		return nil, nil, false
+	}
+}
+
+func minimumAccountCapacity(upstreamRequests *int64, upstreamRemaining *float64, localRequests *int64, localRemaining *float64) (*int64, *float64) {
+	if upstreamRequests == nil {
+		return cloneCapacityInt64Ptr(localRequests), cloneFloat64Ptr(localRemaining)
+	}
+	if localRequests == nil || *upstreamRequests <= *localRequests {
+		return cloneCapacityInt64Ptr(upstreamRequests), cloneFloat64Ptr(upstreamRemaining)
+	}
+	return cloneCapacityInt64Ptr(localRequests), cloneFloat64Ptr(localRemaining)
 }
 
 func calculatePoolAccountCapacity(account *Account, state *AccountQuotaState, average decimal.Decimal) (*int64, *float64, bool) {

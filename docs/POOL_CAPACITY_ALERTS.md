@@ -2,11 +2,11 @@
 
 ## 目标
 
-当一次请求完成成功计费后，如果**最终实际命中的账户**启用了 `pool_mode`，且**最终计费分组**启用了 `pool_capacity_alert_enabled`，系统会根据近期成功落账请求的平均成本估算该计费上下文还能支持多少次请求。
+当一次请求完成成功计费后，如果**最终实际命中的账户**启用了 `pool_mode`，且**最终计费分组**启用了 `pool_capacity_alert_enabled`，系统会读取经验证的上游真实余额，并结合近期成功落账请求的平均成本估算该计费上下文还能支持多少次请求。
 
-当最小预计剩余请求数严格小于 `50` 时，系统创建持久化告警事件，并通过管理员主邮箱和当前 QQBot 的已验证 C2C 绑定主动通知管理员。
+当上游余额、API Key 配额和用户余额中的最小预计剩余请求数严格小于 `50` 时，系统创建持久化告警事件，并通过管理员主邮箱和当前 QQBot 的已验证 C2C 绑定主动通知管理员。
 
-> 该结果是基于历史均值的预测，不是上游实时余额保证。恰好剩余 `50` 次不会告警。
+> 上游余额本身必须是当前已验证的权威快照；“剩余请求数”仍是基于历史均次成本的预测。恰好剩余 `50` 次不会告警。
 
 ## 生效条件
 
@@ -42,13 +42,30 @@
 
 ## 容量计算
 
-系统使用计费事务返回的**扣费后状态**，避免重新查询产生竞态：
+账户、API Key 和用户三类容量使用不同的数据源：
 
-- 账户容量：总额度、日额度、周额度中所有已配置维度的 `floor(remaining / avg_account_cost)` 最小值。
-- API Key 容量：配置了 Key 配额时，使用 `floor((quota - quota_used) / avg_actual_cost)`。
-- 用户容量：余额计费时使用扣费后余额，计算 `floor(balance / avg_actual_cost)`；订阅计费不使用用户钱包作为瓶颈。
+- **账户容量**：从池账户自定义上游的 `GET /v1/usage` 获取经验证的真实余额。`unit=USD` 时计算 `floor(upstream_remaining / avg_account_cost)`；未来若上游明确返回 `unit=requests`，则直接取请求数。
+- **本地账户额度安全上限**：若账户同时配置了总/日/周本地额度，仍使用计费事务返回的扣费后状态计算本地容量，并与上游容量取较小值。本地额度不再被当成上游真实余额。
+- **API Key 容量**：配置了 Key 配额时，继续使用计费事务返回的扣费后状态，计算 `floor((quota - quota_used) / avg_actual_cost)`。
+- **用户容量**：余额计费时继续使用扣费后钱包余额，计算 `floor(balance / avg_actual_cost)`；订阅计费不使用用户钱包作为瓶颈。
 
-最终预计剩余请求数为所有有限容量中的最小值。未配置限额的维度视为无限，不参与取最小值。
+最终预计剩余请求数为所有有限容量中的最小值。未配置限额或上游明确无限的维度不参与取最小值。
+
+## 上游真实余额探测
+
+仅 `pool_mode` 且具有 Bearer API Key 和自定义 `base_url` 的账户会探测 `{base_url}/v1/usage`。Sub2API 上游通过 `object=sub2api.key_usage`、`schema_version=1`、合法 `mode` 和完整 `quota/subscription/balance` 结构进行强识别；旧版响应只有在结构完整且数值一致时才兼容。
+
+安全约束：
+
+- 复用账户代理和 TLS 指纹设置；配置了 `ProxyID` 但代理未加载或 ID 不一致时直接失败，不回退直连。
+- 必须启用 `security.url_allowlist` 并将自定义上游主机加入 `upstream_hosts`；余额探测不会在仅做格式校验的关闭状态下运行。
+- Bearer 认证头不会被账户 Header Override 覆盖；请求禁止重定向。
+- 默认总超时 `10` 秒，响应体上限 `64 KiB`，单次探测不自动重试。
+- 成功缓存 `60` 秒、错误缓存 `30` 秒；最近成功值最多保留 `5` 分钟并只在管理端标记为 `stale`。
+
+原生 AWS Bedrock SigV4 没有通用实时余额端点，且 AWS 凭据绝不会作为 Bearer Key 发出，因此标记为 `unsupported`。Bedrock API Key 或其他自定义 Base URL 只有满足兼容 Bearer `/v1/usage` 契约时才可验证。
+
+告警状态机只消费 `verified` 或明确 `unlimited` 的权威快照。查询失败、`stale`、`unknown`、`unsupported`、非法响应或非 USD/requests 单位时，本次评估直接跳过：既不创建新告警，也不把既有 `low` episode 错误恢复为 `healthy`。
 
 告警条件：
 
@@ -159,9 +176,33 @@ GET /api/v1/admin/groups/:id
 - `pool_capacity_alert_generation` 是内部一致性字段，不通过管理员或用户 DTO 暴露。
 - 普通用户可见的分组响应不暴露告警开关。
 
+## 管理员账户列表容量展示
+
+管理员账户列表的“用量窗口”列统一展示 `capacity`：
+
+- 池模式：显示上游真实余额、来源、更新时间和可用时的预计剩余请求数；查询失败可显示最近快照并明确标记 `stale`。
+- 非池模式：优先使用官方窗口的 `limit_requests/used_requests`；否则按 `floor(requests * (100 - utilization) / utilization)` 估算，并明确标记 `estimated`。
+- 无官方窗口但配置了本地总/日/周额度时，按本地剩余额度与本地平均账户成本估算，模式标记为 `local_quota`。
+- `unknown` 不表示剩余为 `0`；无有限本地额度时可显示 `unlimited`。
+
+管理员接口为：
+
+```http
+GET /api/v1/admin/accounts/:id/usage
+GET /api/v1/admin/accounts/:id/usage?force=true
+```
+
+`force=true` 会绕过池余额成功/错误 TTL，但仍参与 singleflight 合并。外部 API Key 用量契约见 [`API_KEY_USAGE.md`](API_KEY_USAGE.md)。
+
 ## 部署配置
 
 ```yaml
+account_capacity:
+  upstream_timeout_seconds: 10
+  success_cache_seconds: 60
+  error_cache_seconds: 30
+  stale_cache_seconds: 300
+
 pool_capacity_alert:
   enabled: true
   evaluation_worker_count: 2
@@ -180,7 +221,8 @@ pool_capacity_alert:
 
 说明：
 
-- `enabled` 是全局运行时开关；每个分组仍默认关闭。
+- `account_capacity` 控制上游探测超时、成功/错误缓存和 UI stale 保留时间。
+- `pool_capacity_alert.enabled` 是全局运行时开关；每个分组仍默认关闭。
 - 样本数 `50` 和告警阈值 `50` 是产品固定值，不通过 YAML 修改。
 - `lease_seconds` 会被规范化为不小于 `send_timeout_seconds + 30`。
 - worker、队列、超时和重试参数在加载配置时会限制到安全范围。
@@ -190,7 +232,9 @@ pool_capacity_alert:
 1. 应用迁移 `190`、`191`、`192`；其中 `192` 必须按非事务迁移执行。
 2. 确认 SMTP 已配置；否则邮件 delivery 会按策略重试或进入 dead。
 3. 如需 QQ 提醒，确认 QQBot 已启用且管理员完成当前机器人 C2C 绑定。
-4. 在管理端分组创建/编辑弹窗中显式开启容量提醒。
-5. 使用测试池账户产生至少 50 次成功落账请求。
-6. 验证恰好预计 50 次不创建事件，预计 49 次创建事件与两类 delivery。
-7. 关闭分组开关，确认旧 generation 的待投递任务被取消。
+4. 为测试池账户配置 Bearer API Key 与自定义 Base URL，并确认其 `/v1/usage` 返回可验证的 Sub2API 契约；原生 Bedrock 不支持该探测。
+5. 在管理端分组创建/编辑弹窗中显式开启容量提醒。
+6. 使用测试池账户产生至少 50 次成功落账请求。
+7. 验证恰好预计 50 次不创建事件，预计 49 次创建事件与两类 delivery。
+8. 模拟上游超时或 429，确认列表显示 `stale/unknown` 且告警状态机不发生恢复或新建。
+9. 关闭分组开关，确认旧 generation 的待投递任务被取消。

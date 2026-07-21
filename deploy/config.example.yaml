@@ -946,6 +946,19 @@ announcement_email:
   send_timeout_seconds: 30
 
 # =============================================================================
+# 账户容量探测
+# Account Capacity Probe
+# =============================================================================
+# 池模式的 Bearer API Key 自定义上游会查询 {base_url}/v1/usage。
+# 安全起见必须启用 security.url_allowlist，并将自定义上游主机加入 upstream_hosts。
+# 查询复用账户代理和 TLS 指纹设置；最近成功值仅用于 UI stale 展示。
+account_capacity:
+  upstream_timeout_seconds: 10
+  success_cache_seconds: 60
+  error_cache_seconds: 30
+  stale_cache_seconds: 300
+
+# =============================================================================
 # 池模式账户容量预测提醒
 # Pool-mode Account Capacity Prediction Alerts
 # =============================================================================

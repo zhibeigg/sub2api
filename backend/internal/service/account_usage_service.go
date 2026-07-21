@@ -346,18 +346,19 @@ type CursorPlanUsageInfo struct {
 
 // UsageInfo 账号使用量信息
 type UsageInfo struct {
-	Source             string         `json:"source,omitempty"`               // "passive" or "active"
-	UpdatedAt          *time.Time     `json:"updated_at,omitempty"`           // 更新时间
-	FiveHour           *UsageProgress `json:"five_hour"`                      // 5小时窗口
-	SevenDay           *UsageProgress `json:"seven_day,omitempty"`            // 7天窗口
-	SevenDaySonnet     *UsageProgress `json:"seven_day_sonnet,omitempty"`     // 7天Sonnet窗口
-	SevenDayFable      *UsageProgress `json:"seven_day_fable,omitempty"`      // 7天Fable窗口（响应头 7d_oi）
-	GeminiSharedDaily  *UsageProgress `json:"gemini_shared_daily,omitempty"`  // Gemini shared pool RPD (Google One / Code Assist)
-	GeminiProDaily     *UsageProgress `json:"gemini_pro_daily,omitempty"`     // Gemini Pro 日配额
-	GeminiFlashDaily   *UsageProgress `json:"gemini_flash_daily,omitempty"`   // Gemini Flash 日配额
-	GeminiSharedMinute *UsageProgress `json:"gemini_shared_minute,omitempty"` // Gemini shared pool RPM (Google One / Code Assist)
-	GeminiProMinute    *UsageProgress `json:"gemini_pro_minute,omitempty"`    // Gemini Pro RPM
-	GeminiFlashMinute  *UsageProgress `json:"gemini_flash_minute,omitempty"`  // Gemini Flash RPM
+	Source             string                   `json:"source,omitempty"`               // "passive" or "active"
+	UpdatedAt          *time.Time               `json:"updated_at,omitempty"`           // 更新时间
+	Capacity           *AccountCapacitySnapshot `json:"capacity,omitempty"`             // 统一容量视图
+	FiveHour           *UsageProgress           `json:"five_hour"`                      // 5小时窗口
+	SevenDay           *UsageProgress           `json:"seven_day,omitempty"`            // 7天窗口
+	SevenDaySonnet     *UsageProgress           `json:"seven_day_sonnet,omitempty"`     // 7天Sonnet窗口
+	SevenDayFable      *UsageProgress           `json:"seven_day_fable,omitempty"`      // 7天Fable窗口（响应头 7d_oi）
+	GeminiSharedDaily  *UsageProgress           `json:"gemini_shared_daily,omitempty"`  // Gemini shared pool RPD (Google One / Code Assist)
+	GeminiProDaily     *UsageProgress           `json:"gemini_pro_daily,omitempty"`     // Gemini Pro 日配额
+	GeminiFlashDaily   *UsageProgress           `json:"gemini_flash_daily,omitempty"`   // Gemini Flash 日配额
+	GeminiSharedMinute *UsageProgress           `json:"gemini_shared_minute,omitempty"` // Gemini shared pool RPM (Google One / Code Assist)
+	GeminiProMinute    *UsageProgress           `json:"gemini_pro_minute,omitempty"`    // Gemini Pro RPM
+	GeminiFlashMinute  *UsageProgress           `json:"gemini_flash_minute,omitempty"`  // Gemini Flash RPM
 
 	// Antigravity 多模型配额
 	AntigravityQuota map[string]*AntigravityModelQuota `json:"antigravity_quota,omitempty"`
@@ -368,6 +369,9 @@ type UsageInfo struct {
 	// OpenCode Go optional subscription quota snapshot. This data comes from the
 	// website session cookie and is deliberately isolated from inference health.
 	OpenCodeQuota *OpenCodeQuotaInfo `json:"open_code_quota,omitempty"`
+
+	// Generic local usage sample used by non-pool API Key/Bedrock capacity estimates.
+	LocalUsage *WindowStats `json:"local_usage,omitempty"`
 
 	// Cursor Cloud Agents API Key status, local forwarding statistics, and optional
 	// desktop Dashboard plan snapshot are deliberately reported separately.
@@ -513,6 +517,7 @@ type AccountUsageService struct {
 	adobeTokenProvider      *AdobeTokenProvider
 	cursorUsageProber       CursorUsageProber
 	cursorDashboardFetcher  CursorDashboardUsageFetcher
+	capacityService         PoolBalanceReader
 	agentIdentityTaskMu     sync.Mutex
 	agentIdentityWS         agentIdentityWSConnectionInvalidator
 }
@@ -540,6 +545,10 @@ func (s *AccountUsageService) SetCursorUsageProber(prober CursorUsageProber) {
 
 func (s *AccountUsageService) SetCursorDashboardFetcher(fetcher CursorDashboardUsageFetcher) {
 	s.cursorDashboardFetcher = fetcher
+}
+
+func (s *AccountUsageService) SetAccountCapacityService(capacityService PoolBalanceReader) {
+	s.capacityService = capacityService
 }
 
 // NewAccountUsageService 创建AccountUsageService实例
@@ -575,13 +584,37 @@ func NewAccountUsageService(
 // OAuth账号: 调用Anthropic API获取真实数据（需要profile scope），API响应缓存10分钟，窗口统计缓存1分钟
 // Setup Token账号: 根据session_window推算5h窗口，7d数据不可用（没有profile scope）
 // API Key账号: 不支持usage查询
-func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, force ...bool) (*UsageInfo, error) {
+func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, force ...bool) (result *UsageInfo, resultErr error) {
 	forceProbe := len(force) > 0 && force[0]
 
 	account, err := s.accountRepo.GetByID(ctx, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("get account failed: %w", err)
 	}
+
+	if account.IsPoolMode() {
+		usage := &UsageInfo{Source: "active"}
+		if s.capacityService == nil {
+			usage.Capacity = newCapacityState(AccountCapacityStateUnknown, "capacity_service_unavailable")
+			return usage, nil
+		}
+		capacity, capacityErr := s.capacityService.GetPoolBalance(ctx, account, forceProbe)
+		if capacityErr != nil {
+			usage.Capacity = newCapacityState(AccountCapacityStateUnknown, "upstream_request_failed")
+			return usage, nil
+		}
+		usage.Capacity = capacity
+		if capacity != nil && capacity.FetchedAt != nil {
+			usage.UpdatedAt = cloneCapacityTimePtr(capacity.FetchedAt)
+		}
+		return usage, nil
+	}
+
+	defer func() {
+		if result != nil && result.Capacity == nil {
+			result.Capacity = estimateAccountUsageCapacity(account, result)
+		}
+	}()
 
 	if account.IsAdobe() {
 		if s.adobeTokenProvider == nil {
@@ -808,7 +841,18 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 		return usage, nil
 	}
 
-	// API Key账号不支持usage查询
+	// 非池 API Key / Bedrock 没有官方窗口时，返回本地样本供配额容量估算。
+	if account.IsAPIKeyOrBedrock() {
+		now := time.Now().UTC()
+		usage := &UsageInfo{Source: "local", UpdatedAt: &now}
+		if s.usageLogRepo != nil {
+			if stats, statsErr := s.usageLogRepo.GetAccountTodayStats(ctx, account.ID); statsErr == nil && stats != nil {
+				usage.LocalUsage = windowStatsFromAccountStats(stats)
+			}
+		}
+		return usage, nil
+	}
+
 	return nil, fmt.Errorf("account type %s does not support usage query", account.Type)
 }
 
@@ -883,6 +927,7 @@ func (s *AccountUsageService) GetPassiveUsage(ctx context.Context, accountID int
 
 	// 添加窗口统计
 	s.addWindowStats(ctx, account, info)
+	info.Capacity = estimateAccountUsageCapacity(account, info)
 
 	return info, nil
 }

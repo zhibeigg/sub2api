@@ -1,6 +1,7 @@
 <template>
-  <div ref="rootRef" v-if="showUsageWindows">
-    <template v-if="account.platform === 'adobe' && account.type === 'oauth'">
+  <div ref="rootRef">
+    <template v-if="showUsageWindows">
+      <template v-if="account.platform === 'adobe' && account.type === 'oauth'">
       <div v-if="loading" class="space-y-1.5">
         <div class="h-4 w-24 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
         <div class="h-3 w-32 animate-pulse rounded bg-gray-100 dark:bg-gray-800"></div>
@@ -834,14 +835,14 @@
       </div>
     </template>
 
-    <!-- Other accounts: no usage window -->
-    <template v-else>
-      <div class="text-xs text-gray-400">-</div>
+      <!-- Other accounts: no usage window -->
+      <template v-else>
+        <div class="text-xs text-gray-400">-</div>
+      </template>
     </template>
-  </div>
 
-  <!-- Non-OAuth/Setup-Token accounts -->
-  <div ref="rootRef" v-else>
+    <!-- Non-OAuth/Setup-Token accounts and pool-mode key accounts -->
+    <template v-else>
     <!-- Gemini API Key accounts: show quota info -->
     <AccountQuotaInfo v-if="account.platform === 'gemini'" :account="account" />
     <!-- Key/Bedrock accounts: show today stats + optional quota bars -->
@@ -903,7 +904,76 @@
       />
 
       <!-- No data at all -->
-      <div v-if="!todayStats && !todayStatsLoading && !hasApiKeyQuota" class="text-xs text-gray-400">-</div>
+      <div v-if="!todayStats && !todayStatsLoading && !hasApiKeyQuota && !capacity && !loading" class="text-xs text-gray-400">-</div>
+      <div v-else-if="isPoolModeAccount && loading && !capacity" class="flex items-center gap-1">
+        <div class="h-3 w-16 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+        <div class="h-3 w-12 animate-pulse rounded bg-gray-100 dark:bg-gray-800"></div>
+      </div>
+    </div>
+    </template>
+
+    <div
+      v-if="capacity"
+      class="mt-1 space-y-1"
+      data-testid="account-capacity"
+      :title="capacity.message_code || undefined"
+    >
+      <div class="flex flex-wrap items-center gap-1">
+        <span
+          :class="[
+            'inline-block rounded px-1.5 py-0.5 text-[9px] font-medium',
+            capacityStateClass
+          ]"
+          data-testid="capacity-state"
+        >
+          {{ capacityStateLabel }}
+        </span>
+        <span class="text-[9px] text-gray-500 dark:text-gray-400">
+          {{ capacityModeLabel }}
+        </span>
+        <span class="text-[9px] text-gray-400 dark:text-gray-500">
+          {{ capacity.authoritative ? t('admin.accounts.usageWindow.capacity.authoritative') : t('admin.accounts.usageWindow.capacity.nonAuthoritative') }}
+        </span>
+      </div>
+
+      <div
+        v-if="capacityMetricItems.length > 0 || formattedEstimatedRequests || formattedAverageCost"
+        class="flex flex-wrap items-center gap-1 text-[9px] text-gray-600 dark:text-gray-300"
+        data-testid="capacity-metrics"
+      >
+        <span
+          v-for="metric in capacityMetricItems"
+          :key="metric.key"
+          class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800"
+          :data-testid="`capacity-${metric.key}`"
+        >
+          {{ metric.label }} {{ metric.value }}
+        </span>
+        <span v-if="formattedEstimatedRequests" class="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" data-testid="capacity-estimated-requests">
+          {{ t('admin.accounts.usageWindow.capacity.estimatedRequests', { value: formattedEstimatedRequests }) }}
+        </span>
+        <span v-if="formattedAverageCost" class="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800">
+          {{ t('admin.accounts.usageWindow.capacity.averageCost', { value: formattedAverageCost }) }}
+        </span>
+      </div>
+
+      <div v-if="capacityDetails.length > 0" class="flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] text-gray-400 dark:text-gray-500" data-testid="capacity-details">
+        <span v-for="detail in capacityDetails" :key="detail">{{ detail }}</span>
+      </div>
+
+      <button
+        v-if="isPoolModeAccount && !showUsageWindows"
+        type="button"
+        data-testid="pool-capacity-refresh"
+        class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-blue-400 dark:hover:bg-blue-900/30"
+        :disabled="activeQueryLoading"
+        @click="loadActiveUsage"
+      >
+        <svg class="h-2.5 w-2.5" :class="{ 'animate-spin': activeQueryLoading }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        {{ t('admin.accounts.usageWindow.capacity.refresh') }}
+      </button>
     </div>
   </div>
 </template>
@@ -962,7 +1032,18 @@ let desktopViewportMediaQuery: MediaQueryList | null = null
 let desktopViewportListener: ((event: MediaQueryListEvent) => void) | null = null
 let visibilityObserver: IntersectionObserver | null = null
 
-// Show usage windows for OAuth and Setup Token accounts
+const isPoolModeAccount = computed(() => {
+  if (props.account.type !== 'apikey' && props.account.type !== 'bedrock') return false
+  return props.account.credentials?.pool_mode === true
+})
+
+const hasLocalQuotaLimit = computed(() => {
+  return [props.account.quota_limit, props.account.quota_daily_limit, props.account.quota_weekly_limit]
+    .some((value) => typeof value === 'number' && value > 0)
+})
+
+// Select providers with dedicated official-window layouts. Pool/local capacity is
+// rendered in the compact key-account layout below while still being fetched.
 const showUsageWindows = computed(() => {
   // Gemini: we can always compute local usage windows from DB logs (simulated quotas).
   if (props.account.platform === 'gemini' || props.account.platform === 'adobe' || props.account.platform === 'cursor' || props.account.platform === 'opencode') return true
@@ -970,6 +1051,7 @@ const showUsageWindows = computed(() => {
 })
 
 const shouldFetchUsage = computed(() => {
+  if (isPoolModeAccount.value || hasLocalQuotaLimit.value) return true
   if (props.account.platform === 'anthropic') {
     return props.account.type === 'oauth' || props.account.type === 'setup-token'
   }
@@ -1025,6 +1107,147 @@ const shouldAutoLoadUsageOnMount = computed(() => {
 
 const shouldLazyLoadOnMobile = computed(() => {
   return shouldFetchUsage.value && !isDesktopViewport.value
+})
+
+const capacity = computed(() => usageInfo.value?.capacity ?? null)
+
+const capacityStateLabel = computed(() => {
+  const current = capacity.value
+  if (!current) return ''
+
+  switch (current.state) {
+    case 'verified':
+      if (current.mode === 'upstream_balance') {
+        return t('admin.accounts.usageWindow.capacity.verifiedUpstream')
+      }
+      if (current.mode === 'local_quota') {
+        return t('admin.accounts.usageWindow.capacity.verifiedLocal')
+      }
+      return t('admin.accounts.usageWindow.capacity.verified')
+    case 'stale':
+      return t('admin.accounts.usageWindow.capacity.staleSnapshot')
+    case 'estimated':
+      return t('admin.accounts.usageWindow.capacity.estimatedWindow')
+    case 'unsupported':
+      return t('admin.accounts.usageWindow.capacity.unsupported')
+    case 'unlimited':
+      return t('admin.accounts.usageWindow.capacity.unlimited')
+    default:
+      return t('admin.accounts.usageWindow.capacity.unknown')
+  }
+})
+
+const capacityStateClass = computed(() => {
+  switch (capacity.value?.state) {
+    case 'verified':
+      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+    case 'stale':
+      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+    case 'estimated':
+      return 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+    case 'unlimited':
+      return 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+    default:
+      return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+  }
+})
+
+const capacityModeLabel = computed(() => {
+  switch (capacity.value?.mode) {
+    case 'upstream_balance':
+      return t('admin.accounts.usageWindow.capacity.modeUpstreamBalance')
+    case 'usage_window':
+      return t('admin.accounts.usageWindow.capacity.modeUsageWindow')
+    case 'local_quota':
+      return t('admin.accounts.usageWindow.capacity.modeLocalQuota')
+    default:
+      return ''
+  }
+})
+
+const hasDisplayableCapacityValue = (value: number | null | undefined): value is number => {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+const formatCapacityNumber = (value: number) => {
+  if (Math.abs(value) >= 1000) return formatCompactNumber(value)
+  if (Number.isInteger(value)) return String(value)
+  return String(Number(value.toFixed(4)))
+}
+
+const formatCapacityValue = (value: number, unit?: string) => {
+  const formatted = formatCapacityNumber(value)
+  const normalizedUnit = unit?.trim()
+  if (!normalizedUnit) return formatted
+  if (normalizedUnit.toLowerCase() === 'usd' || normalizedUnit === '$') return `$${formatted}`
+  return `${formatted} ${normalizedUnit}`
+}
+
+const capacityShowsNumbers = computed(() => {
+  const state = capacity.value?.state
+  return state === 'verified' || state === 'stale' || state === 'estimated'
+})
+
+const capacityMetricItems = computed(() => {
+  const current = capacity.value
+  if (!current || !capacityShowsNumbers.value) return []
+
+  const metrics: Array<{ key: 'remaining' | 'total' | 'used'; label: string; value: string }> = []
+  const appendMetric = (
+    key: 'remaining' | 'total' | 'used',
+    value: number | null | undefined,
+    labelKey: string
+  ) => {
+    if (!hasDisplayableCapacityValue(value)) return
+    metrics.push({ key, label: t(labelKey), value: formatCapacityValue(value, current.unit) })
+  }
+
+  appendMetric('remaining', current.remaining, 'admin.accounts.usageWindow.capacity.remaining')
+  appendMetric('total', current.total, 'admin.accounts.usageWindow.capacity.total')
+  appendMetric('used', current.used, 'admin.accounts.usageWindow.capacity.used')
+  return metrics
+})
+
+const formattedEstimatedRequests = computed(() => {
+  const current = capacity.value
+  if (!current || !capacityShowsNumbers.value || !hasDisplayableCapacityValue(current.estimated_remaining_requests)) {
+    return ''
+  }
+  return formatCapacityNumber(current.estimated_remaining_requests)
+})
+
+const formattedAverageCost = computed(() => {
+  const current = capacity.value
+  if (!current || !capacityShowsNumbers.value || !hasDisplayableCapacityValue(current.average_cost_per_request)) {
+    return ''
+  }
+  return formatCapacityValue(current.average_cost_per_request, current.unit)
+})
+
+const capacityDetails = computed(() => {
+  const current = capacity.value
+  if (!current) return []
+
+  const details: string[] = []
+  if (hasDisplayableCapacityValue(current.sample_requests)) {
+    details.push(t('admin.accounts.usageWindow.capacity.samples', { count: formatCapacityNumber(current.sample_requests) }))
+  }
+  if (current.fetched_at) {
+    details.push(t('admin.accounts.usageWindow.capacity.updatedAt', { time: formatRelativeTime(current.fetched_at) }))
+  }
+  if (current.reset_at) {
+    details.push(t('admin.accounts.usageWindow.capacity.resetAt', { time: formatRelativeTime(current.reset_at) }))
+  }
+  if (current.scope) {
+    details.push(t('admin.accounts.usageWindow.capacity.scope', { value: current.scope }))
+  }
+  if (current.provider) {
+    const provider = current.provider === 'sub2api'
+      ? 'Sub2API'
+      : t('admin.accounts.usageWindow.capacity.localProvider')
+    details.push(t('admin.accounts.usageWindow.capacity.provider', { value: provider }))
+  }
+  return details
 })
 
 // Antigravity quota types (用于 API 返回的数据)
@@ -2007,7 +2230,7 @@ watch(
     if (!shouldFetchUsage.value) return
 
     const source = isAnthropicOAuthOrSetupToken.value ? 'passive' : undefined
-    const force = props.account.platform === 'cursor' || props.account.platform === 'opencode'
+    const force = isPoolModeAccount.value || props.account.platform === 'cursor' || props.account.platform === 'opencode'
     _usageCache.delete(props.account.id)
     loadUsage({ source, bypassCache: true, force }).catch((e) => {
       console.error('Failed to refresh usage after manual refresh:', e)

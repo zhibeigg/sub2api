@@ -18,10 +18,11 @@
 
 ## 预测口径
 
-系统使用最终分组最近 `50` 次成功落账请求：
+系统使用最终分组最近 `50` 次成功落账请求，并将不同容量来源分开处理：
 
-- 账户平均成本用于估算上游账户额度还能支持多少次请求；
-- 用户平均实际扣费用于估算 API Key 配额和用户余额还能支持多少次请求；
+- 池账户通过自定义上游的 `GET /v1/usage` 读取已验证真实余额；USD 余额除以账户平均成本，`requests` 单位直接使用。
+- 账户本地总/日/周额度不再冒充上游余额，只作为更严格的安全上限。
+- API Key 配额和用户钱包继续使用本次计费事务返回的扣费后状态，并除以用户平均实际扣费。
 - 账户、Key、用户三个有限容量取最小值作为最终预测。
 
 由于使用记录异步批量写入，本次请求直接作为第 50 个样本，数据库只查询此前 49 条。
@@ -34,9 +35,20 @@
 | 50 | 否 |
 | 51 | 否 |
 
-::: warning 预测不是保证
-结果来自近期成功计费请求的平均成本。模型、Token 数、图片规格、倍率或余额发生变化时，实际剩余请求数也会变化。
+::: warning 权威余额与预测请求数不同
+上游余额必须是当前 `verified` 的权威快照；换算后的请求数仍取决于近期均次成本。`stale`、`unknown`、`unsupported`、非法响应或非 USD/requests 单位会跳过本次状态变更，不会误报恢复健康。
 :::
+
+## 上游余额与用量窗口展示
+
+管理员账户列表的“用量窗口”列会统一显示容量状态：
+
+- 池模式显示上游真实余额；最近成功值仅以 `stale` 标记展示。
+- 非池模式根据官方窗口请求数与利用率保守估算剩余请求数，并明确标记“估算”。
+- 无官方窗口但配置本地额度时，使用本地剩余额度和本地平均账户成本估算。
+- `unknown` 不代表剩余为 `0`；原生 AWS Bedrock SigV4 因没有通用余额端点显示 `unsupported`。
+
+手动刷新账户列表会调用 `GET /api/v1/admin/accounts/:id/usage?force=true`，绕过容量 TTL 并重新验证上游。
 
 ## 通知渠道
 
@@ -80,4 +92,6 @@ PUT /api/v1/admin/groups/:id
 - 应用数据库迁移 `190_add_group_pool_capacity_alert.sql`、`191_pool_capacity_alert_runtime.sql` 和非事务迁移 `192_add_usage_logs_pool_capacity_samples_index_notx.sql`；最后一项使用 `CREATE INDEX CONCURRENTLY`，避免阻塞 `usage_logs` 热写入。
 - 邮件提醒需要可用 SMTP 配置。
 - QQBot 提醒需要启用当前机器人，并完成管理员 C2C 绑定。
-- 全局运行时参数见仓库 `deploy/config.example.yaml` 的 `pool_capacity_alert` 段。
+- 上游余额探测参数见 `deploy/config.example.yaml` 的 `account_capacity` 段；默认超时 10 秒、成功缓存 60 秒、错误缓存 30 秒、stale 保留 300 秒。必须启用 `security.url_allowlist` 并将自定义上游主机加入 `upstream_hosts`。
+- 告警 worker、投递和重试参数见 `pool_capacity_alert` 段。
+- 自定义上游必须提供 Bearer API Key 兼容的 `/v1/usage`；原生 AWS Bedrock SigV4 不会发送余额探测。

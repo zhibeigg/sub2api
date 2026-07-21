@@ -148,6 +148,21 @@ cc-switch --app gemini
 claude   # 或 codex / gemini
 ```
 
+## 检查 Sub2API 余额接口
+
+配置 Provider 后，可以直接用 API Key 验证 Sub2API 的余额契约：
+
+```bash
+curl -sS \
+  -H "Authorization: Bearer $SUB2API_API_KEY" \
+  -H "Accept: application/json" \
+  "$SUB2API_BASE_URL/v1/usage"
+```
+
+有效响应包含 `object: sub2api.key_usage`、`schema_version: 1`、合法的 `mode` 和 `isValid`。余额可能来自 Key 配额、订阅最紧窗口或钱包；没有有限订阅窗口时 `remaining=-1` 表示无限。
+
+如果把 Sub2API 作为另一个 Sub2API 实例的池模式自定义上游，该实例也会调用同一端点验证真实余额。401/403 表示 Key 无权访问，404/405 表示上游不支持该契约，429 或网络超时会显示为未知，若有最近成功值则仅标记 `stale`。不要把 AWS Access Key/Secret 当作 Bearer Key 测试原生 Bedrock。
+
 ## 常用命令
 
 ```bash

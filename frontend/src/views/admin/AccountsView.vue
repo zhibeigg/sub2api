@@ -302,7 +302,7 @@
           <template #header-usage="{ column }">
             <div class="flex items-center">
               <span>{{ column.label }}</span>
-              <HelpTooltip :content="t('admin.accounts.usageWindowsHint')" width-class="w-72" />
+              <HelpTooltip :content="t('admin.accounts.usageWindowsHint')" width-class="w-80" />
             </div>
           </template>
           <template #cell-usage="{ row }">
