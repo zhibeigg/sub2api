@@ -2018,9 +2018,10 @@ func (h *GatewayHandler) handleFailoverExhausted(c *gin.Context, failoverErr *se
 	// 请求级 4xx 与账号健康无关，切换账号不会改变结果。保留具体错误，
 	// 避免 OpenCode Go / Cursor 等兼容层把可操作的请求错误误报为账号耗尽或 502。
 	requestFallback := "Upstream rejected the request"
-	if platform == service.PlatformCursor {
+	switch platform {
+	case service.PlatformCursor:
 		requestFallback = "Cursor rejected the request"
-	} else if platform == service.PlatformOpenCode {
+	case service.PlatformOpenCode:
 		requestFallback = "OpenCode Go rejected the request"
 	}
 	// 兼容 Cursor 旧错误对象：历史实现未填写 Scope，但 400 已明确是请求级错误。
