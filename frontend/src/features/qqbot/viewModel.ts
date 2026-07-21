@@ -54,6 +54,7 @@ export function buildUpdateRequest(draft: QQBotDraft): QQBotUpdateRequest {
     link_ttl_minutes: Number(draft.link_ttl_minutes),
     welcome_enabled: draft.welcome_enabled,
     first_interaction_enabled: draft.first_interaction_enabled,
+    channel_check_enabled: draft.channel_check_enabled,
     help_message: draft.help_message.trim(),
     allowed_group_ids: parseIDLines(draft.allowed_group_ids_text),
     allowed_guild_ids: parseIDLines(draft.allowed_guild_ids_text),
@@ -70,6 +71,7 @@ export function buildProbeRequest(draft: QQBotDraft): QQBotProbeRequest {
     sandbox: draft.sandbox,
     public_base_url: draft.public_base_url.trim().replace(/\/$/, ''),
     api_timeout_ms: Number(draft.api_timeout_ms),
+    channel_check_enabled: draft.channel_check_enabled,
   }
   if (draft.app_secret.trim()) payload.app_secret = draft.app_secret.trim()
   if (draft.webhook_secret.trim()) payload.webhook_secret = draft.webhook_secret.trim()
@@ -97,12 +99,24 @@ export function draftFingerprint(draft: QQBotDraft | null): string {
   }
 }
 
+function isChannelCheckPublicURL(url: URL): boolean {
+  const hostname = url.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  if (url.protocol !== 'https:' || url.pathname !== '/' || url.search || url.hash || url.username || url.password) return false
+  if (!hostname.includes('.') || hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.endsWith('.local') || hostname.endsWith('.internal') || hostname === '::1') return false
+  const octets = hostname.split('.').map((value) => Number(value))
+  if (octets.length === 4 && octets.every((value) => Number.isInteger(value) && value >= 0 && value <= 255)) {
+    const [first, second] = octets
+    if (first === 0 || first === 10 || first === 127 || (first === 169 && second === 254) || (first === 172 && second >= 16 && second <= 31) || (first === 192 && second === 168)) return false
+  }
+  return true
+}
+
 export function validateDraft(draft: QQBotDraft): string[] {
   const errors: string[] = []
   if (!/^\d{1,64}$/.test(draft.app_id.trim())) errors.push('appId')
   try {
     const url = new URL(draft.public_base_url)
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') errors.push('publicUrl')
+    if ((url.protocol !== 'https:' && url.protocol !== 'http:') || (draft.channel_check_enabled && !isChannelCheckPublicURL(url))) errors.push('publicUrl')
   } catch {
     errors.push('publicUrl')
   }

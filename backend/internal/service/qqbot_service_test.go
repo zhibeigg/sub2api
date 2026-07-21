@@ -15,6 +15,8 @@ type qqBotRepoStub struct {
 	boundEmail        string
 	alreadyBound      bool
 	findBoundErr      error
+	activeBound       bool
+	activeBoundErr    error
 	createInput       QQBotChallengeCreateInput
 	createRecord      QQBotBindingRecord
 	createCreated     bool
@@ -29,6 +31,9 @@ type qqBotRepoStub struct {
 
 func (s *qqBotRepoStub) FindBoundEmail(context.Context, string, string) (string, bool, error) {
 	return s.boundEmail, s.alreadyBound, s.findBoundErr
+}
+func (s *qqBotRepoStub) HasActiveBoundIdentity(context.Context, string, string) (bool, error) {
+	return s.activeBound, s.activeBoundErr
 }
 func (s *qqBotRepoStub) CreateChallenge(_ context.Context, input QQBotChallengeCreateInput) (QQBotBindingRecord, bool, error) {
 	s.createInput = input
@@ -242,10 +247,12 @@ func TestQQBotUpdateSettingsNormalizesIDsAndAudits(t *testing.T) {
 	channels := map[string]string{" guild-1 ": " channel-1 "}
 	bonus := 8.5
 	ttl := 30
+	channelCheckEnabled := false
 
 	result, err := svc.UpdateSettings(context.Background(), QQBotSettingsUpdate{
 		FirstBindBonus:       &bonus,
 		LinkTTLMinutes:       &ttl,
+		ChannelCheckEnabled:  &channelCheckEnabled,
 		AllowedGroupIDs:      &groups,
 		AllowedGuildIDs:      &guilds,
 		GuildWelcomeChannels: &channels,
@@ -256,5 +263,8 @@ func TestQQBotUpdateSettingsNormalizesIDsAndAudits(t *testing.T) {
 	require.Equal(t, map[string]string{"guild-1": "channel-1"}, result.GuildWelcomeChannels)
 	require.Equal(t, &now, result.UpdatedAt)
 	require.Equal(t, "8.5", settings.updates[SettingKeyQQBotFirstBindBonus])
+	require.Equal(t, "false", settings.updates[SettingKeyQQBotChannelCheckEnabled])
+	require.False(t, result.ChannelCheckEnabled)
 	require.Equal(t, float64(8.5), repo.settingsAudit["first_bind_bonus"])
+	require.Equal(t, false, repo.settingsAudit["channel_check_enabled"])
 }

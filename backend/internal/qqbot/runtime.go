@@ -16,7 +16,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const defaultHelpMessage = "欢迎使用 PokeAPI 账户助手。\n\n绑定账户：请私聊发送 /bind 你的邮箱\n查看帮助：发送 /help\n\n验证链接只会发送到 Sub2API 账户邮箱。数字 QQ 仅作为展示信息，实际身份以机器人 OpenID 为准。"
+const defaultHelpMessage = "欢迎使用 PokeAPI 账户助手。\n\n绑定账户：请私聊发送 /bind 你的邮箱\n查看渠道状态：发送 /check\n查看帮助：发送 /help\n\n验证链接只会发送到 Sub2API 账户邮箱。数字 QQ 仅作为展示信息，实际身份以机器人 OpenID 为准。"
 
 type runtimeGeneration struct {
 	config    ActiveConfig
@@ -27,9 +27,10 @@ type runtimeGeneration struct {
 }
 
 type Runtime struct {
-	manager *ConfigManager
-	queue   *ReliableQueue
-	binding *service.QQBotService
+	manager      *ConfigManager
+	queue        *ReliableQueue
+	binding      *service.QQBotService
+	channelCheck *ChannelCheckService
 
 	generation  atomic.Pointer[runtimeGeneration]
 	stopping    atomic.Bool
@@ -42,8 +43,8 @@ type Runtime struct {
 	state   RuntimeState
 }
 
-func NewRuntime(manager *ConfigManager, queue *ReliableQueue, binding *service.QQBotService) *Runtime {
-	runtime := &Runtime{manager: manager, queue: queue, binding: binding, state: RuntimeState{ProcessStatus: RuntimeDisabled}}
+func NewRuntime(manager *ConfigManager, queue *ReliableQueue, binding *service.QQBotService, channelCheck *ChannelCheckService) *Runtime {
+	runtime := &Runtime{manager: manager, queue: queue, binding: binding, channelCheck: channelCheck, state: RuntimeState{ProcessStatus: RuntimeDisabled}}
 	registerGlobalHandlers()
 	if manager != nil {
 		manager.SetOnReload(runtime.applyConfig)
@@ -136,6 +137,7 @@ func (r *Runtime) applyConfig(ctx context.Context, cfg ActiveConfig) error {
 		r.recordError("messenger_create_failed")
 		return err
 	}
+	messenger.setMediaStore(r.queue)
 	probeCtx, cancel := context.WithTimeout(ctx, time.Duration(cfg.APITimeoutMS)*time.Millisecond)
 	_, err = messenger.Probe(probeCtx)
 	cancel()
@@ -345,6 +347,9 @@ func (r *Runtime) process(ctx context.Context, generation *runtimeGeneration, in
 	if parsed.Kind == CommandHelp {
 		return r.send(ctx, generation.messenger, incoming, renderHelp(settings.HelpMessage))
 	}
+	if parsed.Kind == CommandCheck {
+		return r.handleChannelCheck(ctx, generation, incoming)
+	}
 	if parsed.Kind != CommandBind {
 		return nil
 	}
@@ -382,10 +387,94 @@ func (r *Runtime) process(ctx context.Context, generation *runtimeGeneration, in
 	return r.send(ctx, generation.messenger, incoming, "若该账户存在，验证邮件已发送至 "+masked+"。链接仅在短时间内有效。")
 }
 
+func (r *Runtime) handleChannelCheck(ctx context.Context, generation *runtimeGeneration, incoming InboundEvent) error {
+	if r.channelCheck == nil {
+		return r.send(ctx, generation.messenger, incoming, "渠道状态图暂时不可用，请稍后再试。")
+	}
+	imageURL, err := r.channelCheck.PrepareImageURL(ctx, generation.config, incoming)
+	if err != nil {
+		message := channelCheckErrorMessage(err)
+		if message == "" {
+			slog.Warn("qqbot channel check preparation failed", "event_id", shortID(incoming.EventID), "scene", incoming.Scene, "error_code", infraerrors.Reason(err))
+			message = "渠道状态图暂时不可用，请稍后再试。"
+		}
+		return r.send(ctx, generation.messenger, incoming, message)
+	}
+	if err := r.sendImage(ctx, generation.messenger, incoming, imageURL); err != nil {
+		slog.Warn("qqbot channel check image reply failed", "event_id", shortID(incoming.EventID), "scene", incoming.Scene, "error_code", infraerrors.Reason(err))
+		var definitive interface{ Definitive() bool }
+		if !errors.As(err, &definitive) || !definitive.Definitive() {
+			return err
+		}
+		fallbackErr := r.sendWithSequence(ctx, generation.messenger, incoming, "渠道状态图发送失败，请稍后重新发送 /check。", 2)
+		if fallbackErr != nil {
+			return errors.Join(err, fallbackErr)
+		}
+	}
+	return nil
+}
+
+func channelCheckErrorMessage(err error) string {
+	switch {
+	case errors.Is(err, ErrChannelCheckDisabled), errors.Is(err, ErrChannelMonitorDisabled):
+		return "渠道状态图暂未开放。"
+	case errors.Is(err, ErrChannelCheckBindingRequired):
+		return "私聊查看渠道状态前，请先发送 /bind 你的邮箱完成账户绑定。"
+	}
+	var rateLimitErr *ChannelCheckRateLimitError
+	if errors.As(err, &rateLimitErr) {
+		seconds := int((rateLimitErr.RetryAfter + time.Second - 1) / time.Second)
+		if seconds < 1 {
+			seconds = 1
+		}
+		return fmt.Sprintf("请求过于频繁，请在约 %d 秒后重试。", seconds)
+	}
+	return ""
+}
+
+func (r *Runtime) sendImage(ctx context.Context, messenger Messenger, incoming InboundEvent, imageURL string) error {
+	var lastErr error
+	const sequence uint32 = 1
+	for attempt := 0; attempt < 3; attempt++ {
+		switch incoming.Scene {
+		case SceneGroup:
+			lastErr = messenger.SendGroupImage(ctx, incoming.SourceID, incoming.MessageID, incoming.EventID, imageURL, sequence)
+		case SceneC2C:
+			lastErr = messenger.SendC2CImage(ctx, incoming.ProviderSubject, incoming.MessageID, incoming.EventID, imageURL, sequence)
+		case SceneGuild:
+			lastErr = messenger.SendChannelImage(ctx, incoming.ChannelID, incoming.MessageID, incoming.EventID, imageURL, sequence)
+		default:
+			return errors.New("unsupported qqbot scene")
+		}
+		if lastErr == nil {
+			r.markSent()
+			return nil
+		}
+		var definitive interface{ Definitive() bool }
+		if errors.As(lastErr, &definitive) && definitive.Definitive() {
+			return lastErr
+		}
+		if attempt < 2 {
+			timer := time.NewTimer(time.Duration(attempt+1) * 250 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			case <-timer.C:
+			}
+		}
+	}
+	return lastErr
+}
+
 func (r *Runtime) send(ctx context.Context, messenger Messenger, incoming InboundEvent, content string) error {
+	return r.sendWithSequence(ctx, messenger, incoming, content, 1)
+}
+
+func (r *Runtime) sendWithSequence(ctx context.Context, messenger Messenger, incoming InboundEvent, content string, firstSequence uint32) error {
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
-		sequence := uint32(attempt + 1)
+		sequence := firstSequence
 		switch incoming.Scene {
 		case SceneGroup:
 			lastErr = messenger.SendGroup(ctx, incoming.SourceID, incoming.MessageID, incoming.EventID, content, sequence)
@@ -397,10 +486,7 @@ func (r *Runtime) send(ctx context.Context, messenger Messenger, incoming Inboun
 			return errors.New("unsupported qqbot scene")
 		}
 		if lastErr == nil {
-			now := time.Now().UTC()
-			r.stateMu.Lock()
-			r.state.LastSendAt = &now
-			r.stateMu.Unlock()
+			r.markSent()
 			return nil
 		}
 		if attempt < 2 {
@@ -414,6 +500,13 @@ func (r *Runtime) send(ctx context.Context, messenger Messenger, incoming Inboun
 		}
 	}
 	return lastErr
+}
+
+func (r *Runtime) markSent() {
+	now := time.Now().UTC()
+	r.stateMu.Lock()
+	r.state.LastSendAt = &now
+	r.stateMu.Unlock()
 }
 
 func (r *Runtime) State(ctx context.Context) RuntimeState {

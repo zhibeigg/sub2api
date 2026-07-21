@@ -42,6 +42,7 @@ const (
 	SettingKeyQQBotLinkTTLMinutes          = "qqbot_link_ttl_minutes"
 	SettingKeyQQBotWelcomeEnabled          = "qqbot_welcome_enabled"
 	SettingKeyQQBotFirstInteractionEnabled = "qqbot_first_interaction_enabled"
+	SettingKeyQQBotChannelCheckEnabled     = "qqbot_channel_check_enabled"
 	SettingKeyQQBotHelpMessage             = "qqbot_help_message"
 	SettingKeyQQBotAllowedGroupIDs         = "qqbot_allowed_group_ids"
 	SettingKeyQQBotAllowedGuildIDs         = "qqbot_allowed_guild_ids"
@@ -59,6 +60,7 @@ type QQBotSettings struct {
 	LinkTTLMinutes          int               `json:"link_ttl_minutes"`
 	WelcomeEnabled          bool              `json:"welcome_enabled"`
 	FirstInteractionEnabled bool              `json:"first_interaction_enabled"`
+	ChannelCheckEnabled     bool              `json:"channel_check_enabled"`
 	HelpMessage             string            `json:"help_message"`
 	AllowedGroupIDs         []string          `json:"allowed_group_ids"`
 	AllowedGuildIDs         []string          `json:"allowed_guild_ids"`
@@ -72,6 +74,7 @@ type QQBotSettingsUpdate struct {
 	LinkTTLMinutes          *int               `json:"link_ttl_minutes,omitempty"`
 	WelcomeEnabled          *bool              `json:"welcome_enabled,omitempty"`
 	FirstInteractionEnabled *bool              `json:"first_interaction_enabled,omitempty"`
+	ChannelCheckEnabled     *bool              `json:"channel_check_enabled,omitempty"`
 	HelpMessage             *string            `json:"help_message,omitempty"`
 	AllowedGroupIDs         *[]string          `json:"allowed_group_ids,omitempty"`
 	AllowedGuildIDs         *[]string          `json:"allowed_guild_ids,omitempty"`
@@ -235,6 +238,7 @@ type QQBotUserLookup interface {
 
 type QQBotBindingRepository interface {
 	FindBoundEmail(ctx context.Context, botAppID, providerSubject string) (string, bool, error)
+	HasActiveBoundIdentity(ctx context.Context, botAppID, providerSubject string) (bool, error)
 	CreateChallenge(ctx context.Context, input QQBotChallengeCreateInput) (QQBotBindingRecord, bool, error)
 	GetChallengeByToken(ctx context.Context, token string) (QQBotBindingRecord, string, error)
 	UpdateEmailStatus(ctx context.Context, id int64, status, failureCode string) error

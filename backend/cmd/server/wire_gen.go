@@ -321,8 +321,14 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	qqBotService := service.NewQQBotService(qqBotBindingRepository, qqBotUserLookup, settingRepository, emailQueueService, billingCache, notificationEmailService, configConfig)
 	qqbotConfigManager := qqbot.NewConfigManager(db, settingRepository, redisClient, secretEncryptor, configConfig)
 	reliableQueue := qqbot.NewReliableQueue(redisClient, secretEncryptor)
-	runtime := qqbot.NewRuntime(qqbotConfigManager, reliableQueue, qqBotService)
-	qqBotHandler := handler.NewQQBotHandler(qqBotService, qqbotConfigManager, runtime, reliableQueue)
+	channelCheckSigner, err := qqbot.NewChannelCheckSigner(configConfig)
+	if err != nil {
+		return nil, err
+	}
+	channelStatusRenderer := qqbot.NewChannelStatusRenderer()
+	channelCheckService := qqbot.NewChannelCheckService(channelMonitorService, settingService, qqBotService, reliableQueue, qqbotConfigManager, channelCheckSigner, channelStatusRenderer)
+	runtime := qqbot.NewRuntime(qqbotConfigManager, reliableQueue, qqBotService, channelCheckService)
+	qqBotHandler := handler.NewQQBotHandler(qqBotService, qqbotConfigManager, runtime, reliableQueue, channelCheckService)
 	idempotencyCoordinator := service.ProvideIdempotencyCoordinator(idempotencyRepository, configConfig)
 	idempotencyCleanupService := service.ProvideIdempotencyCleanupService(idempotencyRepository, configConfig)
 	handlers := handler.ProvideHandlers(authHandler, userHandler, apiKeyHandler, playgroundHandler, usageHandler, redeemHandler, subscriptionHandler, announcementHandler, channelMonitorUserHandler, adminHandlers, gatewayHandler, openAIGatewayHandler, adobeMediaHandler, handlerSettingHandler, totpHandler, handlerPaymentHandler, paymentWebhookHandler, availableChannelHandler, asyncImageHandler, batchImageHandler, qqBotHandler, idempotencyCoordinator, idempotencyCleanupService)

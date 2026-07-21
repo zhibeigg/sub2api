@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -18,14 +19,15 @@ import (
 )
 
 type QQBotHandler struct {
-	service *service.QQBotService
-	config  *qqbot.ConfigManager
-	runtime *qqbot.Runtime
-	queue   *qqbot.ReliableQueue
+	service      *service.QQBotService
+	config       *qqbot.ConfigManager
+	runtime      *qqbot.Runtime
+	queue        *qqbot.ReliableQueue
+	channelCheck *qqbot.ChannelCheckService
 }
 
-func NewQQBotHandler(qqBotService *service.QQBotService, configManager *qqbot.ConfigManager, runtime *qqbot.Runtime, queue *qqbot.ReliableQueue) *QQBotHandler {
-	return &QQBotHandler{service: qqBotService, config: configManager, runtime: runtime, queue: queue}
+func NewQQBotHandler(qqBotService *service.QQBotService, configManager *qqbot.ConfigManager, runtime *qqbot.Runtime, queue *qqbot.ReliableQueue, channelCheck *qqbot.ChannelCheckService) *QQBotHandler {
+	return &QQBotHandler{service: qqBotService, config: configManager, runtime: runtime, queue: queue, channelCheck: channelCheck}
 }
 
 func (h *QQBotHandler) PrepareBinding(c *gin.Context) {
@@ -82,6 +84,12 @@ func (h *QQBotHandler) GetSettings(c *gin.Context) {
 func (h *QQBotHandler) UpdateSettings(c *gin.Context) {
 	var input service.QQBotSettingsUpdate
 	if err := c.ShouldBindJSON(&input); err != nil {
+		response.ErrorFrom(c, service.ErrQQBotInvalidInput)
+		return
+	}
+	// /check activation is managed by the embedded admin config endpoint so the
+	// stable shared signing key and public HTTPS URL are validated atomically.
+	if input.ChannelCheckEnabled != nil {
 		response.ErrorFrom(c, service.ErrQQBotInvalidInput)
 		return
 	}
@@ -159,6 +167,65 @@ func (h *QQBotHandler) Webhook(c *gin.Context) {
 		return
 	}
 	h.runtime.ServeWebhook(c.Writer, c.Request)
+}
+
+func (h *QQBotHandler) ChannelStatusImage(c *gin.Context) {
+	c.Header("Cache-Control", "private, no-store, max-age=0")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("X-Robots-Tag", "noindex, nofollow")
+	version, expires, nonce, signature, ok := channelCheckSignatureQuery(c)
+	if !ok {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	if h.channelCheck == nil {
+		c.Status(http.StatusServiceUnavailable)
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
+	defer cancel()
+	imageBytes, err := h.channelCheck.RenderSignedPNG(ctx, version, expires, nonce, signature)
+	if err != nil {
+		if errors.Is(err, qqbot.ErrInvalidChannelCheckSignature) || errors.Is(err, qqbot.ErrChannelCheckFetchLimit) {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Status(http.StatusServiceUnavailable)
+		return
+	}
+	c.Header("Content-Disposition", "inline; filename=channel-status.png")
+	c.Data(http.StatusOK, "image/png", imageBytes)
+}
+
+func channelCheckSignatureQuery(c *gin.Context) (version, expires, nonce, signature string, ok bool) {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return "", "", "", "", false
+	}
+	query, err := url.ParseQuery(c.Request.URL.RawQuery)
+	if err != nil || len(query) != 4 {
+		return "", "", "", "", false
+	}
+	readOne := func(key string) (string, bool) {
+		values, exists := query[key]
+		if !exists || len(values) != 1 {
+			return "", false
+		}
+		value := strings.TrimSpace(values[0])
+		return value, value != ""
+	}
+	if version, ok = readOne("v"); !ok {
+		return "", "", "", "", false
+	}
+	if expires, ok = readOne("exp"); !ok {
+		return "", "", "", "", false
+	}
+	if nonce, ok = readOne("nonce"); !ok {
+		return "", "", "", "", false
+	}
+	if signature, ok = readOne("sig"); !ok {
+		return "", "", "", "", false
+	}
+	return version, expires, nonce, signature, true
 }
 
 func (h *QQBotHandler) PublicInspectBinding(c *gin.Context) {

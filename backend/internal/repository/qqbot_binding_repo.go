@@ -39,6 +39,19 @@ WHERE i.provider_type = 'qqbot'
   AND u.deleted_at IS NULL
 LIMIT 1`
 
+	qqBotHasActiveBoundIdentitySQL = `
+SELECT EXISTS (
+    SELECT 1
+    FROM auth_identities i
+    JOIN users u ON u.id = i.user_id
+    WHERE i.provider_type = 'qqbot'
+      AND i.provider_key = $1
+      AND i.provider_subject = $2
+      AND i.verified_at IS NOT NULL
+      AND u.status = 'active'
+      AND u.deleted_at IS NULL
+)`
+
 	qqBotUpdateEmailDeliveryStatusSQL = `
 UPDATE qqbot_binding_challenges
 SET email_status = $1::varchar,
@@ -69,6 +82,19 @@ func (r *qqBotBindingRepository) FindBoundEmail(ctx context.Context, botAppID, p
 		return "", false, err
 	}
 	return strings.TrimSpace(email), true, nil
+}
+
+func (r *qqBotBindingRepository) HasActiveBoundIdentity(ctx context.Context, botAppID, providerSubject string) (bool, error) {
+	providerKey := "qqbot:" + strings.TrimSpace(botAppID)
+	providerSubject = strings.TrimSpace(providerSubject)
+	if providerKey == "qqbot:" || providerSubject == "" {
+		return false, nil
+	}
+	var found bool
+	if err := r.db.QueryRowContext(ctx, qqBotHasActiveBoundIdentitySQL, providerKey, providerSubject).Scan(&found); err != nil {
+		return false, err
+	}
+	return found, nil
 }
 
 func (r *qqBotBindingRepository) CreateChallenge(ctx context.Context, input service.QQBotChallengeCreateInput) (service.QQBotBindingRecord, bool, error) {

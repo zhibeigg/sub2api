@@ -15,6 +15,7 @@ export interface QQBotConfig {
   link_ttl_minutes: number
   welcome_enabled: boolean
   first_interaction_enabled: boolean
+  channel_check_enabled: boolean
   help_message: string
   allowed_group_ids: string[]
   allowed_guild_ids: string[]
@@ -49,6 +50,7 @@ export interface QQBotUpdateRequest {
   link_ttl_minutes: number
   welcome_enabled: boolean
   first_interaction_enabled: boolean
+  channel_check_enabled: boolean
   help_message: string
   allowed_group_ids: string[]
   allowed_guild_ids: string[]
@@ -62,6 +64,7 @@ export interface QQBotProbeRequest {
   sandbox: boolean
   public_base_url: string
   api_timeout_ms: number
+  channel_check_enabled: boolean
 }
 
 export interface QQBotProbeResult {

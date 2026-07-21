@@ -10,9 +10,10 @@ import (
 type CommandKind string
 
 const (
-	CommandNone CommandKind = ""
-	CommandHelp CommandKind = "help"
-	CommandBind CommandKind = "bind"
+	CommandNone  CommandKind = ""
+	CommandHelp  CommandKind = "help"
+	CommandBind  CommandKind = "bind"
+	CommandCheck CommandKind = "check"
 )
 
 type Command struct {
@@ -42,6 +43,8 @@ func ParseCommand(raw string) Command {
 			return Command{Kind: CommandBind}
 		}
 		return Command{Kind: CommandBind, Email: NormalizeEmail(fields[1])}
+	case "/check", "check":
+		return Command{Kind: CommandCheck}
 	default:
 		return Command{}
 	}

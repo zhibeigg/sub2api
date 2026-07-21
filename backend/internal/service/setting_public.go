@@ -409,6 +409,26 @@ func (s *SettingService) GetChannelMonitorRuntime(ctx context.Context) ChannelMo
 	}
 }
 
+// GetChannelMonitorRuntimeStrict reads the channel monitor switches without the
+// runner's fail-open fallback. Security-sensitive consumers such as QQBot
+// status-image delivery must stop when the setting store is unavailable.
+func (s *SettingService) GetChannelMonitorRuntimeStrict(ctx context.Context) (ChannelMonitorRuntime, error) {
+	if s == nil || s.settingRepo == nil {
+		return ChannelMonitorRuntime{}, fmt.Errorf("channel monitor settings unavailable")
+	}
+	vals, err := s.settingRepo.GetMultiple(ctx, []string{
+		SettingKeyChannelMonitorEnabled,
+		SettingKeyChannelMonitorDefaultIntervalSeconds,
+	})
+	if err != nil {
+		return ChannelMonitorRuntime{}, fmt.Errorf("read channel monitor settings: %w", err)
+	}
+	return ChannelMonitorRuntime{
+		Enabled:                !isFalseSettingValue(vals[SettingKeyChannelMonitorEnabled]),
+		DefaultIntervalSeconds: parseChannelMonitorInterval(vals[SettingKeyChannelMonitorDefaultIntervalSeconds]),
+	}, nil
+}
+
 // AvailableChannelsRuntime is the lightweight view of the available-channels feature
 // switch consumed by the user-facing handler.
 type AvailableChannelsRuntime struct {

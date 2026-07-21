@@ -2,8 +2,8 @@ FROM golang:1.26.5-alpine
 
 WORKDIR /app
 
-# 安装必要的工具
-RUN apk add --no-cache git
+# 安装必要的工具与运行时 CJK 字体
+RUN apk add --no-cache git font-noto-cjk
 
 # 复制go.mod和go.sum
 COPY go.mod go.sum ./

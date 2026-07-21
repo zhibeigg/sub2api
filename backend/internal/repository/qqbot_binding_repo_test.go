@@ -46,6 +46,34 @@ func TestQQBotBindingRepositoryFindBoundEmailReturnsNotFound(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestQQBotBindingRepositoryHasActiveBoundIdentity(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	mock.ExpectQuery(regexp.QuoteMeta(qqBotHasActiveBoundIdentitySQL)).
+		WithArgs("qqbot:app-1", "c2c:openid-1").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+
+	repo := &qqBotBindingRepository{db: db}
+	found, err := repo.HasActiveBoundIdentity(context.Background(), " app-1 ", " c2c:openid-1 ")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestQQBotBindingRepositoryHasActiveBoundIdentityRejectsEmptyIdentity(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+
+	repo := &qqBotBindingRepository{db: db}
+	found, err := repo.HasActiveBoundIdentity(context.Background(), "", "")
+	require.NoError(t, err)
+	require.False(t, found)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestQQBotBindingRepositoryUpdateEmailStatusUsesTypedParameters(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)

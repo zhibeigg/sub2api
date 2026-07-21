@@ -5,10 +5,11 @@
       <p class="mt-1 text-sm text-gray-500 dark:text-dark-300">{{ t('admin.qqbot.messages.description') }}</p>
     </div>
 
-    <section class="grid gap-4 rounded-xl border border-gray-200 bg-white p-5 md:grid-cols-3 dark:border-dark-700 dark:bg-dark-800">
+    <section class="grid gap-4 rounded-xl border border-gray-200 bg-white p-5 md:grid-cols-2 xl:grid-cols-4 dark:border-dark-700 dark:bg-dark-800">
       <ToggleField :checked="draft.binding_enabled" :label="t('admin.qqbot.messages.bindingEnabled')" :hint="t('admin.qqbot.messages.bindingEnabledHint')" @change="update('binding_enabled', $event)" />
       <ToggleField :checked="draft.welcome_enabled" :label="t('admin.qqbot.messages.welcomeEnabled')" :hint="t('admin.qqbot.messages.welcomeEnabledHint')" @change="update('welcome_enabled', $event)" />
       <ToggleField :checked="draft.first_interaction_enabled" :label="t('admin.qqbot.messages.firstInteraction')" :hint="t('admin.qqbot.messages.firstInteractionHint')" @change="update('first_interaction_enabled', $event)" />
+      <ToggleField :checked="draft.channel_check_enabled" :label="t('admin.qqbot.messages.channelCheckEnabled')" :hint="t('admin.qqbot.messages.channelCheckEnabledHint')" @change="update('channel_check_enabled', $event)" />
     </section>
 
     <section class="grid gap-5 rounded-xl border border-gray-200 bg-white p-5 sm:grid-cols-2 dark:border-dark-700 dark:bg-dark-800">

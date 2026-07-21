@@ -99,6 +99,7 @@ type PublicConfig struct {
 	LinkTTLMinutes          int               `json:"link_ttl_minutes"`
 	WelcomeEnabled          bool              `json:"welcome_enabled"`
 	FirstInteractionEnabled bool              `json:"first_interaction_enabled"`
+	ChannelCheckEnabled     bool              `json:"channel_check_enabled"`
 	HelpMessage             string            `json:"help_message"`
 	AllowedGroupIDs         []string          `json:"allowed_group_ids"`
 	AllowedGuildIDs         []string          `json:"allowed_guild_ids"`
@@ -125,6 +126,7 @@ type UpdateConfigRequest struct {
 	LinkTTLMinutes          int               `json:"link_ttl_minutes"`
 	WelcomeEnabled          bool              `json:"welcome_enabled"`
 	FirstInteractionEnabled bool              `json:"first_interaction_enabled"`
+	ChannelCheckEnabled     bool              `json:"channel_check_enabled"`
 	HelpMessage             string            `json:"help_message"`
 	AllowedGroupIDs         []string          `json:"allowed_group_ids"`
 	AllowedGuildIDs         []string          `json:"allowed_guild_ids"`
@@ -138,6 +140,7 @@ func (r UpdateConfigRequest) businessUpdate() service.QQBotSettingsUpdate {
 		LinkTTLMinutes:          &r.LinkTTLMinutes,
 		WelcomeEnabled:          &r.WelcomeEnabled,
 		FirstInteractionEnabled: &r.FirstInteractionEnabled,
+		ChannelCheckEnabled:     &r.ChannelCheckEnabled,
 		HelpMessage:             &r.HelpMessage,
 		AllowedGroupIDs:         &r.AllowedGroupIDs,
 		AllowedGuildIDs:         &r.AllowedGuildIDs,
@@ -173,12 +176,13 @@ type RuntimeState struct {
 }
 
 type ProbeRequest struct {
-	AppID         string `json:"app_id"`
-	AppSecret     string `json:"app_secret,omitempty"`
-	WebhookSecret string `json:"webhook_secret,omitempty"`
-	Sandbox       bool   `json:"sandbox"`
-	PublicBaseURL string `json:"public_base_url"`
-	APITimeoutMS  int    `json:"api_timeout_ms"`
+	AppID               string `json:"app_id"`
+	AppSecret           string `json:"app_secret,omitempty"`
+	WebhookSecret       string `json:"webhook_secret,omitempty"`
+	Sandbox             bool   `json:"sandbox"`
+	PublicBaseURL       string `json:"public_base_url"`
+	APITimeoutMS        int    `json:"api_timeout_ms"`
+	ChannelCheckEnabled *bool  `json:"channel_check_enabled,omitempty"`
 }
 
 type ProbeResult struct {
@@ -280,6 +284,7 @@ func publicFromStorage(cfg storageConfig, settings service.QQBotSettings) Public
 		LinkTTLMinutes:          settings.LinkTTLMinutes,
 		WelcomeEnabled:          settings.WelcomeEnabled,
 		FirstInteractionEnabled: settings.FirstInteractionEnabled,
+		ChannelCheckEnabled:     settings.ChannelCheckEnabled,
 		HelpMessage:             settings.HelpMessage,
 		AllowedGroupIDs:         append([]string{}, settings.AllowedGroupIDs...),
 		AllowedGuildIDs:         append([]string{}, settings.AllowedGuildIDs...),
@@ -304,7 +309,7 @@ func configChangeSummary(cfg storageConfig, settings service.QQBotSettings, chan
 	sort.Strings(ids)
 	digest := sha256.Sum256([]byte(strings.Join(ids, "\n")))
 	appDigest := sha256.Sum256([]byte(cfg.AppID))
-	payload := map[string]any{"enabled": cfg.Enabled, "sandbox": cfg.Sandbox, "worker_count": cfg.WorkerCount, "queue_capacity": cfg.QueueCapacity, "api_timeout_ms": cfg.APITimeoutMS, "app_id_hash": hex.EncodeToString(appDigest[:8]), "allowlist_count": len(ids), "allowlist_hash": hex.EncodeToString(digest[:8]), "changed_secrets": changedSecrets}
+	payload := map[string]any{"enabled": cfg.Enabled, "sandbox": cfg.Sandbox, "worker_count": cfg.WorkerCount, "queue_capacity": cfg.QueueCapacity, "api_timeout_ms": cfg.APITimeoutMS, "channel_check_enabled": settings.ChannelCheckEnabled, "app_id_hash": hex.EncodeToString(appDigest[:8]), "allowlist_count": len(ids), "allowlist_hash": hex.EncodeToString(digest[:8]), "changed_secrets": changedSecrets}
 	raw, _ := json.Marshal(payload)
 	return string(raw)
 }

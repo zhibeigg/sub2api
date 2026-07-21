@@ -6,6 +6,7 @@ import {
   configToDraft,
   credentialFingerprint,
   credentialsReady,
+  draftFingerprint,
   parseChannelMapping,
   validateDraft,
 } from '../viewModel'
@@ -25,6 +26,7 @@ const config = (): QQBotConfig => ({
   link_ttl_minutes: 15,
   welcome_enabled: true,
   first_interaction_enabled: true,
+  channel_check_enabled: false,
   help_message: 'help',
   allowed_group_ids: ['2', '1'],
   allowed_guild_ids: ['g1'],
@@ -56,6 +58,19 @@ describe('QQBot view model', () => {
     })
   })
 
+  it('round-trips the channel status image switch and includes it in dirty-state fingerprints', () => {
+    const draft = configToDraft(config())
+    expect(draft.channel_check_enabled).toBe(false)
+    expect(buildUpdateRequest(draft).channel_check_enabled).toBe(false)
+    expect(buildProbeRequest(draft).channel_check_enabled).toBe(false)
+
+    const before = draftFingerprint(draft)
+    draft.channel_check_enabled = true
+
+    expect(buildUpdateRequest(draft).channel_check_enabled).toBe(true)
+    expect(draftFingerprint(draft)).not.toBe(before)
+  })
+
   it('requires configured or newly entered credentials before enablement', () => {
     const draft = configToDraft({ ...config(), app_secret_configured: false })
     expect(credentialsReady(draft)).toBe(false)
@@ -74,6 +89,20 @@ describe('QQBot view model', () => {
     expect(parseChannelMapping('broken line')).toBeNull()
     draft.guild_welcome_channels_text = 'broken line'
     expect(validateDraft(draft)).toContain('mapping')
+  })
+
+  it('requires a public root HTTPS URL while channel status images are enabled', () => {
+    const draft = configToDraft(config())
+    draft.channel_check_enabled = true
+
+    draft.public_base_url = 'http://qqbot.example.com'
+    expect(validateDraft(draft)).toContain('publicUrl')
+    draft.public_base_url = 'https://qqbot.example.com/proxy'
+    expect(validateDraft(draft)).toContain('publicUrl')
+    draft.public_base_url = 'https://127.0.0.1'
+    expect(validateDraft(draft)).toContain('publicUrl')
+    draft.public_base_url = 'https://qqbot.example.com'
+    expect(validateDraft(draft)).not.toContain('publicUrl')
   })
 
   it('changes the credential fingerprint when a secret is rotated', () => {

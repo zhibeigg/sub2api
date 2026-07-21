@@ -32,11 +32,12 @@ type configSnapshot struct {
 }
 
 type ConfigManager struct {
-	db                 *sql.DB
-	settings           service.SettingRepository
-	redis              *redis.Client
-	encryptor          service.SecretEncryptor
-	bootstrapPublicURL string
+	db                    *sql.DB
+	settings              service.SettingRepository
+	redis                 *redis.Client
+	encryptor             service.SecretEncryptor
+	bootstrapPublicURL    string
+	stableChannelCheckKey bool
 
 	snapshot atomic.Pointer[configSnapshot]
 	expected atomic.Int64
@@ -53,10 +54,12 @@ type ConfigManager struct {
 
 func NewConfigManager(db *sql.DB, settings service.SettingRepository, redisClient *redis.Client, encryptor service.SecretEncryptor, cfg *config.Config) *ConfigManager {
 	publicURL := ""
+	stableChannelCheckKey := false
 	if cfg != nil {
 		publicURL = cfg.QQBotIntegration.PublicBaseURL
+		stableChannelCheckKey = cfg.Totp.EncryptionKeyConfigured
 	}
-	return &ConfigManager{db: db, settings: settings, redis: redisClient, encryptor: encryptor, bootstrapPublicURL: publicURL}
+	return &ConfigManager{db: db, settings: settings, redis: redisClient, encryptor: encryptor, bootstrapPublicURL: publicURL, stableChannelCheckKey: stableChannelCheckKey}
 }
 
 func (m *ConfigManager) SetOnReload(callback func(context.Context, ActiveConfig) error) {
@@ -153,6 +156,10 @@ func (m *ConfigManager) Reload(ctx context.Context) error {
 		return err
 	}
 	business := parseBusinessSettings(values)
+	if err := m.validateChannelCheckActivation(active.Enabled, business.ChannelCheckEnabled, active.PublicBaseURL); err != nil {
+		m.recordLoadError("channel_check_config_invalid")
+		return err
+	}
 	now := time.Now().UTC()
 	m.expected.Store(storage.ConfigVersion)
 	m.snapshot.Store(&configSnapshot{storage: storage, active: active, settings: business, loadedAt: now})
@@ -245,7 +252,27 @@ func (m *ConfigManager) ResolveProbeConfig(req ProbeRequest) (ActiveConfig, erro
 	if candidate.AppSecret == "" || candidate.WebhookSecret == "" || validateStorageConfig(validation, true) != nil {
 		return ActiveConfig{}, ErrInvalidConfig
 	}
+	channelCheckEnabled := m.BusinessSettings().ChannelCheckEnabled
+	if req.ChannelCheckEnabled != nil {
+		channelCheckEnabled = *req.ChannelCheckEnabled
+	}
+	if err := m.validateChannelCheckActivation(true, channelCheckEnabled, candidate.PublicBaseURL); err != nil {
+		return ActiveConfig{}, err
+	}
 	return candidate, nil
+}
+
+func (m *ConfigManager) validateChannelCheckActivation(runtimeEnabled, channelCheckEnabled bool, publicBaseURL string) error {
+	if !runtimeEnabled || !channelCheckEnabled {
+		return nil
+	}
+	if m == nil || !m.stableChannelCheckKey {
+		return ErrInvalidConfig
+	}
+	if _, err := validateChannelCheckPublicBaseURL(publicBaseURL); err != nil {
+		return ErrInvalidConfig
+	}
+	return nil
 }
 
 func (m *ConfigManager) RecordSuccessfulProbe(ctx context.Context, cfg ActiveConfig) error {
@@ -360,6 +387,9 @@ func (m *ConfigManager) Save(ctx context.Context, req UpdateConfigRequest, actor
 	}
 	normalizeStorageConfig(&next)
 	if err := validateStorageConfig(next, next.Enabled); err != nil {
+		return PublicConfig{}, err
+	}
+	if err := m.validateChannelCheckActivation(next.Enabled, business.ChannelCheckEnabled, next.PublicBaseURL); err != nil {
 		return PublicConfig{}, err
 	}
 	credentialsChanged := (!current.Enabled && next.Enabled) || current.AppID != next.AppID || current.Sandbox != next.Sandbox || strings.TrimSpace(req.AppSecret) != "" || strings.TrimSpace(req.WebhookSecret) != ""
@@ -545,10 +575,10 @@ func (m *ConfigManager) clearLoadError() {
 }
 
 func qqBotBusinessSettingKeys() []string {
-	return []string{service.SettingKeyQQBotBindingEnabled, service.SettingKeyQQBotFirstBindBonus, service.SettingKeyQQBotLinkTTLMinutes, service.SettingKeyQQBotWelcomeEnabled, service.SettingKeyQQBotFirstInteractionEnabled, service.SettingKeyQQBotHelpMessage, service.SettingKeyQQBotAllowedGroupIDs, service.SettingKeyQQBotAllowedGuildIDs, service.SettingKeyQQBotGuildWelcomeChannels}
+	return []string{service.SettingKeyQQBotBindingEnabled, service.SettingKeyQQBotFirstBindBonus, service.SettingKeyQQBotLinkTTLMinutes, service.SettingKeyQQBotWelcomeEnabled, service.SettingKeyQQBotFirstInteractionEnabled, service.SettingKeyQQBotChannelCheckEnabled, service.SettingKeyQQBotHelpMessage, service.SettingKeyQQBotAllowedGroupIDs, service.SettingKeyQQBotAllowedGuildIDs, service.SettingKeyQQBotGuildWelcomeChannels}
 }
 func defaultBusinessSettings() service.QQBotSettings {
-	return service.QQBotSettings{BindingEnabled: true, FirstBindBonus: 5, LinkTTLMinutes: 15, WelcomeEnabled: true, FirstInteractionEnabled: true, HelpMessage: "欢迎使用 PokeAPI 账户助手。\n\n绑定账户：请私聊发送 /bind 你的邮箱\n查看帮助：发送 /help\n\n验证链接只会发送到 Sub2API 账户邮箱。数字 QQ 仅作为展示信息，实际身份以机器人 OpenID 为准。", AllowedGroupIDs: []string{}, AllowedGuildIDs: []string{}, GuildWelcomeChannels: map[string]string{}}
+	return service.QQBotSettings{BindingEnabled: true, FirstBindBonus: 5, LinkTTLMinutes: 15, WelcomeEnabled: true, FirstInteractionEnabled: true, ChannelCheckEnabled: false, HelpMessage: defaultHelpMessage, AllowedGroupIDs: []string{}, AllowedGuildIDs: []string{}, GuildWelcomeChannels: map[string]string{}}
 }
 func parseBusinessSettings(values map[string]string) service.QQBotSettings {
 	cfg := defaultBusinessSettings()
@@ -566,6 +596,9 @@ func parseBusinessSettings(values map[string]string) service.QQBotSettings {
 	}
 	if value, ok := values[service.SettingKeyQQBotFirstInteractionEnabled]; ok {
 		cfg.FirstInteractionEnabled, _ = strconv.ParseBool(value)
+	}
+	if value, ok := values[service.SettingKeyQQBotChannelCheckEnabled]; ok {
+		cfg.ChannelCheckEnabled, _ = strconv.ParseBool(value)
 	}
 	if value := strings.TrimSpace(values[service.SettingKeyQQBotHelpMessage]); value != "" {
 		cfg.HelpMessage = value
@@ -594,6 +627,9 @@ func applyBusinessUpdate(current service.QQBotSettings, update service.QQBotSett
 	if update.FirstInteractionEnabled != nil {
 		current.FirstInteractionEnabled = *update.FirstInteractionEnabled
 	}
+	if update.ChannelCheckEnabled != nil {
+		current.ChannelCheckEnabled = *update.ChannelCheckEnabled
+	}
 	if update.HelpMessage != nil {
 		current.HelpMessage = strings.TrimSpace(*update.HelpMessage)
 	}
@@ -615,7 +651,7 @@ func businessSettingsValues(cfg service.QQBotSettings) map[string]string {
 	groups, _ := json.Marshal(cfg.AllowedGroupIDs)
 	guilds, _ := json.Marshal(cfg.AllowedGuildIDs)
 	channels, _ := json.Marshal(cfg.GuildWelcomeChannels)
-	return map[string]string{service.SettingKeyQQBotBindingEnabled: strconv.FormatBool(cfg.BindingEnabled), service.SettingKeyQQBotFirstBindBonus: strconv.FormatFloat(cfg.FirstBindBonus, 'f', -1, 64), service.SettingKeyQQBotLinkTTLMinutes: strconv.Itoa(cfg.LinkTTLMinutes), service.SettingKeyQQBotWelcomeEnabled: strconv.FormatBool(cfg.WelcomeEnabled), service.SettingKeyQQBotFirstInteractionEnabled: strconv.FormatBool(cfg.FirstInteractionEnabled), service.SettingKeyQQBotHelpMessage: cfg.HelpMessage, service.SettingKeyQQBotAllowedGroupIDs: string(groups), service.SettingKeyQQBotAllowedGuildIDs: string(guilds), service.SettingKeyQQBotGuildWelcomeChannels: string(channels)}
+	return map[string]string{service.SettingKeyQQBotBindingEnabled: strconv.FormatBool(cfg.BindingEnabled), service.SettingKeyQQBotFirstBindBonus: strconv.FormatFloat(cfg.FirstBindBonus, 'f', -1, 64), service.SettingKeyQQBotLinkTTLMinutes: strconv.Itoa(cfg.LinkTTLMinutes), service.SettingKeyQQBotWelcomeEnabled: strconv.FormatBool(cfg.WelcomeEnabled), service.SettingKeyQQBotFirstInteractionEnabled: strconv.FormatBool(cfg.FirstInteractionEnabled), service.SettingKeyQQBotChannelCheckEnabled: strconv.FormatBool(cfg.ChannelCheckEnabled), service.SettingKeyQQBotHelpMessage: cfg.HelpMessage, service.SettingKeyQQBotAllowedGroupIDs: string(groups), service.SettingKeyQQBotAllowedGuildIDs: string(guilds), service.SettingKeyQQBotGuildWelcomeChannels: string(channels)}
 }
 func normalizeIDs(values []string) []string {
 	set := map[string]struct{}{}

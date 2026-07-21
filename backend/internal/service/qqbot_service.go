@@ -24,7 +24,7 @@ const (
 	defaultQQBotFirstBindBonus = 5.0
 	defaultQQBotLinkTTLMinutes = 15
 	qqBotDeliveryCallbackTTL   = 10 * time.Second
-	qqBotDefaultHelpMessage    = "欢迎使用 PokeAPI 账户助手。\n\n绑定账户：请私聊发送 /bind 你的邮箱\n查看帮助：发送 /help\n\n验证链接只会发送到 Sub2API 账户邮箱。数字 QQ 仅作为展示信息，实际身份以机器人 OpenID 为准。"
+	qqBotDefaultHelpMessage    = "欢迎使用 PokeAPI 账户助手。\n\n绑定账户：请私聊发送 /bind 你的邮箱\n查看渠道状态：发送 /check\n查看帮助：发送 /help\n\n验证链接只会发送到 Sub2API 账户邮箱。数字 QQ 仅作为展示信息，实际身份以机器人 OpenID 为准。"
 )
 
 func ProvideQQBotUserLookup(repo UserRepository) QQBotUserLookup {
@@ -82,6 +82,13 @@ func (s *QQBotService) getPublicBaseURL() string {
 	s.publicBaseURLMu.RLock()
 	defer s.publicBaseURLMu.RUnlock()
 	return s.publicBaseURL
+}
+
+func (s *QQBotService) HasActiveBoundIdentity(ctx context.Context, botAppID, providerSubject string) (bool, error) {
+	if s == nil || s.repo == nil {
+		return false, ErrQQBotNotConfigured
+	}
+	return s.repo.HasActiveBoundIdentity(ctx, strings.TrimSpace(botAppID), strings.TrimSpace(providerSubject))
 }
 
 func (s *QQBotService) PrepareBinding(ctx context.Context, input QQBotPrepareBindingRequest) (QQBotPrepareBindingResponse, error) {
@@ -296,6 +303,7 @@ func (s *QQBotService) GetSettings(ctx context.Context) (QQBotSettings, error) {
 		SettingKeyQQBotLinkTTLMinutes,
 		SettingKeyQQBotWelcomeEnabled,
 		SettingKeyQQBotFirstInteractionEnabled,
+		SettingKeyQQBotChannelCheckEnabled,
 		SettingKeyQQBotHelpMessage,
 		SettingKeyQQBotAllowedGroupIDs,
 		SettingKeyQQBotAllowedGuildIDs,
@@ -311,6 +319,7 @@ func (s *QQBotService) GetSettings(ctx context.Context) (QQBotSettings, error) {
 	settings.LinkTTLMinutes = parseQQBotInt(values[SettingKeyQQBotLinkTTLMinutes], defaults.LinkTTLMinutes)
 	settings.WelcomeEnabled = parseQQBotBool(values[SettingKeyQQBotWelcomeEnabled], defaults.WelcomeEnabled)
 	settings.FirstInteractionEnabled = parseQQBotBool(values[SettingKeyQQBotFirstInteractionEnabled], defaults.FirstInteractionEnabled)
+	settings.ChannelCheckEnabled = parseQQBotBool(values[SettingKeyQQBotChannelCheckEnabled], defaults.ChannelCheckEnabled)
 	if value, ok := values[SettingKeyQQBotHelpMessage]; ok {
 		settings.HelpMessage = value
 	}
@@ -355,6 +364,9 @@ func (s *QQBotService) UpdateSettings(ctx context.Context, update QQBotSettingsU
 	if update.FirstInteractionEnabled != nil {
 		current.FirstInteractionEnabled = *update.FirstInteractionEnabled
 	}
+	if update.ChannelCheckEnabled != nil {
+		current.ChannelCheckEnabled = *update.ChannelCheckEnabled
+	}
 	if update.HelpMessage != nil {
 		if len([]rune(*update.HelpMessage)) > 4000 {
 			return QQBotSettings{}, ErrQQBotInvalidInput
@@ -388,6 +400,7 @@ func (s *QQBotService) UpdateSettings(ctx context.Context, update QQBotSettingsU
 		SettingKeyQQBotLinkTTLMinutes:          strconv.Itoa(current.LinkTTLMinutes),
 		SettingKeyQQBotWelcomeEnabled:          strconv.FormatBool(current.WelcomeEnabled),
 		SettingKeyQQBotFirstInteractionEnabled: strconv.FormatBool(current.FirstInteractionEnabled),
+		SettingKeyQQBotChannelCheckEnabled:     strconv.FormatBool(current.ChannelCheckEnabled),
 		SettingKeyQQBotHelpMessage:             current.HelpMessage,
 		SettingKeyQQBotAllowedGroupIDs:         string(groupJSON),
 		SettingKeyQQBotAllowedGuildIDs:         string(guildJSON),
@@ -405,6 +418,7 @@ func (s *QQBotService) UpdateSettings(ctx context.Context, update QQBotSettingsU
 			"link_ttl_minutes":          current.LinkTTLMinutes,
 			"welcome_enabled":           current.WelcomeEnabled,
 			"first_interaction_enabled": current.FirstInteractionEnabled,
+			"channel_check_enabled":     current.ChannelCheckEnabled,
 			"allowed_group_count":       len(current.AllowedGroupIDs),
 			"allowed_guild_count":       len(current.AllowedGuildIDs),
 		}); err != nil {
@@ -519,6 +533,7 @@ func defaultQQBotSettings() QQBotSettings {
 		LinkTTLMinutes:          defaultQQBotLinkTTLMinutes,
 		WelcomeEnabled:          true,
 		FirstInteractionEnabled: true,
+		ChannelCheckEnabled:     false,
 		HelpMessage:             qqBotDefaultHelpMessage,
 		AllowedGroupIDs:         []string{},
 		AllowedGuildIDs:         []string{},

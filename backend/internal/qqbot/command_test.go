@@ -11,6 +11,8 @@ func TestParseCommandAndEmailHelpers(t *testing.T) {
 		{"<@!bot> /bind User@Example.com", CommandBind, "user@example.com"},
 		{"绑定 user@example.com", CommandBind, "user@example.com"},
 		{"/帮助", CommandHelp, ""},
+		{"/check", CommandCheck, ""},
+		{"<@!bot> check ignored", CommandCheck, ""},
 		{"hello", CommandNone, ""},
 	}
 	for _, test := range tests {

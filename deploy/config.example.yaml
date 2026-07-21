@@ -94,7 +94,12 @@ server:
 # Keep it disabled for normal built-in operation and remove its environment
 # secret after the standalone instance is retired.
 # 内置 QQBot 请在“管理后台 -> QQBot”中配置，机器人密钥加密保存到 PostgreSQL；
-# 不要在此文件填写腾讯 AppSecret 或 Webhook Secret。以下 HMAC 桥接仅用于迁移期回滚旧容器，
+# 不要在此文件填写腾讯 AppSecret 或 Webhook Secret。后台中的 PublicBaseURL 必须是腾讯服务器
+# 可从公网访问的 HTTPS 根域地址，不得包含路径前缀、查询参数或内网主机；它用于 Webhook、
+# 绑定页和短期 HMAC 签名 PNG URL。/check 管理开关默认关闭；启用前必须显式配置并在所有实例共享
+# totp.encryption_key；反向代理必须避免记录图片签名 URL 的查询参数。
+# /check 图片渲染可选通过环境变量 QQBOT_CHANNEL_CHECK_FONT_PATH 指定自定义 CJK 字体文件；
+# 未设置时运行镜像使用 font-noto-cjk。以下 HMAC 桥接仅用于迁移期回滚旧容器，
 # 正常单体运行时保持关闭，独立实例下线后应移除对应环境变量。
 qqbot_integration:
   enabled: false

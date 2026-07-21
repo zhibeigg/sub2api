@@ -16,6 +16,7 @@ const (
 	queueGroup          = "qqbot-runtime"
 	eventTTL            = 24 * time.Hour
 	welcomeTTL          = 180 * 24 * time.Hour
+	mediaFileInfoTTL    = 24 * time.Hour
 	maxDeliveryAttempts = 5
 )
 
@@ -39,6 +40,23 @@ if count == 1 then
 end
 local ttl = redis.call('PTTL', KEYS[1])
 return {count, ttl}
+`)
+
+var idempotentRateLimitScript = redis.NewScript(`
+if redis.call('EXISTS', KEYS[1]) == 1 then
+  local ttl = redis.call('PTTL', KEYS[2])
+  return {1, ttl}
+end
+local count = redis.call('INCR', KEYS[2])
+if count == 1 then
+  redis.call('PEXPIRE', KEYS[2], ARGV[1])
+end
+local ttl = redis.call('PTTL', KEYS[2])
+if count <= tonumber(ARGV[2]) then
+  redis.call('SET', KEYS[1], '1', 'PX', ARGV[3])
+  return {1, ttl}
+end
+return {0, ttl}
 `)
 
 type QueuedEvent struct {
@@ -212,6 +230,61 @@ func (q *ReliableQueue) Allow(ctx context.Context, scope string, limit int64, wi
 		ttl = window
 	}
 	return values[0] <= limit, ttl, nil
+}
+
+func (q *ReliableQueue) AllowOnce(ctx context.Context, scope, token string, limit int64, window time.Duration) (bool, time.Duration, error) {
+	if q == nil || q.redis == nil || strings.TrimSpace(token) == "" || limit < 1 || window <= 0 {
+		return false, 0, errors.New("qqbot idempotent rate limiter unavailable")
+	}
+	keys := []string{
+		q.prefix + ":limit:accepted:" + Fingerprint(scope+":"+token),
+		q.prefix + ":limit:" + Fingerprint(scope),
+	}
+	values, err := idempotentRateLimitScript.Run(ctx, q.redis, keys, window.Milliseconds(), limit, eventTTL.Milliseconds()).Int64Slice()
+	if err != nil || len(values) != 2 {
+		if err == nil {
+			err = errors.New("qqbot idempotent rate limiter returned an invalid response")
+		}
+		return false, 0, err
+	}
+	ttl := time.Duration(values[1]) * time.Millisecond
+	if ttl < 0 {
+		ttl = window
+	}
+	return values[0] == 1, ttl, nil
+}
+
+func (q *ReliableQueue) GetMediaFileInfo(ctx context.Context, key string) (string, bool, error) {
+	if q == nil || q.redis == nil || q.encryptor == nil || strings.TrimSpace(key) == "" {
+		return "", false, errors.New("qqbot media store unavailable")
+	}
+	ciphertext, err := q.redis.Get(ctx, q.prefix+":media:"+Fingerprint(key)).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	plain, err := q.encryptor.Decrypt(ciphertext)
+	if err != nil {
+		return "", false, fmt.Errorf("decrypt qqbot media file info: %w", err)
+	}
+	plain = strings.TrimSpace(plain)
+	if plain == "" {
+		return "", false, nil
+	}
+	return plain, true, nil
+}
+
+func (q *ReliableQueue) SetMediaFileInfo(ctx context.Context, key, fileInfo string) error {
+	if q == nil || q.redis == nil || q.encryptor == nil || strings.TrimSpace(key) == "" || strings.TrimSpace(fileInfo) == "" {
+		return errors.New("qqbot media store unavailable")
+	}
+	ciphertext, err := q.encryptor.Encrypt(strings.TrimSpace(fileInfo))
+	if err != nil {
+		return fmt.Errorf("encrypt qqbot media file info: %w", err)
+	}
+	return q.redis.Set(ctx, q.prefix+":media:"+Fingerprint(key), ciphertext, mediaFileInfoTTL).Err()
 }
 
 func (q *ReliableQueue) Stats(ctx context.Context) (int64, int64, int64) {
