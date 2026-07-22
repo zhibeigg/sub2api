@@ -5,6 +5,7 @@ package server_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"math"
@@ -30,14 +31,15 @@ func TestAPIContracts(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
-		name       string
-		setup      func(t *testing.T, deps *contractDeps)
-		method     string
-		path       string
-		body       string
-		headers    map[string]string
-		wantStatus int
-		wantJSON   string
+		name          string
+		setup         func(t *testing.T, deps *contractDeps)
+		method        string
+		path          string
+		body          string
+		headers       map[string]string
+		wantStatus    int
+		wantJSON      string
+		normalizeBody func(t *testing.T, body string) string
 	}{
 		{
 			name:       "GET /api/v1/auth/me",
@@ -412,9 +414,10 @@ func TestAPIContracts(t *testing.T) {
 					},
 				})
 			},
-			method:     http.MethodGet,
-			path:       "/api/v1/subscriptions",
-			wantStatus: http.StatusOK,
+			method:        http.MethodGet,
+			path:          "/api/v1/subscriptions",
+			wantStatus:    http.StatusOK,
+			normalizeBody: normalizeSubscriptionContractWindowStarts,
 			wantJSON: `{
 				"code": 0,
 				"message": "success",
@@ -1352,9 +1355,54 @@ func TestAPIContracts(t *testing.T) {
 
 			status, body := doRequest(t, deps.router, tt.method, tt.path, tt.body, tt.headers)
 			require.Equal(t, tt.wantStatus, status)
+			if tt.normalizeBody != nil {
+				body = tt.normalizeBody(t, body)
+			}
 			require.JSONEq(t, tt.wantJSON, body)
 		})
 	}
+}
+
+func normalizeSubscriptionContractWindowStarts(t *testing.T, body string) string {
+	t.Helper()
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(body), &payload))
+	data, ok := payload["data"].([]any)
+	require.True(t, ok)
+	require.Len(t, data, 1)
+	subscription, ok := data[0].(map[string]any)
+	require.True(t, ok)
+
+	startsAtText, ok := subscription["starts_at"].(string)
+	require.True(t, ok)
+	startsAt, err := time.Parse(time.RFC3339Nano, startsAtText)
+	require.NoError(t, err)
+	now := time.Now()
+
+	for _, window := range []struct {
+		field  string
+		period time.Duration
+	}{
+		{field: "daily_window_start", period: 24 * time.Hour},
+		{field: "weekly_window_start", period: 7 * 24 * time.Hour},
+		{field: "monthly_window_start", period: 30 * 24 * time.Hour},
+	} {
+		windowText, ok := subscription[window.field].(string)
+		require.True(t, ok, "%s should contain the current rolling window start", window.field)
+		windowStart, err := time.Parse(time.RFC3339Nano, windowText)
+		require.NoError(t, err)
+		delta := windowStart.Sub(startsAt)
+		require.False(t, delta < 0)
+		require.Zero(t, delta%window.period)
+		require.False(t, windowStart.After(now))
+		require.True(t, windowStart.Add(window.period).After(now))
+		subscription[window.field] = nil
+	}
+
+	normalized, err := json.Marshal(payload)
+	require.NoError(t, err)
+	return string(normalized)
 }
 
 type contractDeps struct {

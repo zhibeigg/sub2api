@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,16 +21,19 @@ func (r groupBalanceAccountRepoStub) ListByGroup(context.Context, int64) ([]Acco
 }
 
 type groupBalancePoolReaderStub struct {
+	callsMu   sync.Mutex
 	snapshots map[int64]*AccountCapacitySnapshot
 	errors    map[int64]error
 	calls     map[int64]int
 }
 
 func (r *groupBalancePoolReaderStub) GetPoolBalance(_ context.Context, account *Account, _ bool) (*AccountCapacitySnapshot, error) {
+	r.callsMu.Lock()
 	if r.calls == nil {
 		r.calls = make(map[int64]int)
 	}
 	r.calls[account.ID]++
+	r.callsMu.Unlock()
 	if err := r.errors[account.ID]; err != nil {
 		return nil, err
 	}
@@ -37,16 +41,19 @@ func (r *groupBalancePoolReaderStub) GetPoolBalance(_ context.Context, account *
 }
 
 type groupBalanceUsageReaderStub struct {
+	callsMu   sync.Mutex
 	snapshots map[int64]*AccountCapacitySnapshot
 	errors    map[int64]error
 	calls     map[int64]int
 }
 
 func (r *groupBalanceUsageReaderStub) GetCapacityForAggregation(_ context.Context, account *Account) (*AccountCapacitySnapshot, error) {
+	r.callsMu.Lock()
 	if r.calls == nil {
 		r.calls = make(map[int64]int)
 	}
 	r.calls[account.ID]++
+	r.callsMu.Unlock()
 	if err := r.errors[account.ID]; err != nil {
 		return nil, err
 	}
