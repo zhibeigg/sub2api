@@ -89,7 +89,7 @@ async function loadModels(): Promise<void> {
   const controller = new AbortController()
   modelsAbortController = controller
   try {
-    const channels = await userChannelsAPI.getAvailable({ signal: controller.signal })
+    const channels = await userChannelsAPI.getModelSquare({ signal: controller.signal })
     if (controller.signal.aborted) return
 
     const groupedModels = new Map<number, Set<string>>()

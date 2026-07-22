@@ -3,12 +3,13 @@ import { flushPromises, mount } from '@vue/test-utils'
 import GroupMultiSelect from '../GroupMultiSelect.vue'
 import type { Group } from '@/types'
 
-const { getAvailable } = vi.hoisted(() => ({
-  getAvailable: vi.fn()
+const { getAvailable, getModelSquare } = vi.hoisted(() => ({
+  getAvailable: vi.fn(),
+  getModelSquare: vi.fn()
 }))
 
 vi.mock('@/api/channels', () => ({
-  default: { getAvailable }
+  default: { getAvailable, getModelSquare }
 }))
 
 vi.mock('vue-i18n', () => ({
@@ -32,7 +33,7 @@ const SortableGroupBindingPickerStub = {
 
 describe('GroupMultiSelect', () => {
   it('restores per-group model display and platform color distinction', async () => {
-    getAvailable.mockResolvedValueOnce([
+    getModelSquare.mockResolvedValueOnce([
       {
         name: 'Primary channel',
         description: '',
@@ -72,6 +73,7 @@ describe('GroupMultiSelect', () => {
     expect(modelCard.text()).toContain('2 models')
     expect(modelCard.text()).toContain('gpt-5.4')
     expect(modelCard.text()).toContain('codex-auto-review')
-    expect(getAvailable).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) })
+    expect(getModelSquare).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) })
+    expect(getAvailable).not.toHaveBeenCalled()
   })
 })
