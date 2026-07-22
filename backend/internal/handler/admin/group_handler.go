@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -16,13 +17,15 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/sync/errgroup"
 )
 
 // GroupHandler handles admin group management
 type GroupHandler struct {
-	adminService         service.AdminService
-	dashboardService     *service.DashboardService
-	groupCapacityService *service.GroupCapacityService
+	adminService                service.AdminService
+	dashboardService            *service.DashboardService
+	groupCapacityService        *service.GroupCapacityService
+	groupPredictedBalanceReader service.GroupPredictedBalanceReader
 }
 
 type optionalLimitField struct {
@@ -104,11 +107,17 @@ func (f optionalNullableFloatField) ToServicePatch() **float64 {
 }
 
 // NewGroupHandler creates a new admin group handler
-func NewGroupHandler(adminService service.AdminService, dashboardService *service.DashboardService, groupCapacityService *service.GroupCapacityService) *GroupHandler {
+func NewGroupHandler(
+	adminService service.AdminService,
+	dashboardService *service.DashboardService,
+	groupCapacityService *service.GroupCapacityService,
+	groupPredictedBalanceReader service.GroupPredictedBalanceReader,
+) *GroupHandler {
 	return &GroupHandler{
-		adminService:         adminService,
-		dashboardService:     dashboardService,
-		groupCapacityService: groupCapacityService,
+		adminService:                adminService,
+		dashboardService:            dashboardService,
+		groupCapacityService:        groupCapacityService,
+		groupPredictedBalanceReader: groupPredictedBalanceReader,
 	}
 }
 
@@ -606,6 +615,129 @@ func (h *GroupHandler) GetCapacitySummary(c *gin.Context) {
 		return
 	}
 	response.Success(c, results)
+}
+
+const maxPredictedCapacityGroupIDs = 100
+
+type groupPredictedCapacitySummaryResponse struct {
+	GroupID                      int64      `json:"group_id"`
+	Available                    bool       `json:"available"`
+	BalanceComplete              bool       `json:"balance_complete"`
+	BalanceUnlimited             bool       `json:"balance_unlimited"`
+	RemainingBalanceUSD          *float64   `json:"remaining_balance_usd"`
+	KnownRemainingBalanceUSD     *float64   `json:"known_remaining_balance_usd"`
+	RequestsComplete             bool       `json:"requests_complete"`
+	RequestsUnlimited            bool       `json:"requests_unlimited"`
+	EstimatedRemainingRequests   *string    `json:"estimated_remaining_requests"`
+	KnownRequestAccountCount     int        `json:"known_request_account_count"`
+	UnknownRequestAccountCount   int        `json:"unknown_request_account_count"`
+	UnknownAccountCount          int        `json:"unknown_account_count"`
+	StaleAccountCount            int        `json:"stale_account_count"`
+	IncompatibleUnitAccountCount int        `json:"incompatible_unit_account_count"`
+	EvaluatedAt                  *time.Time `json:"evaluated_at"`
+}
+
+// GetPredictedCapacitySummary returns predicted USD balance and request capacity for the requested groups.
+// GET /api/v1/admin/groups/predicted-capacity-summary?ids=1,2,3
+func (h *GroupHandler) GetPredictedCapacitySummary(c *gin.Context) {
+	groupIDs, err := parsePredictedCapacityGroupIDs(c.Query("ids"))
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	if h.groupPredictedBalanceReader == nil {
+		response.Error(c, 500, "Group predicted capacity service unavailable")
+		return
+	}
+
+	results := make([]groupPredictedCapacitySummaryResponse, len(groupIDs))
+	g, gctx := errgroup.WithContext(c.Request.Context())
+	g.SetLimit(4)
+	for i, groupID := range groupIDs {
+		i, groupID := i, groupID
+		g.Go(func() error {
+			summary, readErr := h.groupPredictedBalanceReader.EstimateGroupPredictedBalance(gctx, groupID)
+			if readErr != nil {
+				slog.Warn("group_predicted_capacity_read_failed", "group_id", groupID, "error", readErr)
+				results[i] = groupPredictedCapacitySummaryResponse{GroupID: groupID}
+				return nil
+			}
+			results[i] = groupPredictedCapacityResponse(groupID, summary)
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		response.Error(c, 500, "Failed to get group predicted capacity summary")
+		return
+	}
+	response.Success(c, results)
+}
+
+func parsePredictedCapacityGroupIDs(raw string) ([]int64, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, fmt.Errorf("ids is required")
+	}
+	if len(raw) > 4096 {
+		return nil, fmt.Errorf("ids is too long")
+	}
+
+	seen := make(map[int64]struct{})
+	groupIDs := make([]int64, 0)
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		groupID, err := strconv.ParseInt(part, 10, 64)
+		if err != nil || groupID <= 0 {
+			return nil, fmt.Errorf("ids must contain positive integers")
+		}
+		if _, exists := seen[groupID]; exists {
+			continue
+		}
+		if len(groupIDs) >= maxPredictedCapacityGroupIDs {
+			return nil, fmt.Errorf("ids cannot contain more than %d unique IDs", maxPredictedCapacityGroupIDs)
+		}
+		seen[groupID] = struct{}{}
+		groupIDs = append(groupIDs, groupID)
+	}
+	return groupIDs, nil
+}
+
+func groupPredictedCapacityResponse(groupID int64, summary *service.GroupPredictedBalanceSummary) groupPredictedCapacitySummaryResponse {
+	result := groupPredictedCapacitySummaryResponse{GroupID: groupID}
+	if summary == nil {
+		return result
+	}
+
+	result.Available = true
+	result.BalanceComplete = summary.Complete
+	result.BalanceUnlimited = summary.Unlimited
+	result.RemainingBalanceUSD = cloneHandlerFloat64(summary.RemainingBalanceUSD)
+	if summary.KnownBalanceAccountCount > 0 || (summary.Complete && !summary.Unlimited) {
+		known := summary.PoolAuthoritativeBalanceUSD + summary.NormalEstimatedBalanceUSD
+		result.KnownRemainingBalanceUSD = &known
+	}
+	result.RequestsComplete = summary.RequestsComplete
+	result.RequestsUnlimited = summary.RequestsUnlimited
+	if summary.EstimatedRemainingRequests != nil {
+		requests := strconv.FormatInt(*summary.EstimatedRemainingRequests, 10)
+		result.EstimatedRemainingRequests = &requests
+	}
+	result.KnownRequestAccountCount = summary.KnownRequestAccountCount
+	result.UnknownRequestAccountCount = summary.UnknownRequestAccountCount
+	result.UnknownAccountCount = summary.UnknownAccountCount
+	result.StaleAccountCount = summary.StaleAccountCount
+	result.IncompatibleUnitAccountCount = summary.IncompatibleUnitAccountCount
+	evaluatedAt := summary.EvaluatedAt
+	result.EvaluatedAt = &evaluatedAt
+	return result
+}
+
+func cloneHandlerFloat64(value *float64) *float64 {
+	if value == nil {
+		return nil
+	}
+	copyValue := *value
+	return &copyValue
 }
 
 // GetGroupAPIKeys handles getting API keys in a group

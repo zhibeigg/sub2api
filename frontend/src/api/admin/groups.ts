@@ -9,7 +9,8 @@ import type {
   GroupPlatform,
   CreateGroupRequest,
   UpdateGroupRequest,
-  PaginatedResponse
+  PaginatedResponse,
+  GroupPredictedCapacitySummary
 } from '@/types'
 
 /**
@@ -409,6 +410,34 @@ export async function getCapacitySummary(): Promise<
   return data
 }
 
+/**
+ * Get predicted remaining balance and request capacity for selected groups.
+ */
+export async function getPredictedCapacitySummary(
+  groupIds: number[],
+  options?: { signal?: AbortSignal }
+): Promise<GroupPredictedCapacitySummary[]> {
+  const normalizedGroupIds = [...new Set(
+    groupIds.filter(id => Number.isSafeInteger(id) && id > 0)
+  )]
+  if (normalizedGroupIds.length === 0) return []
+
+  const summaries: GroupPredictedCapacitySummary[] = []
+  const maxIdsPerRequest = 100
+  for (let offset = 0; offset < normalizedGroupIds.length; offset += maxIdsPerRequest) {
+    const ids = normalizedGroupIds.slice(offset, offset + maxIdsPerRequest)
+    const { data } = await apiClient.get<GroupPredictedCapacitySummary[]>(
+      '/admin/groups/predicted-capacity-summary',
+      {
+        params: { ids: ids.join(',') },
+        signal: options?.signal
+      }
+    )
+    summaries.push(...data)
+  }
+  return summaries
+}
+
 export const groupsAPI = {
   list,
   getAll,
@@ -431,7 +460,8 @@ export const groupsAPI = {
   batchSetGroupRPMOverrides,
   updateSortOrder,
   getUsageSummary,
-  getCapacitySummary
+  getCapacitySummary,
+  getPredictedCapacitySummary
 }
 
 export default groupsAPI

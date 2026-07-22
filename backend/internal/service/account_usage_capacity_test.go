@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,6 +75,36 @@ func TestEstimateAccountUsageCapacityFallsBackToLocalQuota(t *testing.T) {
 	require.Equal(t, int64(6), *capacity.EstimatedRemainingRequests)
 	require.InDelta(t, 6, *capacity.Remaining, 1e-12)
 	require.InDelta(t, 1, *capacity.AverageCostPerRequest, 1e-12)
+}
+
+func TestEstimateAccountUsageCapacityMarksRequestOverflowUnknown(t *testing.T) {
+	t.Parallel()
+	account := &Account{Extra: map[string]any{
+		"quota_limit": 1e15,
+		"quota_used":  0.0,
+	}}
+	usage := &UsageInfo{CursorLocalUsage: &WindowStats{Requests: 1, Cost: 1e-20}}
+
+	capacity := estimateAccountUsageCapacity(account, usage)
+	require.Equal(t, AccountCapacityModeLocalQuota, capacity.Mode)
+	require.Equal(t, AccountCapacityStateUnknown, capacity.State)
+	require.Equal(t, "request_estimate_overflow", capacity.MessageCode)
+	require.Nil(t, capacity.EstimatedRemainingRequests)
+	require.NotNil(t, capacity.Remaining)
+	require.InDelta(t, 1e15, *capacity.Remaining, 1)
+}
+
+func TestNonNegativeDecimalFloorInt64RejectsOverflow(t *testing.T) {
+	t.Parallel()
+	value, ok := nonNegativeDecimalFloorInt64(decimal.NewFromInt(math.MaxInt64))
+	require.True(t, ok)
+	require.Equal(t, int64(math.MaxInt64), value)
+
+	_, ok = nonNegativeDecimalFloorInt64(decimal.NewFromInt(math.MaxInt64).Add(decimal.NewFromInt(1)))
+	require.False(t, ok)
+
+	_, ok = nonNegativeDecimalFloorInt64(decimal.NewFromInt(-1))
+	require.False(t, ok)
 }
 
 func TestEstimateAccountUsageCapacityDoesNotTurnUnknownIntoZero(t *testing.T) {

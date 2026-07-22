@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -66,6 +67,7 @@ func TestGroupPredictedBalanceServiceMixedAccounts(t *testing.T) {
 	poolOne := 10.5
 	poolTwo := 4.5
 	normalRequests := int64(100)
+	localRequests := int64(60)
 	normalAverage := 0.02
 	localRemaining := 3.0
 
@@ -91,7 +93,13 @@ func TestGroupPredictedBalanceServiceMixedAccounts(t *testing.T) {
 			AverageCostPerRequest:      &normalAverage,
 			SampleRequests:             50,
 		},
-		4: {Mode: AccountCapacityModeLocalQuota, State: AccountCapacityStateEstimated, Unit: "USD", Remaining: &localRemaining},
+		4: {
+			Mode:                       AccountCapacityModeLocalQuota,
+			State:                      AccountCapacityStateEstimated,
+			Unit:                       "USD",
+			Remaining:                  &localRemaining,
+			EstimatedRemainingRequests: &localRequests,
+		},
 	}}
 	svc := NewGroupPredictedBalanceService(groupBalanceAccountRepoStub{accounts: accounts}, poolReader, usageReader, nil)
 	svc.now = func() time.Time { return now }
@@ -104,10 +112,17 @@ func TestGroupPredictedBalanceServiceMixedAccounts(t *testing.T) {
 	require.InDelta(t, 20, *summary.RemainingBalanceUSD, 1e-12)
 	require.InDelta(t, 15, summary.PoolAuthoritativeBalanceUSD, 1e-12)
 	require.InDelta(t, 5, summary.NormalEstimatedBalanceUSD, 1e-12)
+	require.Equal(t, 4, summary.KnownBalanceAccountCount)
 	require.Equal(t, 2, summary.PoolAccountCount)
 	require.Equal(t, 2, summary.NormalAccountCount)
 	require.Equal(t, 2, summary.SkippedAccountCount)
 	require.Zero(t, summary.UnknownAccountCount)
+	require.False(t, summary.RequestsComplete)
+	require.False(t, summary.RequestsUnlimited)
+	require.NotNil(t, summary.EstimatedRemainingRequests)
+	require.Equal(t, int64(160), *summary.EstimatedRemainingRequests)
+	require.Equal(t, 2, summary.KnownRequestAccountCount)
+	require.Equal(t, 2, summary.UnknownRequestAccountCount)
 	require.Equal(t, 1, usageReader.calls[3], "duplicate account IDs must be evaluated once")
 }
 
@@ -136,6 +151,9 @@ func TestGroupPredictedBalanceServiceIncompleteReasons(t *testing.T) {
 	require.Equal(t, 3, summary.UnknownAccountCount)
 	require.Equal(t, 1, summary.StaleAccountCount)
 	require.Equal(t, 1, summary.IncompatibleUnitAccountCount)
+	require.False(t, summary.RequestsComplete)
+	require.Nil(t, summary.EstimatedRemainingRequests)
+	require.Equal(t, 3, summary.UnknownRequestAccountCount)
 }
 
 func TestGroupPredictedBalanceServiceAuthoritativeUnlimitedWins(t *testing.T) {
@@ -156,6 +174,9 @@ func TestGroupPredictedBalanceServiceAuthoritativeUnlimitedWins(t *testing.T) {
 	require.True(t, summary.Complete)
 	require.True(t, summary.Unlimited)
 	require.Nil(t, summary.RemainingBalanceUSD)
+	require.True(t, summary.RequestsComplete)
+	require.True(t, summary.RequestsUnlimited)
+	require.Nil(t, summary.EstimatedRemainingRequests)
 	require.Equal(t, 1, summary.UnknownAccountCount, "diagnostics remain visible even though authoritative infinity determines health")
 }
 
@@ -175,6 +196,8 @@ func TestGroupPredictedBalanceServiceAuthoritativeUnlimitedSurvivesOtherReadFail
 	require.True(t, summary.Complete)
 	require.True(t, summary.Unlimited)
 	require.Nil(t, summary.RemainingBalanceUSD)
+	require.True(t, summary.RequestsComplete)
+	require.True(t, summary.RequestsUnlimited)
 	require.Equal(t, 1, summary.UnknownAccountCount)
 	require.Equal(t, 1, summary.PoolAccountCount)
 	require.Equal(t, 1, summary.NormalAccountCount)
@@ -188,6 +211,100 @@ func TestGroupPredictedBalanceServiceReadFailureDoesNotProducePartialValue(t *te
 	summary, err := svc.EstimateGroupPredictedBalance(context.Background(), 17)
 	require.Error(t, err)
 	require.Nil(t, summary)
+}
+
+func TestGroupPredictedBalanceServiceCompletesRequestEstimateWhenEveryAccountIsKnown(t *testing.T) {
+	poolRemaining := 2.0
+	poolRequests := int64(40)
+	normalRequests := int64(60)
+	normalAverage := 0.03
+	accounts := []Account{
+		{ID: 1, Status: StatusActive, Schedulable: true, Type: AccountTypeAPIKey, Credentials: map[string]any{"pool_mode": true}},
+		{ID: 2, Status: StatusActive, Schedulable: true, Type: AccountTypeOAuth},
+	}
+	poolReader := &groupBalancePoolReaderStub{snapshots: map[int64]*AccountCapacitySnapshot{
+		1: {
+			Mode:                       AccountCapacityModeUpstreamBalance,
+			State:                      AccountCapacityStateVerified,
+			Authoritative:              true,
+			Remaining:                  &poolRemaining,
+			Unit:                       "USD",
+			EstimatedRemainingRequests: &poolRequests,
+		},
+	}}
+	usageReader := &groupBalanceUsageReaderStub{snapshots: map[int64]*AccountCapacitySnapshot{
+		2: {
+			Mode:                       AccountCapacityModeUsageWindow,
+			State:                      AccountCapacityStateEstimated,
+			EstimatedRemainingRequests: &normalRequests,
+			AverageCostPerRequest:      &normalAverage,
+			SampleRequests:             20,
+		},
+	}}
+	svc := NewGroupPredictedBalanceService(groupBalanceAccountRepoStub{accounts: accounts}, poolReader, usageReader, nil)
+
+	summary, err := svc.EstimateGroupPredictedBalance(context.Background(), 17)
+	require.NoError(t, err)
+	require.True(t, summary.Complete)
+	require.True(t, summary.RequestsComplete)
+	require.False(t, summary.RequestsUnlimited)
+	require.NotNil(t, summary.EstimatedRemainingRequests)
+	require.Equal(t, int64(100), *summary.EstimatedRemainingRequests)
+	require.Equal(t, 2, summary.KnownRequestAccountCount)
+	require.Zero(t, summary.UnknownRequestAccountCount)
+}
+
+func TestGroupPredictedBalanceServiceEmptyGroupReturnsFiniteZero(t *testing.T) {
+	svc := NewGroupPredictedBalanceService(groupBalanceAccountRepoStub{}, &groupBalancePoolReaderStub{}, &groupBalanceUsageReaderStub{}, nil)
+
+	summary, err := svc.EstimateGroupPredictedBalance(context.Background(), 17)
+	require.NoError(t, err)
+	require.True(t, summary.Complete)
+	require.NotNil(t, summary.RemainingBalanceUSD)
+	require.Zero(t, *summary.RemainingBalanceUSD)
+	require.True(t, summary.RequestsComplete)
+	require.NotNil(t, summary.EstimatedRemainingRequests)
+	require.Zero(t, *summary.EstimatedRemainingRequests)
+}
+
+func TestGroupPredictedBalanceServiceRequestOverflowBecomesPartial(t *testing.T) {
+	remaining := 1.0
+	maxRequests := int64(math.MaxInt64)
+	oneRequest := int64(1)
+	accounts := []Account{
+		{ID: 1, Status: StatusActive, Schedulable: true, Type: AccountTypeOAuth},
+		{ID: 2, Status: StatusActive, Schedulable: true, Type: AccountTypeOAuth},
+	}
+	usageReader := &groupBalanceUsageReaderStub{snapshots: map[int64]*AccountCapacitySnapshot{
+		1: {Mode: AccountCapacityModeLocalQuota, State: AccountCapacityStateEstimated, Unit: "USD", Remaining: &remaining, EstimatedRemainingRequests: &maxRequests},
+		2: {Mode: AccountCapacityModeLocalQuota, State: AccountCapacityStateEstimated, Unit: "USD", Remaining: &remaining, EstimatedRemainingRequests: &oneRequest},
+	}}
+	svc := NewGroupPredictedBalanceService(groupBalanceAccountRepoStub{accounts: accounts}, &groupBalancePoolReaderStub{}, usageReader, nil)
+
+	summary, err := svc.EstimateGroupPredictedBalance(context.Background(), 17)
+	require.NoError(t, err)
+	require.True(t, summary.Complete)
+	require.False(t, summary.RequestsComplete)
+	require.NotNil(t, summary.EstimatedRemainingRequests)
+	require.Equal(t, int64(math.MaxInt64), *summary.EstimatedRemainingRequests)
+	require.Equal(t, 1, summary.KnownRequestAccountCount)
+	require.Equal(t, 1, summary.UnknownRequestAccountCount)
+}
+
+func TestEstimatedGroupRequestsRejectsInvalidAndLocalUnlimitedValues(t *testing.T) {
+	negative := int64(-1)
+	requests, known, unlimited := estimatedGroupRequests(&AccountCapacitySnapshot{
+		State:                      AccountCapacityStateEstimated,
+		EstimatedRemainingRequests: &negative,
+	}, false)
+	require.Zero(t, requests)
+	require.False(t, known)
+	require.False(t, unlimited)
+
+	requests, known, unlimited = estimatedGroupRequests(&AccountCapacitySnapshot{State: AccountCapacityStateUnlimited}, false)
+	require.Zero(t, requests)
+	require.False(t, known)
+	require.False(t, unlimited, "local unlimited only means no configured local limit")
 }
 
 func TestEstimatedNormalBalanceUSD(t *testing.T) {
@@ -224,6 +341,17 @@ func TestEstimatedNormalBalanceUSD(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Empty(t, reason, "a known local USD remainder stays usable even when request prediction lacks cost samples")
+	require.InDelta(t, local, amount.InexactFloat64(), 1e-12)
+
+	amount, reason, err = estimatedNormalBalanceUSD(&AccountCapacitySnapshot{
+		Mode:        AccountCapacityModeLocalQuota,
+		State:       AccountCapacityStateUnknown,
+		MessageCode: "request_estimate_overflow",
+		Unit:        "USD",
+		Remaining:   &local,
+	})
+	require.NoError(t, err)
+	require.Empty(t, reason, "a request-count overflow must not discard a known local USD remainder")
 	require.InDelta(t, local, amount.InexactFloat64(), 1e-12)
 
 	_, reason, err = estimatedNormalBalanceUSD(&AccountCapacitySnapshot{

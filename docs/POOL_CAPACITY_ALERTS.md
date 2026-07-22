@@ -215,6 +215,50 @@ GET /api/v1/admin/groups/:id
 - `predicted_requests` 继续使用原有 context 状态；`remaining_balance_usd` 使用分组级状态。状态范围不改变上述管理员 API 的请求或响应结构。
 - 内部 generation 不通过管理员或用户 DTO 暴露；普通用户分组响应不暴露告警配置。
 
+## 管理员分组列表预测容量展示
+
+分组管理列表新增“预估剩余”列，同时展示当前页分组的 USD 余额和预计剩余请求数。该列复用本节的账号资格、容量快照、缓存与并发规则，不新增数据库字段或配置项。
+
+前端按当前页批量调用：
+
+```http
+GET /api/v1/admin/groups/predicted-capacity-summary?ids=1,2,3
+```
+
+`ids` 必须是逗号分隔的正整数，服务端按首次出现顺序去重，最多接收 100 个唯一 ID。单个分组的上游读取失败不会让整页失败，而会为该分组返回 `available=false`。
+
+响应仍使用标准 `{code,message,data}` 包装；`data` 中每个元素包含：
+
+```json
+{
+  "group_id": 1,
+  "available": true,
+  "balance_complete": false,
+  "balance_unlimited": false,
+  "remaining_balance_usd": null,
+  "known_remaining_balance_usd": 42.5,
+  "requests_complete": false,
+  "requests_unlimited": false,
+  "estimated_remaining_requests": "1200",
+  "known_request_account_count": 3,
+  "unknown_request_account_count": 1,
+  "unknown_account_count": 1,
+  "stale_account_count": 0,
+  "incompatible_unit_account_count": 0,
+  "evaluated_at": "2026-07-22T15:00:00Z"
+}
+```
+
+显示规则：
+
+- 完整有限估值显示 `≈`；无限容量显示“无限”。
+- 数据不完整但存在已知账号时，`known_remaining_balance_usd` 和 `estimated_remaining_requests` 是已知下界，界面显示 `≥`，不是完整总额。
+- `estimated_remaining_requests` 使用十进制字符串传输，避免超过 JavaScript 安全整数范围后发生静默舍入。
+- 完全没有可用估值时显示“数据不足”，绝不把 `unknown`、`stale`、单位不兼容或读取失败渲染为 `0`。
+- 余额与请求数的完整性独立。池模式账号可能具有完整的权威 USD 余额，但没有可验证的平均请求成本，因此请求数仍可能是部分可估或数据不足。
+- 分组没有任何可用账号时，有限余额和请求数均为完整的 `0`。
+- 管理端只在该列可见时查询当前页 ID；筛选、翻页或隐藏列会取消旧请求，避免陈旧结果覆盖当前页面。
+
 ## 管理员账户列表容量展示
 
 账户列表的“用量窗口”仍展示单账号容量来源，供理解分组金额汇总：

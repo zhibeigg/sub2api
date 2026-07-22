@@ -77,15 +77,17 @@ func estimateAccountUsageCapacity(account *Account, usage *UsageInfo) *AccountCa
 		if usage.KiroUsageCurrent != nil {
 			used = *usage.KiroUsageCurrent
 		}
-		if limit >= 0 && used >= 0 {
+		if limit >= 0 && used >= 0 && !math.IsNaN(limit) && !math.IsInf(limit, 0) && !math.IsNaN(used) && !math.IsInf(used, 0) {
 			remaining := math.Max(limit-used, 0)
-			candidates = append(candidates, usageCapacityCandidate{
-				scope:             "kiro_subscription",
-				estimatedRequests: decimal.NewFromFloat(remaining).Floor().IntPart(),
-				usedRequests:      used,
-				totalRequests:     limit,
-				resetAt:           parseCapacityResetAt(usage.KiroNextResetDate),
-			})
+			if estimated, ok := nonNegativeDecimalFloorInt64(decimal.NewFromFloat(remaining)); ok {
+				candidates = append(candidates, usageCapacityCandidate{
+					scope:             "kiro_subscription",
+					estimatedRequests: estimated,
+					usedRequests:      used,
+					totalRequests:     limit,
+					resetAt:           parseCapacityResetAt(usage.KiroNextResetDate),
+				})
+			}
 		}
 	}
 
@@ -161,23 +163,27 @@ func usageProgressCapacityCandidate(scope string, progress *UsageProgress) (usag
 		return usageCapacityCandidate{}, false
 	}
 
+	if math.IsNaN(progress.Utilization) || math.IsInf(progress.Utilization, 0) {
+		return usageCapacityCandidate{}, false
+	}
 	requests := progress.WindowStats.Requests
 	remaining := int64(0)
 	if progress.Utilization < 100 {
-		remaining = decimal.NewFromInt(requests).
-			Mul(decimal.NewFromFloat(100 - progress.Utilization)).
-			Div(decimal.NewFromFloat(progress.Utilization)).
-			Floor().
-			IntPart()
-		if remaining < 0 {
-			remaining = 0
+		estimated, ok := nonNegativeDecimalFloorInt64(
+			decimal.NewFromInt(requests).
+				Mul(decimal.NewFromFloat(100 - progress.Utilization)).
+				Div(decimal.NewFromFloat(progress.Utilization)),
+		)
+		if !ok {
+			return usageCapacityCandidate{}, false
 		}
+		remaining = estimated
 	}
 	return usageCapacityCandidate{
 		scope:             scope,
 		estimatedRequests: remaining,
 		usedRequests:      float64(requests),
-		totalRequests:     float64(requests + remaining),
+		totalRequests:     float64(requests) + float64(remaining),
 		sampleRequests:    requests,
 		averageCost:       averageAccountCost(progress.WindowStats),
 		resetAt:           cloneCapacityTimePtr(progress.ResetsAt),
@@ -251,17 +257,17 @@ func estimateLocalQuotaCapacity(account *Account, usage *UsageInfo) *AccountCapa
 	if average == nil || *average <= 0 {
 		return snapshot
 	}
-	estimated := decimal.NewFromFloat(selected.remaining).
-		Div(decimal.NewFromFloat(*average)).
-		Floor().
-		IntPart()
-	if estimated < 0 {
-		estimated = 0
+	estimated, ok := nonNegativeDecimalFloorInt64(
+		decimal.NewFromFloat(selected.remaining).Div(decimal.NewFromFloat(*average)),
+	)
+	snapshot.AverageCostPerRequest = cloneCapacityFloat64Ptr(average)
+	snapshot.SampleRequests = stats.Requests
+	if !ok {
+		snapshot.MessageCode = "request_estimate_overflow"
+		return snapshot
 	}
 	snapshot.State = AccountCapacityStateEstimated
 	snapshot.EstimatedRemainingRequests = &estimated
-	snapshot.AverageCostPerRequest = cloneCapacityFloat64Ptr(average)
-	snapshot.SampleRequests = stats.Requests
 	snapshot.MessageCode = ""
 	return snapshot
 }
@@ -311,6 +317,14 @@ func averageAccountCost(stats *WindowStats) *float64 {
 		return nil
 	}
 	return &value
+}
+
+func nonNegativeDecimalFloorInt64(value decimal.Decimal) (int64, bool) {
+	floored := value.Floor()
+	if floored.LessThan(decimal.Zero) || floored.GreaterThan(decimal.NewFromInt(math.MaxInt64)) {
+		return 0, false
+	}
+	return floored.IntPart(), true
 }
 
 func usageCapacityFetchedAt(usage *UsageInfo) time.Time {

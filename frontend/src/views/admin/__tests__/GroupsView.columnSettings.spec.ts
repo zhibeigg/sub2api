@@ -10,6 +10,7 @@ const {
   getModelsListCandidates,
   getUsageSummary,
   getCapacitySummary,
+  getPredictedCapacitySummary,
   listAccounts,
   showError,
   showSuccess,
@@ -21,6 +22,7 @@ const {
   getModelsListCandidates: vi.fn(),
   getUsageSummary: vi.fn(),
   getCapacitySummary: vi.fn(),
+  getPredictedCapacitySummary: vi.fn(),
   listAccounts: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
@@ -38,6 +40,7 @@ const messages: Record<string, string> = {
   'admin.groups.columns.type': 'Type',
   'admin.groups.columns.accounts': 'Accounts',
   'admin.groups.columns.capacity': 'Capacity',
+  'admin.groups.columns.predictedCapacity': 'Estimated Capacity',
   'admin.groups.columns.usage': 'Usage',
   'admin.groups.columns.status': 'Status',
   'admin.groups.columns.actions': 'Actions',
@@ -51,6 +54,7 @@ vi.mock('@/api/admin', () => ({
       getModelsListCandidates,
       getUsageSummary,
       getCapacitySummary,
+      getPredictedCapacitySummary,
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
@@ -152,6 +156,12 @@ const DataTableStub = {
   `,
 }
 
+const PaginationStub = {
+  props: ['page'],
+  emits: ['update:page', 'update:pageSize'],
+  template: '<button data-test="next-page" @click="$emit(\'update:page\', Number(page) + 1)">Next</button>',
+}
+
 const SelectStub = {
   props: ['modelValue', 'options', 'placeholder'],
   emits: ['update:modelValue', 'change'],
@@ -184,7 +194,7 @@ const mountView = async () => {
         AppLayout: AppLayoutStub,
         TablePageLayout: TablePageLayoutStub,
         DataTable: DataTableStub,
-        Pagination: true,
+        Pagination: PaginationStub,
         BaseDialog: BaseDialogStub,
         ConfirmDialog: true,
         EmptyState: true,
@@ -192,6 +202,7 @@ const mountView = async () => {
         PlatformIcon: true,
         Icon: IconStub,
         GroupCapacityBadge: true,
+        GroupPredictedCapacityCell: true,
         GroupRateMultipliersModal: true,
         GroupRPMOverridesModal: true,
         VueDraggable: { template: '<div><slot /></div>' },
@@ -227,6 +238,7 @@ describe('admin GroupsView column settings', () => {
     getModelsListCandidates.mockReset()
     getUsageSummary.mockReset()
     getCapacitySummary.mockReset()
+    getPredictedCapacitySummary.mockReset()
     listAccounts.mockReset()
     showError.mockReset()
     showSuccess.mockReset()
@@ -244,6 +256,7 @@ describe('admin GroupsView column settings', () => {
     getModelsListCandidates.mockResolvedValue([])
     getUsageSummary.mockResolvedValue([])
     getCapacitySummary.mockResolvedValue([])
+    getPredictedCapacitySummary.mockResolvedValue([])
     listAccounts.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 0 })
     isCurrentStep.mockReturnValue(false)
   })
@@ -263,6 +276,7 @@ describe('admin GroupsView column settings', () => {
       'is_exclusive',
       'account_count',
       'capacity',
+      'predicted_capacity',
       'usage',
       'status',
       'actions',
@@ -288,6 +302,7 @@ describe('admin GroupsView column settings', () => {
       'rate_multiplier',
       'is_exclusive',
       'account_count',
+      'predicted_capacity',
       'status',
       'actions',
     ])
@@ -307,6 +322,7 @@ describe('admin GroupsView column settings', () => {
       'is_exclusive',
       'account_count',
       'capacity',
+      'predicted_capacity',
       'status',
       'actions',
     ])
@@ -330,6 +346,7 @@ describe('admin GroupsView column settings', () => {
       'is_exclusive',
       'account_count',
       'capacity',
+      'predicted_capacity',
       'status',
       'actions',
     ])
@@ -353,6 +370,7 @@ describe('admin GroupsView column settings', () => {
       'is_exclusive',
       'account_count',
       'capacity',
+      'predicted_capacity',
       'usage',
       'status',
       'actions',
@@ -379,5 +397,80 @@ describe('admin GroupsView column settings', () => {
     await clickColumnToggle(wrapper, 'Capacity')
     expect(getUsageSummary).toHaveBeenCalledTimes(1)
     expect(getCapacitySummary).toHaveBeenCalledTimes(1)
+  })
+
+  it('loads predicted capacity only when visible and passes current-page ids with a signal', async () => {
+    localStorage.setItem('group-hidden-columns', JSON.stringify(['predicted_capacity']))
+    localStorage.setItem('group-column-settings-version', '2')
+    listGroups.mockResolvedValueOnce({
+      items: [createGroup({ id: 4 }), createGroup({ id: 9, name: 'Second' })],
+      total: 2,
+      page: 1,
+      page_size: 20,
+      pages: 1,
+    })
+
+    const wrapper = await mountView()
+    expect(getPredictedCapacitySummary).not.toHaveBeenCalled()
+
+    await openColumnSettings(wrapper)
+    await clickColumnToggle(wrapper, 'Estimated Capacity')
+
+    expect(getPredictedCapacitySummary).toHaveBeenCalledTimes(1)
+    expect(getPredictedCapacitySummary).toHaveBeenCalledWith(
+      [4, 9],
+      { signal: expect.any(AbortSignal) },
+    )
+  })
+
+  it('reloads current-page predicted capacity after paging, filtering, and refresh', async () => {
+    const pageResponse = (group: AdminGroup, page: number) => ({
+      items: [group],
+      total: 4,
+      page,
+      page_size: 20,
+      pages: 4,
+    })
+    listGroups
+      .mockResolvedValueOnce(pageResponse(createGroup({ id: 1 }), 1))
+      .mockResolvedValueOnce(pageResponse(createGroup({ id: 2 }), 2))
+      .mockResolvedValueOnce(pageResponse(createGroup({ id: 3 }), 1))
+      .mockResolvedValueOnce(pageResponse(createGroup({ id: 4 }), 1))
+    getPredictedCapacitySummary
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockResolvedValue([])
+
+    const wrapper = await mountView()
+    const initialSignal = getPredictedCapacitySummary.mock.calls[0][1].signal as AbortSignal
+
+    await wrapper.get('[data-test="next-page"]').trigger('click')
+    await flushPromises()
+    expect(initialSignal.aborted).toBe(true)
+    expect(getPredictedCapacitySummary.mock.calls[1][0]).toEqual([2])
+
+    await wrapper.findAll('select')[0].trigger('change')
+    await flushPromises()
+    expect(listGroups.mock.calls[2][0]).toBe(1)
+    expect(getPredictedCapacitySummary.mock.calls[2][0]).toEqual([3])
+
+    await wrapper.get('button[title="common.refresh"]').trigger('click')
+    await flushPromises()
+    expect(getPredictedCapacitySummary.mock.calls[3][0]).toEqual([4])
+  })
+
+  it('aborts an in-flight predicted capacity request when the column is hidden', async () => {
+    getPredictedCapacitySummary.mockImplementationOnce(() => new Promise(() => {}))
+    const wrapper = await mountView()
+    const signal = getPredictedCapacitySummary.mock.calls[0][1].signal as AbortSignal
+    expect(signal.aborted).toBe(false)
+
+    await openColumnSettings(wrapper)
+    await clickColumnToggle(wrapper, 'Estimated Capacity')
+
+    expect(signal.aborted).toBe(true)
+    expect(JSON.parse(localStorage.getItem('group-hidden-columns')!)).toEqual(
+      expect.arrayContaining(['id', 'predicted_capacity']),
+    )
+    wrapper.unmount()
   })
 })

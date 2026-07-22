@@ -29,13 +29,28 @@ type GroupPredictedBalanceSummary struct {
 	RemainingBalanceUSD          *float64
 	PoolAuthoritativeBalanceUSD  float64
 	NormalEstimatedBalanceUSD    float64
+	KnownBalanceAccountCount     int
 	PoolAccountCount             int
 	NormalAccountCount           int
 	SkippedAccountCount          int
 	UnknownAccountCount          int
 	StaleAccountCount            int
 	IncompatibleUnitAccountCount int
+	RequestsComplete             bool
+	RequestsUnlimited            bool
+	EstimatedRemainingRequests   *int64
+	KnownRequestAccountCount     int
+	UnknownRequestAccountCount   int
 	EvaluatedAt                  time.Time
+}
+
+type groupAccountPrediction struct {
+	balance           decimal.Decimal
+	balanceUnlimited  bool
+	balanceReason     string
+	requests          int64
+	requestsKnown     bool
+	requestsUnlimited bool
 }
 
 // GroupPredictedBalanceReader is deliberately narrow so the alert evaluator can
@@ -122,6 +137,7 @@ func (s *GroupPredictedBalanceService) EstimateGroupPredictedBalance(ctx context
 	var firstReadErr error
 	poolTotal := decimal.Zero
 	normalTotal := decimal.Zero
+	var requestTotal int64
 	g, gctx := errgroup.WithContext(ctx)
 	limit := s.maxConcurrency
 	if limit < 1 {
@@ -132,46 +148,56 @@ func (s *GroupPredictedBalanceService) EstimateGroupPredictedBalance(ctx context
 	for i := range eligible {
 		account := eligible[i]
 		g.Go(func() error {
-			if account.IsPoolMode() {
-				amount, unlimited, reason, readErr := s.poolAccountBalance(gctx, &account)
-				mu.Lock()
-				summary.PoolAccountCount++
-				if readErr != nil {
-					if firstReadErr == nil {
-						firstReadErr = readErr
-					}
-					applyGroupBalanceReason(summary, GroupBalanceReasonUnknown)
-					mu.Unlock()
-					return nil
-				}
-				if unlimited {
-					summary.Unlimited = true
-				} else if reason != "" {
-					applyGroupBalanceReason(summary, reason)
-				} else {
-					poolTotal = poolTotal.Add(amount)
-				}
-				mu.Unlock()
-				return nil
+			isPool := account.IsPoolMode()
+			var prediction groupAccountPrediction
+			var readErr error
+			if isPool {
+				prediction, readErr = s.poolAccountPrediction(gctx, &account)
+			} else {
+				prediction, readErr = s.normalAccountPrediction(gctx, &account)
 			}
 
-			amount, reason, readErr := s.normalAccountBalance(gctx, &account)
 			mu.Lock()
-			summary.NormalAccountCount++
+			defer mu.Unlock()
+			if isPool {
+				summary.PoolAccountCount++
+			} else {
+				summary.NormalAccountCount++
+			}
 			if readErr != nil {
 				if firstReadErr == nil {
 					firstReadErr = readErr
 				}
 				applyGroupBalanceReason(summary, GroupBalanceReasonUnknown)
-				mu.Unlock()
+				summary.UnknownRequestAccountCount++
 				return nil
 			}
-			if reason != "" {
-				applyGroupBalanceReason(summary, reason)
+
+			if prediction.balanceUnlimited {
+				summary.Unlimited = true
+			} else if prediction.balanceReason != "" {
+				applyGroupBalanceReason(summary, prediction.balanceReason)
 			} else {
-				normalTotal = normalTotal.Add(amount)
+				summary.KnownBalanceAccountCount++
+				if isPool {
+					poolTotal = poolTotal.Add(prediction.balance)
+				} else {
+					normalTotal = normalTotal.Add(prediction.balance)
+				}
 			}
-			mu.Unlock()
+
+			switch {
+			case prediction.requestsUnlimited:
+				summary.RequestsUnlimited = true
+			case !prediction.requestsKnown:
+				summary.UnknownRequestAccountCount++
+			case prediction.requests > 0 && requestTotal > math.MaxInt64-prediction.requests:
+				requestTotal = math.MaxInt64
+				summary.UnknownRequestAccountCount++
+			default:
+				requestTotal += prediction.requests
+				summary.KnownRequestAccountCount++
+			}
 			return nil
 		})
 	}
@@ -181,6 +207,7 @@ func (s *GroupPredictedBalanceService) EstimateGroupPredictedBalance(ctx context
 
 	summary.PoolAuthoritativeBalanceUSD = poolTotal.InexactFloat64()
 	summary.NormalEstimatedBalanceUSD = normalTotal.InexactFloat64()
+	finalizeGroupRequestSummary(summary, requestTotal)
 	if summary.Unlimited {
 		summary.Complete = true
 		return summary, nil
@@ -198,6 +225,22 @@ func (s *GroupPredictedBalanceService) EstimateGroupPredictedBalance(ctx context
 	return summary, nil
 }
 
+func finalizeGroupRequestSummary(summary *GroupPredictedBalanceSummary, requestTotal int64) {
+	if summary == nil {
+		return
+	}
+	if summary.RequestsUnlimited {
+		summary.RequestsComplete = true
+		summary.EstimatedRemainingRequests = nil
+		return
+	}
+	summary.RequestsComplete = summary.UnknownRequestAccountCount == 0
+	if summary.KnownRequestAccountCount > 0 || summary.RequestsComplete {
+		total := requestTotal
+		summary.EstimatedRemainingRequests = &total
+	}
+}
+
 func groupBalanceAccountEligible(account *Account, now time.Time) bool {
 	if account == nil || account.Status != StatusActive || !account.Schedulable {
 		return false
@@ -208,45 +251,74 @@ func groupBalanceAccountEligible(account *Account, now time.Time) bool {
 	return true
 }
 
-func (s *GroupPredictedBalanceService) poolAccountBalance(ctx context.Context, account *Account) (decimal.Decimal, bool, string, error) {
+func (s *GroupPredictedBalanceService) poolAccountPrediction(ctx context.Context, account *Account) (groupAccountPrediction, error) {
+	prediction := groupAccountPrediction{balanceReason: GroupBalanceReasonUnknown}
 	if s.poolReader == nil {
-		return decimal.Zero, false, GroupBalanceReasonUnknown, nil
+		return prediction, nil
 	}
 	snapshot, err := s.poolReader.GetPoolBalance(ctx, account, false)
 	if err != nil {
-		return decimal.Zero, false, "", err
+		return groupAccountPrediction{}, err
 	}
-	if snapshot == nil || snapshot.Mode != AccountCapacityModeUpstreamBalance || !snapshot.Authoritative {
-		return decimal.Zero, false, GroupBalanceReasonUnknown, nil
+	authoritativeBalance := snapshot != nil && snapshot.Mode == AccountCapacityModeUpstreamBalance && snapshot.Authoritative
+	prediction.requests, prediction.requestsKnown, prediction.requestsUnlimited = estimatedGroupRequests(snapshot, authoritativeBalance)
+	if !authoritativeBalance {
+		return prediction, nil
 	}
 	if snapshot.State == AccountCapacityStateUnlimited {
-		return decimal.Zero, true, "", nil
+		prediction.balanceUnlimited = true
+		prediction.balanceReason = ""
+		return prediction, nil
 	}
 	if snapshot.State == AccountCapacityStateStale {
-		return decimal.Zero, false, GroupBalanceReasonStale, nil
+		prediction.balanceReason = GroupBalanceReasonStale
+		return prediction, nil
 	}
 	if snapshot.State != AccountCapacityStateVerified {
-		return decimal.Zero, false, GroupBalanceReasonUnknown, nil
+		return prediction, nil
 	}
 	if !isUSDUnit(snapshot.Unit) {
-		return decimal.Zero, false, GroupBalanceReasonIncompatibleUnit, nil
+		prediction.balanceReason = GroupBalanceReasonIncompatibleUnit
+		return prediction, nil
 	}
 	amount, ok := validGroupBalanceAmount(snapshot.Remaining)
 	if !ok {
-		return decimal.Zero, false, GroupBalanceReasonInvalidValue, nil
+		prediction.balanceReason = GroupBalanceReasonInvalidValue
+		return prediction, nil
 	}
-	return decimal.NewFromFloat(amount), false, "", nil
+	prediction.balance = decimal.NewFromFloat(amount)
+	prediction.balanceReason = ""
+	return prediction, nil
 }
 
-func (s *GroupPredictedBalanceService) normalAccountBalance(ctx context.Context, account *Account) (decimal.Decimal, string, error) {
+func (s *GroupPredictedBalanceService) normalAccountPrediction(ctx context.Context, account *Account) (groupAccountPrediction, error) {
+	prediction := groupAccountPrediction{balanceReason: GroupBalanceReasonUnknown}
 	if s.usageReader == nil {
-		return decimal.Zero, GroupBalanceReasonUnknown, nil
+		return prediction, nil
 	}
 	snapshot, err := s.usageReader.GetCapacityForAggregation(ctx, account)
 	if err != nil {
-		return decimal.Zero, "", err
+		return groupAccountPrediction{}, err
 	}
-	return estimatedNormalBalanceUSD(snapshot)
+	prediction.requests, prediction.requestsKnown, prediction.requestsUnlimited = estimatedGroupRequests(snapshot, false)
+	prediction.balance, prediction.balanceReason, err = estimatedNormalBalanceUSD(snapshot)
+	return prediction, err
+}
+
+func estimatedGroupRequests(snapshot *AccountCapacitySnapshot, authoritativeUnlimited bool) (int64, bool, bool) {
+	if snapshot == nil || snapshot.State == AccountCapacityStateStale {
+		return 0, false, false
+	}
+	if authoritativeUnlimited && snapshot.State == AccountCapacityStateUnlimited {
+		return 0, false, true
+	}
+	if snapshot.State != AccountCapacityStateEstimated && snapshot.State != AccountCapacityStateVerified {
+		return 0, false, false
+	}
+	if snapshot.EstimatedRemainingRequests == nil || *snapshot.EstimatedRemainingRequests < 0 {
+		return 0, false, false
+	}
+	return *snapshot.EstimatedRemainingRequests, true, false
 }
 
 func estimatedNormalBalanceUSD(snapshot *AccountCapacitySnapshot) (decimal.Decimal, string, error) {
@@ -264,7 +336,9 @@ func estimatedNormalBalanceUSD(snapshot *AccountCapacitySnapshot) (decimal.Decim
 			return decimal.Zero, GroupBalanceReasonUnknown, nil
 		}
 		if snapshot.State == AccountCapacityStateUnsupported ||
-			(snapshot.State == AccountCapacityStateUnknown && snapshot.MessageCode != "insufficient_cost_sample") {
+			(snapshot.State == AccountCapacityStateUnknown &&
+				snapshot.MessageCode != "insufficient_cost_sample" &&
+				snapshot.MessageCode != "request_estimate_overflow") {
 			return decimal.Zero, GroupBalanceReasonUnknown, nil
 		}
 		if !isUSDUnit(snapshot.Unit) {

@@ -26,21 +26,21 @@
               :options="platformFilterOptions"
               :placeholder="t('admin.groups.allPlatforms')"
               class="w-44"
-              @change="loadGroups"
+              @change="handleFilterChange"
             />
             <Select
               v-model="filters.status"
               :options="statusOptions"
               :placeholder="t('admin.groups.allStatus')"
               class="w-40"
-              @change="loadGroups"
+              @change="handleFilterChange"
             />
             <Select
               v-model="filters.is_exclusive"
               :options="exclusiveOptions"
               :placeholder="t('admin.groups.allGroups')"
               class="w-44"
-              @change="loadGroups"
+              @change="handleFilterChange"
             />
           </div>
 
@@ -318,6 +318,13 @@
               :rpm-max="capacityMap.get(row.id)!.rpmMax"
             />
             <span v-else class="text-xs text-gray-400">—</span>
+          </template>
+
+          <template #cell-predicted_capacity="{ row }">
+            <GroupPredictedCapacityCell
+              :summary="predictedCapacityMap.get(row.id)"
+              :loading="predictedCapacityLoading"
+            />
           </template>
 
           <template #cell-usage="{ row }">
@@ -4117,6 +4124,7 @@ import { adminAPI } from "@/api/admin";
 import type {
   AdminGroup,
   GroupPlatform,
+  GroupPredictedCapacitySummary,
   PoolCapacityAlertMetric,
   SubscriptionType,
 } from "@/types";
@@ -4134,6 +4142,7 @@ import PlatformIcon from "@/components/common/PlatformIcon.vue";
 import Icon from "@/components/icons/Icon.vue";
 import GroupRateMultipliersModal from "@/components/admin/group/GroupRateMultipliersModal.vue";
 import GroupRPMOverridesModal from "@/components/admin/group/GroupRPMOverridesModal.vue";
+import GroupPredictedCapacityCell from "@/components/admin/group/GroupPredictedCapacityCell.vue";
 import GroupCapacityBadge from "@/components/common/GroupCapacityBadge.vue";
 import { VueDraggable } from "vue-draggable-plus";
 import { createStableObjectKeyResolver } from "@/utils/stableObjectKey";
@@ -4223,6 +4232,11 @@ const allColumns = computed<Column[]>(() => [
     label: t("admin.groups.columns.capacity"),
     sortable: false,
   },
+  {
+    key: "predicted_capacity",
+    label: t("admin.groups.columns.predictedCapacity"),
+    sortable: false,
+  },
   { key: "usage", label: t("admin.groups.columns.usage"), sortable: false },
   { key: "status", label: t("admin.groups.columns.status"), sortable: true },
   { key: "actions", label: t("admin.groups.columns.actions"), sortable: false },
@@ -4309,6 +4323,9 @@ const hasVisibleUsageSummaryConsumer = computed(
   () => isColumnVisible("usage") || isColumnVisible("billing_type"),
 );
 const hasVisibleCapacityColumn = computed(() => isColumnVisible("capacity"));
+const hasVisiblePredictedCapacityColumn = computed(() =>
+  isColumnVisible("predicted_capacity"),
+);
 
 const toggleColumn = (key: string) => {
   const validKeys = getValidHiddenColumnKeys();
@@ -4327,6 +4344,14 @@ const toggleColumn = (key: string) => {
   }
   if (wasHidden && key === "capacity") {
     loadCapacitySummary();
+  }
+  if (key === "predicted_capacity") {
+    if (wasHidden) {
+      loadPredictedCapacitySummary();
+    } else {
+      cancelPredictedCapacitySummary();
+      predictedCapacityMap.value = new Map();
+    }
   }
 };
 
@@ -4497,6 +4522,10 @@ const capacityMap = ref<
     }
   >
 >(new Map());
+const predictedCapacityMap = ref<Map<number, GroupPredictedCapacitySummary>>(
+  new Map(),
+);
+const predictedCapacityLoading = ref(false);
 const searchQuery = ref("");
 const filters = reactive({
   platform: "",
@@ -4515,6 +4544,7 @@ const sortState = reactive({
 });
 
 let abortController: AbortController | null = null;
+let predictedCapacityAbortController: AbortController | null = null;
 
 const showCreateModal = ref(false);
 const showEditModal = ref(false);
@@ -5286,7 +5316,63 @@ const deleteConfirmMessage = computed(() => {
   return t("admin.groups.deleteConfirm", { name: deletingGroup.value.name });
 });
 
+const cancelPredictedCapacitySummary = () => {
+  predictedCapacityAbortController?.abort();
+  predictedCapacityAbortController = null;
+  predictedCapacityLoading.value = false;
+};
+
+const loadPredictedCapacitySummary = async () => {
+  cancelPredictedCapacitySummary();
+  if (!hasVisiblePredictedCapacityColumn.value) return;
+
+  const groupIds = groups.value.map((group) => group.id);
+  predictedCapacityMap.value = new Map();
+  if (groupIds.length === 0) return;
+
+  const currentController = new AbortController();
+  predictedCapacityAbortController = currentController;
+  const { signal } = currentController;
+  predictedCapacityLoading.value = true;
+
+  try {
+    const data = await adminAPI.groups.getPredictedCapacitySummary(groupIds, {
+      signal,
+    });
+    if (
+      signal.aborted ||
+      predictedCapacityAbortController !== currentController ||
+      !hasVisiblePredictedCapacityColumn.value
+    ) {
+      return;
+    }
+
+    predictedCapacityMap.value = new Map(
+      data.map((item) => [item.group_id, item]),
+    );
+  } catch (error: any) {
+    if (
+      signal.aborted ||
+      error?.name === "AbortError" ||
+      error?.code === "ERR_CANCELED"
+    ) {
+      return;
+    }
+    console.error("Error loading group predicted capacity summary:", error);
+  } finally {
+    if (predictedCapacityAbortController === currentController) {
+      predictedCapacityAbortController = null;
+      predictedCapacityLoading.value = false;
+    }
+  }
+};
+
 const loadGroups = async () => {
+  cancelPredictedCapacitySummary();
+  if (hasVisiblePredictedCapacityColumn.value) {
+    predictedCapacityMap.value = new Map();
+    predictedCapacityLoading.value = true;
+  }
   if (abortController) {
     abortController.abort();
   }
@@ -5322,6 +5408,9 @@ const loadGroups = async () => {
     if (hasVisibleCapacityColumn.value) {
       loadCapacitySummary();
     }
+    if (hasVisiblePredictedCapacityColumn.value) {
+      loadPredictedCapacitySummary();
+    }
   } catch (error: any) {
     if (
       signal.aborted ||
@@ -5330,6 +5419,7 @@ const loadGroups = async () => {
     ) {
       return;
     }
+    predictedCapacityLoading.value = false;
     appStore.showError(t("admin.groups.failedToLoad"));
     console.error("Error loading groups:", error);
   } finally {
@@ -5429,6 +5519,11 @@ const handleSearch = () => {
     pagination.page = 1;
     loadGroups();
   }, 300);
+};
+
+const handleFilterChange = () => {
+  pagination.page = 1;
+  loadGroups();
 };
 
 const handlePageChange = (page: number) => {
@@ -6223,6 +6318,9 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  abortController?.abort();
+  cancelPredictedCapacitySummary();
+  clearTimeout(searchTimeout);
   document.removeEventListener("click", handleClickOutside);
   accountSearchRunner.clearAll();
   clearAllAccountSearchState();

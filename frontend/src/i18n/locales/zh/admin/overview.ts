@@ -833,6 +833,7 @@ export default {
         apiKeys: 'API 密钥数',
         accounts: '账号数',
         capacity: '容量',
+        predictedCapacity: '预估剩余额度 / 请求数',
         usage: '用量',
         status: '状态',
         actions: '操作',
@@ -848,6 +849,18 @@ export default {
       accountsRateLimited: '限流:',
       accountsTotal: '总量:',
       accountsUnit: '个账号',
+      predictedCapacity: {
+        balance: '余额',
+        requests: '请求',
+        requestUnit: '请求',
+        unlimited: '无限',
+        partial: '部分可估',
+        insufficient: '数据不足',
+        partialBalanceHint: '部分可估：仅显示已知账号的剩余余额下界。',
+        partialRequestsHint: '部分可估：仅显示可估账号的剩余请求数下界。',
+        diagnostics: '已知请求账号 {knownRequests}，未知请求账号 {unknownRequests}，未知余额账号 {unknownAccounts}，过期数据账号 {staleAccounts}，单位不兼容账号 {incompatibleAccounts}。',
+        evaluatedAt: '评估时间：{time}'
+      },
       form: {
         name: '名称',
         description: '描述',

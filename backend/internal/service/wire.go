@@ -933,6 +933,7 @@ var ProviderSet = wire.NewSet(
 	ProvideRateLimitService,
 	ProvideAccountUsageService,
 	ProvideGroupPredictedBalanceService,
+	wire.Bind(new(GroupPredictedBalanceReader), new(*GroupPredictedBalanceService)),
 	ProvideAccountTestServiceWithAgentIdentity,
 	ProvideUpstreamBillingProbeService,
 	ProvideSettingService,

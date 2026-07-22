@@ -602,6 +602,24 @@ export interface Group {
   updated_at: string
 }
 
+export interface GroupPredictedCapacitySummary {
+  group_id: number
+  available: boolean
+  balance_complete: boolean
+  balance_unlimited: boolean
+  remaining_balance_usd: number | null
+  known_remaining_balance_usd: number | null
+  requests_complete: boolean
+  requests_unlimited: boolean
+  estimated_remaining_requests: string | number | null
+  known_request_account_count: number
+  unknown_request_account_count: number
+  unknown_account_count: number
+  stale_account_count: number
+  incompatible_unit_account_count: number
+  evaluated_at: string | null
+}
+
 export interface AdminGroup extends Group {
   // 池账号容量提醒（仅管理员可配置；可选字段兼容旧管理 API 响应）
   pool_capacity_alert_enabled?: boolean

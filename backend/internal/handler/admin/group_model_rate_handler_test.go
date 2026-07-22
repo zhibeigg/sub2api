@@ -42,7 +42,7 @@ func (s *groupModelRateCapturingAdminService) UpdateGroup(_ context.Context, id 
 func setupGroupModelRateHandler() (*gin.Engine, *groupModelRateCapturingAdminService) {
 	gin.SetMode(gin.TestMode)
 	svc := &groupModelRateCapturingAdminService{stubAdminService: newStubAdminService()}
-	handler := NewGroupHandler(svc, nil, nil)
+	handler := NewGroupHandler(svc, nil, nil, nil)
 	router := gin.New()
 	router.POST("/api/v1/admin/groups", handler.Create)
 	router.PUT("/api/v1/admin/groups/:id", handler.Update)

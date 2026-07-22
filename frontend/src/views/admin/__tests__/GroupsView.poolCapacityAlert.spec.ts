@@ -13,6 +13,7 @@ const {
   getModelsListCandidates,
   getUsageSummary,
   getCapacitySummary,
+  getPredictedCapacitySummary,
   showError,
   showSuccess,
 } = vi.hoisted(() => ({
@@ -23,6 +24,7 @@ const {
   getModelsListCandidates: vi.fn(),
   getUsageSummary: vi.fn(),
   getCapacitySummary: vi.fn(),
+  getPredictedCapacitySummary: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
 }))
@@ -35,6 +37,7 @@ vi.mock('@/api/admin', () => ({
       getModelsListCandidates,
       getUsageSummary,
       getCapacitySummary,
+      getPredictedCapacitySummary,
       create: createGroup,
       update: updateGroup,
       delete: vi.fn(),
@@ -208,6 +211,7 @@ describe('GroupsView pool capacity alert form', () => {
     getModelsListCandidates.mockReset().mockResolvedValue([])
     getUsageSummary.mockReset().mockResolvedValue([])
     getCapacitySummary.mockReset().mockResolvedValue([])
+    getPredictedCapacitySummary.mockReset().mockResolvedValue([])
     showError.mockReset()
     showSuccess.mockReset()
   })
