@@ -823,7 +823,8 @@ Sub2API 将 Adobe 作为独立的 `adobe` 平台接入。Adobe 分组只调度 A
 Cursor 账号支持 `auto`、`ide_chat`、`cloud_agent` 三种转发模式。普通 `/v1/messages`、`/v1/chat/completions`、`/v1/responses` 使用双向 HTTP/2 Connect-Protobuf `agent.v1.AgentService/Run` RPC。`ide_chat` 仅作为兼容枚举保留，界面显示为 **Agent RPC（兼容 IDE Chat）**；官方 `https://api.cursor.com/v1/agents` API 继续作为独立显式任务模式。
 
 - Agent RPC 使用加密保存的 Dashboard Access/Refresh Token 和独立的仅 HTTP/2 连接池，实时输出文本、thinking/reasoning 与 MCP 工具调用增量。下一轮工具结果通过原生 history/state 恢复；Sub2API 不执行本地 shell 命令或文件操作。
-- `auto` 只有在下游响应尚未提交且命中配置允许的可安全重放错误时，才可回退 Cloud Agent；Cloud Agent 仍是显式任务模式，不是普通聊天默认路径。
+- Anthropic `/v1/messages` 用户消息支持 `source.type=base64` 的图片块，网关会解码并写入 Cursor 原生内联图片字段。单次请求最多 20 张、单图最多 5 MiB、累计最多 6 MiB，超限返回 HTTP `413`。远程图片 URL、非法 Base64、文件或音频块返回 HTTP `400 invalid_request_error`，不会切换或惩罚其他账号；`auto` 模式下图片请求固定保留在 Agent RPC。
+- `auto` 只有在下游响应尚未提交、请求不含客户端工具、工具续轮、图片或 Responses 延续状态，且命中配置允许的可安全重放错误时，才可回退 Cloud Agent；Cloud Agent 仍是显式任务模式，不是普通聊天默认路径。
 - 已保存的 Dashboard 会话会在到期前自动续期，并在 `401` 后强制刷新重试一次。管理端可通过 `POST /api/v1/admin/cursor/dashboard-auth/start` 与 `/poll` 完成服务器独立的一键 PKCE 授权；从 `state.vscdb` 手工导入 Token 仅作为高级兼容方式。
 - 内部 `GetUsableModels` 模型目录使用 fresh/stale 缓存、账号级 singleflight、启动/授权预热与非阻塞刷新；冷缓存直接执行 `AgentService/Run`，不会阻塞聊天热路径。Cloud Agent 模型同步继续使用 `GET /v1/models`，API Key 验证继续使用 `GET /v1/me`。
 - Cloud Agents API 仍是官方 Beta。仓库任务、持久 Agent、run、取消与清理继续使用 `/v1/agents` 及其 run 端点。

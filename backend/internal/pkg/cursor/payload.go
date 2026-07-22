@@ -35,7 +35,7 @@ func BuildPayload(dialogue *Dialogue, options BuildOptions) (*Request, error) {
 	}
 	for i, msg := range dialogue.Messages {
 		role := msg.Role
-		text := msg.Text
+		text := textWithInlineImagePlaceholders(msg.Text, msg.Images)
 		switch role {
 		case "user", "assistant":
 		case "tool":
@@ -101,6 +101,26 @@ func RenderAgentPrompt(request *Request) string {
 		_ = builder.WriteByte('\n')
 	}
 	_, _ = builder.WriteString("\n[ASSISTANT]\n")
+	return builder.String()
+}
+
+func textWithInlineImagePlaceholders(text string, images []InlineImage) string {
+	if len(images) == 0 {
+		return text
+	}
+	var builder strings.Builder
+	_, _ = builder.WriteString(text)
+	for _, image := range images {
+		if builder.Len() > 0 {
+			_, _ = builder.WriteString("\n\n")
+		}
+		_, _ = builder.WriteString("[Attached image")
+		if mediaType, err := normalizeImageMIMEType(image.MIMEType); err == nil {
+			_, _ = builder.WriteString(": ")
+			_, _ = builder.WriteString(mediaType)
+		}
+		_ = builder.WriteByte(']')
+	}
 	return builder.String()
 }
 

@@ -53,9 +53,15 @@ type Dialogue struct {
 	ToolChoice ToolChoice
 }
 
+type InlineImage struct {
+	MIMEType string
+	Data     []byte
+}
+
 type DialogueMessage struct {
 	Role       string
 	Text       string
+	Images     []InlineImage
 	ToolCalls  []Action
 	ToolCallID string
 	IsError    bool

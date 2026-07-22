@@ -18,9 +18,11 @@ Cursor API Key 账号通过 `credentials.cursor_transport_mode` 选择路径：
 
 - `/v1/messages`、`/v1/chat/completions`、`/v1/responses` 在 Agent RPC 模式下实时双向收发 Connect-Protobuf 帧，并实时输出下游 SSE；不再创建临时 Cloud Agent 等待任务完成后模拟流式。
 - `AgentService/Run` 统一承载普通聊天，不再使用旧 ChatService RPC。网关映射文本、thinking/reasoning 和 MCP 工具调用增量；工具执行结果在下一轮请求中通过 Cursor 原生 history/state 恢复继续发送。
+- Anthropic `/v1/messages` 用户消息中的 `image` 块支持 `source.type=base64`。网关只在内存中解码图片，并通过 `UserMessage.selected_context.selected_images` 发送原始字节，同时设置 `client_supports_inline_images`；历史用户轮次也在 blob-backed `UserMessage` 中保留图片。日志只记录图片数量和总字节数，不记录 Base64、原始字节或正文。
+- 单次请求最多接受 20 张图片，单图上限为 5 MiB、累计上限为 6 MiB，并会在 Base64 解码前按编码长度预检；超限返回请求级 HTTP `413`。远程图片 URL 不会由网关下载，以避免 SSRF 和不受控网络 I/O；非法 Base64、非图片 MIME、系统/助手图片、工具结果图片以及尚未支持的 file/audio/document 块返回 HTTP `400 invalid_request_error`。这些请求级错误不会记录账号调度失败、切换账号或最终伪装成 502。
 - Agent RPC 只转发模型对话与工具协议，不在 Sub2API 本机执行 Cursor 请求中的 shell 命令或文件读写。工具调用由下游客户端执行并在下一轮回传结果。
 - Agent RPC 强制使用独立 HTTP/2 连接池和 `application/connect+proto`，不会参与 OpenAI 上游的 HTTP/2→HTTP/1.1 降级。
-- `auto` 的回退是可配置的安全兜底：只有在下游响应尚未提交、错误被明确归类为可安全重放、请求不携带客户端工具/工具结果/工具调用历史/Responses 延续状态且 Cloud Agent 凭据可用时，才能切换 Cloud Agent；一旦请求依赖本地工具语义、已发送响应事件或错误可能产生副作用，就不会重放。
+- `auto` 的回退是可配置的安全兜底：只有在下游响应尚未提交、错误被明确归类为可安全重放、请求不携带客户端工具/工具结果/工具调用历史/内联图片/Responses 延续状态且 Cloud Agent 凭据可用时，才能切换 Cloud Agent；一旦请求依赖本地工具或图片语义、已发送响应事件或错误可能产生副作用，就不会重放。显式 `cloud_agent` 模式仍会把图片写入 `prompt.images`，避免静默丢图。
 - Cloud Agent 仍用于创建和管理可自主执行任务的持久资源；它保持独立的显式任务模式，每次提示词执行对应一个 run，同一 Agent 同时只能有一个活跃 run。
 - 管理后台白名单优先以 `GET /v1/models` 返回的逻辑模型 ID 为准；仅配置 Dashboard Token 的账号使用内部 `GetUsableModels` 目录获得同样的逻辑目录与运行时变体，不会把 thinking、effort、fast 等执行变体逐项写入白名单。
 - Cursor 账号可显式启用混合调度。兼容层可承接 `/v1/messages`、`/v1/chat/completions`、`/v1/responses` 三种普通聊天协议；被 Anthropic、Gemini、OpenAI 或 Grok 分组选中后，转发阶段始终按账号平台进入 Cursor 网关，不会把 Cursor API Key 当作对应分组平台的上游凭据。Gemini 原生 `generateContent` 不会调度到 Cursor。不同上游的会话上下文与模型能力可能不同，应通过分组隔离账号，并只启用已同步且验证可用的模型。

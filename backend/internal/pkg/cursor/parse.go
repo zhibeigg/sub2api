@@ -2,11 +2,43 @@ package cursor
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"strings"
 )
+
+const (
+	maxInlineImageCount        = 20
+	maxInlineImageBytes        = 5 << 20
+	maxInlineImagesTotalBytes  = 6 << 20
+	maxInlineImageBase64Length = ((maxInlineImageBytes + 2) / 3) * 4
+)
+
+type inlineImageBudget struct {
+	count int
+	bytes int
+}
+
+func (b *inlineImageBudget) add(image InlineImage) error {
+	if b == nil {
+		return nil
+	}
+	if b.count >= maxInlineImageCount {
+		return fmt.Errorf("inline image count exceeds %d", maxInlineImageCount)
+	}
+	if len(image.Data) > maxInlineImageBytes {
+		return fmt.Errorf("inline image exceeds %d MiB limit", maxInlineImageBytes>>20)
+	}
+	if b.bytes+len(image.Data) > maxInlineImagesTotalBytes {
+		return fmt.Errorf("inline images exceed %d MiB total limit", maxInlineImagesTotalBytes>>20)
+	}
+	b.count++
+	b.bytes += len(image.Data)
+	return nil
+}
 
 func ParseRequest(protocol Protocol, data []byte) (*Dialogue, error) {
 	switch protocol {
@@ -64,6 +96,7 @@ func ParseAnthropic(data []byte) (*Dialogue, error) {
 		return nil, badRequest("parse anthropic request", err)
 	}
 	d := &Dialogue{}
+	imageBudget := &inlineImageBudget{}
 	var err error
 	if len(req.System) > 0 && string(req.System) != "null" {
 		d.System, err = parseTextContent(req.System, false)
@@ -85,7 +118,7 @@ func ParseAnthropic(data []byte) (*Dialogue, error) {
 			}
 			continue
 		}
-		converted, convErr := parseAnthropicMessage(msg)
+		converted, convErr := parseAnthropicMessage(msg, imageBudget)
 		if convErr != nil {
 			return nil, badRequest("parse anthropic message", convErr)
 		}
@@ -99,7 +132,7 @@ func ParseAnthropic(data []byte) (*Dialogue, error) {
 	return validateDialogue(d)
 }
 
-func parseAnthropicMessage(msg rawMessage) ([]DialogueMessage, error) {
+func parseAnthropicMessage(msg rawMessage, imageBudget *inlineImageBudget) ([]DialogueMessage, error) {
 	if msg.Role != "user" && msg.Role != "assistant" {
 		return nil, fmt.Errorf("unsupported role %q", msg.Role)
 	}
@@ -115,6 +148,11 @@ func parseAnthropicMessage(msg rawMessage) ([]DialogueMessage, error) {
 		ToolUseID string          `json:"tool_use_id"`
 		Content   json.RawMessage `json:"content"`
 		IsError   bool            `json:"is_error"`
+		Source    *struct {
+			Type      string `json:"type"`
+			MediaType string `json:"media_type"`
+			Data      string `json:"data"`
+		} `json:"source"`
 	}
 	if err := json.Unmarshal(msg.Content, &blocks); err != nil {
 		return nil, fmt.Errorf("content must be text or blocks: %w", err)
@@ -148,7 +186,7 @@ func parseAnthropicMessage(msg rawMessage) ([]DialogueMessage, error) {
 			if msg.Role != "user" {
 				return nil, fmt.Errorf("tool_result is only valid for user messages")
 			}
-			if current.Text != "" || len(current.ToolCalls) > 0 {
+			if dialogueMessageHasContent(current) {
 				result = append(result, current)
 				current = DialogueMessage{Role: msg.Role}
 			}
@@ -157,16 +195,98 @@ func parseAnthropicMessage(msg rawMessage) ([]DialogueMessage, error) {
 				return nil, fmt.Errorf("tool result: %w", err)
 			}
 			result = append(result, DialogueMessage{Role: "tool", Text: text, ToolCallID: block.ToolUseID, IsError: block.IsError})
-		case "image", "image_url", "input_image", "audio", "input_audio", "file", "input_file", "document":
+		case "image":
+			if msg.Role != "user" {
+				return nil, fmt.Errorf("image content is only valid for user messages")
+			}
+			image, err := parseAnthropicInlineImage(block.Source)
+			if err != nil {
+				return nil, err
+			}
+			if err := imageBudget.add(image); err != nil {
+				return nil, err
+			}
+			current.Images = append(current.Images, image)
+		case "image_url", "input_image", "audio", "input_audio", "file", "input_file", "document":
 			return nil, fmt.Errorf("unsupported multimodal content type %q", block.Type)
 		default:
 			return nil, fmt.Errorf("unsupported content type %q", block.Type)
 		}
 	}
-	if current.Text != "" || len(current.ToolCalls) > 0 {
+	if dialogueMessageHasContent(current) {
 		result = append(result, current)
 	}
 	return result, nil
+}
+
+func parseAnthropicInlineImage(source *struct {
+	Type      string `json:"type"`
+	MediaType string `json:"media_type"`
+	Data      string `json:"data"`
+}) (InlineImage, error) {
+	if source == nil {
+		return InlineImage{}, fmt.Errorf("image source is required")
+	}
+	if source.Type != "base64" {
+		return InlineImage{}, fmt.Errorf("unsupported remote image source; use base64 image data")
+	}
+	mediaType, err := normalizeImageMIMEType(source.MediaType)
+	if err != nil {
+		return InlineImage{}, err
+	}
+	encoded := strings.TrimSpace(source.Data)
+	if encoded == "" {
+		return InlineImage{}, fmt.Errorf("image data is required")
+	}
+	if len(encoded) > maxInlineImageBase64Length {
+		return InlineImage{}, fmt.Errorf("inline image exceeds %d MiB limit", maxInlineImageBytes>>20)
+	}
+	decoded, err := base64.StdEncoding.Strict().DecodeString(encoded)
+	if err != nil {
+		return InlineImage{}, fmt.Errorf("invalid base64 image data")
+	}
+	if len(decoded) == 0 {
+		return InlineImage{}, fmt.Errorf("image data is empty")
+	}
+	if len(decoded) > maxInlineImageBytes {
+		return InlineImage{}, fmt.Errorf("inline image exceeds %d MiB limit", maxInlineImageBytes>>20)
+	}
+	if !inlineImageMatchesMIMEType(mediaType, decoded) {
+		return InlineImage{}, fmt.Errorf("image data does not match media_type")
+	}
+	return InlineImage{MIMEType: mediaType, Data: decoded}, nil
+}
+
+func normalizeImageMIMEType(value string) (string, error) {
+	mediaType, parameters, err := mime.ParseMediaType(strings.TrimSpace(value))
+	if err != nil || len(parameters) > 0 {
+		return "", fmt.Errorf("image media_type must be one of image/png, image/jpeg, image/gif, or image/webp")
+	}
+	switch strings.ToLower(mediaType) {
+	case "image/png", "image/jpeg", "image/gif", "image/webp":
+		return strings.ToLower(mediaType), nil
+	default:
+		return "", fmt.Errorf("image media_type must be one of image/png, image/jpeg, image/gif, or image/webp")
+	}
+}
+
+func inlineImageMatchesMIMEType(mediaType string, data []byte) bool {
+	switch mediaType {
+	case "image/png":
+		return bytes.HasPrefix(data, []byte{'\x89', 'P', 'N', 'G', '\r', '\n', '\x1a', '\n'})
+	case "image/jpeg":
+		return bytes.HasPrefix(data, []byte{'\xff', '\xd8', '\xff'})
+	case "image/gif":
+		return bytes.HasPrefix(data, []byte("GIF87a")) || bytes.HasPrefix(data, []byte("GIF89a"))
+	case "image/webp":
+		return len(data) >= 12 && bytes.Equal(data[:4], []byte("RIFF")) && bytes.Equal(data[8:12], []byte("WEBP"))
+	default:
+		return false
+	}
+}
+
+func dialogueMessageHasContent(message DialogueMessage) bool {
+	return message.Text != "" || len(message.Images) > 0 || len(message.ToolCalls) > 0
 }
 
 func ParseOpenAIChat(data []byte) (*Dialogue, error) {

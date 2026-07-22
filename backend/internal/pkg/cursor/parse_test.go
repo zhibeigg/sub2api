@@ -1,6 +1,7 @@
 package cursor
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -28,6 +29,114 @@ func TestParseAnthropicIgnoresPriorThinkingBlocks(t *testing.T) {
 		{Role: "assistant", Text: "visible answer"},
 		{Role: "user", Text: "follow up"},
 	}, dialogue.Messages)
+}
+
+func TestParseAnthropicBase64Images(t *testing.T) {
+	body := []byte(`{
+		"messages":[
+			{"role":"user","content":[
+				{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgo="}}
+			]},
+			{"role":"assistant","content":"received"},
+			{"role":"user","content":[
+				{"type":"text","text":"compare this"},
+				{"type":"image","source":{"type":"base64","media_type":"image/jpeg","data":"/9j/AA=="}}
+			]}
+		]
+	}`)
+
+	dialogue, err := ParseAnthropic(body)
+	require.NoError(t, err)
+	require.Equal(t, []DialogueMessage{
+		{Role: "user", Images: []InlineImage{{MIMEType: "image/png", Data: []byte{'\x89', 'P', 'N', 'G', '\r', '\n', '\x1a', '\n'}}}},
+		{Role: "assistant", Text: "received"},
+		{Role: "user", Text: "compare this", Images: []InlineImage{{MIMEType: "image/jpeg", Data: []byte{'\xff', '\xd8', '\xff', '\x00'}}}},
+	}, dialogue.Messages)
+}
+
+func TestParseAnthropicRejectsUnsupportedImageStructuresWithoutLeakingData(t *testing.T) {
+	tests := []struct {
+		name   string
+		body   string
+		secret string
+	}{
+		{
+			name:   "remote URL",
+			body:   `{"messages":[{"role":"user","content":[{"type":"image","source":{"type":"url","url":"https://secret.example/image.png"}}]}]}`,
+			secret: "secret.example",
+		},
+		{
+			name:   "invalid base64",
+			body:   `{"messages":[{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"not-base64-SECRET"}}]}]}`,
+			secret: "not-base64-SECRET",
+		},
+		{
+			name:   "non image MIME",
+			body:   `{"messages":[{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"text/plain","data":"iVBORw0KGgpJTUFHRS1TRUNSRVQ="}}]}]}`,
+			secret: "iVBORw0KGgpJTUFHRS1TRUNSRVQ=",
+		},
+		{
+			name:   "SVG MIME",
+			body:   `{"messages":[{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/svg+xml","data":"iVBORw0KGgo="}}]}]}`,
+			secret: "iVBORw0KGgo=",
+		},
+		{
+			name:   "MIME mismatch",
+			body:   `{"messages":[{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"/9j/AA=="}}]}]}`,
+			secret: "/9j/AA==",
+		},
+		{
+			name:   "assistant image",
+			body:   `{"messages":[{"role":"assistant","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgpJTUFHRS1TRUNSRVQ="}}]}]}`,
+			secret: "iVBORw0KGgpJTUFHRS1TRUNSRVQ=",
+		},
+		{
+			name:   "system image",
+			body:   `{"messages":[{"role":"system","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgpJTUFHRS1TRUNSRVQ="}}]}]}`,
+			secret: "iVBORw0KGgpJTUFHRS1TRUNSRVQ=",
+		},
+		{
+			name:   "tool result image",
+			body:   `{"messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"call-1","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgpJTUFHRS1TRUNSRVQ="}}]}]}]}`,
+			secret: "iVBORw0KGgpJTUFHRS1TRUNSRVQ=",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := ParseAnthropic([]byte(test.body))
+			require.Error(t, err)
+			require.True(t, IsKind(err, ErrorBadRequest))
+			require.NotContains(t, err.Error(), test.secret)
+		})
+	}
+}
+
+func TestInlineImageBudgetLimits(t *testing.T) {
+	countBudget := &inlineImageBudget{}
+	for range maxInlineImageCount {
+		require.NoError(t, countBudget.add(InlineImage{Data: []byte{1}}))
+	}
+	require.ErrorContains(t, countBudget.add(InlineImage{Data: []byte{1}}), "inline image count exceeds")
+
+	totalBudget := &inlineImageBudget{}
+	require.NoError(t, totalBudget.add(InlineImage{Data: make([]byte, 4<<20)}))
+	require.ErrorContains(t, totalBudget.add(InlineImage{Data: make([]byte, 3<<20)}), "inline images exceed")
+}
+
+func TestParseAnthropicRejectsOversizedImageBeforeDecode(t *testing.T) {
+	source := &struct {
+		Type      string `json:"type"`
+		MediaType string `json:"media_type"`
+		Data      string `json:"data"`
+	}{
+		Type:      "base64",
+		MediaType: "image/png",
+		Data:      strings.Repeat("A", maxInlineImageBase64Length+1),
+	}
+
+	_, err := parseAnthropicInlineImage(source)
+	require.ErrorContains(t, err, "inline image exceeds")
 }
 
 func TestParseAnthropicMergesSystemMessagesIntoTopLevelPrompt(t *testing.T) {

@@ -803,6 +803,28 @@ func TestOpenAIResponses_SetsClientTransportHTTP(t *testing.T) {
 	require.Equal(t, service.OpenAIClientTransportHTTP, service.GetOpenAIClientTransport(c))
 }
 
+func TestHandleAnthropicFailoverExhaustedReturnsRequestScopedError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+
+	h := &OpenAIGatewayHandler{}
+	h.handleAnthropicFailoverExhausted(c, &service.UpstreamFailoverError{
+		StatusCode:        http.StatusBadRequest,
+		Scope:             service.GatewayFailureScopeRequest,
+		NextAccountAction: service.NextAccountStop,
+		ClientStatusCode:  http.StatusBadRequest,
+		ClientMessage:     "unsupported remote image source; use base64 image data",
+	}, false)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Equal(t, "error", gjson.Get(w.Body.String(), "type").String())
+	require.Equal(t, "invalid_request_error", gjson.Get(w.Body.String(), "error.type").String())
+	require.Equal(t, "unsupported remote image source; use base64 image data", gjson.Get(w.Body.String(), "error.message").String())
+	require.Equal(t, http.StatusBadRequest, c.GetInt(service.OpsUpstreamStatusCodeKey))
+}
+
 func TestOpenAIResponses_RejectsMessageIDAsPreviousResponseID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

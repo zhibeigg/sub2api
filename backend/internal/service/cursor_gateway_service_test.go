@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -200,6 +201,50 @@ func TestOpenAIGatewayRoutesMixedScheduledCursorAcrossCompatibleProtocols(t *tes
 	}
 }
 
+func TestMapCursorErrorClassifiesBadRequestAsRequestScoped(t *testing.T) {
+	mapped := mapCursorError(&cursorpkg.Error{
+		Kind:       cursorpkg.ErrorBadRequest,
+		StatusCode: http.StatusBadRequest,
+		Operation:  "parse anthropic message",
+		Err:        errors.New("unsupported remote image source; use base64 image data: https://SECRET.example/image.png"),
+	})
+
+	var failure *UpstreamFailoverError
+	require.ErrorAs(t, mapped, &failure)
+	require.Equal(t, http.StatusBadRequest, failure.StatusCode)
+	require.Equal(t, GatewayFailureStageInference, failure.Stage)
+	require.Equal(t, GatewayFailureScopeRequest, failure.Scope)
+	require.Equal(t, GatewayFailureReason("cursor_invalid_request"), failure.Reason)
+	require.Equal(t, NextAccountStop, failure.NextAccountAction)
+	require.Equal(t, http.StatusBadRequest, failure.ClientStatusCode)
+	require.Equal(t, "unsupported remote image source; use base64 image data", failure.ClientMessage)
+	require.NotContains(t, failure.Error(), "SECRET.example")
+	require.False(t, failure.ShouldRetryNextAccount())
+	require.False(t, failure.ShouldReportAccountScheduleFailure())
+
+	mapped = mapCursorError(&cursorpkg.Error{
+		Kind:      cursorpkg.ErrorTransport,
+		Operation: "send Agent message",
+		Err:       errors.New("agent frame size 9000000 exceeds 8388608 bytes"),
+	})
+	require.ErrorAs(t, mapped, &failure)
+	require.Equal(t, http.StatusRequestEntityTooLarge, failure.StatusCode)
+	require.Equal(t, GatewayFailureScopeRequest, failure.Scope)
+	require.Equal(t, NextAccountStop, failure.NextAccountAction)
+	require.Equal(t, "Cursor request payload exceeds the Agent frame limit", failure.ClientMessage)
+	require.False(t, failure.ShouldReportAccountScheduleFailure())
+
+	mapped = mapCursorError(&cursorpkg.Error{
+		Kind:      cursorpkg.ErrorProtocol,
+		Operation: "parse connect stream",
+		Err:       errors.New("frame size 9000000 exceeds 8388608 bytes"),
+	})
+	require.ErrorAs(t, mapped, &failure)
+	require.Equal(t, http.StatusBadGateway, failure.StatusCode)
+	require.Empty(t, failure.Scope)
+	require.True(t, failure.ShouldReportAccountScheduleFailure())
+}
+
 func TestCursorMixedSchedulingRequiresConfiguredGateway(t *testing.T) {
 	t.Parallel()
 	body := []byte(`{"model":"grok-4.5","stream":false,"messages":[{"role":"user","content":"hi"}]}`)
@@ -264,6 +309,44 @@ func TestCursorGatewayForwardAnthropicCloudAgent(t *testing.T) {
 	require.Equal(t, "/v1/agents", requests[0].URL.Path)
 	require.Contains(t, bodies[0], "Conversation transcript")
 	require.Contains(t, bodies[0], "hi")
+}
+
+func TestCursorGatewayForwardAnthropicCloudAgentPreservesInlineImages(t *testing.T) {
+	cleanupCh := make(chan string, 2)
+	upstream := &cursorGatewayUpstreamStub{outputs: []string{"image answer"}, cleanupCh: cleanupCh}
+	svc := newCursorGatewayForTest(upstream, nil)
+	body := `{"model":"grok-4.5","stream":false,"messages":[{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgpJTUFHRS1TRUNSRVQ="}},{"type":"text","text":"describe it"}]}]}`
+	c, recorder := newCursorGatewayTestContext(t, "/v1/messages", body, 3)
+
+	result, err := svc.Forward(context.Background(), c, cursorAPIKeyAccount(), []byte(body))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	select {
+	case action := <-cleanupCh:
+		require.Equal(t, "delete", action)
+	case <-time.After(time.Second):
+		t.Fatal("completed image agent was not deleted")
+	}
+
+	requests, bodies, _, _ := upstream.snapshot()
+	var createBody string
+	for index, request := range requests {
+		if request.Method == http.MethodPost && request.URL.Path == "/v1/agents" {
+			createBody = bodies[index]
+			break
+		}
+	}
+	require.NotEmpty(t, createBody)
+	var createRequest cursorpkg.CreateAgentRequest
+	require.NoError(t, json.Unmarshal([]byte(createBody), &createRequest))
+	require.Len(t, createRequest.Prompt.Images, 1)
+	require.Equal(t, "image/png", createRequest.Prompt.Images[0].MimeType)
+	require.Equal(t, "iVBORw0KGgpJTUFHRS1TRUNSRVQ=", createRequest.Prompt.Images[0].Data)
+	require.Contains(t, createRequest.Prompt.Text, "[Attached image: image/png]")
+	require.NotContains(t, createRequest.Prompt.Text, "iVBORw0KGgpJTUFHRS1TRUNSRVQ=")
+	require.NotContains(t, createRequest.Prompt.Text, "IMAGE-SECRET")
 }
 
 func TestCursorGatewayForwardAnthropicFollowUpWithThinkingHistory(t *testing.T) {

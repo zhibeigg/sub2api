@@ -140,6 +140,30 @@ func TestHandleFailoverExhaustedReturnsCursorBadRequestDetail(t *testing.T) {
 	require.Contains(t, w.Body.String(), `"type":"invalid_request_error"`)
 }
 
+func TestCursorInvalidArgumentStreamsSingleSanitizedErrorFrame(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	_, err := c.Writer.Write([]byte(partialMessageStartSSE))
+	require.NoError(t, err)
+
+	(&GatewayHandler{}).handleFailoverExhausted(c, &service.UpstreamFailoverError{
+		StatusCode:        http.StatusBadRequest,
+		ResponseBody:      []byte(`{"error":"image payload SECRET-DATA is invalid"}`),
+		Scope:             service.GatewayFailureScopeRequest,
+		NextAccountAction: service.NextAccountStop,
+		ClientStatusCode:  http.StatusBadRequest,
+		ClientMessage:     "Cursor rejected the request payload",
+	}, service.PlatformCursor, true)
+
+	body := recorder.Body.String()
+	require.Equal(t, 1, strings.Count(body, `"type":"error"`))
+	require.Contains(t, body, `"type":"invalid_request_error"`)
+	require.Contains(t, body, "Cursor rejected the request payload")
+	require.NotContains(t, body, "SECRET-DATA")
+}
+
 func TestOpenCodeRequestErrorPreservedAcrossCompatibilityEndpoints(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h := &GatewayHandler{}

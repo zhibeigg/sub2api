@@ -126,6 +126,84 @@ func TestAgentRunRequestGoldenAndDescriptorFields(t *testing.T) {
 	}
 }
 
+func TestAgentRunRequestEncodesCurrentAndHistoricalInlineImages(t *testing.T) {
+	historyImage := []byte("HISTORY-IMAGE-BYTES")
+	currentImage := []byte("CURRENT-IMAGE-BYTES")
+	secondCurrentImage := []byte("SECOND-CURRENT-IMAGE-BYTES")
+	dialogue := &Dialogue{Messages: []DialogueMessage{
+		{Role: "user", Images: []InlineImage{{MIMEType: "image/png", Data: historyImage}}},
+		{Role: "assistant", Text: "history answer"},
+		{Role: "user", Images: []InlineImage{
+			{MIMEType: "image/jpeg", Data: currentImage},
+			{MIMEType: "image/webp", Data: secondCurrentImage},
+		}},
+	}}
+	state, blobs, err := PrepareAgentConversationState(dialogue, nil, nil, sequenceUUID("history-message"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := encodeAgentRunRequest(dialogue, AgentRunOptions{
+		Model:             "model",
+		ConversationID:    "conversation",
+		ConversationState: state,
+	}, sequenceUUID("current-message"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runRequest := firstBytesField(t, payload, 1)
+	if !hasVarint(allFields(runRequest), 19, 1) {
+		t.Fatalf("AgentRunRequest field 19 missing: %x", runRequest)
+	}
+	userAction := firstBytesField(t, firstBytesField(t, runRequest, 2), 1)
+	currentUser := firstBytesField(t, userAction, 1)
+	currentFields := allFields(currentUser)
+	for _, number := range []protowire.Number{1, 2, 3, 4} {
+		if !hasField(currentFields, number) {
+			t.Fatalf("current UserMessage field %d missing: %x", number, currentUser)
+		}
+	}
+	if firstStringField(t, currentUser, 1) != "" || !hasVarint(currentFields, 4, uint64(AgentModeAgent)) {
+		t.Fatalf("unexpected current UserMessage text/mode: %x", currentUser)
+	}
+	currentSelectedContext := firstBytesField(t, currentUser, 3)
+	currentSelectedImages := bytesFields(currentSelectedContext, 1)
+	if len(currentSelectedImages) != 2 {
+		t.Fatalf("current SelectedImage count = %d", len(currentSelectedImages))
+	}
+	if firstStringField(t, currentSelectedImages[0], 7) != "image/jpeg" || !bytes.Equal(firstBytesField(t, currentSelectedImages[0], 8), currentImage) {
+		t.Fatalf("unexpected first current SelectedImage: %x", currentSelectedImages[0])
+	}
+	if firstStringField(t, currentSelectedImages[1], 7) != "image/webp" || !bytes.Equal(firstBytesField(t, currentSelectedImages[1], 8), secondCurrentImage) {
+		t.Fatalf("unexpected second current SelectedImage: %x", currentSelectedImages[1])
+	}
+
+	encodedState := firstBytesField(t, runRequest, 1)
+	turnIDs := bytesFields(encodedState, 8)
+	if len(turnIDs) != 1 {
+		t.Fatalf("image-only history turn count = %d", len(turnIDs))
+	}
+	agentTurn := firstBytesField(t, agentTestBlob(t, blobs, turnIDs[0]), 1)
+	historyUser := agentTestBlob(t, blobs, firstBytesField(t, agentTurn, 1))
+	if !hasField(allFields(historyUser), 3) || firstStringField(t, historyUser, 1) != "" {
+		t.Fatalf("unexpected history UserMessage: %x", historyUser)
+	}
+	historySelectedContext := firstBytesField(t, historyUser, 3)
+	historySelectedImage := firstBytesField(t, historySelectedContext, 1)
+	if firstStringField(t, historySelectedImage, 7) != "image/png" || !bytes.Equal(firstBytesField(t, historySelectedImage, 8), historyImage) {
+		t.Fatalf("unexpected history SelectedImage: %x", historySelectedImage)
+	}
+
+	rootPromptIDs := bytesFields(encodedState, 1)
+	if len(rootPromptIDs) != 3 {
+		t.Fatalf("root prompt count = %d", len(rootPromptIDs))
+	}
+	historyUserRoot := agentTestBlob(t, blobs, rootPromptIDs[1])
+	if !bytes.Contains(historyUserRoot, []byte("[Attached image: image/png]")) || bytes.Contains(historyUserRoot, historyImage) {
+		t.Fatalf("history root prompt image copy is unsafe: %s", historyUserRoot)
+	}
+}
+
 func TestAgentMCPToolNamesUseProviderScopedInternalName(t *testing.T) {
 	tools := []ToolDefinition{
 		{Name: "Glob", InputSchema: json.RawMessage(`{"type":"object"}`)},

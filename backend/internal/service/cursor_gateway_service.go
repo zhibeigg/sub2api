@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -639,11 +640,33 @@ func cursorRequestRequiresAgentRPC(body []byte, protocol cursorpkg.Protocol) (bo
 		return true, "client_tools"
 	}
 	for _, message := range dialogue.Messages {
+		if len(message.Images) > 0 {
+			return true, "inline_images"
+		}
 		if len(message.ToolCalls) > 0 || strings.TrimSpace(message.ToolCallID) != "" || strings.EqualFold(strings.TrimSpace(message.Role), "tool") {
 			return true, "tool_continuation"
 		}
 	}
 	return false, ""
+}
+
+func cursorCloudPromptImages(dialogue *cursorpkg.Dialogue) []cursorpkg.CloudImage {
+	if dialogue == nil {
+		return nil
+	}
+	var images []cursorpkg.CloudImage
+	for _, message := range dialogue.Messages {
+		for _, image := range message.Images {
+			if len(image.Data) == 0 || strings.TrimSpace(image.MIMEType) == "" {
+				continue
+			}
+			images = append(images, cursorpkg.CloudImage{
+				Data:     base64.StdEncoding.EncodeToString(image.Data),
+				MimeType: image.MIMEType,
+			})
+		}
+	}
+	return images
 }
 
 func (s *CursorGatewayService) forwardCloud(ctx context.Context, c *gin.Context, account *Account, body []byte, protocol cursorpkg.Protocol) (*ForwardResult, error) {
@@ -660,7 +683,7 @@ func (s *CursorGatewayService) forwardCloud(ctx context.Context, c *gin.Context,
 
 	var envelope cursorRequestEnvelope
 	if err := json.Unmarshal(body, &envelope); err != nil {
-		return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte("invalid request body: " + err.Error())}
+		return nil, cursorRequestFailoverError("invalid request body: " + err.Error())
 	}
 	requestModel := strings.TrimSpace(envelope.Model)
 	if requestModel == "" {
@@ -683,7 +706,7 @@ func (s *CursorGatewayService) forwardCloud(ctx context.Context, c *gin.Context,
 	if protocol == cursorpkg.ProtocolResponses && strings.TrimSpace(envelope.PreviousResponseID) != "" {
 		previous, loadErr := s.loadCursorResponse(ctx, c, envelope.PreviousResponseID)
 		if loadErr != nil {
-			return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte(loadErr.Error())}
+			return nil, cursorRequestFailoverError(loadErr.Error())
 		}
 		if strings.TrimSpace(dialogue.System) == "" {
 			dialogue.System = previous.System
@@ -712,13 +735,16 @@ func (s *CursorGatewayService) forwardCloud(ctx context.Context, c *gin.Context,
 		}
 		modelRef, err = completeCursorCloudModelRef(modelRef, models)
 		if err != nil {
-			return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte(err.Error())}
+			return nil, cursorRequestFailoverError(err.Error())
 		}
 	}
 	created, err := client.CreateAgent(ctx, cursorpkg.CreateAgentRequest{
-		Prompt: cursorpkg.CloudPrompt{Text: cursorpkg.RenderAgentPrompt(payload)},
-		Model:  modelRef,
-		Name:   "Sub2API compatibility request",
+		Prompt: cursorpkg.CloudPrompt{
+			Text:   cursorpkg.RenderAgentPrompt(payload),
+			Images: cursorCloudPromptImages(dialogue),
+		},
+		Model: modelRef,
+		Name:  "Sub2API compatibility request",
 	})
 	if err != nil {
 		return nil, mapCursorError(err)
@@ -1449,8 +1475,14 @@ func cursorResponseID(protocol cursorpkg.Protocol) string {
 }
 
 func mapCursorError(err error) error {
+	if err == nil {
+		return &UpstreamFailoverError{StatusCode: http.StatusBadGateway, ResponseBody: []byte("Cursor request failed")}
+	}
 	var cursorErr *cursorpkg.Error
 	if errors.As(err, &cursorErr) {
+		if cursorErrorIndicatesPayloadTooLarge(cursorErr.Error()) {
+			return cursorRequestPayloadTooLargeError("Cursor request payload exceeds the Agent frame limit")
+		}
 		status := cursorErr.StatusCode
 		if status == 0 {
 			if cursorErr.Kind == cursorpkg.ErrorBadRequest {
@@ -1459,9 +1491,84 @@ func mapCursorError(err error) error {
 				status = http.StatusBadGateway
 			}
 		}
-		return &UpstreamFailoverError{StatusCode: status, ResponseBody: []byte(cursorErr.Error())}
+		failure := &UpstreamFailoverError{StatusCode: status, ResponseBody: []byte(cursorErr.Error())}
+		if cursorErr.Kind == cursorpkg.ErrorBadRequest {
+			clientMessage := cursorBadRequestClientMessage(cursorErr)
+			failure.ResponseBody = []byte(clientMessage)
+			failure.Stage = GatewayFailureStageInference
+			failure.Scope = GatewayFailureScopeRequest
+			failure.Reason = GatewayFailureReason("cursor_invalid_request")
+			failure.NextAccountAction = NextAccountStop
+			failure.ClientStatusCode = http.StatusBadRequest
+			failure.ClientMessage = clientMessage
+		}
+		return failure
+	}
+	if cursorErrorIndicatesPayloadTooLarge(err.Error()) {
+		return cursorRequestPayloadTooLargeError("Cursor request payload exceeds the Agent frame limit")
 	}
 	return &UpstreamFailoverError{StatusCode: http.StatusBadGateway, ResponseBody: []byte(err.Error())}
+}
+
+func cursorBadRequestClientMessage(err *cursorpkg.Error) string {
+	if err == nil {
+		return "Invalid Cursor request"
+	}
+	message := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(message, "unsupported remote image source"):
+		return "unsupported remote image source; use base64 image data"
+	case strings.Contains(message, "invalid base64 image data"):
+		return "invalid base64 image data"
+	case strings.Contains(message, "image source is required"):
+		return "image source is required"
+	case strings.Contains(message, "image data is required"):
+		return "image data is required"
+	case strings.Contains(message, "image data is empty"):
+		return "image data is empty"
+	case strings.Contains(message, "image data does not match media_type"):
+		return "image data does not match media_type"
+	case strings.Contains(message, "image media_type must be one of"):
+		return "image media_type must be one of image/png, image/jpeg, image/gif, or image/webp"
+	case strings.Contains(message, "image content is only valid for user messages"):
+		return "image content is only valid for user messages"
+	default:
+		return "Invalid Cursor request"
+	}
+}
+
+func cursorErrorIndicatesPayloadTooLarge(message string) bool {
+	message = strings.ToLower(strings.TrimSpace(message))
+	return strings.Contains(message, "inline image count exceeds") ||
+		strings.Contains(message, "inline image exceeds") ||
+		strings.Contains(message, "inline images exceed") ||
+		strings.Contains(message, "agent frame size") ||
+		(strings.Contains(message, "encode ide chat frame") && strings.Contains(message, "frame size") && strings.Contains(message, "exceeds"))
+}
+
+func cursorRequestFailoverError(message string) *UpstreamFailoverError {
+	return cursorRequestScopedError(http.StatusBadRequest, GatewayFailureReason("cursor_invalid_request"), message)
+}
+
+func cursorRequestPayloadTooLargeError(message string) *UpstreamFailoverError {
+	return cursorRequestScopedError(http.StatusRequestEntityTooLarge, GatewayFailureReason("cursor_request_too_large"), message)
+}
+
+func cursorRequestScopedError(status int, reason GatewayFailureReason, message string) *UpstreamFailoverError {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		message = "Invalid Cursor request"
+	}
+	return &UpstreamFailoverError{
+		StatusCode:        status,
+		ResponseBody:      []byte(message),
+		Stage:             GatewayFailureStageInference,
+		Scope:             GatewayFailureScopeRequest,
+		Reason:            reason,
+		NextAccountAction: NextAccountStop,
+		ClientStatusCode:  status,
+		ClientMessage:     message,
+	}
 }
 
 func (s *CursorGatewayService) saveCursorResponse(ctx context.Context, c *gin.Context, responseID string, dialogue *cursorpkg.Dialogue) error {

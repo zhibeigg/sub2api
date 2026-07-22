@@ -42,13 +42,34 @@ func TestParseAnthropicAndBuildPayload(t *testing.T) {
 	}
 }
 
-func TestParsersRejectMultimodalContent(t *testing.T) {
+func TestBuildPayloadPreservesImageOnlyMessagesWithoutEmbeddingData(t *testing.T) {
+	dialogue := &Dialogue{Messages: []DialogueMessage{{
+		Role:   "user",
+		Images: []InlineImage{{MIMEType: "image/png", Data: []byte("SECRET-IMAGE-BYTES")}},
+	}}}
+
+	payload, err := BuildPayload(dialogue, BuildOptions{Model: "claude-test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Messages) != 1 || payload.Messages[0].Parts[0].Text != "[Attached image: image/png]" {
+		t.Fatalf("image-only message was not preserved: %+v", payload.Messages)
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "SECRET-IMAGE-BYTES") {
+		t.Fatalf("payload embedded raw image data: %s", encoded)
+	}
+}
+
+func TestOpenAIParsersRejectMultimodalContent(t *testing.T) {
 	tests := []struct {
 		name     string
 		protocol Protocol
 		body     string
 	}{
-		{"anthropic image", ProtocolAnthropic, `{"messages":[{"role":"user","content":[{"type":"image","source":{"type":"base64","data":"x"}}]}]}`},
 		{"openai audio", ProtocolOpenAIChat, `{"messages":[{"role":"user","content":[{"type":"input_audio","input_audio":{"data":"x"}}]}]}`},
 		{"responses file", ProtocolResponses, `{"input":[{"type":"input_file","file_id":"file_1"}]}`},
 	}

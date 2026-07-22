@@ -1253,6 +1253,11 @@ func (h *OpenAIGatewayHandler) handleAnthropicFailoverExhausted(c *gin.Context, 
 		h.anthropicStreamingAwareError(c, status, "api_error", message, streamStarted)
 		return
 	}
+	if status, message, ok := requestScopedFailoverClientError(failoverErr, "Invalid Cursor request"); ok {
+		setOpsUpstreamErrorFallback(c, failoverErr.StatusCode, message)
+		h.anthropicStreamingAwareError(c, status, "invalid_request_error", message, streamStarted)
+		return
+	}
 	status, errType, errMsg := h.mapUpstreamError(failoverErr.StatusCode)
 	h.anthropicStreamingAwareError(c, status, errType, errMsg, streamStarted)
 }

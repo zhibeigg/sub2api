@@ -1050,7 +1050,7 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 
 	var envelope cursorRequestEnvelope
 	if err := json.Unmarshal(body, &envelope); err != nil {
-		return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte("invalid request body: " + err.Error())}
+		return nil, cursorRequestFailoverError("invalid request body: " + err.Error())
 	}
 	requestModel := strings.TrimSpace(envelope.Model)
 	if requestModel == "" {
@@ -1068,6 +1068,20 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 	if err != nil {
 		return nil, mapCursorError(err)
 	}
+	imageCount, imageBytes := cursorDialogueInlineImageStats(dialogue)
+	if imageCount > 0 {
+		if err := validateCursorInlineImageFrameBudget(imageBytes, s.cursorConfig().MaxFrameBytes); err != nil {
+			return nil, err
+		}
+		slog.Info("cursor_agent_inline_images_prepared",
+			"account_id", account.ID,
+			"protocol", string(protocol),
+			"model", requestModel,
+			"image_count", imageCount,
+			"image_bytes", imageBytes,
+			"body_bytes", len(body),
+		)
+	}
 	incomingToolResultIDs := cursorAgentToolResultIDs(dialogue)
 	owner, ownerErr := cursorResponseOwner(c)
 	var activeSession *cursorAgentActiveSession
@@ -1076,7 +1090,7 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 		activeSession, activeSessionExists = s.takeCursorAgentSession(owner, envelope.PreviousResponseID, incomingToolResultIDs)
 	}
 	if activeSession == nil && activeSessionExists {
-		return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte("Cursor Agent is waiting for the matching tool result")}
+		return nil, cursorRequestFailoverError("Cursor Agent is waiting for the matching tool result")
 	}
 
 	conversationID := uuid.NewString()
@@ -1090,7 +1104,7 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 	} else if protocol == cursorpkg.ProtocolResponses && strings.TrimSpace(envelope.PreviousResponseID) != "" {
 		loaded, loadErr := s.loadCursorStoredResponse(ctx, c, envelope.PreviousResponseID)
 		if loadErr != nil {
-			return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte(loadErr.Error())}
+			return nil, cursorRequestFailoverError(loadErr.Error())
 		}
 		previous = loaded
 	} else {
@@ -1107,7 +1121,7 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 			if activeSession != nil {
 				activeSession.Close()
 			}
-			return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte("previous_response_id has no stored dialogue")}
+			return nil, cursorRequestFailoverError("previous_response_id has no stored dialogue")
 		}
 		if strings.TrimSpace(dialogue.System) == "" {
 			dialogue.System = previous.Dialogue.System
@@ -1162,12 +1176,12 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 	toolResult, hasToolResult := cursorAgentToolResult(dialogue, pendingMCP)
 	if activeSession != nil && (!hasToolResult || pendingMCP == nil) {
 		activeSession.Close()
-		return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte("Cursor Agent is waiting for the matching tool result")}
+		return nil, cursorRequestFailoverError("Cursor Agent is waiting for the matching tool result")
 	}
 	resumeStoredMCP := false
 	if activeSession == nil && pendingMCP != nil {
 		if !hasToolResult {
-			return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte("Cursor Agent is waiting for the matching tool result")}
+			return nil, cursorRequestFailoverError("Cursor Agent is waiting for the matching tool result")
 		}
 		kind := strings.TrimSpace(pendingMCP.Kind)
 		if kind == "" {
@@ -1181,7 +1195,7 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 	if activeSession == nil {
 		preparedState, preparedBlobs, prepareErr := cursorpkg.PrepareAgentConversationState(dialogue, agentState, agentBlobs, uuid.NewString)
 		if prepareErr != nil {
-			return nil, &UpstreamFailoverError{StatusCode: http.StatusBadRequest, ResponseBody: []byte(prepareErr.Error())}
+			return nil, cursorRequestFailoverError(prepareErr.Error())
 		}
 		agentState = preparedState
 		agentBlobs = preparedBlobs
@@ -1219,12 +1233,22 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 			if stream != nil {
 				_ = stream.Close()
 			}
-			slog.Warn("cursor_agent_resume_failed_rebuilding_history", "account_id", account.ID, "model", upstreamModel, "error", err.Error())
+			slog.Warn("cursor_agent_resume_failed_rebuilding_history",
+				"account_id", account.ID,
+				"model", upstreamModel,
+				"error_type", fmt.Sprintf("%T", err),
+				"error_bytes", len(err.Error()),
+			)
 			conversationID = uuid.NewString()
 			runOptions.ConversationID = conversationID
-			runOptions.ConversationState = nil
 			runOptions.Resume = false
-			activeAccount, resp, stream, err = s.openCursorAgentStream(ctx, runCtx, account, dialogue, runOptions, nil)
+			rebuiltState, rebuiltBlobs, rebuildErr := cursorpkg.PrepareAgentConversationState(dialogue, nil, nil, uuid.NewString)
+			if rebuildErr != nil {
+				err = rebuildErr
+			} else {
+				runOptions.ConversationState = rebuiltState
+				activeAccount, resp, stream, err = s.openCursorAgentStream(ctx, runCtx, account, dialogue, runOptions, rebuiltBlobs)
+			}
 		}
 	}
 	if err != nil {
@@ -1237,7 +1261,13 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 		if activeSession != nil {
 			activeSession.Close()
 		}
-		slog.Warn("cursor_agent_open_stream_failed", "account_id", account.ID, "model", upstreamModel, "reused_active_session", reusedActiveSession, "error", err.Error())
+		slog.Warn("cursor_agent_open_stream_failed",
+			"account_id", account.ID,
+			"model", upstreamModel,
+			"reused_active_session", reusedActiveSession,
+			"error_type", fmt.Sprintf("%T", err),
+			"error_bytes", len(err.Error()),
+		)
 		return nil, mapCursorError(err)
 	}
 	if !reusedActiveSession && (resp == nil || resp.ProtoMajor != 2) {
@@ -1283,10 +1313,13 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 			if errors.Is(nextErr, io.EOF) {
 				break
 			}
-			if committed {
-				_ = writer.WriteError(nextErr.Error())
-			}
-			slog.Warn("cursor_ide_stream_read_failed", "account_id", account.ID, "model", upstreamModel, "committed", committed, "error", nextErr.Error())
+			slog.Warn("cursor_ide_stream_read_failed",
+				"account_id", account.ID,
+				"model", upstreamModel,
+				"committed", committed,
+				"error_type", fmt.Sprintf("%T", nextErr),
+				"error_bytes", len(nextErr.Error()),
+			)
 			return nil, mapCursorError(nextErr)
 		}
 		switch event.Type {
@@ -1344,30 +1377,20 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 			finished = true
 		case cursorpkg.IDEEventError:
 			statusCode, code, message, details := cursorAgentStreamFailure(event.Error)
-			clientMessage := message
-			if code != "" {
-				clientMessage = code + ": " + message
-			}
-			if committed {
-				_ = writer.WriteError(clientMessage)
-			}
 			slog.Warn("cursor_ide_stream_event_failed",
 				"account_id", account.ID,
 				"model", upstreamModel,
 				"committed", committed,
 				"status_code", statusCode,
 				"code", code,
-				"details", details,
-				"error", clientMessage,
+				"message_bytes", len(message),
+				"details_bytes", len(details),
 			)
 			return nil, cursorAgentStreamFailoverError(statusCode, code, message)
 		}
 	}
 
 	if err := validateCursorToolResult(dialogue, collected.Actions); err != nil {
-		if committed {
-			_ = writer.WriteError(err.Error())
-		}
 		return nil, &UpstreamFailoverError{StatusCode: http.StatusBadGateway, ResponseBody: []byte(err.Error())}
 	}
 	pending := stream.PendingMCP()
@@ -1390,9 +1413,6 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 	}
 	if protocol == cursorpkg.ProtocolResponses && (envelope.Store == nil || *envelope.Store) {
 		if saveErr := s.saveCursorStoredResponse(ctx, c, responseID, storedResponse); saveErr != nil {
-			if committed {
-				_ = writer.WriteError("failed to store Cursor response continuation")
-			}
 			return nil, &UpstreamFailoverError{StatusCode: http.StatusServiceUnavailable, ResponseBody: []byte("failed to store Cursor response continuation: " + saveErr.Error())}
 		}
 	} else if pending != nil && strings.TrimSpace(pending.Action.ID) != "" {
@@ -1484,7 +1504,9 @@ func cursorAgentStreamFailoverError(statusCode int, code, message string) error 
 	if statusCode == 0 {
 		statusCode = http.StatusBadGateway
 	}
-	if strings.TrimSpace(message) == "" {
+	if statusCode == http.StatusBadRequest {
+		message = "Cursor rejected the request payload"
+	} else if strings.TrimSpace(message) == "" {
 		message = "Cursor Agent stream failed"
 	}
 	body, err := json.Marshal(map[string]any{
@@ -1493,7 +1515,16 @@ func cursorAgentStreamFailoverError(statusCode int, code, message string) error 
 	if err != nil {
 		body = []byte(message)
 	}
-	return &UpstreamFailoverError{StatusCode: statusCode, ResponseBody: body}
+	failure := &UpstreamFailoverError{StatusCode: statusCode, ResponseBody: body}
+	if statusCode == http.StatusBadRequest {
+		failure.Stage = GatewayFailureStageInference
+		failure.Scope = GatewayFailureScopeRequest
+		failure.Reason = GatewayFailureReason("cursor_invalid_request")
+		failure.NextAccountAction = NextAccountStop
+		failure.ClientStatusCode = http.StatusBadRequest
+		failure.ClientMessage = message
+	}
+	return failure
 }
 
 func (s *CursorGatewayService) runCursorAgentWithOpenRetry(ctx context.Context, account *Account, client *cursorpkg.AgentClient, credential cursorpkg.IDECredential, dialogue *cursorpkg.Dialogue, options cursorpkg.AgentRunOptions) (*http.Response, *cursorpkg.AgentStream, error) {
@@ -1665,6 +1696,8 @@ func estimateCursorDialogueFixedTokens(dialogue *cursorpkg.Dialogue) int {
 	return total
 }
 
+const cursorInlineImageEstimatedTokens = 1024
+
 func estimateCursorDialogueHistoryTokens(dialogue *cursorpkg.Dialogue) int {
 	if dialogue == nil {
 		return 0
@@ -1672,12 +1705,47 @@ func estimateCursorDialogueHistoryTokens(dialogue *cursorpkg.Dialogue) int {
 	total := 0
 	for _, message := range dialogue.Messages {
 		total += 4 + cursorpkg.EstimateTokens(message.Text)
+		total += len(message.Images) * cursorInlineImageEstimatedTokens
 		for _, action := range message.ToolCalls {
 			encoded, _ := json.Marshal(action.Arguments)
 			total += cursorpkg.EstimateTokens(action.Name) + cursorpkg.EstimateTokens(string(encoded))
 		}
 	}
 	return total
+}
+
+func cursorDialogueInlineImageStats(dialogue *cursorpkg.Dialogue) (count, totalBytes int) {
+	if dialogue == nil {
+		return 0, 0
+	}
+	for _, message := range dialogue.Messages {
+		count += len(message.Images)
+		for _, image := range message.Images {
+			totalBytes += len(image.Data)
+		}
+	}
+	return count, totalBytes
+}
+
+func validateCursorInlineImageFrameBudget(imageBytes, maxFrameBytes int) error {
+	if imageBytes <= 0 {
+		return nil
+	}
+	if maxFrameBytes <= 0 {
+		maxFrameBytes = 8 << 20
+	}
+	reserve := maxFrameBytes / 4
+	if reserve < 256<<10 {
+		reserve = 256 << 10
+	}
+	if reserve > 2<<20 {
+		reserve = 2 << 20
+	}
+	budget := maxFrameBytes - reserve
+	if budget < 0 || imageBytes > budget {
+		return cursorRequestPayloadTooLargeError("inline images exceed the configured Cursor Agent frame budget")
+	}
+	return nil
 }
 
 func estimateCursorDialogueTokens(dialogue *cursorpkg.Dialogue) int {

@@ -97,6 +97,12 @@ type cursorIDEAutoFallbackUpstreamStub struct {
 	ideRunRequests int
 }
 
+type cursorIDEResumeFallbackUpstreamStub struct {
+	mu         sync.Mutex
+	runFrames  [][]byte
+	runRequest int
+}
+
 type cursorAgentDuplexUpstreamStub struct {
 	mu                   sync.Mutex
 	runRequests          int
@@ -111,6 +117,38 @@ func newCursorAgentDuplexUpstreamStub() *cursorAgentDuplexUpstreamStub {
 		shellResultFrames:    make(chan [][]byte, 1),
 		serveErrors:          make(chan error, 1),
 	}
+}
+
+func (s *cursorIDEResumeFallbackUpstreamStub) Do(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+	switch req.URL.Path {
+	case cursorpkg.AgentGetUsableModelsPath:
+		return cursorIDEHTTP2Response(req, cursorAgentModelsPayload("claude-sonnet-5")), nil
+	case cursorpkg.AgentRunPath:
+		frame, err := readCursorConnectFrame(req.Body)
+		if err != nil {
+			return nil, err
+		}
+		go func() { _, _ = io.Copy(io.Discard, req.Body) }()
+		s.mu.Lock()
+		s.runRequest++
+		requestNumber := s.runRequest
+		s.runFrames = append(s.runFrames, append([]byte(nil), frame...))
+		s.mu.Unlock()
+		switch requestNumber {
+		case 1:
+			return cursorIDEHTTP2Response(req, cursorIDEFrames(cursorIDEToolPayload("call_weather", "get_weather", `{"city":"Shanghai"}`, true))), nil
+		case 2:
+			return nil, errors.New("resume transport failed")
+		default:
+			return cursorIDEHTTP2Response(req, cursorIDEFrames(cursorIDETextPayload("fallback rebuilt"), cursorIDEUsagePayload(12, 3, 0, 0))), nil
+		}
+	default:
+		return nil, fmt.Errorf("unexpected Cursor Agent path %s", req.URL.Path)
+	}
+}
+
+func (s *cursorIDEResumeFallbackUpstreamStub) DoWithTLS(req *http.Request, proxyURL string, accountID int64, accountConcurrency int, _ *tlsfingerprint.Profile) (*http.Response, error) {
+	return s.Do(req, proxyURL, accountID, accountConcurrency)
 }
 
 func (s *cursorAgentDuplexUpstreamStub) Do(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
@@ -370,6 +408,28 @@ func TestCursorGatewayIDEAnthropicStreamsImmediately(t *testing.T) {
 	require.NotEmpty(t, upstream.bodies[0])
 }
 
+func TestCursorGatewayIDEAnthropicInlineImageUsesSingleAgentRun(t *testing.T) {
+	upstream := &cursorIDEUpstreamStub{chatBody: cursorIDEFrames(
+		cursorIDETextPayload("image received"), cursorIDEUsagePayload(11, 2, 0, 0),
+	)}
+	svc := ideTestGateway(upstream)
+	body := `{"model":"grok-4.5","stream":true,"messages":[{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgo="}},{"type":"text","text":"describe it"}]}]}`
+	c, recorder := newCursorGatewayTestContext(t, "/v1/messages", body, 3)
+
+	result, err := svc.Forward(context.Background(), c, ideTestAccount(), []byte(body))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Stream)
+	require.Contains(t, recorder.Body.String(), `"text":"image received"`)
+	require.Contains(t, recorder.Body.String(), `event: message_stop`)
+
+	upstream.mu.Lock()
+	defer upstream.mu.Unlock()
+	require.Len(t, upstream.requests, 1)
+	require.Equal(t, cursorpkg.AgentRunPath, upstream.requests[0].URL.Path)
+	require.NotEmpty(t, upstream.bodies[0])
+}
+
 func TestCursorGatewayIDEAnthropicGrokDirectUsageRestoresStreamAndBillingCache(t *testing.T) {
 	upstream := &cursorIDEUpstreamStub{chatBody: cursorIDEFrames(
 		cursorIDETextPayload("grok response"), cursorIDEGrokUsagePayload(9, 2, 1, 3),
@@ -503,6 +563,51 @@ func TestCursorGatewayIDEMCPPersistedFallbackAfterActiveStreamLoss(t *testing.T)
 	require.Len(t, upstream.requests, 2)
 }
 
+func TestCursorGatewayIDEResumeFailureRebuildsFullHistoryWithImages(t *testing.T) {
+	redisServer := miniredis.RunT(t)
+	redisClient := redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	defer func() { _ = redisClient.Close() }()
+	upstream := &cursorIDEResumeFallbackUpstreamStub{}
+	svc := ideTestGatewayWithRedis(upstream, redisClient)
+	account := ideTestAccount()
+	firstBody := `{"model":"claude-sonnet-5","stream":false,"messages":[{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgo="}},{"type":"text","text":"weather"}]}],"tools":[{"name":"get_weather","description":"weather","input_schema":{"type":"object"}}]}`
+	firstContext, _ := newCursorGatewayTestContext(t, "/v1/messages", firstBody, 3)
+	_, err := svc.Forward(context.Background(), firstContext, account, []byte(firstBody))
+	require.NoError(t, err)
+	svc.closeCursorAgentSessions()
+
+	secondBody := `{"model":"claude-sonnet-5","stream":false,"messages":[{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgo="}},{"type":"text","text":"weather"}]},{"role":"assistant","content":[{"type":"tool_use","id":"call_weather","name":"get_weather","input":{"city":"Shanghai"}}]},{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_weather","content":"27 C"}]}],"tools":[{"name":"get_weather","description":"weather","input_schema":{"type":"object"}}]}`
+	secondContext, secondRecorder := newCursorGatewayTestContext(t, "/v1/messages", secondBody, 3)
+	result, err := svc.Forward(context.Background(), secondContext, account, []byte(secondBody))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Contains(t, secondRecorder.Body.String(), "fallback rebuilt")
+
+	upstream.mu.Lock()
+	runFrames := make([][]byte, len(upstream.runFrames))
+	for index := range upstream.runFrames {
+		runFrames[index] = append([]byte(nil), upstream.runFrames[index]...)
+	}
+	upstream.mu.Unlock()
+	require.Len(t, runFrames, 3)
+
+	resumeRun := firstServiceBytesField(t, runFrames[1][5:], 1)
+	resumeAction := firstServiceBytesField(t, resumeRun, 2)
+	require.True(t, hasServiceProtoField(resumeAction, 2), "persisted continuation must first resume the stored tool session")
+
+	rebuiltRun := firstServiceBytesField(t, runFrames[2][5:], 1)
+	rebuiltAction := firstServiceBytesField(t, rebuiltRun, 2)
+	require.True(t, hasServiceProtoField(rebuiltAction, 1), "fallback must create a new user action")
+	require.False(t, hasServiceProtoField(rebuiltAction, 2), "fallback must not remain in resume mode")
+	rebuiltUserAction := firstServiceBytesField(t, rebuiltAction, 1)
+	rebuiltUserMessage := firstServiceBytesField(t, rebuiltUserAction, 1)
+	require.Equal(t, "Continue the conversation using the latest tool result.", firstServiceStringField(t, rebuiltUserMessage, 1))
+	rebuiltState := firstServiceBytesField(t, rebuiltRun, 1)
+	require.True(t, hasServiceProtoField(rebuiltState, 1), "fallback state must include root prompt history")
+	require.True(t, hasServiceProtoField(rebuiltState, 8), "fallback state must include complete conversation turns")
+	require.Equal(t, uint64(1), firstServiceVarintField(t, rebuiltRun, 19), "fallback must preserve inline image support")
+}
+
 func TestCursorAgentSessionRequiresMatchingToolResultBeforeTake(t *testing.T) {
 	svc := ideTestGateway(&cursorIDEUpstreamStub{})
 	session := &cursorAgentActiveSession{
@@ -533,6 +638,55 @@ func TestMergeCursorAgentDialogueMessagesAvoidsDuplicatingFullHistory(t *testing
 	merged = mergeCursorAgentDialogueMessages(previous, toolOnly)
 	require.Len(t, merged, 3)
 	require.Equal(t, "tool", merged[2].Role)
+}
+
+func TestCursorDialogueInlineImageStatsAndEstimate(t *testing.T) {
+	dialogue := &cursorpkg.Dialogue{Messages: []cursorpkg.DialogueMessage{
+		{Role: "user", Text: "compare", Images: []cursorpkg.InlineImage{
+			{MIMEType: "image/png", Data: []byte("first")},
+			{MIMEType: "image/jpeg", Data: []byte("second-image")},
+		}},
+	}}
+
+	count, totalBytes := cursorDialogueInlineImageStats(dialogue)
+	require.Equal(t, 2, count)
+	require.Equal(t, len("first")+len("second-image"), totalBytes)
+	require.GreaterOrEqual(t, estimateCursorDialogueHistoryTokens(dialogue), 2*cursorInlineImageEstimatedTokens)
+	require.NoError(t, validateCursorInlineImageFrameBudget(totalBytes, 8<<20))
+
+	err := validateCursorInlineImageFrameBudget(800, 1024)
+	var failure *UpstreamFailoverError
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, http.StatusRequestEntityTooLarge, failure.StatusCode)
+	require.Equal(t, GatewayFailureScopeRequest, failure.Scope)
+	require.Equal(t, NextAccountStop, failure.NextAccountAction)
+	require.False(t, failure.ShouldReportAccountScheduleFailure())
+}
+
+func TestCursorGatewayRejectsTooManyInlineImagesBeforeUpstream(t *testing.T) {
+	images := make([]string, 21)
+	for index := range images {
+		images[index] = `{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgo="}}`
+	}
+	body := `{"model":"grok-4.5","stream":false,"messages":[{"role":"user","content":[` + strings.Join(images, ",") + `]}]}`
+	upstream := &cursorIDEUpstreamStub{}
+	svc := ideTestGateway(upstream)
+	c, recorder := newCursorGatewayTestContext(t, "/v1/messages", body, 3)
+
+	result, err := svc.Forward(context.Background(), c, ideTestAccount(), []byte(body))
+
+	require.Nil(t, result)
+	require.Error(t, err)
+	var failure *UpstreamFailoverError
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, http.StatusRequestEntityTooLarge, failure.StatusCode)
+	require.Equal(t, GatewayFailureScopeRequest, failure.Scope)
+	require.Equal(t, NextAccountStop, failure.NextAccountAction)
+	require.False(t, failure.ShouldReportAccountScheduleFailure())
+	require.Empty(t, recorder.Body.String())
+	upstream.mu.Lock()
+	defer upstream.mu.Unlock()
+	require.Empty(t, upstream.requests)
 }
 
 func TestTrimCursorDialogueDoesNotChargeFixedAgentOverheadToHistory(t *testing.T) {
@@ -760,6 +914,31 @@ func TestCursorGatewayAutoDoesNotFallbackRequestsRequiringAgentRPC(t *testing.T)
 	}
 }
 
+func TestCursorGatewayInvalidArgumentDoesNotWriteStreamOrFallback(t *testing.T) {
+	upstream := &cursorIDEAutoFallbackUpstreamStub{ideChatBody: cursorIDEErrorFrame("invalid_argument", "image payload SECRET-DATA is invalid")}
+	svc := ideTestGateway(upstream)
+	account := ideTestAccount()
+	account.Credentials["api_key"] = "cloud-key"
+	account.Credentials["cursor_transport_mode"] = CursorTransportAuto
+	body := `{"model":"grok-4.5","stream":true,"messages":[{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgo="}}]}]}`
+	c, recorder := newCursorGatewayTestContext(t, "/v1/messages", body, 3)
+
+	result, err := svc.Forward(context.Background(), c, account, []byte(body))
+
+	require.Nil(t, result)
+	require.Error(t, err)
+	var failure *UpstreamFailoverError
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, http.StatusBadRequest, failure.StatusCode)
+	require.Equal(t, GatewayFailureScopeRequest, failure.Scope)
+	require.Equal(t, NextAccountStop, failure.NextAccountAction)
+	require.Equal(t, "Cursor rejected the request payload", failure.ClientMessage)
+	require.NotContains(t, failure.Error(), "SECRET-DATA")
+	require.Empty(t, recorder.Body.String(), "service must leave stream error serialization to the handler")
+	require.Equal(t, 0, upstream.cloud.nextAgent)
+	require.Equal(t, 1, upstream.ideRunRequestCount())
+}
+
 func TestCursorAgentStreamFailureMapsConnectCodes(t *testing.T) {
 	tests := map[string]int{
 		"resource_exhausted": http.StatusTooManyRequests,
@@ -779,6 +958,19 @@ func TestCursorAgentStreamFailureMapsConnectCodes(t *testing.T) {
 	}
 }
 
+func TestCursorAgentInvalidArgumentStopsAccountFailover(t *testing.T) {
+	err := cursorAgentStreamFailoverError(http.StatusBadRequest, "invalid_argument", "image payload is invalid")
+
+	var failure *UpstreamFailoverError
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, GatewayFailureScopeRequest, failure.Scope)
+	require.Equal(t, NextAccountStop, failure.NextAccountAction)
+	require.Equal(t, http.StatusBadRequest, failure.ClientStatusCode)
+	require.Equal(t, "Cursor rejected the request payload", failure.ClientMessage)
+	require.False(t, failure.ShouldRetryNextAccount())
+	require.False(t, failure.ShouldReportAccountScheduleFailure())
+}
+
 func TestCursorRequestRequiresAgentRPCProtectsResponsesContinuation(t *testing.T) {
 	required, reason := cursorRequestRequiresAgentRPC([]byte(`{"model":"claude-sonnet-5","previous_response_id":"resp_previous","input":"continue"}`), cursorpkg.ProtocolResponses)
 	require.True(t, required)
@@ -787,6 +979,10 @@ func TestCursorRequestRequiresAgentRPCProtectsResponsesContinuation(t *testing.T
 	required, reason = cursorRequestRequiresAgentRPC([]byte(`{"model":"claude-sonnet-5","messages":[{"role":"user","content":"hi"}]}`), cursorpkg.ProtocolAnthropic)
 	require.False(t, required)
 	require.Empty(t, reason)
+
+	required, reason = cursorRequestRequiresAgentRPC([]byte(`{"model":"grok-4.5","messages":[{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGgo="}}]}]}`), cursorpkg.ProtocolAnthropic)
+	require.True(t, required)
+	require.Equal(t, "inline_images", reason)
 }
 
 func TestCursorGatewayRetriesAgentGOAWAYBeforeCloudFallback(t *testing.T) {

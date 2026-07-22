@@ -40,11 +40,13 @@ func encodeAgentRunRequest(dialogue *Dialogue, options AgentRunOptions, uuidFn f
 	} else {
 		actionIndex := len(dialogue.Messages)
 		actionText := ""
+		var actionImages []InlineImage
 		if actionIndex > 0 {
 			switch dialogue.Messages[actionIndex-1].Role {
 			case "user":
 				actionIndex--
 				actionText = dialogue.Messages[actionIndex].Text
+				actionImages = dialogue.Messages[actionIndex].Images
 			case "tool":
 				// A rebuilt tool-result turn still needs a non-empty user action after
 				// the assistant/tool history, otherwise Agent treats it as an empty prompt.
@@ -53,6 +55,13 @@ func encodeAgentRunRequest(dialogue *Dialogue, options AgentRunOptions, uuidFn f
 		}
 		userMessage := appendString(nil, 1, actionText)
 		userMessage = appendString(userMessage, 2, uuidFn())
+		selectedContext, err := encodeAgentSelectedContext(actionImages)
+		if err != nil {
+			return nil, badRequest("encode Agent user images", err)
+		}
+		if len(selectedContext) > 0 {
+			userMessage = appendBytes(userMessage, 3, selectedContext)
+		}
 		userMessage = appendVarint(userMessage, 4, uint64(mode))
 		userAction := appendBytes(nil, 1, userMessage)
 		userAction = appendBytes(userAction, 2, requestContext)
@@ -96,13 +105,42 @@ func encodeAgentRunRequest(dialogue *Dialogue, options AgentRunOptions, uuidFn f
 	if options.ConversationGroupID != "" {
 		request = appendString(request, 16, options.ConversationGroupID)
 	}
-	if options.ClientSupportsImages {
+	if options.ClientSupportsImages || dialogueHasInlineImages(dialogue) {
 		request = appendVarint(request, 19, 1)
 	}
 	if options.ClientSupportsSend {
 		request = appendVarint(request, 23, 1)
 	}
 	return appendBytes(nil, 1, request), nil // AgentClientMessage.run_request
+}
+
+func encodeAgentSelectedContext(images []InlineImage) ([]byte, error) {
+	var selectedContext []byte
+	for _, image := range images {
+		mediaType, err := normalizeImageMIMEType(image.MIMEType)
+		if err != nil {
+			return nil, err
+		}
+		if len(image.Data) == 0 {
+			return nil, errors.New("image data is empty")
+		}
+		selectedImage := appendString(nil, 7, mediaType)
+		selectedImage = appendBytes(selectedImage, 8, image.Data)
+		selectedContext = appendBytes(selectedContext, 1, selectedImage)
+	}
+	return selectedContext, nil
+}
+
+func dialogueHasInlineImages(dialogue *Dialogue) bool {
+	if dialogue == nil {
+		return false
+	}
+	for _, message := range dialogue.Messages {
+		if len(message.Images) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func encodeAgentConversationState(state *AgentConversationState, mode AgentMode) []byte {
@@ -305,6 +343,7 @@ func encodeAgentRootPromptMessages(system string, history []DialogueMessage, blo
 		text := message.Text
 		switch message.Role {
 		case "user":
+			text = textWithInlineImagePlaceholders(text, message.Images)
 		case "assistant":
 			text, err = agentHistoryStepText(message)
 		case "tool":
@@ -335,13 +374,20 @@ func encodeAgentConversationTurns(messages []DialogueMessage, blobs map[string][
 	turns := make([][]byte, 0)
 	for index := 0; index < len(messages); {
 		message := messages[index]
-		if message.Role != "user" || strings.TrimSpace(message.Text) == "" {
+		if message.Role != "user" || !dialogueMessageHasContent(message) {
 			index++
 			continue
 		}
 
 		userMessage := appendString(nil, 1, message.Text)
 		userMessage = appendString(userMessage, 2, messageID())
+		selectedContext, err := encodeAgentSelectedContext(message.Images)
+		if err != nil {
+			return nil, err
+		}
+		if len(selectedContext) > 0 {
+			userMessage = appendBytes(userMessage, 3, selectedContext)
+		}
 		userMessageBlobID := storeAgentBlob(blobs, userMessage)
 		index++
 
