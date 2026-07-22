@@ -877,30 +877,6 @@ func minimumFiniteCapacity(named ...*int64) (*int64, string) {
 	return minimum, bottleneck
 }
 
-func minimumFiniteAmountValue(values ...*float64) *float64 {
-	minimum, _ := minimumFiniteAmount(values...)
-	return minimum
-}
-
-func minimumFiniteAmount(named ...*float64) (*float64, string) {
-	labels := []string{"account", "api_key", "wallet"}
-	var minimum *float64
-	bottleneck := ""
-	for index, value := range named {
-		if value == nil {
-			continue
-		}
-		if minimum == nil || *value < *minimum {
-			copyValue := *value
-			minimum = &copyValue
-			if index < len(labels) {
-				bottleneck = labels[index]
-			}
-		}
-	}
-	return minimum, bottleneck
-}
-
 func (s *PoolCapacityAlertService) reminderCooldown() time.Duration {
 	hours := 24
 	if s.cfg != nil && s.cfg.PoolCapacityAlert.ReminderCooldownHours > 0 {

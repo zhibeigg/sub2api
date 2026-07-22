@@ -729,9 +729,12 @@ func accountCredentialPlanTypePredicate(planType string) dbpredicate.Account {
 		target = ""
 	}
 	return dbpredicate.Account(func(s *entsql.Selector) {
-		credentials := s.C(dbaccount.FieldCredentials)
-		expr := "LOWER(BTRIM(COALESCE(" + credentials + " #>> '{plan_type}', ''))) = ?"
-		s.Where(entsql.ExprP(expr, target))
+		s.Where(entsql.P(func(b *entsql.Builder) {
+			b.WriteString("LOWER(BTRIM(COALESCE(").
+				Ident(s.C(dbaccount.FieldCredentials)).
+				WriteString(" #>> '{plan_type}', ''))) = ").
+				Arg(target)
+		}))
 	})
 }
 
