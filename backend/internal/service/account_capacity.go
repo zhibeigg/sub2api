@@ -277,9 +277,6 @@ func accountCapacityIdentity(account *Account, baseURL, apiKey string) string {
 }
 
 func (s *AccountCapacityService) fetchSub2APIUsage(ctx context.Context, account *Account, baseURL, apiKey string, now time.Time) (*AccountCapacitySnapshot, error) {
-	if s.cfg == nil || !s.cfg.Security.URLAllowlist.Enabled {
-		return newCapacityState(AccountCapacityStateUnknown, "url_allowlist_required"), nil
-	}
 	normalizedBaseURL, err := validateConfiguredUpstreamBaseURL(s.cfg, baseURL)
 	if err != nil {
 		return newCapacityState(AccountCapacityStateUnknown, "invalid_base_url"), nil

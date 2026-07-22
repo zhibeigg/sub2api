@@ -132,7 +132,7 @@ Accept: application/json
 - 没有任何有限订阅窗口时，顶层 `remaining=-1` 表示无限。
 - 响应设置 `Cache-Control: no-store`，客户端不应持久化余额响应或 API Key。
 
-管理端池模式账户也使用同一兼容契约验证自定义上游真实余额。查询失败时显示“未知”或带 `stale` 标记的最近成功快照，不会回退为本地账户额度。原生 AWS Bedrock SigV4 没有通用余额端点，因此不支持；只有 Bedrock API Key/自定义 Base URL 明确兼容 Bearer `/v1/usage` 时才会尝试。
+管理端池模式账户也使用 CC-Switch 导入脚本的同款请求方法验证自定义上游真实余额。启用 URL 白名单时自定义主机必须位于 `upstream_hosts`；关闭白名单时仍会按账户连通性测试的规则校验 Base URL 并发起请求，不会直接显示为未知。查询失败时显示“未知”或带 `stale` 标记的最近成功快照，不会回退为本地账户额度。原生 AWS Bedrock SigV4 没有通用余额端点，因此不支持；只有 Bedrock API Key/自定义 Base URL 明确兼容 Bearer `/v1/usage` 时才会尝试。
 
 ## 七、CLI 版本
 

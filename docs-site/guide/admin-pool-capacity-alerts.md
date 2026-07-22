@@ -92,6 +92,6 @@ PUT /api/v1/admin/groups/:id
 - 应用数据库迁移 `190_add_group_pool_capacity_alert.sql`、`191_pool_capacity_alert_runtime.sql` 和非事务迁移 `192_add_usage_logs_pool_capacity_samples_index_notx.sql`；最后一项使用 `CREATE INDEX CONCURRENTLY`，避免阻塞 `usage_logs` 热写入。
 - 邮件提醒需要可用 SMTP 配置。
 - QQBot 提醒需要启用当前机器人，并完成管理员 C2C 绑定。
-- 上游余额探测参数见 `deploy/config.example.yaml` 的 `account_capacity` 段；默认超时 10 秒、成功缓存 60 秒、错误缓存 30 秒、stale 保留 300 秒。必须启用 `security.url_allowlist` 并将自定义上游主机加入 `upstream_hosts`。
+- 上游余额探测参数见 `deploy/config.example.yaml` 的 `account_capacity` 段；默认超时 10 秒、成功缓存 60 秒、错误缓存 30 秒、stale 保留 300 秒。探测复用账户连通性测试的 URL 策略：白名单开启时必须把自定义主机加入 `upstream_hosts`；白名单关闭时仍会校验 URL 格式并按账户保存的 Base URL 请求余额。
 - 告警 worker、投递和重试参数见 `pool_capacity_alert` 段。
 - 自定义上游必须提供 Bearer API Key 兼容的 `/v1/usage`；原生 AWS Bedrock SigV4 不会发送余额探测。

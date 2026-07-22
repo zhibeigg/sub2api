@@ -155,8 +155,8 @@ security:
   #   - "True-Client-IP"
   #   - "X-CDN-Client-IP"
   url_allowlist:
-    # Enable URL allowlist validation (disable to skip all URL checks)
-    # 启用 URL 白名单验证（禁用则跳过所有 URL 检查）
+    # Enable host/private-network allowlist checks; disabled still validates URL format
+    # 启用主机与私网白名单检查；禁用后仍会校验 URL 格式
     enabled: false
     # Allowed upstream hosts for API proxying
     # 允许代理的上游 API 主机列表
@@ -949,8 +949,9 @@ announcement_email:
 # 账户容量探测
 # Account Capacity Probe
 # =============================================================================
-# 池模式的 Bearer API Key 自定义上游会查询 {base_url}/v1/usage。
-# 安全起见必须启用 security.url_allowlist，并将自定义上游主机加入 upstream_hosts。
+# 池模式的 Bearer API Key 自定义上游会像 CC-Switch 一样查询 {base_url}/v1/usage。
+# URL 校验复用普通账户连通性测试：启用 security.url_allowlist 时主机必须位于
+# upstream_hosts；关闭时仍做格式/协议/主机/端口校验，并使用账户保存的精确 base_url。
 # 查询复用账户代理和 TLS 指纹设置；最近成功值仅用于 UI stale 展示。
 account_capacity:
   upstream_timeout_seconds: 10

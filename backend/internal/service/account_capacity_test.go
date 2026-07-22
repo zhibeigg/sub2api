@@ -224,6 +224,61 @@ func TestAccountCapacityServiceUsesSafeRequestAndCache(t *testing.T) {
 	require.Equal(t, HTTPUpstreamProfileOpenAI, HTTPUpstreamProfileFromContext(request.Context()))
 }
 
+func TestAccountCapacityServiceMatchesCCSwitchUsageProbeWhenAllowlistDisabled(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name         string
+		baseURL      string
+		expectedPath string
+	}{
+		{name: "root base URL", baseURL: "https://relay.example.com", expectedPath: "/v1/usage"},
+		{name: "versioned base URL", baseURL: "https://relay.example.com/v1", expectedPath: "/v1/usage"},
+		{name: "prefixed versioned base URL", baseURL: "https://relay.example.com/prefix/v1", expectedPath: "/prefix/v1/usage"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			stub := &accountCapacityHTTPUpstreamStub{do: func(_ int, _ *http.Request) (*http.Response, error) {
+				return accountCapacityJSONResponse(http.StatusOK, `{"mode":"unrestricted","isValid":true,"remaining":46.00897575,"unit":"USD","balance":46.00897575,"daily_usage":1.2,"usage":{},"model_stats":{}}`), nil
+			}}
+			cfg := accountCapacityTestConfig()
+			cfg.Security.URLAllowlist.Enabled = false
+			cfg.Security.URLAllowlist.AllowInsecureHTTP = false
+			service := NewAccountCapacityService(stub, cfg, nil)
+			account := poolCapacityTestAccount()
+			account.Credentials["base_url"] = test.baseURL
+
+			snapshot, err := service.GetPoolBalance(context.Background(), account, true)
+			require.NoError(t, err)
+			require.Equal(t, AccountCapacityStateVerified, snapshot.State)
+			require.True(t, snapshot.Authoritative)
+			require.Equal(t, "balance", snapshot.Scope)
+			require.Equal(t, "USD", snapshot.Unit)
+			require.InDelta(t, 46.00897575, *snapshot.Remaining, 1e-12)
+			require.Len(t, stub.request, 1)
+			require.Equal(t, http.MethodGet, stub.request[0].Method)
+			require.Equal(t, test.expectedPath, stub.request[0].URL.Path)
+			require.Equal(t, "Bearer real-upstream-key", stub.request[0].Header.Get("Authorization"))
+			require.Equal(t, "application/json", stub.request[0].Header.Get("Accept"))
+		})
+	}
+}
+
+func TestAccountCapacityServiceRespectsEnabledURLAllowlist(t *testing.T) {
+	t.Parallel()
+	stub := &accountCapacityHTTPUpstreamStub{do: func(_ int, _ *http.Request) (*http.Response, error) {
+		t.Fatal("unexpected upstream request")
+		return nil, nil
+	}}
+	cfg := accountCapacityTestConfig()
+	cfg.Security.URLAllowlist.UpstreamHosts = []string{"other.example.com"}
+	service := NewAccountCapacityService(stub, cfg, nil)
+
+	snapshot, err := service.GetPoolBalance(context.Background(), poolCapacityTestAccount(), true)
+	require.NoError(t, err)
+	require.Equal(t, AccountCapacityStateUnknown, snapshot.State)
+	require.Equal(t, "invalid_base_url", snapshot.MessageCode)
+	require.Zero(t, stub.callCount())
+}
+
 func TestAccountCapacityServiceKeepsRecentSuccessAsStale(t *testing.T) {
 	t.Parallel()
 	stub := &accountCapacityHTTPUpstreamStub{do: func(call int, _ *http.Request) (*http.Response, error) {
