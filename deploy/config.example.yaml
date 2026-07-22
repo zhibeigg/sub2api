@@ -1179,6 +1179,9 @@ oidc_connect:
 # =============================================================================
 # Default Settings
 # 默认设置
+# OpenAI account-plan filtering needs no extra switch: regular accounts use credentials.plan_type,
+# while linked shadow accounts use the effective plan inherited from their parent.
+# OpenAI 套餐筛选无需额外开关：普通账号读取 credentials.plan_type，关联影子账号按母账号的有效套餐筛选。
 # =============================================================================
 default:
   # Initial admin account (created on first run)

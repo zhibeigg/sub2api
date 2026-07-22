@@ -1,6 +1,6 @@
 {
   "name": "pokeapi-docs",
-  "version": "0.57.57",
+  "version": "0.58.57",
   "private": true,
   "type": "module",
   "scripts": {

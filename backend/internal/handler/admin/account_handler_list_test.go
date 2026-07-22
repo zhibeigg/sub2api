@@ -52,6 +52,37 @@ func TestAccountHandlerListIncludesCreatedAt(t *testing.T) {
 	require.Equal(t, 0, offset)
 }
 
+func TestAccountHandlerListPassesNormalizedPlanType(t *testing.T) {
+	router, adminSvc := setupAccountListRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/accounts?page=1&page_size=20&platform=openai&plan_type=%20PrO%20", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "pro", adminSvc.lastListAccounts.planType)
+}
+
+func TestAccountHandlerListIgnoresUnsupportedPlanType(t *testing.T) {
+	router, adminSvc := setupAccountListRouter()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/accounts?page=1&page_size=20&platform=openai&plan_type=enterprise", nil)
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Empty(t, adminSvc.lastListAccounts.planType)
+}
+
+func TestBuildAccountsListETagIncludesPlanType(t *testing.T) {
+	plus := buildAccountsListETag(nil, 0, 1, 20, service.PlatformOpenAI, service.AccountTypeOAuth, "plus", "", "", false)
+	pro := buildAccountsListETag(nil, 0, 1, 20, service.PlatformOpenAI, service.AccountTypeOAuth, "pro", "", "", false)
+
+	require.NotEmpty(t, plus)
+	require.NotEmpty(t, pro)
+	require.NotEqual(t, plus, pro)
+}
+
 func TestAccountHandlerListReturnsSchedulerScoresPerGroup(t *testing.T) {
 	router, adminSvc := setupAccountListRouter()
 	now := time.Now().UTC()
@@ -225,10 +256,11 @@ func TestAccountHandlerListKeepsSchedulerScoreScopedToFilter(t *testing.T) {
 	adminSvc.openAISchedulerScorePoolAccounts = []service.Account{visibleAccount, hiddenGroupPeer}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/accounts?page=1&page_size=1&platform=openai&include_scheduler_score=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/accounts?page=1&page_size=1&platform=openai&plan_type=plus&include_scheduler_score=1", nil)
 	router.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "plus", adminSvc.schedulerScoreFilterPlanType)
 	var payload struct {
 		Data struct {
 			Items []struct {

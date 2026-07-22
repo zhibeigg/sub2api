@@ -720,10 +720,34 @@ func (r *accountRepository) Delete(ctx context.Context, id int64) error {
 }
 
 func (r *accountRepository) List(ctx context.Context, params pagination.PaginationParams) ([]service.Account, *pagination.PaginationResult, error) {
-	return r.ListWithFilters(ctx, params, "", "", "", "", 0, "")
+	return r.ListWithFilters(ctx, params, "", "", "", "", "", 0, "")
 }
 
-func (r *accountRepository) accountListFilteredQuery(platform, accountType, status, search string, groupID int64, privacyMode string) *dbent.AccountQuery {
+func accountCredentialPlanTypePredicate(planType string) dbpredicate.Account {
+	target := strings.ToLower(strings.TrimSpace(planType))
+	if target == service.AccountPlanTypeUnsetFilter {
+		target = ""
+	}
+	return dbpredicate.Account(func(s *entsql.Selector) {
+		credentials := s.C(dbaccount.FieldCredentials)
+		expr := "LOWER(BTRIM(COALESCE(" + credentials + " #>> '{plan_type}', ''))) = ?"
+		s.Where(entsql.ExprP(expr, target))
+	})
+}
+
+func accountEffectivePlanTypePredicate(planType string) dbpredicate.Account {
+	credentialPlanType := accountCredentialPlanTypePredicate(planType)
+	parentPlanType := accountCredentialPlanTypePredicate(planType)
+	return dbaccount.And(
+		dbaccount.PlatformEQ(service.PlatformOpenAI),
+		dbaccount.Or(
+			dbaccount.And(dbaccount.ParentAccountIDIsNil(), credentialPlanType),
+			dbaccount.HasParentWith(parentPlanType),
+		),
+	)
+}
+
+func (r *accountRepository) accountListFilteredQuery(platform, accountType, planType, status, search string, groupID int64, privacyMode string) *dbent.AccountQuery {
 	q := r.client.Account.Query()
 
 	if platform != "" {
@@ -731,6 +755,9 @@ func (r *accountRepository) accountListFilteredQuery(platform, accountType, stat
 	}
 	if accountType != "" {
 		q = q.Where(dbaccount.TypeEQ(accountType))
+	}
+	if strings.TrimSpace(planType) != "" {
+		q = q.Where(accountEffectivePlanTypePredicate(planType))
 	}
 	if status != "" {
 		switch status {
@@ -819,8 +846,8 @@ func (r *accountRepository) accountListFilteredQuery(platform, accountType, stat
 	return q
 }
 
-func (r *accountRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, platform, accountType, status, search string, groupID int64, privacyMode string) ([]service.Account, *pagination.PaginationResult, error) {
-	q := r.accountListFilteredQuery(platform, accountType, status, search, groupID, privacyMode)
+func (r *accountRepository) ListWithFilters(ctx context.Context, params pagination.PaginationParams, platform, accountType, planType, status, search string, groupID int64, privacyMode string) ([]service.Account, *pagination.PaginationResult, error) {
+	q := r.accountListFilteredQuery(platform, accountType, planType, status, search, groupID, privacyMode)
 	// Clone before Count so interceptor-appended predicates (SoftDeleteMixin's
 	// deleted_at IS NULL) don't accumulate on the shared builder and pollute the
 	// subsequent list query. Same pattern used in group_repo/promo_code_repo/user_repo
@@ -849,8 +876,8 @@ func (r *accountRepository) ListWithFilters(ctx context.Context, params paginati
 	return outAccounts, paginationResultFromTotal(int64(total), params), nil
 }
 
-func (r *accountRepository) ListAllWithFilters(ctx context.Context, platform, accountType, status, search string, groupID int64, privacyMode string) ([]service.Account, error) {
-	accounts, err := r.accountListFilteredQuery(platform, accountType, status, search, groupID, privacyMode).All(ctx)
+func (r *accountRepository) ListAllWithFilters(ctx context.Context, platform, accountType, planType, status, search string, groupID int64, privacyMode string) ([]service.Account, error) {
+	accounts, err := r.accountListFilteredQuery(platform, accountType, planType, status, search, groupID, privacyMode).All(ctx)
 	if err != nil {
 		return nil, err
 	}

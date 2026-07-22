@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { defineComponent } from 'vue'
 
 import AccountsView from '../AccountsView.vue'
 
@@ -91,6 +92,19 @@ const AccountBulkActionsBarStub = {
   `
 }
 
+const AccountTableFiltersStub = defineComponent({
+  props: ['filters'],
+  emits: ['update:filters', 'change'],
+  setup(props, { emit }) {
+    const selectPlus = () => {
+      emit('update:filters', { ...props.filters, plan_type: 'plus' })
+      emit('change')
+    }
+    return { selectPlus }
+  },
+  template: '<button data-test="set-plan-filter" @click="selectPlus">set plan</button>'
+})
+
 const PaginationStub = {
   emits: ['update:page'],
   template: '<button data-test="next-page" @click="$emit(\'update:page\', 2)">next</button>'
@@ -98,7 +112,7 @@ const PaginationStub = {
 
 const BulkEditAccountModalStub = {
   props: ['show', 'target'],
-  template: '<div data-test="bulk-edit-modal" :data-show="String(show)" :data-target-mode="target?.mode ?? \'\'"></div>'
+  template: '<div data-test="bulk-edit-modal" :data-show="String(show)" :data-target-mode="target?.mode ?? \'\'" :data-plan-type="target?.filters?.plan_type ?? \'\'"></div>'
 }
 
 describe('admin AccountsView bulk edit scope', () => {
@@ -144,7 +158,7 @@ describe('admin AccountsView bulk edit scope', () => {
           Pagination: true,
           ConfirmDialog: true,
           AccountTableActions: { template: '<div><slot name="beforeCreate" /><slot name="after" /></div>' },
-          AccountTableFilters: { template: '<div></div>' },
+          AccountTableFilters: AccountTableFiltersStub,
           AccountBulkActionsBar: AccountBulkActionsBarStub,
           AccountActionMenu: true,
           ImportDataModal: true,
@@ -171,11 +185,15 @@ describe('admin AccountsView bulk edit scope', () => {
     })
 
     await flushPromises()
+    await wrapper.get('[data-test="set-plan-filter"]').trigger('click')
+    await flushPromises()
     await wrapper.get('[data-test="edit-filtered"]').trigger('click')
     await flushPromises()
 
+    expect(listAccounts.mock.calls.at(-1)?.[2]).toMatchObject({ plan_type: 'plus' })
     expect(wrapper.get('[data-test="bulk-edit-modal"]').attributes('data-show')).toBe('true')
     expect(wrapper.get('[data-test="bulk-edit-modal"]').attributes('data-target-mode')).toBe('filtered')
+    expect(wrapper.get('[data-test="bulk-edit-modal"]').attributes('data-plan-type')).toBe('plus')
   })
 
   it('renders the created_at column by default', async () => {
@@ -209,7 +227,7 @@ describe('admin AccountsView bulk edit scope', () => {
           Pagination: true,
           ConfirmDialog: true,
           AccountTableActions: { template: '<div><slot name="beforeCreate" /><slot name="after" /></div>' },
-          AccountTableFilters: { template: '<div></div>' },
+          AccountTableFilters: AccountTableFiltersStub,
           AccountBulkActionsBar: AccountBulkActionsBarStub,
           AccountActionMenu: true,
           ImportDataModal: true,
@@ -439,11 +457,13 @@ describe('admin AccountsView bulk edit scope', () => {
     })
 
     await flushPromises()
+    const callsBeforeProbe = listAccounts.mock.calls.length
     await wrapper.get('[data-test="select-row"] input').trigger('change')
     await wrapper.get('[data-test="probe-upstream-billing"]').trigger('click')
     await flushPromises()
 
     expect(probeUpstreamBillingBatch).toHaveBeenCalledWith([7])
-    expect(listAccounts).toHaveBeenCalledTimes(2)
+    expect(listAccounts).toHaveBeenCalledTimes(callsBeforeProbe + 1)
+    wrapper.unmount()
   })
 })

@@ -8,6 +8,15 @@
       @search="$emit('change')"
     />
     <Select :model-value="filters.platform" class="w-40" :options="pOpts" @update:model-value="updatePlatform" @change="$emit('change')" />
+    <Select
+      data-test="openai-plan-filter"
+      :model-value="filters.plan_type"
+      class="w-40"
+      :options="planOpts"
+      :disabled="isOpenAIPlanFilterDisabled"
+      @update:model-value="updatePlanType"
+      @change="$emit('change')"
+    />
     <Select :model-value="filters.type" class="w-40" :options="tOpts" @update:model-value="updateType" @change="$emit('change')" />
     <Select :model-value="filters.status" class="w-40" :options="sOpts" @update:model-value="updateStatus" @change="$emit('change')" />
     <Select :model-value="filters.privacy_mode" class="w-40" :options="privacyOpts" @update:model-value="updatePrivacyMode" @change="$emit('change')" />
@@ -16,19 +25,49 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'; import { useI18n } from 'vue-i18n'; import Select from '@/components/common/Select.vue'; import SearchInput from '@/components/common/SearchInput.vue'
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import Select from '@/components/common/Select.vue'
+import SearchInput from '@/components/common/SearchInput.vue'
 import type { AdminGroup } from '@/types'
 import { PLATFORM_ORDER, PLATFORM_REGISTRY } from '@/constants/platforms'
+
 const props = defineProps<{ searchQuery: string; filters: Record<string, any>; groups?: AdminGroup[] }>()
-const emit = defineEmits(['update:searchQuery', 'update:filters', 'change']); const { t } = useI18n()
-const updatePlatform = (value: string | number | boolean | null) => { emit('update:filters', { ...props.filters, platform: value }) }
+const emit = defineEmits(['update:searchQuery', 'update:filters', 'change'])
+const { t } = useI18n()
+
+const isOpenAIPlanFilterDisabled = computed(() => {
+  const platform = typeof props.filters.platform === 'string' ? props.filters.platform : ''
+  return platform !== '' && platform !== 'openai'
+})
+
+const updatePlatform = (value: string | number | boolean | null) => {
+  const platform = typeof value === 'string' ? value : ''
+  emit('update:filters', {
+    ...props.filters,
+    platform,
+    plan_type: platform !== '' && platform !== 'openai' ? '' : props.filters.plan_type
+  })
+}
+const updatePlanType = (value: string | number | boolean | null) => {
+  emit('update:filters', { ...props.filters, plan_type: typeof value === 'string' ? value : '' })
+}
 const updateType = (value: string | number | boolean | null) => { emit('update:filters', { ...props.filters, type: value }) }
 const updateStatus = (value: string | number | boolean | null) => { emit('update:filters', { ...props.filters, status: value }) }
 const updatePrivacyMode = (value: string | number | boolean | null) => { emit('update:filters', { ...props.filters, privacy_mode: value }) }
 const updateGroup = (value: string | number | boolean | null) => { emit('update:filters', { ...props.filters, group: value }) }
+
 const pOpts = computed(() => [
   { value: '', label: t('admin.accounts.allPlatforms') },
   ...PLATFORM_ORDER.map((platform) => ({ value: platform, label: PLATFORM_REGISTRY[platform].label }))
+])
+const planOpts = computed(() => [
+  { value: '', label: t('admin.accounts.allOpenAIPlans') },
+  { value: 'k12', label: 'K12' },
+  { value: 'free', label: 'Free' },
+  { value: 'plus', label: 'Plus' },
+  { value: 'pro', label: 'Pro' },
+  { value: '__unset__', label: t('admin.accounts.planTypeUnset') }
 ])
 const tOpts = computed(() => [{ value: '', label: t('admin.accounts.allTypes') }, { value: 'oauth', label: t('admin.accounts.oauthType') }, { value: 'setup-token', label: t('admin.accounts.setupToken') }, { value: 'apikey', label: t('admin.accounts.apiKey') }, { value: 'bedrock', label: 'AWS Bedrock' }])
 const sOpts = computed(() => [{ value: '', label: t('admin.accounts.allStatus') }, { value: 'active', label: t('admin.accounts.status.active') }, { value: 'inactive', label: t('admin.accounts.status.inactive') }, { value: 'error', label: t('admin.accounts.status.error') }, { value: 'rate_limited', label: t('admin.accounts.status.rateLimited') }, { value: 'temp_unschedulable', label: t('admin.accounts.status.tempUnschedulable') }, { value: 'unschedulable', label: t('admin.accounts.status.unschedulable') }])

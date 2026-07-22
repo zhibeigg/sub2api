@@ -252,6 +252,9 @@ export default {
       notesHint: '备注可选',
       // Filter options
       allPlatforms: '全部平台',
+      openAIPlan: 'OpenAI 套餐',
+      allOpenAIPlans: '全部 OpenAI 套餐',
+      planTypeUnset: '未设置',
       allTypes: '全部类型',
       allStatus: '全部状态',
       allGroups: '全部分组',

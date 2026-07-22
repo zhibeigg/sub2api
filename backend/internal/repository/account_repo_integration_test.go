@@ -402,6 +402,7 @@ func (s *AccountRepoSuite) TestListWithFilters() {
 		setup       func(client *dbent.Client)
 		platform    string
 		accType     string
+		planType    string
 		status      string
 		search      string
 		groupID     int64
@@ -431,6 +432,116 @@ func (s *AccountRepoSuite) TestListWithFilters() {
 			wantCount: 1,
 			validate: func(accounts []service.Account) {
 				s.Require().Equal(service.AccountTypeAPIKey, accounts[0].Type)
+			},
+		},
+		{
+			name: "filter_by_plan_type_k12_case_insensitive",
+			setup: func(client *dbent.Client) {
+				mustCreateAccount(s.T(), client, &service.Account{
+					Name:        "openai-k12",
+					Platform:    service.PlatformOpenAI,
+					Type:        service.AccountTypeOAuth,
+					Credentials: map[string]any{"plan_type": " K12 "},
+				})
+				mustCreateAccount(s.T(), client, &service.Account{
+					Name:        "openai-free",
+					Platform:    service.PlatformOpenAI,
+					Type:        service.AccountTypeOAuth,
+					Credentials: map[string]any{"plan_type": "free"},
+				})
+				mustCreateAccount(s.T(), client, &service.Account{
+					Name:        "anthropic-k12",
+					Platform:    service.PlatformAnthropic,
+					Credentials: map[string]any{"plan_type": "k12"},
+				})
+			},
+			planType:  "k12",
+			wantCount: 1,
+			validate: func(accounts []service.Account) {
+				s.Require().Equal("openai-k12", accounts[0].Name)
+			},
+		},
+		{
+			name: "filter_by_plan_type_unset",
+			setup: func(client *dbent.Client) {
+				mustCreateAccount(s.T(), client, &service.Account{Name: "openai-plan-missing", Platform: service.PlatformOpenAI})
+				mustCreateAccount(s.T(), client, &service.Account{
+					Name:        "openai-plan-empty",
+					Platform:    service.PlatformOpenAI,
+					Credentials: map[string]any{"plan_type": "   "},
+				})
+				mustCreateAccount(s.T(), client, &service.Account{
+					Name:        "openai-plan-plus",
+					Platform:    service.PlatformOpenAI,
+					Credentials: map[string]any{"plan_type": "plus"},
+				})
+				mustCreateAccount(s.T(), client, &service.Account{Name: "anthropic-plan-missing", Platform: service.PlatformAnthropic})
+			},
+			planType:  service.AccountPlanTypeUnsetFilter,
+			wantCount: 2,
+			validate: func(accounts []service.Account) {
+				names := []string{accounts[0].Name, accounts[1].Name}
+				s.ElementsMatch([]string{"openai-plan-missing", "openai-plan-empty"}, names)
+			},
+		},
+		{
+			name: "filter_by_plan_type_uses_parent_for_shadow",
+			setup: func(client *dbent.Client) {
+				parent := mustCreateAccount(s.T(), client, &service.Account{
+					Name:        "openai-pro-parent",
+					Platform:    service.PlatformOpenAI,
+					Type:        service.AccountTypeOAuth,
+					Credentials: map[string]any{"plan_type": "pro"},
+				})
+				mustCreateAccount(s.T(), client, &service.Account{
+					Name:            "openai-pro-shadow",
+					Platform:        service.PlatformOpenAI,
+					Type:            service.AccountTypeOAuth,
+					ParentAccountID: &parent.ID,
+					QuotaDimension:  service.QuotaDimensionSpark,
+					Credentials:     map[string]any{"plan_type": "free"},
+				})
+				mustCreateAccount(s.T(), client, &service.Account{
+					Name:        "openai-free-parent",
+					Platform:    service.PlatformOpenAI,
+					Credentials: map[string]any{"plan_type": "free"},
+				})
+			},
+			planType:  "pro",
+			wantCount: 2,
+			validate: func(accounts []service.Account) {
+				names := []string{accounts[0].Name, accounts[1].Name}
+				s.ElementsMatch([]string{"openai-pro-parent", "openai-pro-shadow"}, names)
+			},
+		},
+		{
+			name: "filter_by_plan_type_unset_uses_parent_for_shadow",
+			setup: func(client *dbent.Client) {
+				parent := mustCreateAccount(s.T(), client, &service.Account{
+					Name:        "openai-unset-parent",
+					Platform:    service.PlatformOpenAI,
+					Type:        service.AccountTypeOAuth,
+					Credentials: map[string]any{"plan_type": "   "},
+				})
+				mustCreateAccount(s.T(), client, &service.Account{
+					Name:            "openai-unset-shadow",
+					Platform:        service.PlatformOpenAI,
+					Type:            service.AccountTypeOAuth,
+					ParentAccountID: &parent.ID,
+					QuotaDimension:  service.QuotaDimensionSpark,
+					Credentials:     map[string]any{"plan_type": "pro"},
+				})
+				mustCreateAccount(s.T(), client, &service.Account{
+					Name:        "openai-plus-parent",
+					Platform:    service.PlatformOpenAI,
+					Credentials: map[string]any{"plan_type": "plus"},
+				})
+			},
+			planType:  service.AccountPlanTypeUnsetFilter,
+			wantCount: 2,
+			validate: func(accounts []service.Account) {
+				names := []string{accounts[0].Name, accounts[1].Name}
+				s.ElementsMatch([]string{"openai-unset-parent", "openai-unset-shadow"}, names)
 			},
 		},
 		{
@@ -605,7 +716,7 @@ func (s *AccountRepoSuite) TestListWithFilters() {
 
 			tt.setup(client)
 
-			accounts, page, err := repo.ListWithFilters(ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, tt.platform, tt.accType, tt.status, tt.search, tt.groupID, tt.privacyMode)
+			accounts, page, err := repo.ListWithFilters(ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, tt.platform, tt.accType, tt.planType, tt.status, tt.search, tt.groupID, tt.privacyMode)
 			s.Require().NoError(err)
 			s.Require().Len(accounts, tt.wantCount)
 			// Regression guard for issue #3601: when the whole result set fits on a single page,
@@ -677,7 +788,7 @@ func (s *AccountRepoSuite) TestPreload_And_VirtualFields() {
 	s.Require().Len(got.Groups, 1, "expected Groups to be populated")
 	s.Require().Equal(group.ID, got.Groups[0].ID)
 
-	accounts, page, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, "", "", "", "acc", 0, "")
+	accounts, page, err := s.repo.ListWithFilters(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, "", "", "", "", "acc", 0, "")
 	s.Require().NoError(err, "ListWithFilters")
 	s.Require().Equal(int64(1), page.Total)
 	s.Require().Len(accounts, 1)

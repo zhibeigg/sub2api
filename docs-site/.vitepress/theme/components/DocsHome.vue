@@ -19,7 +19,8 @@ const capabilities = [
   ["01", "一个 Key", "统一管理 Claude、OpenAI、Gemini 等模型访问，不再维护多套凭据。"],
   ["02", "官方协议兼容", "支持 OpenAI Responses、Chat Completions、Anthropic Messages 与 Gemini 调用方式。"],
   ["03", "多模态", "覆盖文本对话、图片理解、文生图与图片编辑。"],
-  ["04", "SSE 流式输出", "全接口支持流式返回，保持与官方接口一致的交互节奏。"]
+  ["04", "SSE 流式输出", "全接口支持流式返回，保持与官方接口一致的交互节奏。"],
+  ["05", "账号池运营", "管理员可按 OpenAI K12、Free、Plus、Pro 或未设置套餐筛选账号，并保持分页、批量操作与导出范围一致。"]
 ]
 
 function fallbackCopy(value) {

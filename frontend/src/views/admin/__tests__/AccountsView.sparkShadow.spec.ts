@@ -305,6 +305,128 @@ describe('admin AccountsView — 账号行展示', () => {
     wrapper.unmount()
   })
 
+  it('增量刷新在母账号套餐变化时替换影子行的继承套餐', async () => {
+    const shadowAccount = {
+      id: 100,
+      name: '影子账号',
+      platform: 'openai',
+      type: 'oauth',
+      parent_account_id: 1,
+      credentials: { plan_type: 'free' },
+      parent_email: 'parent@example.com',
+      parent_plan_type: 'plus',
+      parent_privacy_mode: 'false',
+      parent_subscription_expires_at: '2027-01-01T00:00:00Z',
+      parent_chatgpt_account_id: 'chatgpt-abc123',
+      updated_at: '2026-07-22T00:00:00Z'
+    }
+
+    listAccounts.mockResolvedValue({ items: [shadowAccount], total: 1, page: 1, page_size: 20, pages: 1 })
+
+    const wrapper = mountViewWithRow()
+    await flushPromises()
+    expect(wrapper.findComponent(PlatformTypeBadge).props('planType')).toBe('plus')
+
+    ;(wrapper.vm as any).mergeAccountsIncrementally([
+      { ...shadowAccount, parent_plan_type: 'pro' }
+    ])
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.findComponent(PlatformTypeBadge).props('planType')).toBe('pro')
+    wrapper.unmount()
+  })
+
+  it('编辑母账号后立即同步同页影子账号的继承字段', async () => {
+    const parentAccount = {
+      id: 1,
+      name: '母账号',
+      platform: 'openai',
+      type: 'oauth',
+      credentials: {
+        email: 'parent@example.com',
+        plan_type: 'plus',
+        subscription_expires_at: '2027-01-01T00:00:00Z',
+        chatgpt_account_id: 'chatgpt-old'
+      },
+      extra: { privacy_mode: 'false' },
+      updated_at: '2026-07-22T00:00:00Z'
+    }
+    const shadowAccount = {
+      id: 100,
+      name: '影子账号',
+      platform: 'openai',
+      type: 'oauth',
+      parent_account_id: 1,
+      parent_email: 'parent@example.com',
+      parent_plan_type: 'plus',
+      parent_privacy_mode: 'false',
+      parent_subscription_expires_at: '2027-01-01T00:00:00Z',
+      parent_chatgpt_account_id: 'chatgpt-old',
+      updated_at: '2026-07-22T00:00:00Z'
+    }
+
+    listAccounts.mockResolvedValue({ items: [parentAccount, shadowAccount], total: 2, page: 1, page_size: 20, pages: 1 })
+
+    const wrapper = mountViewWithRow()
+    await flushPromises()
+
+    ;(wrapper.vm as any).handleAccountUpdated({
+      ...parentAccount,
+      credentials: {
+        email: 'updated@example.com',
+        plan_type: 'pro',
+        subscription_expires_at: '2028-01-01T00:00:00Z',
+        chatgpt_account_id: 'chatgpt-new'
+      },
+      extra: { privacy_mode: 'true' },
+      updated_at: '2026-07-22T00:01:00Z'
+    })
+    await wrapper.vm.$nextTick()
+
+    const badges = wrapper.findAllComponents(PlatformTypeBadge)
+    expect(badges[1].props('planType')).toBe('pro')
+    expect(badges[1].props('privacyMode')).toBe('true')
+    expect(badges[1].props('subscriptionExpiresAt')).toBe('2028-01-01T00:00:00Z')
+    expect(wrapper.text()).toContain('updated@example.com')
+    wrapper.unmount()
+  })
+
+  it('母账号套餐离开当前筛选后立即移除母账号及其影子账号', async () => {
+    const parentAccount = {
+      id: 1,
+      name: '母账号',
+      platform: 'openai',
+      type: 'oauth',
+      credentials: { plan_type: 'plus' },
+      updated_at: '2026-07-22T00:00:00Z'
+    }
+    const shadowAccount = {
+      id: 100,
+      name: '影子账号',
+      platform: 'openai',
+      type: 'oauth',
+      parent_account_id: 1,
+      parent_plan_type: 'plus',
+      updated_at: '2026-07-22T00:00:00Z'
+    }
+    listAccounts.mockResolvedValue({ items: [parentAccount, shadowAccount], total: 2, page: 1, page_size: 20, pages: 1 })
+
+    const wrapper = mountViewWithRow()
+    await flushPromises()
+    const vm = wrapper.vm as any
+    vm.params.plan_type = 'plus'
+    vm.handleAccountUpdated({
+      ...parentAccount,
+      credentials: { plan_type: 'pro' },
+      updated_at: '2026-07-22T00:01:00Z'
+    })
+    await wrapper.vm.$nextTick()
+
+    expect(vm.accounts).toHaveLength(0)
+    expect(vm.pagination.total).toBe(0)
+    wrapper.unmount()
+  })
+
   it('仅将具有安全 base_url 的 API Key 账号名称链接到站点主页', async () => {
     listAccounts.mockResolvedValue({
       items: [

@@ -529,6 +529,7 @@ type AccountBulkEditTarget =
       filters: {
         platform?: string
         type?: string
+        plan_type?: string
         status?: string
         group?: string
         search?: string
@@ -884,6 +885,7 @@ const {
   initialParams: {
     platform: '',
     type: '',
+    plan_type: '',
     status: '',
     privacy_mode: '',
     group: '',
@@ -1073,6 +1075,12 @@ const shouldReplaceAutoRefreshRow = (current: Account, next: Account) => {
     current.rate_limit_reset_at !== next.rate_limit_reset_at ||
     current.overload_until !== next.overload_until ||
     current.temp_unschedulable_until !== next.temp_unschedulable_until ||
+    current.parent_account_id !== next.parent_account_id ||
+    current.parent_email !== next.parent_email ||
+    current.parent_plan_type !== next.parent_plan_type ||
+    current.parent_privacy_mode !== next.parent_privacy_mode ||
+    current.parent_subscription_expires_at !== next.parent_subscription_expires_at ||
+    current.parent_chatgpt_account_id !== next.parent_chatgpt_account_id ||
     buildOpenAIUsageRefreshKey(current) !== buildOpenAIUsageRefreshKey(next)
   )
 }
@@ -1126,6 +1134,7 @@ const refreshAccountsIncrementally = async () => {
       toRaw(params) as {
         platform?: string
         type?: string
+        plan_type?: string
         status?: string
         privacy_mode?: string
         group?: string
@@ -1239,6 +1248,9 @@ const { pause: pauseAutoRefresh, resume: resumeAutoRefresh } = useIntervalFn(
 // can be stale, so they remain fallbacks together with legacy plan_type fields.
 function getAccountPlanType(row: any): string | undefined {
   if (!row) return undefined
+  if (row.platform === 'openai' && row.parent_account_id != null) {
+    return typeof row.parent_plan_type === 'string' ? row.parent_plan_type : undefined
+  }
   if (row.platform === 'grok') {
     const extra = (row.extra || {}) as Record<string, any>
     const billing = extra.grok_billing_snapshot as Record<string, any> | undefined
@@ -1629,6 +1641,7 @@ const buildBulkEditFilterSnapshot = () => {
   return {
     platform: typeof rawParams.platform === 'string' ? rawParams.platform : '',
     type: typeof rawParams.type === 'string' ? rawParams.type : '',
+    plan_type: typeof rawParams.plan_type === 'string' ? rawParams.plan_type : '',
     status: typeof rawParams.status === 'string' ? rawParams.status : '',
     group: typeof rawParams.group === 'string' ? rawParams.group : '',
     search: typeof rawParams.search === 'string' ? rawParams.search : '',
@@ -1677,9 +1690,11 @@ const handleBulkUpdated = () => {
 const handleDataImported = () => { showImportData.value = false; reload() }
 const ACCOUNT_UNGROUPED_GROUP_QUERY_VALUE = 'ungrouped'
 const ACCOUNT_PRIVACY_MODE_UNSET_QUERY_VALUE = '__unset__'
+const ACCOUNT_PLAN_TYPE_UNSET_QUERY_VALUE = '__unset__'
 const buildAccountQueryFilters = () => ({
   platform: params.platform || '',
   type: params.type || '',
+  plan_type: params.plan_type || '',
   status: params.status || '',
   group: params.group || '',
   privacy_mode: params.privacy_mode || '',
@@ -1691,6 +1706,16 @@ const accountMatchesCurrentFilters = (account: Account) => {
   const filters = buildAccountQueryFilters()
   if (filters.platform && account.platform !== filters.platform) return false
   if (filters.type && account.type !== filters.type) return false
+  if (filters.plan_type) {
+    if (account.platform !== 'openai') return false
+    const effectivePlanType = String(getAccountPlanType(account) || '').trim().toLowerCase()
+    const requestedPlanType = String(filters.plan_type).trim().toLowerCase()
+    if (requestedPlanType === ACCOUNT_PLAN_TYPE_UNSET_QUERY_VALUE) {
+      if (effectivePlanType !== '') return false
+    } else if (effectivePlanType !== requestedPlanType) {
+      return false
+    }
+  }
   if (filters.status) {
     const now = Date.now()
     const rateLimitResetAt = account.rate_limit_reset_at ? new Date(account.rate_limit_reset_at).getTime() : Number.NaN
@@ -1797,7 +1822,29 @@ const handleProbeUpstreamBilling = async (account: Account) => {
   }
 }
 const handleAccountUpdated = (updatedAccount: Account) => {
+  const dependentShadows = accounts.value.filter(account => account.parent_account_id === updatedAccount.id)
   patchAccountInList(updatedAccount)
+
+  if (dependentShadows.length > 0) {
+    const credentialString = (key: string): string | undefined => {
+      const value = updatedAccount.credentials?.[key]
+      return typeof value === 'string' && value !== '' ? value : undefined
+    }
+    const privacyMode = updatedAccount.extra?.privacy_mode
+    const parentPrivacyMode = typeof privacyMode === 'string' && privacyMode !== '' ? privacyMode : undefined
+
+    for (const shadow of dependentShadows) {
+      patchAccountInList({
+        ...shadow,
+        parent_email: credentialString('email'),
+        parent_plan_type: credentialString('plan_type'),
+        parent_privacy_mode: parentPrivacyMode,
+        parent_subscription_expires_at: credentialString('subscription_expires_at'),
+        parent_chatgpt_account_id: credentialString('chatgpt_account_id')
+      })
+    }
+  }
+
   enterAutoRefreshSilentWindow()
 }
 const formatExportTimestamp = () => {
