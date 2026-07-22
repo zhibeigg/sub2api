@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { UserSubscription } from '@/types'
-import { getEffectiveSubscriptionQuotaLimit } from '@/utils/subscriptionQuota'
+import {
+  getEffectiveSubscriptionQuotaLimit,
+  getSubscriptionQuotaResetAt
+} from '@/utils/subscriptionQuota'
 
 function subscription(overrides: Partial<UserSubscription> = {}): UserSubscription {
   return {
@@ -25,6 +28,45 @@ function subscription(overrides: Partial<UserSubscription> = {}): UserSubscripti
     ...overrides
   }
 }
+
+describe('getSubscriptionQuotaResetAt', () => {
+  it('keeps daily, weekly, and monthly reset times anchored to the purchase time', () => {
+    const value = subscription({
+      starts_at: '2026-07-01T10:30:00Z',
+      expires_at: '2026-08-30T10:30:00Z',
+      daily_window_start: '2026-07-22T00:00:00Z',
+      weekly_window_start: '2026-07-20T00:00:00Z',
+      monthly_window_start: '2026-07-01T00:00:00Z'
+    })
+    const now = new Date('2026-07-22T12:00:00Z')
+
+    expect(getSubscriptionQuotaResetAt(value, 'daily', now)?.toISOString()).toBe('2026-07-23T10:30:00.000Z')
+    expect(getSubscriptionQuotaResetAt(value, 'weekly', now)?.toISOString()).toBe('2026-07-29T10:30:00.000Z')
+    expect(getSubscriptionQuotaResetAt(value, 'monthly', now)?.toISOString()).toBe('2026-07-31T10:30:00.000Z')
+  })
+
+  it('returns the next anchored period when called exactly on a boundary', () => {
+    const value = subscription({
+      starts_at: '2026-07-01T10:30:00Z',
+      expires_at: '2026-08-30T10:30:00Z'
+    })
+
+    expect(
+      getSubscriptionQuotaResetAt(value, 'daily', new Date('2026-07-22T10:30:00Z'))?.toISOString()
+    ).toBe('2026-07-23T10:30:00.000Z')
+  })
+
+  it('uses subscription expiry as the end of a one-day daily quota', () => {
+    const value = subscription({
+      starts_at: '2026-07-22T10:30:00Z',
+      expires_at: '2026-07-23T10:30:00Z'
+    })
+
+    expect(
+      getSubscriptionQuotaResetAt(value, 'daily', new Date('2026-07-22T12:00:00Z'))?.toISOString()
+    ).toBe('2026-07-23T10:30:00.000Z')
+  })
+})
 
 describe('getEffectiveSubscriptionQuotaLimit', () => {
   it('falls back to the group limit for legacy non-snapshotted subscriptions', () => {

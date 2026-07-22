@@ -241,7 +241,7 @@
                     ${{ getQuotaLimit(row, 'daily')?.toFixed(2) }}
                   </span>
                 </div>
-                <div class="reset-info" v-if="row.daily_window_start">
+                <div class="reset-info">
                   <svg
                     class="h-3 w-3"
                     fill="none"
@@ -278,7 +278,7 @@
                     ${{ getQuotaLimit(row, 'weekly')?.toFixed(2) }}
                   </span>
                 </div>
-                <div class="reset-info" v-if="row.weekly_window_start">
+                <div class="reset-info">
                   <svg
                     class="h-3 w-3"
                     fill="none"
@@ -292,7 +292,7 @@
                       d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  <span>{{ formatResetTime(row.weekly_window_start, 'weekly') }}</span>
+                  <span>{{ formatResetTime(row, 'weekly') }}</span>
                 </div>
               </div>
 
@@ -315,7 +315,7 @@
                     ${{ getQuotaLimit(row, 'monthly')?.toFixed(2) }}
                   </span>
                 </div>
-                <div class="reset-info" v-if="row.monthly_window_start">
+                <div class="reset-info">
                   <svg
                     class="h-3 w-3"
                     fill="none"
@@ -329,7 +329,7 @@
                       d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
-                  <span>{{ formatResetTime(row.monthly_window_start, 'monthly') }}</span>
+                  <span>{{ formatResetTime(row, 'monthly') }}</span>
                 </div>
               </div>
 
@@ -772,7 +772,14 @@ import type { SubscriptionPlan } from '@/types/payment'
 import type { SimpleUser } from '@/api/admin/usage'
 import type { Column } from '@/components/common/types'
 import { formatDateTimeToMinute } from '@/utils/format'
-import { getEffectiveSubscriptionQuotaLimit, type SubscriptionQuotaPeriod } from '@/utils/subscriptionQuota'
+import {
+  getEffectiveSubscriptionQuotaLimit,
+  getRemainingDurationParts,
+  getSubscriptionQuotaResetAt,
+  isOneTimeDailyQuota,
+  type RemainingDurationParts,
+  type SubscriptionQuotaPeriod
+} from '@/utils/subscriptionQuota'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
@@ -784,7 +791,6 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import Select from '@/components/common/Select.vue'
 import GroupBadge from '@/components/common/GroupBadge.vue'
 import Icon from '@/components/icons/Icon.vue'
-import { getRemainingDurationParts, isOneTimeDailyQuota, type RemainingDurationParts } from '@/utils/subscriptionQuota'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -1422,32 +1428,17 @@ const formatDailyUsageWindow = (subscription: UserSubscription): string => {
     return parts ? formatQuotaEndDuration(parts) : t('admin.subscriptions.windowNotActive')
   }
 
-  return formatResetTime(subscription.daily_window_start, 'daily')
+  return formatResetTime(subscription, 'daily')
 }
 
-// Format reset time based on window start and period type
-const formatResetTime = (windowStart: string | null, period: 'daily' | 'weekly' | 'monthly'): string => {
-  if (!windowStart) return t('admin.subscriptions.windowNotActive')
+const formatResetTime = (
+  subscription: UserSubscription,
+  period: SubscriptionQuotaPeriod
+): string => {
+  const resetAt = getSubscriptionQuotaResetAt(subscription, period)
+  if (!resetAt) return t('admin.subscriptions.windowNotActive')
 
-  const start = new Date(windowStart)
-  const now = new Date()
-
-  // Calculate reset time based on period
-  let resetTime: Date
-  switch (period) {
-    case 'daily':
-      resetTime = new Date(start.getTime() + 24 * 60 * 60 * 1000)
-      break
-    case 'weekly':
-      resetTime = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000)
-      break
-    case 'monthly':
-      resetTime = new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000)
-      break
-  }
-
-  const parts = getRemainingDurationParts(resetTime, now)
-
+  const parts = getRemainingDurationParts(resetAt)
   return parts ? formatResetDuration(parts) : t('admin.subscriptions.windowNotActive')
 }
 

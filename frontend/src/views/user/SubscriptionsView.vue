@@ -134,10 +134,7 @@
                   }"
                 ></div>
               </div>
-              <p
-                v-if="subscription.daily_window_start"
-                class="text-xs text-gray-500 dark:text-dark-400"
-              >
+              <p class="text-xs text-gray-500 dark:text-dark-400">
                 {{ formatDailyUsageWindow(subscription) }}
               </p>
             </div>
@@ -171,13 +168,10 @@
                   }"
                 ></div>
               </div>
-              <p
-                v-if="subscription.weekly_window_start"
-                class="text-xs text-gray-500 dark:text-dark-400"
-              >
+              <p class="text-xs text-gray-500 dark:text-dark-400">
                 {{
                   t('userSubscriptions.resetIn', {
-                    time: formatResetTime(subscription.weekly_window_start, 168)
+                    time: formatResetTime(subscription, 'weekly')
                   })
                 }}
               </p>
@@ -212,13 +206,10 @@
                   }"
                 ></div>
               </div>
-              <p
-                v-if="subscription.monthly_window_start"
-                class="text-xs text-gray-500 dark:text-dark-400"
-              >
+              <p class="text-xs text-gray-500 dark:text-dark-400">
                 {{
                   t('userSubscriptions.resetIn', {
-                    time: formatResetTime(subscription.monthly_window_start, 720)
+                    time: formatResetTime(subscription, 'monthly')
                   })
                 }}
               </p>
@@ -267,6 +258,7 @@ import { platformBorderClass, platformBadgeClass, platformButtonClass, platformL
 import {
   getEffectiveSubscriptionQuotaLimit,
   getRemainingDurationParts,
+  getSubscriptionQuotaResetAt,
   isOneTimeDailyQuota,
   type RemainingDurationParts,
   type SubscriptionQuotaPeriod
@@ -398,17 +390,18 @@ function formatDailyUsageWindow(subscription: UserSubscription): string {
   }
 
   return t('userSubscriptions.resetIn', {
-    time: formatResetTime(subscription.daily_window_start, 24)
+    time: formatResetTime(subscription, 'daily')
   })
 }
 
-function formatResetTime(windowStart: string | null, windowHours: number): string {
-  if (!windowStart) return t('userSubscriptions.windowNotActive')
+function formatResetTime(
+  subscription: UserSubscription,
+  period: SubscriptionQuotaPeriod
+): string {
+  const resetAt = getSubscriptionQuotaResetAt(subscription, period)
+  if (!resetAt) return t('userSubscriptions.windowNotActive')
 
-  const start = new Date(windowStart)
-  const end = new Date(start.getTime() + windowHours * 60 * 60 * 1000)
-  const parts = getRemainingDurationParts(end)
-
+  const parts = getRemainingDurationParts(resetAt)
   return parts ? formatDurationParts(parts) : t('userSubscriptions.windowNotActive')
 }
 

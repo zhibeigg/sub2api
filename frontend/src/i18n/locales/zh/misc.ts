@@ -372,7 +372,7 @@ export default {
     expiresOn: '{date} 到期',
     resetIn: '{time} 后重置',
     quotaEndsIn: '额度将在 {time} 后结束',
-    windowNotActive: '等待首次使用',
+    windowNotActive: '重置时间不可用',
     usageOf: '已用 {used} / {limit}'
   },
 
@@ -884,8 +884,8 @@ export default {
         legacy: '旧版共享订阅套餐',
       },
       planTypeDescriptions: {
-        subscription: '绑定一个订阅分组，使用该分组自身的日、周、月额度。',
-        standardQuota: '绑定一个或多个标准分组，共同消耗套餐级共享额度。',
+        subscription: '绑定一个订阅分组，使用该分组自身的日、周、月额度，并按购买或生效时间滚动刷新。',
+        standardQuota: '绑定一个或多个标准分组，共同消耗套餐级共享额度，并按购买或生效时间滚动刷新。',
       },
       legacyPlanConversionWarning: '此套餐使用旧版共享订阅模式，保存前必须转换为订阅分组套餐或标准共享额度套餐。切换类型后会清除不兼容的分组和旧额度。',
       legacyPlanOffSaleHint: '兼容旧套餐，保持下架并尽快转换。',

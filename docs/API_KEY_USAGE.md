@@ -59,7 +59,7 @@ Cache-Control: no-store
 
 ### 订阅额度
 
-存在有效订阅时，响应包含日、周、月用量和限额。顶层 `remaining` 是所有已配置有限窗口中最小的剩余额度；没有任何有限窗口时为 `-1`。
+存在有效订阅时，响应包含日、周、月用量和限额。三个窗口以该订阅的购买或生效时间为锚点，分别按 24 小时、7 天、30 天滚动刷新；`*_window_start` 是当前窗口起点，`*_window_resets_at` 是下一次刷新时间。顶层 `remaining` 是所有已配置有限窗口中最小的剩余额度；没有任何有限窗口时为 `-1`。
 
 ```json
 {
@@ -77,8 +77,13 @@ Cache-Control: no-store
     "weekly_limit_usd": 10,
     "monthly_usage_usd": 20,
     "monthly_limit_usd": 100,
-    "weekly_window_start": "2026-07-20T00:00:00Z",
-    "expires_at": "2026-08-01T00:00:00Z"
+    "daily_window_start": "2026-07-22T10:30:00Z",
+    "weekly_window_start": "2026-07-20T10:30:00Z",
+    "monthly_window_start": "2026-07-20T10:30:00Z",
+    "daily_window_resets_at": "2026-07-23T10:30:00Z",
+    "weekly_window_resets_at": "2026-07-27T10:30:00Z",
+    "monthly_window_resets_at": "2026-08-19T10:30:00Z",
+    "expires_at": "2026-08-20T10:30:00Z"
   }
 }
 ```

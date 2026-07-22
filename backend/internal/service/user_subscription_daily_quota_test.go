@@ -12,11 +12,29 @@ import (
 type dailyResetTrackingUserSubRepo struct {
 	userSubRepoNoop
 
-	resetDailyCalled bool
+	resetDailyCalled   bool
+	resetWeeklyCalled  bool
+	resetMonthlyCalled bool
+	resetDailyAt       time.Time
+	resetWeeklyAt      time.Time
+	resetMonthlyAt     time.Time
 }
 
-func (r *dailyResetTrackingUserSubRepo) ResetDailyUsage(context.Context, int64, *time.Time, time.Time) error {
+func (r *dailyResetTrackingUserSubRepo) ResetDailyUsage(_ context.Context, _ int64, _ *time.Time, start time.Time) error {
 	r.resetDailyCalled = true
+	r.resetDailyAt = start
+	return nil
+}
+
+func (r *dailyResetTrackingUserSubRepo) ResetWeeklyUsage(_ context.Context, _ int64, _ *time.Time, start time.Time) error {
+	r.resetWeeklyCalled = true
+	r.resetWeeklyAt = start
+	return nil
+}
+
+func (r *dailyResetTrackingUserSubRepo) ResetMonthlyUsage(_ context.Context, _ int64, _ *time.Time, start time.Time) error {
+	r.resetMonthlyCalled = true
+	r.resetMonthlyAt = start
 	return nil
 }
 
@@ -26,7 +44,7 @@ func TestAssignOrExtendSubscription_ExpiredDailyCardStartsNewOneTimeQuota(t *tes
 	}
 	subRepo := newSubscriptionUserSubRepoStub()
 	oldStart := time.Now().AddDate(0, 0, -3)
-	oldWindowStart := startOfDay(oldStart)
+	oldWindowStart := oldStart
 	subRepo.seed(&UserSubscription{
 		ID:                 100,
 		UserID:             200,
@@ -58,7 +76,7 @@ func TestAssignOrExtendSubscription_ExpiredDailyCardStartsNewOneTimeQuota(t *tes
 	require.True(t, renewed.StartsAt.After(oldStart), "重新购买过期订阅时应重置当前周期 StartsAt")
 	require.False(t, renewed.ExpiresAt.After(renewed.StartsAt.AddDate(0, 0, 1)))
 	require.NotNil(t, renewed.DailyWindowStart)
-	require.Equal(t, startOfDay(renewed.StartsAt), *renewed.DailyWindowStart)
+	require.Equal(t, renewed.StartsAt, *renewed.DailyWindowStart)
 	require.Equal(t, 0.0, renewed.DailyUsageUSD)
 	require.Equal(t, 0.0, renewed.WeeklyUsageUSD)
 	require.Equal(t, 0.0, renewed.MonthlyUsageUSD)
@@ -204,4 +222,78 @@ func TestValidateAndCheckLimits_DailyCardDoesNotAllowSecondQuotaAfterMidnight(t 
 	require.False(t, needsMaintenance, "日卡跨过日窗口后不应触发 daily reset 维护")
 	require.True(t, errors.Is(err, ErrDailyLimitExceeded))
 	require.Equal(t, dailyLimit+0.01, sub.DailyUsageUSD, "热路径不应清零日卡已用额度")
+}
+
+func TestUserSubscriptionRollingWindowsUsePurchaseTimeAnchor(t *testing.T) {
+	startsAt := time.Date(2026, 7, 1, 10, 30, 0, 0, time.UTC)
+	dailyStart := startsAt.Add(20 * subscriptionDayDuration)
+	weeklyStart := startsAt.Add(2 * subscriptionWeekDuration)
+	monthlyStart := startsAt
+	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
+	sub := &UserSubscription{
+		StartsAt:           startsAt,
+		ExpiresAt:          startsAt.Add(60 * subscriptionDayDuration),
+		DailyWindowStart:   &dailyStart,
+		WeeklyWindowStart:  &weeklyStart,
+		MonthlyWindowStart: &monthlyStart,
+	}
+
+	require.True(t, sub.NeedsDailyResetAt(now))
+	require.True(t, sub.NeedsWeeklyResetAt(now))
+	require.False(t, sub.NeedsMonthlyResetAt(now))
+	require.Equal(t, time.Date(2026, 7, 22, 10, 30, 0, 0, time.UTC), sub.CurrentDailyWindowStartAt(now))
+	require.Equal(t, time.Date(2026, 7, 22, 10, 30, 0, 0, time.UTC), sub.CurrentWeeklyWindowStartAt(now))
+	require.Equal(t, startsAt, sub.CurrentMonthlyWindowStartAt(now))
+	require.Equal(t, time.Date(2026, 7, 23, 10, 30, 0, 0, time.UTC), *sub.DailyResetTimeAt(now))
+	require.Equal(t, time.Date(2026, 7, 29, 10, 30, 0, 0, time.UTC), *sub.WeeklyResetTimeAt(now))
+	require.Equal(t, time.Date(2026, 7, 31, 10, 30, 0, 0, time.UTC), *sub.MonthlyResetTimeAt(now))
+}
+
+func TestUserSubscriptionLegacyMidnightWindowWaitsForPurchaseTimeBoundary(t *testing.T) {
+	startsAt := time.Date(2026, 7, 1, 10, 30, 0, 0, time.UTC)
+	legacyMidnightStart := time.Date(2026, 7, 22, 0, 0, 0, 0, time.UTC)
+	sub := &UserSubscription{
+		StartsAt:         startsAt,
+		ExpiresAt:        startsAt.Add(60 * subscriptionDayDuration),
+		DailyWindowStart: &legacyMidnightStart,
+	}
+
+	require.False(t, sub.NeedsDailyResetAt(time.Date(2026, 7, 22, 9, 0, 0, 0, time.UTC)))
+	require.True(t, sub.NeedsDailyResetAt(time.Date(2026, 7, 22, 10, 30, 0, 0, time.UTC)))
+}
+
+func TestCheckAndResetWindowsAdvancesEachPeriodToAnchoredBoundary(t *testing.T) {
+	startsAt := time.Date(2026, 5, 20, 10, 30, 0, 0, time.UTC)
+	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
+	dailyStart := startsAt
+	weeklyStart := startsAt
+	monthlyStart := startsAt
+	repo := &dailyResetTrackingUserSubRepo{}
+	svc := NewSubscriptionService(groupRepoNoop{}, repo, nil, nil, nil)
+	sub := &UserSubscription{
+		ID:                 1,
+		UserID:             10,
+		GroupID:            20,
+		StartsAt:           startsAt,
+		ExpiresAt:          now.Add(30 * subscriptionDayDuration),
+		DailyWindowStart:   &dailyStart,
+		WeeklyWindowStart:  &weeklyStart,
+		MonthlyWindowStart: &monthlyStart,
+		DailyUsageUSD:      1,
+		WeeklyUsageUSD:     2,
+		MonthlyUsageUSD:    3,
+	}
+
+	err := svc.checkAndResetWindowsAt(context.Background(), sub, now)
+
+	require.NoError(t, err)
+	require.True(t, repo.resetDailyCalled)
+	require.True(t, repo.resetWeeklyCalled)
+	require.True(t, repo.resetMonthlyCalled)
+	require.Equal(t, time.Date(2026, 7, 22, 10, 30, 0, 0, time.UTC), repo.resetDailyAt)
+	require.Equal(t, time.Date(2026, 7, 22, 10, 30, 0, 0, time.UTC), repo.resetWeeklyAt)
+	require.Equal(t, time.Date(2026, 7, 19, 10, 30, 0, 0, time.UTC), repo.resetMonthlyAt)
+	require.Zero(t, sub.DailyUsageUSD)
+	require.Zero(t, sub.WeeklyUsageUSD)
+	require.Zero(t, sub.MonthlyUsageUSD)
 }

@@ -375,7 +375,7 @@ export default {
     expiresOn: 'Expires on {date}',
     resetIn: 'Resets in {time}',
     quotaEndsIn: 'Quota ends in {time}',
-    windowNotActive: 'Awaiting first use',
+    windowNotActive: 'Reset time unavailable',
     usageOf: '{used} of {limit}'
   },
 
@@ -860,8 +860,8 @@ export default {
         legacy: 'Legacy Shared Subscription Plan',
       },
       planTypeDescriptions: {
-        subscription: 'Uses one subscription group and its native daily, weekly, and monthly limits.',
-        standardQuota: 'Uses one or more standard groups that share plan-level quota limits.',
+        subscription: 'Uses one subscription group and its native daily, weekly, and monthly limits, rolling from purchase or activation time.',
+        standardQuota: 'Uses one or more standard groups that share plan-level quota limits, rolling from purchase or activation time.',
       },
       legacyPlanConversionWarning: 'This plan uses the legacy shared subscription mode. Select a subscription group plan or standard shared quota plan before saving. Changing type clears incompatible groups and legacy quotas.',
       legacyPlanOffSaleHint: 'Legacy compatibility plan; keep it off sale and convert it soon.',

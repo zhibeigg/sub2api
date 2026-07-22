@@ -20,8 +20,10 @@ func TestUsageUnrestrictedIncludesWeeklyWindowStart(t *testing.T) {
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodGet, "/v1/usage", nil)
 
-	weeklyWindowStart := time.Date(2026, time.July, 13, 0, 30, 0, 0, time.FixedZone("UTC+8", 8*60*60))
+	weeklyWindowStart := time.Date(2026, time.July, 20, 0, 30, 0, 0, time.FixedZone("UTC+8", 8*60*60))
 	c.Set(string(middleware.ContextKeySubscription), &service.UserSubscription{
+		StartsAt:          weeklyWindowStart,
+		ExpiresAt:         weeklyWindowStart.AddDate(0, 0, 30),
 		WeeklyWindowStart: &weeklyWindowStart,
 	})
 
@@ -44,7 +46,8 @@ func TestUsageUnrestrictedIncludesWeeklyWindowStart(t *testing.T) {
 		Object        string `json:"object"`
 		SchemaVersion int    `json:"schema_version"`
 		Subscription  struct {
-			WeeklyWindowStart *time.Time `json:"weekly_window_start"`
+			WeeklyWindowStart    *time.Time `json:"weekly_window_start"`
+			WeeklyWindowResetsAt *time.Time `json:"weekly_window_resets_at"`
 		} `json:"subscription"`
 	}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
@@ -52,6 +55,8 @@ func TestUsageUnrestrictedIncludesWeeklyWindowStart(t *testing.T) {
 	require.Equal(t, 1, response.SchemaVersion)
 	require.NotNil(t, response.Subscription.WeeklyWindowStart)
 	require.True(t, weeklyWindowStart.Equal(*response.Subscription.WeeklyWindowStart))
+	require.NotNil(t, response.Subscription.WeeklyWindowResetsAt)
+	require.True(t, weeklyWindowStart.Add(7*24*time.Hour).Equal(*response.Subscription.WeeklyWindowResetsAt))
 }
 
 func TestUsageQuotaLimitedIncludesStrongContract(t *testing.T) {

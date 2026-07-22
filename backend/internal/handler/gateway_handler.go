@@ -1808,6 +1808,8 @@ func (h *GatewayHandler) usageUnrestricted(c *gin.Context, ctx context.Context, 
 	subscription, hasSubscription := middleware2.GetSubscriptionFromContext(c)
 	// 原生订阅分组，或标准分组当前存在有效套餐订阅时，均展示订阅额度。
 	if apiKey.Group != nil && hasSubscription {
+		now := time.Now()
+		subscription = subscription.NormalizedWindowSnapshotAt(now)
 		resp := gin.H{
 			"object":         "sub2api.key_usage",
 			"schema_version": 1,
@@ -1822,14 +1824,19 @@ func (h *GatewayHandler) usageUnrestricted(c *gin.Context, ctx context.Context, 
 			remaining := h.calculateSubscriptionRemaining(apiKey.Group, subscription)
 			resp["remaining"] = remaining
 			resp["subscription"] = gin.H{
-				"daily_usage_usd":     subscription.DailyUsageUSD,
-				"weekly_usage_usd":    subscription.WeeklyUsageUSD,
-				"monthly_usage_usd":   subscription.MonthlyUsageUSD,
-				"daily_limit_usd":     subscription.EffectiveDailyLimit(apiKey.Group),
-				"weekly_limit_usd":    subscription.EffectiveWeeklyLimit(apiKey.Group),
-				"monthly_limit_usd":   subscription.EffectiveMonthlyLimit(apiKey.Group),
-				"weekly_window_start": subscription.WeeklyWindowStart,
-				"expires_at":          subscription.ExpiresAt,
+				"daily_usage_usd":          subscription.DailyUsageUSD,
+				"weekly_usage_usd":         subscription.WeeklyUsageUSD,
+				"monthly_usage_usd":        subscription.MonthlyUsageUSD,
+				"daily_limit_usd":          subscription.EffectiveDailyLimit(apiKey.Group),
+				"weekly_limit_usd":         subscription.EffectiveWeeklyLimit(apiKey.Group),
+				"monthly_limit_usd":        subscription.EffectiveMonthlyLimit(apiKey.Group),
+				"daily_window_start":       subscription.DailyWindowStart,
+				"weekly_window_start":      subscription.WeeklyWindowStart,
+				"monthly_window_start":     subscription.MonthlyWindowStart,
+				"daily_window_resets_at":   subscription.DailyResetTimeAt(now),
+				"weekly_window_resets_at":  subscription.WeeklyResetTimeAt(now),
+				"monthly_window_resets_at": subscription.MonthlyResetTimeAt(now),
+				"expires_at":               subscription.ExpiresAt,
 			}
 		}
 

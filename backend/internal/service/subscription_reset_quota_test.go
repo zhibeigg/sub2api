@@ -24,6 +24,7 @@ type resetQuotaUserSubRepoStub struct {
 	resetDailyErr      error
 	resetWeeklyErr     error
 	resetMonthlyErr    error
+	lastWindowStarts   SubscriptionWindowStarts
 }
 
 func (r *resetQuotaUserSubRepoStub) GetByID(_ context.Context, id int64) (*UserSubscription, error) {
@@ -34,7 +35,8 @@ func (r *resetQuotaUserSubRepoStub) GetByID(_ context.Context, id int64) (*UserS
 	return &cp, nil
 }
 
-func (r *resetQuotaUserSubRepoStub) ResetUsageWindows(_ context.Context, _ int64, resetDaily, resetWeekly, resetMonthly bool, windowStart time.Time) error {
+func (r *resetQuotaUserSubRepoStub) ResetUsageWindows(_ context.Context, _ int64, resetDaily, resetWeekly, resetMonthly bool, starts SubscriptionWindowStarts) error {
+	r.lastWindowStarts = starts
 	r.resetDailyCalled = resetDaily
 	r.resetWeeklyCalled = resetWeekly
 	r.resetMonthlyCalled = resetMonthly
@@ -52,15 +54,15 @@ func (r *resetQuotaUserSubRepoStub) ResetUsageWindows(_ context.Context, _ int64
 	}
 	if resetDaily {
 		r.sub.DailyUsageUSD = 0
-		r.sub.DailyWindowStart = &windowStart
+		r.sub.DailyWindowStart = &starts.Daily
 	}
 	if resetWeekly {
 		r.sub.WeeklyUsageUSD = 0
-		r.sub.WeeklyWindowStart = &windowStart
+		r.sub.WeeklyWindowStart = &starts.Weekly
 	}
 	if resetMonthly {
 		r.sub.MonthlyUsageUSD = 0
-		r.sub.MonthlyWindowStart = &windowStart
+		r.sub.MonthlyWindowStart = &starts.Monthly
 	}
 	return nil
 }
@@ -215,6 +217,40 @@ func TestAdminResetQuota_ResetMonthlyUsageError(t *testing.T) {
 
 	require.ErrorIs(t, err, dbErr)
 	require.True(t, stub.resetMonthlyCalled)
+}
+
+func TestAdminResetQuota_PreservesPurchaseTimeAnchor(t *testing.T) {
+	startsAt := time.Now().UTC().Add(-40 * 24 * time.Hour).Truncate(time.Second)
+	stub := &resetQuotaUserSubRepoStub{
+		sub: &UserSubscription{
+			ID:        10,
+			UserID:    10,
+			GroupID:   20,
+			StartsAt:  startsAt,
+			ExpiresAt: time.Now().UTC().Add(30 * 24 * time.Hour),
+		},
+	}
+	svc := newResetQuotaSvc(stub)
+	before := time.Now().UTC()
+
+	_, err := svc.AdminResetQuota(context.Background(), 10, true, true, true)
+	after := time.Now().UTC()
+
+	require.NoError(t, err)
+	for _, window := range []struct {
+		start  time.Time
+		period time.Duration
+	}{
+		{start: stub.lastWindowStarts.Daily, period: subscriptionDayDuration},
+		{start: stub.lastWindowStarts.Weekly, period: subscriptionWeekDuration},
+		{start: stub.lastWindowStarts.Monthly, period: subscriptionMonthDuration},
+	} {
+		require.Equal(t, startsAt.Hour(), window.start.Hour())
+		require.Equal(t, startsAt.Minute(), window.start.Minute())
+		require.Equal(t, startsAt.Second(), window.start.Second())
+		require.False(t, window.start.After(after))
+		require.True(t, window.start.Add(window.period).After(before))
+	}
 }
 
 func TestAdminResetQuota_ReturnsRefreshedSub(t *testing.T) {
