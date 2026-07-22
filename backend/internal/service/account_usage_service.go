@@ -584,12 +584,33 @@ func NewAccountUsageService(
 // OAuth账号: 调用Anthropic API获取真实数据（需要profile scope），API响应缓存10分钟，窗口统计缓存1分钟
 // Setup Token账号: 根据session_window推算5h窗口，7d数据不可用（没有profile scope）
 // API Key账号: 不支持usage查询
-func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, force ...bool) (result *UsageInfo, resultErr error) {
-	forceProbe := len(force) > 0 && force[0]
-
+func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, force ...bool) (*UsageInfo, error) {
 	account, err := s.accountRepo.GetByID(ctx, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("get account failed: %w", err)
+	}
+	forceProbe := len(force) > 0 && force[0]
+	return s.getUsageForLoadedAccount(ctx, account, forceProbe)
+}
+
+// GetCapacityForAggregation returns the existing account-capacity view for a
+// fully loaded account without re-reading the account row. It intentionally
+// uses non-forced probes so group-level evaluators reuse the normal caches and
+// singleflight protection instead of amplifying upstream requests.
+func (s *AccountUsageService) GetCapacityForAggregation(ctx context.Context, account *Account) (*AccountCapacitySnapshot, error) {
+	usage, err := s.getUsageForLoadedAccount(ctx, account, false)
+	if err != nil {
+		return nil, err
+	}
+	if usage == nil || usage.Capacity == nil {
+		return localCapacityState(AccountCapacityModeUsageWindow, AccountCapacityStateUnknown, "capacity_unavailable"), nil
+	}
+	return cloneAccountCapacitySnapshot(usage.Capacity), nil
+}
+
+func (s *AccountUsageService) getUsageForLoadedAccount(ctx context.Context, account *Account, forceProbe bool) (result *UsageInfo, resultErr error) {
+	if account == nil {
+		return nil, fmt.Errorf("account is required")
 	}
 
 	if account.IsPoolMode() {
@@ -753,7 +774,7 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 		var apiResp *ClaudeUsageResponse
 
 		// 1. 检查缓存（成功响应 3 分钟 / 错误响应 1 分钟）
-		if cached, ok := s.cache.apiCache.Load(accountID); ok {
+		if cached, ok := s.cache.apiCache.Load(account.ID); ok {
 			if cache, ok := cached.(*apiUsageCache); ok {
 				age := time.Since(cache.timestamp)
 				if cache.err != nil && age < apiErrorCacheTTL {
@@ -777,10 +798,10 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 				return nil, ctx.Err()
 			}
 
-			flightKey := fmt.Sprintf("usage:%d", accountID)
+			flightKey := fmt.Sprintf("usage:%d", account.ID)
 			result, flightErr, _ := s.cache.apiFlight.Do(flightKey, func() (any, error) {
 				// 再次检查缓存（可能在等待 singleflight 期间被其他请求填充）
-				if cached, ok := s.cache.apiCache.Load(accountID); ok {
+				if cached, ok := s.cache.apiCache.Load(account.ID); ok {
 					if cache, ok := cached.(*apiUsageCache); ok {
 						age := time.Since(cache.timestamp)
 						if cache.err != nil && age < apiErrorCacheTTL {
@@ -794,14 +815,14 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 				resp, fetchErr := s.fetchOAuthUsageRaw(ctx, account)
 				if fetchErr != nil {
 					// 负缓存：缓存错误响应，防止后续请求重复触发 429
-					s.cache.apiCache.Store(accountID, &apiUsageCache{
+					s.cache.apiCache.Store(account.ID, &apiUsageCache{
 						err:       fetchErr,
 						timestamp: time.Now(),
 					})
 					return nil, fetchErr
 				}
 				// 缓存成功响应
-				s.cache.apiCache.Store(accountID, &apiUsageCache{
+				s.cache.apiCache.Store(account.ID, &apiUsageCache{
 					response:  resp,
 					timestamp: time.Now(),
 				})

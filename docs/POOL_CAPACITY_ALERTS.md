@@ -1,177 +1,197 @@
-# 池模式账户容量提醒
+# 分组容量提醒
 
-## 目标
+## 目标与兼容性
 
-当一次请求完成成功计费后，如果**最终实际命中的账户**启用了 `pool_mode`，且**最终计费分组**启用了 `pool_capacity_alert_enabled`，系统会按该分组选择的单一指标评估容量：
+分组容量提醒由每个分组选择一个指标和对应阈值：
 
-- `predicted_requests`：根据近期成功落账请求的平均成本，预测该计费上下文还能支持多少次请求。
-- `remaining_balance_usd`：直接比较经验证的权威 USD 上游余额与本地账户额度、API Key 配额和用户钱包中的最小剩余金额。
+- `predicted_requests`：保留原有预计剩余请求数模式，继续使用最近 `50` 条成功落账样本估算请求容量。
+- `remaining_balance_usd`：字段值与 API 枚举保持不变，但语义调整为**分组预测剩余余额（USD）**。
 
-当所选指标值严格小于该分组的自定义阈值时，系统创建持久化告警事件，并通过管理员主邮箱和当前 QQBot 的已验证 C2C 绑定主动通知管理员。默认兼容旧行为：关闭提醒，指标为 `predicted_requests`，请求阈值为 `50`。
+金额模式的计算定义为：
 
-> 两种指标不会并行触发。请求模式中的“剩余请求数”是基于历史均次成本的预测；金额模式只接受当前、权威且单位为 USD 的真实余额，绝不通过预计请求数或均次成本反推金额。等于阈值不会告警。
+```text
+分组预测剩余余额（USD）
+= 分组内池模式账号的权威 USD 余额之和
++ 分组内普通账号的估算 USD 余额之和
+```
 
-## 生效条件
+只有计算结果**严格小于**分组配置的阈值时才进入低容量状态并通知管理员。结果等于阈值时不告警。
 
-必须同时满足：
+`unknown`、`stale`、非权威余额、单位不兼容或其他数据不完整情况绝不按 `0` 计入。只要本次分组重算不能得到完整、可比较的结果，就跳过本次状态变更：既不创建新的低容量 episode，也不把已有低容量状态恢复为健康。
 
-1. 本次请求已由统一计费仓储成功提交，且幂等结果为 `Applied=true`。
-2. 本次最终实际使用的账户 `Account.IsPoolMode()` 为 `true`。
-3. 本次最终计费分组 `pool_capacity_alert_enabled=true`。
-4. 请求不是 `cyber` 拒绝记录，且本次用户实际成本和账户成本均大于 `0`。
-5. 最终分组、API Key、账户和用户信息完整。
-6. 若指标为 `predicted_requests`，已取得该分组此前 `49` 条符合条件的成功落账样本，本次成本作为第 `50` 个样本；金额模式不等待历史样本。
+默认兼容旧配置：提醒开关关闭，指标为 `predicted_requests`，请求阈值为 `50`。
 
-如果请求在故障转移后使用了其他账户或分组，只以最终成功计费的账户和分组为准；中途尝试过但未最终计费的账户不参与判断。
+## 触发条件
 
-## 请求预测模式的样本口径
+### `predicted_requests`
 
-仅 `predicted_requests` 模式读取历史样本。样本来自 `usage_logs`，按 `created_at DESC, id DESC` 取最终分组最近记录，并满足：
+请求预测模式保留原有触发和计算方式：一次请求成功落账后，以最终成功计费的分组和池模式账号为准；故障转移中尝试过但未最终计费的账号不参与本次计算。
 
-- `actual_cost > 0`；
-- `request_type <> cyber`；
-- 账户成本大于 `0`；
-- 对应 `(request_id, api_key_id)` 已存在于 `usage_billing_dedup` 或归档表；
-- 排除本次 `(request_id, api_key_id)`，避免 usage log 已提前可见时重复计算。
+请求还必须满足原有样本条件，例如计费幂等结果为 `Applied=true`、不是 `cyber` 拒绝记录、相关成本大于 `0`，并能组成固定 `50` 条有效成功落账样本。
 
-由于 usage log 通过异步 worker 批量落库，评估查询只读取此前最多 `49` 条，本次计费成本直接从成功计费结果加入，组成固定 `50` 条样本。
+### `remaining_balance_usd`
 
-平均值：
+金额模式按分组重算，不再限定“本次请求最终命中池模式账号”。分组内任意普通账号或池模式账号成功计费后，都可以触发该分组的余额重算，但必须同时满足：
+
+1. 本次计费已成功提交，幂等结果为 `Applied=true`。
+2. 最终计费分组已开启 `pool_capacity_alert_enabled`，且选择 `remaining_balance_usd`。
+3. 请求不是 `cyber` 拒绝记录，并满足计费事件的有效性要求。
+4. 能读取该分组全部应计入账号的当前容量数据，并完成统一 USD 计算。
+
+汇总账号范围为分组内当前启用、可调度且未因到期自动暂停的账号；重复关联的同一账号只计算一次。触发计费的账号只负责唤起重算。金额指标比较的是整个分组的预测剩余余额，不把触发账号本身当作唯一容量来源或瓶颈。
+
+## `predicted_requests` 旧模式
+
+请求预测模式继续读取最终分组最近 `50` 次符合条件的成功落账记录。由于 usage log 通过异步 worker 批量落库，评估查询读取此前最多 `49` 条，本次成功计费成本直接作为第 `50` 个样本。
+
+平均值口径保持不变：
 
 - `avg_account_cost`：账户统计成本平均值，使用 `account_stats_cost`（存在时）或 `total_cost`，再乘账户倍率。
 - `avg_actual_cost`：用户实际扣费平均值，即 `actual_cost`。
 
-少于 `49` 条历史样本时不进行请求预测，也不触发请求数告警；这不影响金额模式评估。
+原有账户容量、本地账户额度、API Key 配额和余额计费钱包的有限容量仍按旧逻辑换算为预计请求数，并取最小值。少于 `49` 条历史样本时不评估，不改变现有告警状态。
 
-## 容量计算
+## `remaining_balance_usd` 分组金额模式
 
-### `predicted_requests`
+金额模式不使用 API Key 配额或用户钱包，也不再计算 `account / api_key / wallet` 最小瓶颈。它只汇总分组内账号容量。
 
-账户、API Key 和用户三类容量使用不同的数据源：
+### 池模式账号
 
-- **账户容量**：从池账户自定义上游的 `GET /v1/usage` 获取经验证的真实余额。`unit=USD` 时计算 `floor(upstream_remaining / avg_account_cost)`；上游明确返回 `unit=requests` 时直接取请求数。
-- **本地账户额度安全上限**：若账户同时配置了总/日/周本地额度，仍使用计费事务返回的扣费后状态计算本地容量，并与上游容量取较小值。本地额度不再被当成上游真实余额。
-- **API Key 容量**：配置了 Key 配额时，使用计费事务返回的扣费后状态，计算 `floor((quota - quota_used) / avg_actual_cost)`。
-- **用户容量**：余额计费时使用扣费后钱包余额，计算 `floor(balance / avg_actual_cost)`；订阅计费不使用用户钱包作为瓶颈。
+池模式账号只接受当前、权威且单位为 `USD` 或 `$` 的上游余额。每个账号的合格 `remaining` 值直接作为该账号的 USD 贡献值。
 
-最终预计剩余请求数为所有有限容量中的最小值。未配置限额或上游明确无限的维度不参与取最小值。
+以下数据不能用于金额汇总：
 
-### `remaining_balance_usd`
+- `stale`、`unknown` 或 `unsupported`；
+- 非权威快照；
+- `requests`、EUR、空单位或其他非 USD 单位；
+- 非法、缺失或无法安全比较的数值。
 
-金额模式不读取历史均次成本，也不进行 requests → USD 换算：
+这些情况不等于余额为 `0`。任一应计入池账号缺少合格数据时，本次整个分组重算视为数据不完整并跳过。池账号若返回明确、权威的 `unlimited`，则分组结果为完整的无限容量，不会触发低余额告警。
 
-- **账户金额**：权威上游 USD `remaining` 与扣费后本地总/日/周 USD 剩余额度取较小值。
-- **API Key 金额**：配置 Key 配额时使用扣费后 `quota - quota_used`。
-- **用户钱包金额**：余额计费时使用扣费后余额减 `billing.minimum_balance_reserve`；订阅计费不加入钱包维度。
-- **最终金额**：取所有有限 USD 容量的最小值，并记录 `account / api_key / wallet` 瓶颈。未配置或明确无限的维度不参与；全部明确无限时视为可信健康。
+### 普通账号
 
-如果上游快照不是 `verified + authoritative + USD/$`，也不是明确 `unlimited`，整个金额评估会跳过，不能只凭本地额度触发或恢复状态。
+普通账号使用统一账户容量中的 `usage_window` 或 `local_quota` 数据估算 USD 贡献：
 
-## 上游真实余额探测
+- **`usage_window`**：使用预计剩余请求数乘以平均每请求成本。
 
-仅 `pool_mode` 且具有 Bearer API Key 和自定义 `base_url` 的账户会探测 `{base_url}/v1/usage`。Sub2API 上游通过 `object=sub2api.key_usage`、`schema_version=1`、合法 `mode` 和完整 `quota/subscription/balance` 结构进行强识别；旧版响应只有在结构完整且数值一致时才兼容。
+  ```text
+  普通账号估算 USD 余额 = remaining_requests × average_cost_per_request
+  ```
 
-安全约束：
+  容量状态必须为 `estimated`，且必须已有有效样本；预计请求数需为非负整数，平均成本需为有限正数。缺少预计请求数、平均成本或样本时，不能把该账号按 `0` 处理。
 
-- 复用账户代理和 TLS 指纹设置；配置了 `ProxyID` 但代理未加载或 ID 不一致时直接失败，不回退直连。
-- URL 校验与账户连通性测试保持一致：启用 `security.url_allowlist` 时，自定义上游主机必须加入 `upstream_hosts`；关闭时仍会校验 URL 格式、协议、主机和端口，并按账户保存的精确 `base_url` 发起探测。生产环境若允许非受信管理员配置上游，仍建议开启白名单。
-- Bearer 认证头不会被账户 Header Override 覆盖；请求禁止重定向。
-- 默认总超时 `10` 秒，响应体上限 `64 KiB`，单次探测不自动重试。
-- 成功缓存 `60` 秒、错误缓存 `30` 秒；最近成功值最多保留 `5` 分钟并只在管理端标记为 `stale`。
+- **`local_quota`**：本地额度的剩余值已经是 USD，直接计入分组总额，不再做 requests → USD 换算。若快照仅因缺少均次成本而标记 `unknown / insufficient_cost_sample`，其请求数预测虽然未知，但已知、当前的本地 USD 剩余额度仍可计入；其他 `unknown`、`stale` 或 `unsupported` 情况仍会跳过。
 
-原生 AWS Bedrock SigV4 没有通用实时余额端点，且 AWS 凭据绝不会作为 Bearer Key 发出，因此标记为 `unsupported`。Bedrock API Key 或其他自定义 Base URL 只有满足兼容 Bearer `/v1/usage` 契约时才可验证。
+普通账号的容量状态、模式或单位无法支持上述换算时，本次分组重算同样跳过。
 
-告警状态机只消费 `verified` 或明确 `unlimited` 的权威快照。查询失败、`stale`、`unknown`、`unsupported`、非法响应或单位与当前指标不兼容时，本次评估直接跳过：既不创建新告警，也不把既有 `low` episode 错误恢复为 `healthy`。请求模式允许权威 USD 或 requests；金额模式只允许权威 USD/$。
+### 分组汇总与阈值
 
-告警条件统一为：
+只有全部应计入账号都成功产生兼容的 USD 贡献值时，才求和并比较：
 
 ```text
-metric_value < configured_threshold
+group_remaining_balance_usd < pool_capacity_alert_threshold_usd
 ```
 
-例如请求阈值为 `50` 时：`49` 告警，`50` 和 `51` 不告警。USD 阈值为 `10.00` 时：`9.99` 告警，`10.00` 不告警。
+例如阈值为 `$10.00`：
 
-## 持久化状态机
+- `$9.99`：进入低容量状态并创建通知 episode；
+- `$10.00` 或更高：健康；
+- 任一账号数据为 `unknown`、`stale`、单位不兼容或无法换算：跳过，不改变状态。
 
-数据库迁移：
+金额模式无需等待 `50` 条历史成功落账样本。普通账号的 `usage_window` 换算只使用其容量摘要提供的平均成本，不读取请求预测模式的分组 50 样本作为替代。
 
-- `190_add_group_pool_capacity_alert.sql`
-- `191_pool_capacity_alert_runtime.sql`
-- `192_add_usage_logs_pool_capacity_samples_index_notx.sql`（并发构建热表索引，不阻塞 usage log 写入）
-- `193_add_group_pool_capacity_alert_thresholds.sql`（增加分组指标/阈值以及状态、事件策略快照）
+## 上游余额探测与账户容量
 
-运行时表：
+池模式且具有 Bearer API Key 和自定义 `base_url` 的账号会探测 `{base_url}/v1/usage`。Sub2API 上游通过 `object=sub2api.key_usage`、`schema_version=1`、合法 `mode` 和完整结构进行强识别。
 
-- `pool_capacity_alert_states`：按分组 generation、账户、API Key、用户、计费类型保存 `healthy/low` 状态、所选 metric、当前值/阈值和 episode。
-- `pool_capacity_alert_events`：保存每次告警 episode 的不可变策略与容量快照；金额事件的请求预测字段允许为空。
-- `pool_capacity_alert_deliveries`：保存 recipient/channel 级投递、租约、尝试次数、重试和最终状态。
+安全约束保持不变：
 
-状态范围：
+- 复用账号代理和 TLS 指纹设置；配置了代理但代理不可用时不回退直连。
+- URL 校验与账号连通性测试保持一致；启用 `security.url_allowlist` 时，自定义上游主机必须加入 `upstream_hosts`。
+- Bearer 认证头不会被 Header Override 覆盖；请求禁止重定向。
+- 响应大小、缓存与超时均受 `account_capacity` 配置约束。
+- 最近成功快照可以在管理界面标记为 `stale` 展示，但告警重算不会消费 stale 数据。
 
-```text
-group_id + group_generation + account_id + api_key_id + user_id + billing_type
-```
+原生 AWS Bedrock SigV4 没有通用实时余额端点，且 AWS 凭据不会作为 Bearer Key 发出，因此这类账号可能显示 `unsupported`。如果该账号属于应汇总账号，金额模式会跳过本次不完整的分组重算，而不是按 `0` 处理。
 
-行为：
+## 持久化状态范围
 
-- `healthy -> low`：立即创建新 episode。
+两种指标使用不同状态范围，以保留请求预测旧模式：
+
+- `predicted_requests` 使用原有 `context` 范围：
+
+  ```text
+  group_id + group_generation + account_id + api_key_id + user_id + billing_type
+  ```
+
+- `remaining_balance_usd` 使用新的 `group` 范围：
+
+  ```text
+  group_id + group_generation
+  ```
+
+金额状态不再按账号、API Key、用户或计费类型拆分。状态和事件保存分组总余额、池模式账号权威余额小计、普通账号估算余额小计，以及两类纳入账号数量；金额事件不会保存 API Key / 钱包瓶颈。请求预测状态和事件继续保留原有 context 明细。
+
+状态行为：
+
+- `healthy -> low`：完整计算值严格小于阈值时立即创建新 episode。
 - 持续 `low`：达到 `reminder_cooldown_hours` 后创建提醒 episode。
-- `low -> healthy`：恢复健康状态；下次再次低于阈值时创建新 episode。
-- 分组开关、metric 或对应阈值任一实际值发生变化时，`pool_capacity_alert_generation` 只自增一次。
-- 队列中的旧 generation 任务会被丢弃；尚未完成的旧 generation delivery 会被取消。
-- 复制分组时复制 metric/阈值作为惰性配置，但开关强制关闭，generation 重置为 `0`。
+- `low -> healthy`：完整计算值大于或等于阈值时恢复；之后再次低于阈值会创建新 episode。
+- **金额数据不完整**：不执行上述任何迁移，保留当前 group 状态和 episode。
+- 分组开关、metric 或对应阈值实际变化时，`pool_capacity_alert_generation` 自增一次。
+- 旧 generation 的评估任务会被丢弃，尚未完成的旧 generation delivery 会被取消。
+- 迁移到新的金额语义时，所有已选择 `remaining_balance_usd` 的分组 generation 会推进一次，取消旧 context 语义的待投递任务。
+- 复制分组时复制 metric 和阈值作为惰性配置，但开关强制关闭，generation 重置为 `0`。
 
-## 通知收件人
+## 通知内容与收件人
+
+`predicted_requests` 通知继续使用原有计费 context 内容。`remaining_balance_usd` 通知改为以**分组**为主体，应表达：
+
+- 分组名称或 ID；
+- 当前生效指标和分组预测剩余余额总和；
+- 池模式账号权威 USD 余额小计与纳入账号数；
+- 普通账号估算 USD 余额小计与纳入账号数；
+- 配置阈值，以及“严格小于阈值”的触发关系；
+- episode 类型和评估时间。
+
+金额通知不再把某个触发账号描述为唯一告警对象，也不再包含 API Key 配额或用户钱包瓶颈。数据不完整时不会创建通知，因此通知中不会把 unknown、stale 或不兼容单位显示为 `$0`。
 
 ### 管理员邮件
 
-事件创建时，为所有满足以下条件的管理员主邮箱创建独立 delivery：
+事件创建时，为所有符合条件的管理员主邮箱创建独立 delivery：管理员必须处于启用状态、未软删除、主邮箱格式有效且不是连接占位邮箱。发送前会再次确认管理员资格。
 
-- `role=admin`；
-- `status=active`；
-- 未软删除；
-- 主邮箱格式有效；
-- 不是连接占位邮箱。
-
-发送前会再次确认管理员仍处于启用状态。邮件使用通知模板事件：
+邮件使用不可退订的管理员事务通知事件：
 
 ```text
 account.pool_capacity_low
 ```
 
-该事件属于不可退订的管理员事务通知，可在通知邮件模板管理中自定义中英文模板。
+事件名为兼容性保持不变，但模板语义应按分组容量呈现。
 
 ### QQBot
 
-仅当当前进程中的 QQBot 已启用且存在当前 AppID 时创建 QQBot delivery。收件人必须：
-
-- 仍是启用管理员；
-- 在当前机器人 AppID 下完成已验证身份绑定；
-- 存在 `c2c` identity channel。
-
-每次主动发送前，QQBot Service 会按 identity-channel ID 重新校验当前 AppID、管理员状态、验证状态和 C2C 场景。生产日志不会记录 OpenID 或 channel subject。
+仅当当前进程中的 QQBot 已启用且存在当前 AppID 时创建 QQBot delivery。收件人必须是启用管理员，并在当前机器人 AppID 下具有已验证的 C2C identity channel。发送前会重新校验管理员状态、绑定状态和当前 AppID。
 
 ## 异步与失败隔离
 
 网关热路径只执行有界、非阻塞的内存队列投递：
 
-- 队列满时丢弃本次评估并记录告警日志；
-- 历史聚合、状态机写入、SMTP 和 QQ HTTP 均在后台运行；
+- 队列满时丢弃本次评估并记录日志；
+- 样本聚合、分组余额查询、状态机写入、SMTP 和 QQ HTTP 均在后台执行；
 - 通知失败不回滚或影响已完成计费；
 - delivery 使用数据库租约支持多实例抢占、进程重启恢复和指数退避重试；
-- 发送前发现开关 generation、管理员资格或 QQ C2C 绑定已经失效时直接取消陈旧 delivery；
-- 其余明确永久发送错误直接进入 `dead`，临时错误在最大尝试次数内重试。
+- 发送前发现 generation、管理员资格或 QQ C2C 绑定失效时取消陈旧 delivery。
 
 ## 管理员 API
 
-分组创建、更新和管理员分组响应新增字段：
+API 枚举和表单结构保持不变。分组创建、更新、列表和详情继续使用以下字段：
 
 ```json
 {
   "pool_capacity_alert_enabled": true,
-  "pool_capacity_alert_metric": "predicted_requests",
+  "pool_capacity_alert_metric": "remaining_balance_usd",
   "pool_capacity_alert_threshold_requests": 50,
-  "pool_capacity_alert_threshold_usd": null
+  "pool_capacity_alert_threshold_usd": 10.0
 }
 ```
 
@@ -186,22 +206,23 @@ GET /api/v1/admin/groups/:id
 
 规则：
 
-- 创建时未提供新字段，默认 `enabled=false`、`metric=predicted_requests`、`threshold_requests=50`、`threshold_usd=null`。
-- 更新时四个字段均采用可选 patch 语义；未提供的字段保持原值。
-- metric 只允许 `predicted_requests` 或 `remaining_balance_usd`；请求阈值范围为 `1..1_000_000_000`，USD 阈值范围为 `0.01..1e15`。
-- 选择 `remaining_balance_usd` 时必须提供有效 USD 阈值。请求模式可保留 USD 阈值供以后切换，但当前不参与判断。
-- 开关、metric 或任一阈值实际变化时内部 generation 只自增一次；重复提交相同值不递增。
-- `pool_capacity_alert_generation` 是内部一致性字段，不通过管理员或用户 DTO 暴露。
-- 普通用户可见的分组响应不暴露任何告警配置。
+- 创建缺省为 `enabled=false`、`metric=predicted_requests`、`threshold_requests=50`、`threshold_usd=null`。
+- 更新采用可选 patch 语义，未提供字段保持原值。
+- metric 仍只允许 `predicted_requests` 或 `remaining_balance_usd`。
+- 请求阈值范围为 `1..1_000_000_000`；USD 阈值范围为 `0.01..1e15`。
+- 选择 `remaining_balance_usd` 时必须提供有效 USD 阈值。
+- `remaining_balance_usd` 的字段名未变，但返回和配置语义是“分组预测剩余余额（USD）”，不是单账号权威余额，也不是 Key / 钱包最小余额。
+- `predicted_requests` 继续使用原有 context 状态；`remaining_balance_usd` 使用分组级状态。状态范围不改变上述管理员 API 的请求或响应结构。
+- 内部 generation 不通过管理员或用户 DTO 暴露；普通用户分组响应不暴露告警配置。
 
 ## 管理员账户列表容量展示
 
-管理员账户列表的“用量窗口”列统一展示 `capacity`：
+账户列表的“用量窗口”仍展示单账号容量来源，供理解分组金额汇总：
 
-- 池模式：显示上游真实余额、来源、更新时间和可用时的预计剩余请求数；查询失败可显示最近快照并明确标记 `stale`。
-- 非池模式：优先使用官方窗口的 `limit_requests/used_requests`；否则按 `floor(requests * (100 - utilization) / utilization)` 估算，并明确标记 `estimated`。
-- 无官方窗口但配置了本地总/日/周额度时，按本地剩余额度与本地平均账户成本估算，模式标记为 `local_quota`。
-- `unknown` 不表示剩余为 `0`；无有限本地额度时可显示 `unlimited`。
+- 池模式：显示上游真实余额、来源和更新时间；查询失败可展示最近快照并明确标记 `stale`。
+- 普通账号 `usage_window`：展示官方窗口或本地推算的预计剩余请求数以及平均每请求成本；金额汇总时两者相乘。
+- 普通账号 `local_quota`：展示本地剩余 USD 额度；金额汇总时直接计入。
+- `unknown` 不表示剩余为 `0`。
 
 管理员接口为：
 
@@ -226,6 +247,8 @@ pool_capacity_alert:
   evaluation_worker_count: 2
   queue_size: 256
   evaluation_timeout_seconds: 15
+  group_balance_concurrency: 4
+  group_balance_timeout_seconds: 60
   delivery_worker_count: 4
   delivery_batch_size: 50
   poll_interval_seconds: 5
@@ -239,20 +262,21 @@ pool_capacity_alert:
 
 说明：
 
-- `account_capacity` 控制上游探测超时、成功/错误缓存和 UI stale 保留时间。
+- `account_capacity` 控制单账号上游探测超时、成功/错误缓存和 UI stale 保留时间。
 - `pool_capacity_alert.enabled` 是全局运行时开关；每个分组仍默认关闭。
-- 请求预测的样本数固定为 `50`；告警 metric 和阈值由每个分组配置，不通过 YAML 设置。
+- `group_balance_concurrency` 限制一次分组余额重算中的账号查询并发数。
+- `group_balance_timeout_seconds` 限制一次分组余额重算的总耗时；超时视为数据不完整，不改变状态。
+- 请求预测样本数固定为 `50`；metric 和阈值仍由每个分组配置。
 - `lease_seconds` 会被规范化为不小于 `send_timeout_seconds + 30`。
-- worker、队列、超时和重试参数在加载配置时会限制到安全范围。
 
 ## 运维检查
 
-1. 应用迁移 `190`、`191`、`192`、`193`；其中 `192` 必须按非事务迁移执行。
-2. 确认 SMTP 已配置；否则邮件 delivery 会按策略重试或进入 dead。
-3. 如需 QQ 提醒，确认 QQBot 已启用且管理员完成当前机器人 C2C 绑定。
-4. 为测试池账户配置 Bearer API Key 与自定义 Base URL，并确认其 `/v1/usage` 返回可验证的 Sub2API 契约；原生 Bedrock 不支持该探测。
-5. 在管理端分组创建/编辑弹窗中开启提醒，选择一个 metric 并配置对应阈值。
-6. 请求模式：产生至少 50 次成功落账请求，验证值等于阈值不告警、严格小于时创建事件与两类 delivery。
-7. 金额模式：无需等待 50 次样本，验证权威 USD 值严格小于阈值时告警；requests/EUR/stale/unknown 快照必须跳过。
-8. 模拟上游超时或 429，确认列表显示 `stale/unknown` 且告警状态机不发生恢复或新建。
-9. 修改开关、metric 或阈值，确认 generation 变化后旧待投递任务被取消。
+1. 应用当前版本随附的全部数据库迁移，包括将金额告警切换为分组状态的 `194_group_predicted_balance_alert.sql`。
+2. 确认 SMTP 已配置；如需 QQ 提醒，确认 QQBot 已启用且管理员完成当前机器人 C2C 绑定。
+3. 在管理端分组创建/编辑弹窗中开启提醒，选择指标并配置对应阈值。
+4. 请求模式：产生足够的成功落账样本，验证 `49 < 50` 告警而 `50` 不告警。
+5. 金额模式：分别准备池模式权威 USD 余额、普通 `usage_window` 与普通 `local_quota` 账号，验证分组结果按求和公式计算。
+6. 让分组内任意普通或池账号成功计费，确认都会触发金额模式的分组重算。
+7. 分别模拟 `stale`、`unknown`、非权威、单位不兼容、缺少平均成本和查询超时，确认不会按 `0` 计入，也不会创建、恢复或提醒。
+8. 验证金额通知仅表达分组聚合值和阈值，不再显示 API Key / 钱包瓶颈。
+9. 修改开关、metric 或阈值，确认 generation 变化后旧任务和旧待投递通知被取消。

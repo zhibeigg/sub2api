@@ -90,8 +90,8 @@ func TestPoolCapacityAlertEventDeduplicatesAdministratorEmails(t *testing.T) {
 	predicted := int64(49)
 	repo := &poolCapacityAlertRepository{db: db}
 	mock.ExpectBegin()
-	mock.ExpectQuery(`(?s)SELECT name FROM groups.*pool_capacity_alert_generation=\$3`).
-		WithArgs(int64(1), service.StatusActive, int64(3)).
+	mock.ExpectQuery(`(?s)SELECT name FROM groups.*pool_capacity_alert_generation=\$3.*pool_capacity_alert_metric=\$4`).
+		WithArgs(int64(1), service.StatusActive, int64(3), service.PoolCapacityAlertMetricPredictedRequests).
 		WillReturnRows(sqlmock.NewRows([]string{"name"}).AddRow("pool-group"))
 	mock.ExpectQuery(`SELECT pg_advisory_xact_lock`).
 		WillReturnRows(sqlmock.NewRows([]string{"lock"}).AddRow(""))
@@ -141,8 +141,8 @@ func TestPoolCapacityAlertDeliveryRevalidationChecksGenerationAndPrimaryEmail(t 
 	})
 
 	repo := &poolCapacityAlertRepository{db: db}
-	mock.ExpectQuery(`(?s)SELECT EXISTS.*pool_capacity_alert_generation=e\.group_generation.*LOWER\(BTRIM\(u\.email\)\)=LOWER\(BTRIM\(d\.recipient_email\)\)`).
-		WithArgs(int64(7), "worker-1", service.StatusActive, service.RoleAdmin).
+	mock.ExpectQuery(`(?s)SELECT EXISTS.*s\.status=\$5 AND s\.episode=e\.episode.*pool_capacity_alert_generation=e\.group_generation.*pool_capacity_alert_metric=e\.alert_metric.*LOWER\(BTRIM\(u\.email\)\)=LOWER\(BTRIM\(d\.recipient_email\)\)`).
+		WithArgs(int64(7), "worker-1", service.StatusActive, service.RoleAdmin, service.PoolCapacityAlertStatusLow).
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 	mock.ExpectClose()
 

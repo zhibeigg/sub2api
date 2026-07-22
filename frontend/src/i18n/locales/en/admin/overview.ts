@@ -867,18 +867,18 @@ export default {
         disabled: 'Disabled'
       },
       poolCapacityAlert: {
-        title: 'Pool account capacity alert',
-        description: 'Only applies when a request actually hits a pool_mode account. An alert is sent when the selected metric is strictly below its threshold. Unknown, stale, or unsupported balances are skipped rather than treated as zero.',
+        title: 'Group capacity alert',
+        description: 'Evaluates the selected metric for the group and alerts only when it is strictly below the threshold. Unknown, stale, or unit-incompatible balances are never treated as zero, and incomplete data does not change the current alert state.',
         enabled: 'Capacity alerts enabled',
         disabled: 'Off by default',
         basisLegend: 'Alert based on',
         predictedRequests: {
           label: 'Estimated remaining requests',
-          description: 'Estimates remaining requests from the final group’s latest 50 successful settlements.'
+          description: 'Keeps the legacy mode and estimates remaining requests from the final group’s latest 50 successful settlements.'
         },
         remainingBalanceUsd: {
-          label: 'Remaining available balance (USD)',
-          description: 'Compares only authoritative, available remaining balances denominated in USD.'
+          label: 'Predicted group remaining balance (USD)',
+          description: 'Group total = pool-mode authoritative USD subtotal + regular-account estimated USD subtotal; notifications also show pool/regular participants and skipped, unknown, stale, and unit-incompatible account counts.'
         },
         requestsThreshold: {
           label: 'Request threshold',
@@ -886,8 +886,8 @@ export default {
           unit: 'requests'
         },
         usdThreshold: {
-          label: 'USD threshold',
-          hint: 'Alert when the authoritative remaining USD balance is strictly below this amount from 0.01 to 1,000,000,000,000,000.',
+          label: 'Group USD balance threshold',
+          hint: 'Alert when the predicted group remaining balance is strictly below this amount from 0.01 to 1,000,000,000,000,000.',
           unit: 'USD'
         },
         validation: {

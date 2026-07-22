@@ -64,6 +64,11 @@ func GroupGeneration(v int64) predicate.PoolCapacityAlertState {
 	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldGroupGeneration, v))
 }
 
+// ScopeType applies equality check predicate on the "scope_type" field. It's identical to ScopeTypeEQ.
+func ScopeType(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldScopeType, v))
+}
+
 // AccountID applies equality check predicate on the "account_id" field. It's identical to AccountIDEQ.
 func AccountID(v int64) predicate.PoolCapacityAlertState {
 	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldAccountID, v))
@@ -107,6 +112,46 @@ func PredictedRequests(v int64) predicate.PoolCapacityAlertState {
 // RemainingBalanceUsd applies equality check predicate on the "remaining_balance_usd" field. It's identical to RemainingBalanceUsdEQ.
 func RemainingBalanceUsd(v float64) predicate.PoolCapacityAlertState {
 	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldRemainingBalanceUsd, v))
+}
+
+// PoolAuthoritativeBalanceUsd applies equality check predicate on the "pool_authoritative_balance_usd" field. It's identical to PoolAuthoritativeBalanceUsdEQ.
+func PoolAuthoritativeBalanceUsd(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldPoolAuthoritativeBalanceUsd, v))
+}
+
+// NormalEstimatedBalanceUsd applies equality check predicate on the "normal_estimated_balance_usd" field. It's identical to NormalEstimatedBalanceUsdEQ.
+func NormalEstimatedBalanceUsd(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldNormalEstimatedBalanceUsd, v))
+}
+
+// PoolAccountCount applies equality check predicate on the "pool_account_count" field. It's identical to PoolAccountCountEQ.
+func PoolAccountCount(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldPoolAccountCount, v))
+}
+
+// NormalAccountCount applies equality check predicate on the "normal_account_count" field. It's identical to NormalAccountCountEQ.
+func NormalAccountCount(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldNormalAccountCount, v))
+}
+
+// SkippedAccountCount applies equality check predicate on the "skipped_account_count" field. It's identical to SkippedAccountCountEQ.
+func SkippedAccountCount(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldSkippedAccountCount, v))
+}
+
+// UnknownAccountCount applies equality check predicate on the "unknown_account_count" field. It's identical to UnknownAccountCountEQ.
+func UnknownAccountCount(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldUnknownAccountCount, v))
+}
+
+// StaleAccountCount applies equality check predicate on the "stale_account_count" field. It's identical to StaleAccountCountEQ.
+func StaleAccountCount(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldStaleAccountCount, v))
+}
+
+// IncompatibleUnitAccountCount applies equality check predicate on the "incompatible_unit_account_count" field. It's identical to IncompatibleUnitAccountCountEQ.
+func IncompatibleUnitAccountCount(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldIncompatibleUnitAccountCount, v))
 }
 
 // ThresholdRequests applies equality check predicate on the "threshold_requests" field. It's identical to ThresholdRequestsEQ.
@@ -254,6 +299,71 @@ func GroupGenerationLTE(v int64) predicate.PoolCapacityAlertState {
 	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldGroupGeneration, v))
 }
 
+// ScopeTypeEQ applies the EQ predicate on the "scope_type" field.
+func ScopeTypeEQ(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldScopeType, v))
+}
+
+// ScopeTypeNEQ applies the NEQ predicate on the "scope_type" field.
+func ScopeTypeNEQ(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNEQ(FieldScopeType, v))
+}
+
+// ScopeTypeIn applies the In predicate on the "scope_type" field.
+func ScopeTypeIn(vs ...string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIn(FieldScopeType, vs...))
+}
+
+// ScopeTypeNotIn applies the NotIn predicate on the "scope_type" field.
+func ScopeTypeNotIn(vs ...string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotIn(FieldScopeType, vs...))
+}
+
+// ScopeTypeGT applies the GT predicate on the "scope_type" field.
+func ScopeTypeGT(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGT(FieldScopeType, v))
+}
+
+// ScopeTypeGTE applies the GTE predicate on the "scope_type" field.
+func ScopeTypeGTE(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGTE(FieldScopeType, v))
+}
+
+// ScopeTypeLT applies the LT predicate on the "scope_type" field.
+func ScopeTypeLT(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLT(FieldScopeType, v))
+}
+
+// ScopeTypeLTE applies the LTE predicate on the "scope_type" field.
+func ScopeTypeLTE(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldScopeType, v))
+}
+
+// ScopeTypeContains applies the Contains predicate on the "scope_type" field.
+func ScopeTypeContains(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldContains(FieldScopeType, v))
+}
+
+// ScopeTypeHasPrefix applies the HasPrefix predicate on the "scope_type" field.
+func ScopeTypeHasPrefix(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldHasPrefix(FieldScopeType, v))
+}
+
+// ScopeTypeHasSuffix applies the HasSuffix predicate on the "scope_type" field.
+func ScopeTypeHasSuffix(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldHasSuffix(FieldScopeType, v))
+}
+
+// ScopeTypeEqualFold applies the EqualFold predicate on the "scope_type" field.
+func ScopeTypeEqualFold(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEqualFold(FieldScopeType, v))
+}
+
+// ScopeTypeContainsFold applies the ContainsFold predicate on the "scope_type" field.
+func ScopeTypeContainsFold(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldContainsFold(FieldScopeType, v))
+}
+
 // AccountIDEQ applies the EQ predicate on the "account_id" field.
 func AccountIDEQ(v int64) predicate.PoolCapacityAlertState {
 	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldAccountID, v))
@@ -292,6 +402,16 @@ func AccountIDLT(v int64) predicate.PoolCapacityAlertState {
 // AccountIDLTE applies the LTE predicate on the "account_id" field.
 func AccountIDLTE(v int64) predicate.PoolCapacityAlertState {
 	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldAccountID, v))
+}
+
+// AccountIDIsNil applies the IsNil predicate on the "account_id" field.
+func AccountIDIsNil() predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIsNull(FieldAccountID))
+}
+
+// AccountIDNotNil applies the NotNil predicate on the "account_id" field.
+func AccountIDNotNil() predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotNull(FieldAccountID))
 }
 
 // APIKeyIDEQ applies the EQ predicate on the "api_key_id" field.
@@ -334,6 +454,16 @@ func APIKeyIDLTE(v int64) predicate.PoolCapacityAlertState {
 	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldAPIKeyID, v))
 }
 
+// APIKeyIDIsNil applies the IsNil predicate on the "api_key_id" field.
+func APIKeyIDIsNil() predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIsNull(FieldAPIKeyID))
+}
+
+// APIKeyIDNotNil applies the NotNil predicate on the "api_key_id" field.
+func APIKeyIDNotNil() predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotNull(FieldAPIKeyID))
+}
+
 // UserIDEQ applies the EQ predicate on the "user_id" field.
 func UserIDEQ(v int64) predicate.PoolCapacityAlertState {
 	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldUserID, v))
@@ -374,6 +504,16 @@ func UserIDLTE(v int64) predicate.PoolCapacityAlertState {
 	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldUserID, v))
 }
 
+// UserIDIsNil applies the IsNil predicate on the "user_id" field.
+func UserIDIsNil() predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIsNull(FieldUserID))
+}
+
+// UserIDNotNil applies the NotNil predicate on the "user_id" field.
+func UserIDNotNil() predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotNull(FieldUserID))
+}
+
 // BillingTypeEQ applies the EQ predicate on the "billing_type" field.
 func BillingTypeEQ(v int8) predicate.PoolCapacityAlertState {
 	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldBillingType, v))
@@ -412,6 +552,16 @@ func BillingTypeLT(v int8) predicate.PoolCapacityAlertState {
 // BillingTypeLTE applies the LTE predicate on the "billing_type" field.
 func BillingTypeLTE(v int8) predicate.PoolCapacityAlertState {
 	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldBillingType, v))
+}
+
+// BillingTypeIsNil applies the IsNil predicate on the "billing_type" field.
+func BillingTypeIsNil() predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIsNull(FieldBillingType))
+}
+
+// BillingTypeNotNil applies the NotNil predicate on the "billing_type" field.
+func BillingTypeNotNil() predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotNull(FieldBillingType))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.
@@ -682,6 +832,346 @@ func RemainingBalanceUsdIsNil() predicate.PoolCapacityAlertState {
 // RemainingBalanceUsdNotNil applies the NotNil predicate on the "remaining_balance_usd" field.
 func RemainingBalanceUsdNotNil() predicate.PoolCapacityAlertState {
 	return predicate.PoolCapacityAlertState(sql.FieldNotNull(FieldRemainingBalanceUsd))
+}
+
+// PoolAuthoritativeBalanceUsdEQ applies the EQ predicate on the "pool_authoritative_balance_usd" field.
+func PoolAuthoritativeBalanceUsdEQ(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldPoolAuthoritativeBalanceUsd, v))
+}
+
+// PoolAuthoritativeBalanceUsdNEQ applies the NEQ predicate on the "pool_authoritative_balance_usd" field.
+func PoolAuthoritativeBalanceUsdNEQ(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNEQ(FieldPoolAuthoritativeBalanceUsd, v))
+}
+
+// PoolAuthoritativeBalanceUsdIn applies the In predicate on the "pool_authoritative_balance_usd" field.
+func PoolAuthoritativeBalanceUsdIn(vs ...float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIn(FieldPoolAuthoritativeBalanceUsd, vs...))
+}
+
+// PoolAuthoritativeBalanceUsdNotIn applies the NotIn predicate on the "pool_authoritative_balance_usd" field.
+func PoolAuthoritativeBalanceUsdNotIn(vs ...float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotIn(FieldPoolAuthoritativeBalanceUsd, vs...))
+}
+
+// PoolAuthoritativeBalanceUsdGT applies the GT predicate on the "pool_authoritative_balance_usd" field.
+func PoolAuthoritativeBalanceUsdGT(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGT(FieldPoolAuthoritativeBalanceUsd, v))
+}
+
+// PoolAuthoritativeBalanceUsdGTE applies the GTE predicate on the "pool_authoritative_balance_usd" field.
+func PoolAuthoritativeBalanceUsdGTE(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGTE(FieldPoolAuthoritativeBalanceUsd, v))
+}
+
+// PoolAuthoritativeBalanceUsdLT applies the LT predicate on the "pool_authoritative_balance_usd" field.
+func PoolAuthoritativeBalanceUsdLT(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLT(FieldPoolAuthoritativeBalanceUsd, v))
+}
+
+// PoolAuthoritativeBalanceUsdLTE applies the LTE predicate on the "pool_authoritative_balance_usd" field.
+func PoolAuthoritativeBalanceUsdLTE(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldPoolAuthoritativeBalanceUsd, v))
+}
+
+// PoolAuthoritativeBalanceUsdIsNil applies the IsNil predicate on the "pool_authoritative_balance_usd" field.
+func PoolAuthoritativeBalanceUsdIsNil() predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIsNull(FieldPoolAuthoritativeBalanceUsd))
+}
+
+// PoolAuthoritativeBalanceUsdNotNil applies the NotNil predicate on the "pool_authoritative_balance_usd" field.
+func PoolAuthoritativeBalanceUsdNotNil() predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotNull(FieldPoolAuthoritativeBalanceUsd))
+}
+
+// NormalEstimatedBalanceUsdEQ applies the EQ predicate on the "normal_estimated_balance_usd" field.
+func NormalEstimatedBalanceUsdEQ(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldNormalEstimatedBalanceUsd, v))
+}
+
+// NormalEstimatedBalanceUsdNEQ applies the NEQ predicate on the "normal_estimated_balance_usd" field.
+func NormalEstimatedBalanceUsdNEQ(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNEQ(FieldNormalEstimatedBalanceUsd, v))
+}
+
+// NormalEstimatedBalanceUsdIn applies the In predicate on the "normal_estimated_balance_usd" field.
+func NormalEstimatedBalanceUsdIn(vs ...float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIn(FieldNormalEstimatedBalanceUsd, vs...))
+}
+
+// NormalEstimatedBalanceUsdNotIn applies the NotIn predicate on the "normal_estimated_balance_usd" field.
+func NormalEstimatedBalanceUsdNotIn(vs ...float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotIn(FieldNormalEstimatedBalanceUsd, vs...))
+}
+
+// NormalEstimatedBalanceUsdGT applies the GT predicate on the "normal_estimated_balance_usd" field.
+func NormalEstimatedBalanceUsdGT(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGT(FieldNormalEstimatedBalanceUsd, v))
+}
+
+// NormalEstimatedBalanceUsdGTE applies the GTE predicate on the "normal_estimated_balance_usd" field.
+func NormalEstimatedBalanceUsdGTE(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGTE(FieldNormalEstimatedBalanceUsd, v))
+}
+
+// NormalEstimatedBalanceUsdLT applies the LT predicate on the "normal_estimated_balance_usd" field.
+func NormalEstimatedBalanceUsdLT(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLT(FieldNormalEstimatedBalanceUsd, v))
+}
+
+// NormalEstimatedBalanceUsdLTE applies the LTE predicate on the "normal_estimated_balance_usd" field.
+func NormalEstimatedBalanceUsdLTE(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldNormalEstimatedBalanceUsd, v))
+}
+
+// NormalEstimatedBalanceUsdIsNil applies the IsNil predicate on the "normal_estimated_balance_usd" field.
+func NormalEstimatedBalanceUsdIsNil() predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIsNull(FieldNormalEstimatedBalanceUsd))
+}
+
+// NormalEstimatedBalanceUsdNotNil applies the NotNil predicate on the "normal_estimated_balance_usd" field.
+func NormalEstimatedBalanceUsdNotNil() predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotNull(FieldNormalEstimatedBalanceUsd))
+}
+
+// PoolAccountCountEQ applies the EQ predicate on the "pool_account_count" field.
+func PoolAccountCountEQ(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldPoolAccountCount, v))
+}
+
+// PoolAccountCountNEQ applies the NEQ predicate on the "pool_account_count" field.
+func PoolAccountCountNEQ(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNEQ(FieldPoolAccountCount, v))
+}
+
+// PoolAccountCountIn applies the In predicate on the "pool_account_count" field.
+func PoolAccountCountIn(vs ...int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIn(FieldPoolAccountCount, vs...))
+}
+
+// PoolAccountCountNotIn applies the NotIn predicate on the "pool_account_count" field.
+func PoolAccountCountNotIn(vs ...int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotIn(FieldPoolAccountCount, vs...))
+}
+
+// PoolAccountCountGT applies the GT predicate on the "pool_account_count" field.
+func PoolAccountCountGT(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGT(FieldPoolAccountCount, v))
+}
+
+// PoolAccountCountGTE applies the GTE predicate on the "pool_account_count" field.
+func PoolAccountCountGTE(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGTE(FieldPoolAccountCount, v))
+}
+
+// PoolAccountCountLT applies the LT predicate on the "pool_account_count" field.
+func PoolAccountCountLT(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLT(FieldPoolAccountCount, v))
+}
+
+// PoolAccountCountLTE applies the LTE predicate on the "pool_account_count" field.
+func PoolAccountCountLTE(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldPoolAccountCount, v))
+}
+
+// NormalAccountCountEQ applies the EQ predicate on the "normal_account_count" field.
+func NormalAccountCountEQ(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldNormalAccountCount, v))
+}
+
+// NormalAccountCountNEQ applies the NEQ predicate on the "normal_account_count" field.
+func NormalAccountCountNEQ(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNEQ(FieldNormalAccountCount, v))
+}
+
+// NormalAccountCountIn applies the In predicate on the "normal_account_count" field.
+func NormalAccountCountIn(vs ...int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIn(FieldNormalAccountCount, vs...))
+}
+
+// NormalAccountCountNotIn applies the NotIn predicate on the "normal_account_count" field.
+func NormalAccountCountNotIn(vs ...int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotIn(FieldNormalAccountCount, vs...))
+}
+
+// NormalAccountCountGT applies the GT predicate on the "normal_account_count" field.
+func NormalAccountCountGT(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGT(FieldNormalAccountCount, v))
+}
+
+// NormalAccountCountGTE applies the GTE predicate on the "normal_account_count" field.
+func NormalAccountCountGTE(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGTE(FieldNormalAccountCount, v))
+}
+
+// NormalAccountCountLT applies the LT predicate on the "normal_account_count" field.
+func NormalAccountCountLT(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLT(FieldNormalAccountCount, v))
+}
+
+// NormalAccountCountLTE applies the LTE predicate on the "normal_account_count" field.
+func NormalAccountCountLTE(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldNormalAccountCount, v))
+}
+
+// SkippedAccountCountEQ applies the EQ predicate on the "skipped_account_count" field.
+func SkippedAccountCountEQ(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldSkippedAccountCount, v))
+}
+
+// SkippedAccountCountNEQ applies the NEQ predicate on the "skipped_account_count" field.
+func SkippedAccountCountNEQ(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNEQ(FieldSkippedAccountCount, v))
+}
+
+// SkippedAccountCountIn applies the In predicate on the "skipped_account_count" field.
+func SkippedAccountCountIn(vs ...int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIn(FieldSkippedAccountCount, vs...))
+}
+
+// SkippedAccountCountNotIn applies the NotIn predicate on the "skipped_account_count" field.
+func SkippedAccountCountNotIn(vs ...int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotIn(FieldSkippedAccountCount, vs...))
+}
+
+// SkippedAccountCountGT applies the GT predicate on the "skipped_account_count" field.
+func SkippedAccountCountGT(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGT(FieldSkippedAccountCount, v))
+}
+
+// SkippedAccountCountGTE applies the GTE predicate on the "skipped_account_count" field.
+func SkippedAccountCountGTE(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGTE(FieldSkippedAccountCount, v))
+}
+
+// SkippedAccountCountLT applies the LT predicate on the "skipped_account_count" field.
+func SkippedAccountCountLT(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLT(FieldSkippedAccountCount, v))
+}
+
+// SkippedAccountCountLTE applies the LTE predicate on the "skipped_account_count" field.
+func SkippedAccountCountLTE(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldSkippedAccountCount, v))
+}
+
+// UnknownAccountCountEQ applies the EQ predicate on the "unknown_account_count" field.
+func UnknownAccountCountEQ(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldUnknownAccountCount, v))
+}
+
+// UnknownAccountCountNEQ applies the NEQ predicate on the "unknown_account_count" field.
+func UnknownAccountCountNEQ(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNEQ(FieldUnknownAccountCount, v))
+}
+
+// UnknownAccountCountIn applies the In predicate on the "unknown_account_count" field.
+func UnknownAccountCountIn(vs ...int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIn(FieldUnknownAccountCount, vs...))
+}
+
+// UnknownAccountCountNotIn applies the NotIn predicate on the "unknown_account_count" field.
+func UnknownAccountCountNotIn(vs ...int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotIn(FieldUnknownAccountCount, vs...))
+}
+
+// UnknownAccountCountGT applies the GT predicate on the "unknown_account_count" field.
+func UnknownAccountCountGT(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGT(FieldUnknownAccountCount, v))
+}
+
+// UnknownAccountCountGTE applies the GTE predicate on the "unknown_account_count" field.
+func UnknownAccountCountGTE(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGTE(FieldUnknownAccountCount, v))
+}
+
+// UnknownAccountCountLT applies the LT predicate on the "unknown_account_count" field.
+func UnknownAccountCountLT(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLT(FieldUnknownAccountCount, v))
+}
+
+// UnknownAccountCountLTE applies the LTE predicate on the "unknown_account_count" field.
+func UnknownAccountCountLTE(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldUnknownAccountCount, v))
+}
+
+// StaleAccountCountEQ applies the EQ predicate on the "stale_account_count" field.
+func StaleAccountCountEQ(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldStaleAccountCount, v))
+}
+
+// StaleAccountCountNEQ applies the NEQ predicate on the "stale_account_count" field.
+func StaleAccountCountNEQ(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNEQ(FieldStaleAccountCount, v))
+}
+
+// StaleAccountCountIn applies the In predicate on the "stale_account_count" field.
+func StaleAccountCountIn(vs ...int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIn(FieldStaleAccountCount, vs...))
+}
+
+// StaleAccountCountNotIn applies the NotIn predicate on the "stale_account_count" field.
+func StaleAccountCountNotIn(vs ...int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotIn(FieldStaleAccountCount, vs...))
+}
+
+// StaleAccountCountGT applies the GT predicate on the "stale_account_count" field.
+func StaleAccountCountGT(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGT(FieldStaleAccountCount, v))
+}
+
+// StaleAccountCountGTE applies the GTE predicate on the "stale_account_count" field.
+func StaleAccountCountGTE(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGTE(FieldStaleAccountCount, v))
+}
+
+// StaleAccountCountLT applies the LT predicate on the "stale_account_count" field.
+func StaleAccountCountLT(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLT(FieldStaleAccountCount, v))
+}
+
+// StaleAccountCountLTE applies the LTE predicate on the "stale_account_count" field.
+func StaleAccountCountLTE(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldStaleAccountCount, v))
+}
+
+// IncompatibleUnitAccountCountEQ applies the EQ predicate on the "incompatible_unit_account_count" field.
+func IncompatibleUnitAccountCountEQ(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldIncompatibleUnitAccountCount, v))
+}
+
+// IncompatibleUnitAccountCountNEQ applies the NEQ predicate on the "incompatible_unit_account_count" field.
+func IncompatibleUnitAccountCountNEQ(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNEQ(FieldIncompatibleUnitAccountCount, v))
+}
+
+// IncompatibleUnitAccountCountIn applies the In predicate on the "incompatible_unit_account_count" field.
+func IncompatibleUnitAccountCountIn(vs ...int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIn(FieldIncompatibleUnitAccountCount, vs...))
+}
+
+// IncompatibleUnitAccountCountNotIn applies the NotIn predicate on the "incompatible_unit_account_count" field.
+func IncompatibleUnitAccountCountNotIn(vs ...int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotIn(FieldIncompatibleUnitAccountCount, vs...))
+}
+
+// IncompatibleUnitAccountCountGT applies the GT predicate on the "incompatible_unit_account_count" field.
+func IncompatibleUnitAccountCountGT(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGT(FieldIncompatibleUnitAccountCount, v))
+}
+
+// IncompatibleUnitAccountCountGTE applies the GTE predicate on the "incompatible_unit_account_count" field.
+func IncompatibleUnitAccountCountGTE(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGTE(FieldIncompatibleUnitAccountCount, v))
+}
+
+// IncompatibleUnitAccountCountLT applies the LT predicate on the "incompatible_unit_account_count" field.
+func IncompatibleUnitAccountCountLT(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLT(FieldIncompatibleUnitAccountCount, v))
+}
+
+// IncompatibleUnitAccountCountLTE applies the LTE predicate on the "incompatible_unit_account_count" field.
+func IncompatibleUnitAccountCountLTE(v int) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldIncompatibleUnitAccountCount, v))
 }
 
 // ThresholdRequestsEQ applies the EQ predicate on the "threshold_requests" field.

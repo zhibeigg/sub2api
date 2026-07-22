@@ -948,18 +948,18 @@ export default {
         disabled: '未启用'
       },
       poolCapacityAlert: {
-        title: '池账户容量提醒',
-        description: '仅在请求实际命中 pool_mode 账户时生效；所选指标严格小于阈值时提醒。余额未知、过期或不受支持时跳过评估，不按 0 处理。',
+        title: '分组容量提醒',
+        description: '按分组评估所选指标，只有严格小于阈值时提醒。余额数据 unknown、stale 或单位不兼容时不按 0 处理，数据不完整也不会改变现有告警状态。',
         enabled: '已开启容量提醒',
         disabled: '默认关闭',
         basisLegend: '提醒依据',
         predictedRequests: {
           label: '预计剩余请求数',
-          description: '根据最终分组最近 50 次成功落账的平均消耗估算剩余请求数。'
+          description: '保留原有模式，根据最终分组最近 50 次成功落账的平均消耗估算剩余请求数。'
         },
         remainingBalanceUsd: {
-          label: '剩余可用金额（USD）',
-          description: '仅比较权威、可用且单位为 USD 的剩余余额。'
+          label: '分组预测剩余余额（USD）',
+          description: '分组总额 = 池模式账号权威 USD 余额小计 + 普通账号估算 USD 余额小计；通知会同时展示池/普通参与数以及跳过、未知、过期和单位不兼容账号统计。'
         },
         requestsThreshold: {
           label: '请求阈值',
@@ -967,8 +967,8 @@ export default {
           unit: '请求'
         },
         usdThreshold: {
-          label: 'USD 阈值',
-          hint: '权威剩余 USD 余额严格小于此金额时提醒；可填 0.01 到 1,000,000,000,000,000。',
+          label: '分组 USD 余额阈值',
+          hint: '分组预测剩余余额严格小于此金额时提醒；可填 0.01 到 1,000,000,000,000,000。',
           unit: 'USD'
         },
         validation: {

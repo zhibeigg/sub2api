@@ -70,6 +70,20 @@ func (_u *PoolCapacityAlertStateUpdate) AddGroupGeneration(v int64) *PoolCapacit
 	return _u
 }
 
+// SetScopeType sets the "scope_type" field.
+func (_u *PoolCapacityAlertStateUpdate) SetScopeType(v string) *PoolCapacityAlertStateUpdate {
+	_u.mutation.SetScopeType(v)
+	return _u
+}
+
+// SetNillableScopeType sets the "scope_type" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdate) SetNillableScopeType(v *string) *PoolCapacityAlertStateUpdate {
+	if v != nil {
+		_u.SetScopeType(*v)
+	}
+	return _u
+}
+
 // SetAccountID sets the "account_id" field.
 func (_u *PoolCapacityAlertStateUpdate) SetAccountID(v int64) *PoolCapacityAlertStateUpdate {
 	_u.mutation.ResetAccountID()
@@ -88,6 +102,12 @@ func (_u *PoolCapacityAlertStateUpdate) SetNillableAccountID(v *int64) *PoolCapa
 // AddAccountID adds value to the "account_id" field.
 func (_u *PoolCapacityAlertStateUpdate) AddAccountID(v int64) *PoolCapacityAlertStateUpdate {
 	_u.mutation.AddAccountID(v)
+	return _u
+}
+
+// ClearAccountID clears the value of the "account_id" field.
+func (_u *PoolCapacityAlertStateUpdate) ClearAccountID() *PoolCapacityAlertStateUpdate {
+	_u.mutation.ClearAccountID()
 	return _u
 }
 
@@ -112,6 +132,12 @@ func (_u *PoolCapacityAlertStateUpdate) AddAPIKeyID(v int64) *PoolCapacityAlertS
 	return _u
 }
 
+// ClearAPIKeyID clears the value of the "api_key_id" field.
+func (_u *PoolCapacityAlertStateUpdate) ClearAPIKeyID() *PoolCapacityAlertStateUpdate {
+	_u.mutation.ClearAPIKeyID()
+	return _u
+}
+
 // SetUserID sets the "user_id" field.
 func (_u *PoolCapacityAlertStateUpdate) SetUserID(v int64) *PoolCapacityAlertStateUpdate {
 	_u.mutation.ResetUserID()
@@ -133,6 +159,12 @@ func (_u *PoolCapacityAlertStateUpdate) AddUserID(v int64) *PoolCapacityAlertSta
 	return _u
 }
 
+// ClearUserID clears the value of the "user_id" field.
+func (_u *PoolCapacityAlertStateUpdate) ClearUserID() *PoolCapacityAlertStateUpdate {
+	_u.mutation.ClearUserID()
+	return _u
+}
+
 // SetBillingType sets the "billing_type" field.
 func (_u *PoolCapacityAlertStateUpdate) SetBillingType(v int8) *PoolCapacityAlertStateUpdate {
 	_u.mutation.ResetBillingType()
@@ -151,6 +183,12 @@ func (_u *PoolCapacityAlertStateUpdate) SetNillableBillingType(v *int8) *PoolCap
 // AddBillingType adds value to the "billing_type" field.
 func (_u *PoolCapacityAlertStateUpdate) AddBillingType(v int8) *PoolCapacityAlertStateUpdate {
 	_u.mutation.AddBillingType(v)
+	return _u
+}
+
+// ClearBillingType clears the value of the "billing_type" field.
+func (_u *PoolCapacityAlertStateUpdate) ClearBillingType() *PoolCapacityAlertStateUpdate {
+	_u.mutation.ClearBillingType()
 	return _u
 }
 
@@ -254,6 +292,186 @@ func (_u *PoolCapacityAlertStateUpdate) AddRemainingBalanceUsd(v float64) *PoolC
 // ClearRemainingBalanceUsd clears the value of the "remaining_balance_usd" field.
 func (_u *PoolCapacityAlertStateUpdate) ClearRemainingBalanceUsd() *PoolCapacityAlertStateUpdate {
 	_u.mutation.ClearRemainingBalanceUsd()
+	return _u
+}
+
+// SetPoolAuthoritativeBalanceUsd sets the "pool_authoritative_balance_usd" field.
+func (_u *PoolCapacityAlertStateUpdate) SetPoolAuthoritativeBalanceUsd(v float64) *PoolCapacityAlertStateUpdate {
+	_u.mutation.ResetPoolAuthoritativeBalanceUsd()
+	_u.mutation.SetPoolAuthoritativeBalanceUsd(v)
+	return _u
+}
+
+// SetNillablePoolAuthoritativeBalanceUsd sets the "pool_authoritative_balance_usd" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdate) SetNillablePoolAuthoritativeBalanceUsd(v *float64) *PoolCapacityAlertStateUpdate {
+	if v != nil {
+		_u.SetPoolAuthoritativeBalanceUsd(*v)
+	}
+	return _u
+}
+
+// AddPoolAuthoritativeBalanceUsd adds value to the "pool_authoritative_balance_usd" field.
+func (_u *PoolCapacityAlertStateUpdate) AddPoolAuthoritativeBalanceUsd(v float64) *PoolCapacityAlertStateUpdate {
+	_u.mutation.AddPoolAuthoritativeBalanceUsd(v)
+	return _u
+}
+
+// ClearPoolAuthoritativeBalanceUsd clears the value of the "pool_authoritative_balance_usd" field.
+func (_u *PoolCapacityAlertStateUpdate) ClearPoolAuthoritativeBalanceUsd() *PoolCapacityAlertStateUpdate {
+	_u.mutation.ClearPoolAuthoritativeBalanceUsd()
+	return _u
+}
+
+// SetNormalEstimatedBalanceUsd sets the "normal_estimated_balance_usd" field.
+func (_u *PoolCapacityAlertStateUpdate) SetNormalEstimatedBalanceUsd(v float64) *PoolCapacityAlertStateUpdate {
+	_u.mutation.ResetNormalEstimatedBalanceUsd()
+	_u.mutation.SetNormalEstimatedBalanceUsd(v)
+	return _u
+}
+
+// SetNillableNormalEstimatedBalanceUsd sets the "normal_estimated_balance_usd" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdate) SetNillableNormalEstimatedBalanceUsd(v *float64) *PoolCapacityAlertStateUpdate {
+	if v != nil {
+		_u.SetNormalEstimatedBalanceUsd(*v)
+	}
+	return _u
+}
+
+// AddNormalEstimatedBalanceUsd adds value to the "normal_estimated_balance_usd" field.
+func (_u *PoolCapacityAlertStateUpdate) AddNormalEstimatedBalanceUsd(v float64) *PoolCapacityAlertStateUpdate {
+	_u.mutation.AddNormalEstimatedBalanceUsd(v)
+	return _u
+}
+
+// ClearNormalEstimatedBalanceUsd clears the value of the "normal_estimated_balance_usd" field.
+func (_u *PoolCapacityAlertStateUpdate) ClearNormalEstimatedBalanceUsd() *PoolCapacityAlertStateUpdate {
+	_u.mutation.ClearNormalEstimatedBalanceUsd()
+	return _u
+}
+
+// SetPoolAccountCount sets the "pool_account_count" field.
+func (_u *PoolCapacityAlertStateUpdate) SetPoolAccountCount(v int) *PoolCapacityAlertStateUpdate {
+	_u.mutation.ResetPoolAccountCount()
+	_u.mutation.SetPoolAccountCount(v)
+	return _u
+}
+
+// SetNillablePoolAccountCount sets the "pool_account_count" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdate) SetNillablePoolAccountCount(v *int) *PoolCapacityAlertStateUpdate {
+	if v != nil {
+		_u.SetPoolAccountCount(*v)
+	}
+	return _u
+}
+
+// AddPoolAccountCount adds value to the "pool_account_count" field.
+func (_u *PoolCapacityAlertStateUpdate) AddPoolAccountCount(v int) *PoolCapacityAlertStateUpdate {
+	_u.mutation.AddPoolAccountCount(v)
+	return _u
+}
+
+// SetNormalAccountCount sets the "normal_account_count" field.
+func (_u *PoolCapacityAlertStateUpdate) SetNormalAccountCount(v int) *PoolCapacityAlertStateUpdate {
+	_u.mutation.ResetNormalAccountCount()
+	_u.mutation.SetNormalAccountCount(v)
+	return _u
+}
+
+// SetNillableNormalAccountCount sets the "normal_account_count" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdate) SetNillableNormalAccountCount(v *int) *PoolCapacityAlertStateUpdate {
+	if v != nil {
+		_u.SetNormalAccountCount(*v)
+	}
+	return _u
+}
+
+// AddNormalAccountCount adds value to the "normal_account_count" field.
+func (_u *PoolCapacityAlertStateUpdate) AddNormalAccountCount(v int) *PoolCapacityAlertStateUpdate {
+	_u.mutation.AddNormalAccountCount(v)
+	return _u
+}
+
+// SetSkippedAccountCount sets the "skipped_account_count" field.
+func (_u *PoolCapacityAlertStateUpdate) SetSkippedAccountCount(v int) *PoolCapacityAlertStateUpdate {
+	_u.mutation.ResetSkippedAccountCount()
+	_u.mutation.SetSkippedAccountCount(v)
+	return _u
+}
+
+// SetNillableSkippedAccountCount sets the "skipped_account_count" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdate) SetNillableSkippedAccountCount(v *int) *PoolCapacityAlertStateUpdate {
+	if v != nil {
+		_u.SetSkippedAccountCount(*v)
+	}
+	return _u
+}
+
+// AddSkippedAccountCount adds value to the "skipped_account_count" field.
+func (_u *PoolCapacityAlertStateUpdate) AddSkippedAccountCount(v int) *PoolCapacityAlertStateUpdate {
+	_u.mutation.AddSkippedAccountCount(v)
+	return _u
+}
+
+// SetUnknownAccountCount sets the "unknown_account_count" field.
+func (_u *PoolCapacityAlertStateUpdate) SetUnknownAccountCount(v int) *PoolCapacityAlertStateUpdate {
+	_u.mutation.ResetUnknownAccountCount()
+	_u.mutation.SetUnknownAccountCount(v)
+	return _u
+}
+
+// SetNillableUnknownAccountCount sets the "unknown_account_count" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdate) SetNillableUnknownAccountCount(v *int) *PoolCapacityAlertStateUpdate {
+	if v != nil {
+		_u.SetUnknownAccountCount(*v)
+	}
+	return _u
+}
+
+// AddUnknownAccountCount adds value to the "unknown_account_count" field.
+func (_u *PoolCapacityAlertStateUpdate) AddUnknownAccountCount(v int) *PoolCapacityAlertStateUpdate {
+	_u.mutation.AddUnknownAccountCount(v)
+	return _u
+}
+
+// SetStaleAccountCount sets the "stale_account_count" field.
+func (_u *PoolCapacityAlertStateUpdate) SetStaleAccountCount(v int) *PoolCapacityAlertStateUpdate {
+	_u.mutation.ResetStaleAccountCount()
+	_u.mutation.SetStaleAccountCount(v)
+	return _u
+}
+
+// SetNillableStaleAccountCount sets the "stale_account_count" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdate) SetNillableStaleAccountCount(v *int) *PoolCapacityAlertStateUpdate {
+	if v != nil {
+		_u.SetStaleAccountCount(*v)
+	}
+	return _u
+}
+
+// AddStaleAccountCount adds value to the "stale_account_count" field.
+func (_u *PoolCapacityAlertStateUpdate) AddStaleAccountCount(v int) *PoolCapacityAlertStateUpdate {
+	_u.mutation.AddStaleAccountCount(v)
+	return _u
+}
+
+// SetIncompatibleUnitAccountCount sets the "incompatible_unit_account_count" field.
+func (_u *PoolCapacityAlertStateUpdate) SetIncompatibleUnitAccountCount(v int) *PoolCapacityAlertStateUpdate {
+	_u.mutation.ResetIncompatibleUnitAccountCount()
+	_u.mutation.SetIncompatibleUnitAccountCount(v)
+	return _u
+}
+
+// SetNillableIncompatibleUnitAccountCount sets the "incompatible_unit_account_count" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdate) SetNillableIncompatibleUnitAccountCount(v *int) *PoolCapacityAlertStateUpdate {
+	if v != nil {
+		_u.SetIncompatibleUnitAccountCount(*v)
+	}
+	return _u
+}
+
+// AddIncompatibleUnitAccountCount adds value to the "incompatible_unit_account_count" field.
+func (_u *PoolCapacityAlertStateUpdate) AddIncompatibleUnitAccountCount(v int) *PoolCapacityAlertStateUpdate {
+	_u.mutation.AddIncompatibleUnitAccountCount(v)
 	return _u
 }
 
@@ -546,6 +764,11 @@ func (_u *PoolCapacityAlertStateUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *PoolCapacityAlertStateUpdate) check() error {
+	if v, ok := _u.mutation.ScopeType(); ok {
+		if err := poolcapacityalertstate.ScopeTypeValidator(v); err != nil {
+			return &ValidationError{Name: "scope_type", err: fmt.Errorf(`ent: validator failed for field "PoolCapacityAlertState.scope_type": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := poolcapacityalertstate.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "PoolCapacityAlertState.status": %w`, err)}
@@ -588,11 +811,17 @@ func (_u *PoolCapacityAlertStateUpdate) sqlSave(ctx context.Context) (_node int,
 	if value, ok := _u.mutation.AddedGroupGeneration(); ok {
 		_spec.AddField(poolcapacityalertstate.FieldGroupGeneration, field.TypeInt64, value)
 	}
+	if value, ok := _u.mutation.ScopeType(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldScopeType, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.AccountID(); ok {
 		_spec.SetField(poolcapacityalertstate.FieldAccountID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.AddedAccountID(); ok {
 		_spec.AddField(poolcapacityalertstate.FieldAccountID, field.TypeInt64, value)
+	}
+	if _u.mutation.AccountIDCleared() {
+		_spec.ClearField(poolcapacityalertstate.FieldAccountID, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.APIKeyID(); ok {
 		_spec.SetField(poolcapacityalertstate.FieldAPIKeyID, field.TypeInt64, value)
@@ -600,17 +829,26 @@ func (_u *PoolCapacityAlertStateUpdate) sqlSave(ctx context.Context) (_node int,
 	if value, ok := _u.mutation.AddedAPIKeyID(); ok {
 		_spec.AddField(poolcapacityalertstate.FieldAPIKeyID, field.TypeInt64, value)
 	}
+	if _u.mutation.APIKeyIDCleared() {
+		_spec.ClearField(poolcapacityalertstate.FieldAPIKeyID, field.TypeInt64)
+	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(poolcapacityalertstate.FieldUserID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.AddedUserID(); ok {
 		_spec.AddField(poolcapacityalertstate.FieldUserID, field.TypeInt64, value)
 	}
+	if _u.mutation.UserIDCleared() {
+		_spec.ClearField(poolcapacityalertstate.FieldUserID, field.TypeInt64)
+	}
 	if value, ok := _u.mutation.BillingType(); ok {
 		_spec.SetField(poolcapacityalertstate.FieldBillingType, field.TypeInt8, value)
 	}
 	if value, ok := _u.mutation.AddedBillingType(); ok {
 		_spec.AddField(poolcapacityalertstate.FieldBillingType, field.TypeInt8, value)
+	}
+	if _u.mutation.BillingTypeCleared() {
+		_spec.ClearField(poolcapacityalertstate.FieldBillingType, field.TypeInt8)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(poolcapacityalertstate.FieldStatus, field.TypeString, value)
@@ -641,6 +879,60 @@ func (_u *PoolCapacityAlertStateUpdate) sqlSave(ctx context.Context) (_node int,
 	}
 	if _u.mutation.RemainingBalanceUsdCleared() {
 		_spec.ClearField(poolcapacityalertstate.FieldRemainingBalanceUsd, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.PoolAuthoritativeBalanceUsd(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldPoolAuthoritativeBalanceUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedPoolAuthoritativeBalanceUsd(); ok {
+		_spec.AddField(poolcapacityalertstate.FieldPoolAuthoritativeBalanceUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.PoolAuthoritativeBalanceUsdCleared() {
+		_spec.ClearField(poolcapacityalertstate.FieldPoolAuthoritativeBalanceUsd, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.NormalEstimatedBalanceUsd(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldNormalEstimatedBalanceUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedNormalEstimatedBalanceUsd(); ok {
+		_spec.AddField(poolcapacityalertstate.FieldNormalEstimatedBalanceUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.NormalEstimatedBalanceUsdCleared() {
+		_spec.ClearField(poolcapacityalertstate.FieldNormalEstimatedBalanceUsd, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.PoolAccountCount(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldPoolAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedPoolAccountCount(); ok {
+		_spec.AddField(poolcapacityalertstate.FieldPoolAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.NormalAccountCount(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldNormalAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedNormalAccountCount(); ok {
+		_spec.AddField(poolcapacityalertstate.FieldNormalAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.SkippedAccountCount(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldSkippedAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSkippedAccountCount(); ok {
+		_spec.AddField(poolcapacityalertstate.FieldSkippedAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.UnknownAccountCount(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldUnknownAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedUnknownAccountCount(); ok {
+		_spec.AddField(poolcapacityalertstate.FieldUnknownAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.StaleAccountCount(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldStaleAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedStaleAccountCount(); ok {
+		_spec.AddField(poolcapacityalertstate.FieldStaleAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.IncompatibleUnitAccountCount(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldIncompatibleUnitAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedIncompatibleUnitAccountCount(); ok {
+		_spec.AddField(poolcapacityalertstate.FieldIncompatibleUnitAccountCount, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.ThresholdRequests(); ok {
 		_spec.SetField(poolcapacityalertstate.FieldThresholdRequests, field.TypeInt64, value)
@@ -779,6 +1071,20 @@ func (_u *PoolCapacityAlertStateUpdateOne) AddGroupGeneration(v int64) *PoolCapa
 	return _u
 }
 
+// SetScopeType sets the "scope_type" field.
+func (_u *PoolCapacityAlertStateUpdateOne) SetScopeType(v string) *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.SetScopeType(v)
+	return _u
+}
+
+// SetNillableScopeType sets the "scope_type" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdateOne) SetNillableScopeType(v *string) *PoolCapacityAlertStateUpdateOne {
+	if v != nil {
+		_u.SetScopeType(*v)
+	}
+	return _u
+}
+
 // SetAccountID sets the "account_id" field.
 func (_u *PoolCapacityAlertStateUpdateOne) SetAccountID(v int64) *PoolCapacityAlertStateUpdateOne {
 	_u.mutation.ResetAccountID()
@@ -797,6 +1103,12 @@ func (_u *PoolCapacityAlertStateUpdateOne) SetNillableAccountID(v *int64) *PoolC
 // AddAccountID adds value to the "account_id" field.
 func (_u *PoolCapacityAlertStateUpdateOne) AddAccountID(v int64) *PoolCapacityAlertStateUpdateOne {
 	_u.mutation.AddAccountID(v)
+	return _u
+}
+
+// ClearAccountID clears the value of the "account_id" field.
+func (_u *PoolCapacityAlertStateUpdateOne) ClearAccountID() *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.ClearAccountID()
 	return _u
 }
 
@@ -821,6 +1133,12 @@ func (_u *PoolCapacityAlertStateUpdateOne) AddAPIKeyID(v int64) *PoolCapacityAle
 	return _u
 }
 
+// ClearAPIKeyID clears the value of the "api_key_id" field.
+func (_u *PoolCapacityAlertStateUpdateOne) ClearAPIKeyID() *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.ClearAPIKeyID()
+	return _u
+}
+
 // SetUserID sets the "user_id" field.
 func (_u *PoolCapacityAlertStateUpdateOne) SetUserID(v int64) *PoolCapacityAlertStateUpdateOne {
 	_u.mutation.ResetUserID()
@@ -842,6 +1160,12 @@ func (_u *PoolCapacityAlertStateUpdateOne) AddUserID(v int64) *PoolCapacityAlert
 	return _u
 }
 
+// ClearUserID clears the value of the "user_id" field.
+func (_u *PoolCapacityAlertStateUpdateOne) ClearUserID() *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.ClearUserID()
+	return _u
+}
+
 // SetBillingType sets the "billing_type" field.
 func (_u *PoolCapacityAlertStateUpdateOne) SetBillingType(v int8) *PoolCapacityAlertStateUpdateOne {
 	_u.mutation.ResetBillingType()
@@ -860,6 +1184,12 @@ func (_u *PoolCapacityAlertStateUpdateOne) SetNillableBillingType(v *int8) *Pool
 // AddBillingType adds value to the "billing_type" field.
 func (_u *PoolCapacityAlertStateUpdateOne) AddBillingType(v int8) *PoolCapacityAlertStateUpdateOne {
 	_u.mutation.AddBillingType(v)
+	return _u
+}
+
+// ClearBillingType clears the value of the "billing_type" field.
+func (_u *PoolCapacityAlertStateUpdateOne) ClearBillingType() *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.ClearBillingType()
 	return _u
 }
 
@@ -963,6 +1293,186 @@ func (_u *PoolCapacityAlertStateUpdateOne) AddRemainingBalanceUsd(v float64) *Po
 // ClearRemainingBalanceUsd clears the value of the "remaining_balance_usd" field.
 func (_u *PoolCapacityAlertStateUpdateOne) ClearRemainingBalanceUsd() *PoolCapacityAlertStateUpdateOne {
 	_u.mutation.ClearRemainingBalanceUsd()
+	return _u
+}
+
+// SetPoolAuthoritativeBalanceUsd sets the "pool_authoritative_balance_usd" field.
+func (_u *PoolCapacityAlertStateUpdateOne) SetPoolAuthoritativeBalanceUsd(v float64) *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.ResetPoolAuthoritativeBalanceUsd()
+	_u.mutation.SetPoolAuthoritativeBalanceUsd(v)
+	return _u
+}
+
+// SetNillablePoolAuthoritativeBalanceUsd sets the "pool_authoritative_balance_usd" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdateOne) SetNillablePoolAuthoritativeBalanceUsd(v *float64) *PoolCapacityAlertStateUpdateOne {
+	if v != nil {
+		_u.SetPoolAuthoritativeBalanceUsd(*v)
+	}
+	return _u
+}
+
+// AddPoolAuthoritativeBalanceUsd adds value to the "pool_authoritative_balance_usd" field.
+func (_u *PoolCapacityAlertStateUpdateOne) AddPoolAuthoritativeBalanceUsd(v float64) *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.AddPoolAuthoritativeBalanceUsd(v)
+	return _u
+}
+
+// ClearPoolAuthoritativeBalanceUsd clears the value of the "pool_authoritative_balance_usd" field.
+func (_u *PoolCapacityAlertStateUpdateOne) ClearPoolAuthoritativeBalanceUsd() *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.ClearPoolAuthoritativeBalanceUsd()
+	return _u
+}
+
+// SetNormalEstimatedBalanceUsd sets the "normal_estimated_balance_usd" field.
+func (_u *PoolCapacityAlertStateUpdateOne) SetNormalEstimatedBalanceUsd(v float64) *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.ResetNormalEstimatedBalanceUsd()
+	_u.mutation.SetNormalEstimatedBalanceUsd(v)
+	return _u
+}
+
+// SetNillableNormalEstimatedBalanceUsd sets the "normal_estimated_balance_usd" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdateOne) SetNillableNormalEstimatedBalanceUsd(v *float64) *PoolCapacityAlertStateUpdateOne {
+	if v != nil {
+		_u.SetNormalEstimatedBalanceUsd(*v)
+	}
+	return _u
+}
+
+// AddNormalEstimatedBalanceUsd adds value to the "normal_estimated_balance_usd" field.
+func (_u *PoolCapacityAlertStateUpdateOne) AddNormalEstimatedBalanceUsd(v float64) *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.AddNormalEstimatedBalanceUsd(v)
+	return _u
+}
+
+// ClearNormalEstimatedBalanceUsd clears the value of the "normal_estimated_balance_usd" field.
+func (_u *PoolCapacityAlertStateUpdateOne) ClearNormalEstimatedBalanceUsd() *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.ClearNormalEstimatedBalanceUsd()
+	return _u
+}
+
+// SetPoolAccountCount sets the "pool_account_count" field.
+func (_u *PoolCapacityAlertStateUpdateOne) SetPoolAccountCount(v int) *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.ResetPoolAccountCount()
+	_u.mutation.SetPoolAccountCount(v)
+	return _u
+}
+
+// SetNillablePoolAccountCount sets the "pool_account_count" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdateOne) SetNillablePoolAccountCount(v *int) *PoolCapacityAlertStateUpdateOne {
+	if v != nil {
+		_u.SetPoolAccountCount(*v)
+	}
+	return _u
+}
+
+// AddPoolAccountCount adds value to the "pool_account_count" field.
+func (_u *PoolCapacityAlertStateUpdateOne) AddPoolAccountCount(v int) *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.AddPoolAccountCount(v)
+	return _u
+}
+
+// SetNormalAccountCount sets the "normal_account_count" field.
+func (_u *PoolCapacityAlertStateUpdateOne) SetNormalAccountCount(v int) *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.ResetNormalAccountCount()
+	_u.mutation.SetNormalAccountCount(v)
+	return _u
+}
+
+// SetNillableNormalAccountCount sets the "normal_account_count" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdateOne) SetNillableNormalAccountCount(v *int) *PoolCapacityAlertStateUpdateOne {
+	if v != nil {
+		_u.SetNormalAccountCount(*v)
+	}
+	return _u
+}
+
+// AddNormalAccountCount adds value to the "normal_account_count" field.
+func (_u *PoolCapacityAlertStateUpdateOne) AddNormalAccountCount(v int) *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.AddNormalAccountCount(v)
+	return _u
+}
+
+// SetSkippedAccountCount sets the "skipped_account_count" field.
+func (_u *PoolCapacityAlertStateUpdateOne) SetSkippedAccountCount(v int) *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.ResetSkippedAccountCount()
+	_u.mutation.SetSkippedAccountCount(v)
+	return _u
+}
+
+// SetNillableSkippedAccountCount sets the "skipped_account_count" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdateOne) SetNillableSkippedAccountCount(v *int) *PoolCapacityAlertStateUpdateOne {
+	if v != nil {
+		_u.SetSkippedAccountCount(*v)
+	}
+	return _u
+}
+
+// AddSkippedAccountCount adds value to the "skipped_account_count" field.
+func (_u *PoolCapacityAlertStateUpdateOne) AddSkippedAccountCount(v int) *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.AddSkippedAccountCount(v)
+	return _u
+}
+
+// SetUnknownAccountCount sets the "unknown_account_count" field.
+func (_u *PoolCapacityAlertStateUpdateOne) SetUnknownAccountCount(v int) *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.ResetUnknownAccountCount()
+	_u.mutation.SetUnknownAccountCount(v)
+	return _u
+}
+
+// SetNillableUnknownAccountCount sets the "unknown_account_count" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdateOne) SetNillableUnknownAccountCount(v *int) *PoolCapacityAlertStateUpdateOne {
+	if v != nil {
+		_u.SetUnknownAccountCount(*v)
+	}
+	return _u
+}
+
+// AddUnknownAccountCount adds value to the "unknown_account_count" field.
+func (_u *PoolCapacityAlertStateUpdateOne) AddUnknownAccountCount(v int) *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.AddUnknownAccountCount(v)
+	return _u
+}
+
+// SetStaleAccountCount sets the "stale_account_count" field.
+func (_u *PoolCapacityAlertStateUpdateOne) SetStaleAccountCount(v int) *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.ResetStaleAccountCount()
+	_u.mutation.SetStaleAccountCount(v)
+	return _u
+}
+
+// SetNillableStaleAccountCount sets the "stale_account_count" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdateOne) SetNillableStaleAccountCount(v *int) *PoolCapacityAlertStateUpdateOne {
+	if v != nil {
+		_u.SetStaleAccountCount(*v)
+	}
+	return _u
+}
+
+// AddStaleAccountCount adds value to the "stale_account_count" field.
+func (_u *PoolCapacityAlertStateUpdateOne) AddStaleAccountCount(v int) *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.AddStaleAccountCount(v)
+	return _u
+}
+
+// SetIncompatibleUnitAccountCount sets the "incompatible_unit_account_count" field.
+func (_u *PoolCapacityAlertStateUpdateOne) SetIncompatibleUnitAccountCount(v int) *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.ResetIncompatibleUnitAccountCount()
+	_u.mutation.SetIncompatibleUnitAccountCount(v)
+	return _u
+}
+
+// SetNillableIncompatibleUnitAccountCount sets the "incompatible_unit_account_count" field if the given value is not nil.
+func (_u *PoolCapacityAlertStateUpdateOne) SetNillableIncompatibleUnitAccountCount(v *int) *PoolCapacityAlertStateUpdateOne {
+	if v != nil {
+		_u.SetIncompatibleUnitAccountCount(*v)
+	}
+	return _u
+}
+
+// AddIncompatibleUnitAccountCount adds value to the "incompatible_unit_account_count" field.
+func (_u *PoolCapacityAlertStateUpdateOne) AddIncompatibleUnitAccountCount(v int) *PoolCapacityAlertStateUpdateOne {
+	_u.mutation.AddIncompatibleUnitAccountCount(v)
 	return _u
 }
 
@@ -1268,6 +1778,11 @@ func (_u *PoolCapacityAlertStateUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *PoolCapacityAlertStateUpdateOne) check() error {
+	if v, ok := _u.mutation.ScopeType(); ok {
+		if err := poolcapacityalertstate.ScopeTypeValidator(v); err != nil {
+			return &ValidationError{Name: "scope_type", err: fmt.Errorf(`ent: validator failed for field "PoolCapacityAlertState.scope_type": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := poolcapacityalertstate.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "PoolCapacityAlertState.status": %w`, err)}
@@ -1327,11 +1842,17 @@ func (_u *PoolCapacityAlertStateUpdateOne) sqlSave(ctx context.Context) (_node *
 	if value, ok := _u.mutation.AddedGroupGeneration(); ok {
 		_spec.AddField(poolcapacityalertstate.FieldGroupGeneration, field.TypeInt64, value)
 	}
+	if value, ok := _u.mutation.ScopeType(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldScopeType, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.AccountID(); ok {
 		_spec.SetField(poolcapacityalertstate.FieldAccountID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.AddedAccountID(); ok {
 		_spec.AddField(poolcapacityalertstate.FieldAccountID, field.TypeInt64, value)
+	}
+	if _u.mutation.AccountIDCleared() {
+		_spec.ClearField(poolcapacityalertstate.FieldAccountID, field.TypeInt64)
 	}
 	if value, ok := _u.mutation.APIKeyID(); ok {
 		_spec.SetField(poolcapacityalertstate.FieldAPIKeyID, field.TypeInt64, value)
@@ -1339,17 +1860,26 @@ func (_u *PoolCapacityAlertStateUpdateOne) sqlSave(ctx context.Context) (_node *
 	if value, ok := _u.mutation.AddedAPIKeyID(); ok {
 		_spec.AddField(poolcapacityalertstate.FieldAPIKeyID, field.TypeInt64, value)
 	}
+	if _u.mutation.APIKeyIDCleared() {
+		_spec.ClearField(poolcapacityalertstate.FieldAPIKeyID, field.TypeInt64)
+	}
 	if value, ok := _u.mutation.UserID(); ok {
 		_spec.SetField(poolcapacityalertstate.FieldUserID, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.AddedUserID(); ok {
 		_spec.AddField(poolcapacityalertstate.FieldUserID, field.TypeInt64, value)
 	}
+	if _u.mutation.UserIDCleared() {
+		_spec.ClearField(poolcapacityalertstate.FieldUserID, field.TypeInt64)
+	}
 	if value, ok := _u.mutation.BillingType(); ok {
 		_spec.SetField(poolcapacityalertstate.FieldBillingType, field.TypeInt8, value)
 	}
 	if value, ok := _u.mutation.AddedBillingType(); ok {
 		_spec.AddField(poolcapacityalertstate.FieldBillingType, field.TypeInt8, value)
+	}
+	if _u.mutation.BillingTypeCleared() {
+		_spec.ClearField(poolcapacityalertstate.FieldBillingType, field.TypeInt8)
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(poolcapacityalertstate.FieldStatus, field.TypeString, value)
@@ -1380,6 +1910,60 @@ func (_u *PoolCapacityAlertStateUpdateOne) sqlSave(ctx context.Context) (_node *
 	}
 	if _u.mutation.RemainingBalanceUsdCleared() {
 		_spec.ClearField(poolcapacityalertstate.FieldRemainingBalanceUsd, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.PoolAuthoritativeBalanceUsd(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldPoolAuthoritativeBalanceUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedPoolAuthoritativeBalanceUsd(); ok {
+		_spec.AddField(poolcapacityalertstate.FieldPoolAuthoritativeBalanceUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.PoolAuthoritativeBalanceUsdCleared() {
+		_spec.ClearField(poolcapacityalertstate.FieldPoolAuthoritativeBalanceUsd, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.NormalEstimatedBalanceUsd(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldNormalEstimatedBalanceUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedNormalEstimatedBalanceUsd(); ok {
+		_spec.AddField(poolcapacityalertstate.FieldNormalEstimatedBalanceUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.NormalEstimatedBalanceUsdCleared() {
+		_spec.ClearField(poolcapacityalertstate.FieldNormalEstimatedBalanceUsd, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.PoolAccountCount(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldPoolAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedPoolAccountCount(); ok {
+		_spec.AddField(poolcapacityalertstate.FieldPoolAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.NormalAccountCount(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldNormalAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedNormalAccountCount(); ok {
+		_spec.AddField(poolcapacityalertstate.FieldNormalAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.SkippedAccountCount(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldSkippedAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSkippedAccountCount(); ok {
+		_spec.AddField(poolcapacityalertstate.FieldSkippedAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.UnknownAccountCount(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldUnknownAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedUnknownAccountCount(); ok {
+		_spec.AddField(poolcapacityalertstate.FieldUnknownAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.StaleAccountCount(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldStaleAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedStaleAccountCount(); ok {
+		_spec.AddField(poolcapacityalertstate.FieldStaleAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.IncompatibleUnitAccountCount(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldIncompatibleUnitAccountCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedIncompatibleUnitAccountCount(); ok {
+		_spec.AddField(poolcapacityalertstate.FieldIncompatibleUnitAccountCount, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.ThresholdRequests(); ok {
 		_spec.SetField(poolcapacityalertstate.FieldThresholdRequests, field.TypeInt64, value)

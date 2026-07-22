@@ -11,8 +11,8 @@ import (
 	"entgo.io/ent/schema/index"
 )
 
-// PoolCapacityAlertState stores the current prediction state for one final
-// group/account/API-key/user billing context.
+// PoolCapacityAlertState stores either a request-context prediction state or a
+// group-level predicted USD balance state.
 type PoolCapacityAlertState struct{ ent.Schema }
 
 func (PoolCapacityAlertState) Annotations() []schema.Annotation {
@@ -23,15 +23,24 @@ func (PoolCapacityAlertState) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int64("group_id"),
 		field.Int64("group_generation").Default(0),
-		field.Int64("account_id"),
-		field.Int64("api_key_id"),
-		field.Int64("user_id"),
-		field.Int8("billing_type"),
+		field.String("scope_type").MaxLen(16).Default("context"),
+		field.Int64("account_id").Optional().Nillable(),
+		field.Int64("api_key_id").Optional().Nillable(),
+		field.Int64("user_id").Optional().Nillable(),
+		field.Int8("billing_type").Optional().Nillable(),
 		field.String("status").MaxLen(16).Default("healthy"),
 		field.Int64("episode").Default(0),
 		field.String("alert_metric").MaxLen(32).Default("predicted_requests"),
 		field.Int64("predicted_requests").Optional().Nillable(),
 		field.Float("remaining_balance_usd").Optional().Nillable().SchemaType(map[string]string{dialect.Postgres: "numeric(30,12)"}),
+		field.Float("pool_authoritative_balance_usd").Optional().Nillable().SchemaType(map[string]string{dialect.Postgres: "numeric(30,12)"}),
+		field.Float("normal_estimated_balance_usd").Optional().Nillable().SchemaType(map[string]string{dialect.Postgres: "numeric(30,12)"}),
+		field.Int("pool_account_count").Default(0),
+		field.Int("normal_account_count").Default(0),
+		field.Int("skipped_account_count").Default(0),
+		field.Int("unknown_account_count").Default(0),
+		field.Int("stale_account_count").Default(0),
+		field.Int("incompatible_unit_account_count").Default(0),
 		field.Int64("threshold_requests").Default(50),
 		field.Float("threshold_usd").Optional().Nillable().SchemaType(map[string]string{dialect.Postgres: "numeric(30,12)"}),
 		field.Int64("account_requests").Optional().Nillable(),
@@ -50,8 +59,10 @@ func (PoolCapacityAlertState) Fields() []ent.Field {
 
 func (PoolCapacityAlertState) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("group_id", "group_generation", "account_id", "api_key_id", "user_id", "billing_type").Unique(),
-		index.Fields("group_id", "group_generation"),
+		index.Fields("group_id", "group_generation", "account_id", "api_key_id", "user_id", "billing_type").Unique().
+			Annotations(entsql.IndexWhere("scope_type = 'context'")),
+		index.Fields("group_id", "group_generation").Unique().
+			Annotations(entsql.IndexWhere("scope_type = 'group'")),
 		index.Fields("status", "updated_at"),
 	}
 }

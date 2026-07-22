@@ -316,19 +316,21 @@ type AccountCapacityConfig struct {
 // sample size is fixed in the service layer; each group selects one alert metric
 // and owns the corresponding custom threshold.
 type PoolCapacityAlertConfig struct {
-	Enabled                  bool `mapstructure:"enabled"`
-	EvaluationWorkerCount    int  `mapstructure:"evaluation_worker_count"`
-	QueueSize                int  `mapstructure:"queue_size"`
-	EvaluationTimeoutSeconds int  `mapstructure:"evaluation_timeout_seconds"`
-	DeliveryWorkerCount      int  `mapstructure:"delivery_worker_count"`
-	DeliveryBatchSize        int  `mapstructure:"delivery_batch_size"`
-	PollIntervalSeconds      int  `mapstructure:"poll_interval_seconds"`
-	LeaseSeconds             int  `mapstructure:"lease_seconds"`
-	MaxAttempts              int  `mapstructure:"max_attempts"`
-	RetryBaseSeconds         int  `mapstructure:"retry_base_seconds"`
-	MaxRetrySeconds          int  `mapstructure:"max_retry_seconds"`
-	SendTimeoutSeconds       int  `mapstructure:"send_timeout_seconds"`
-	ReminderCooldownHours    int  `mapstructure:"reminder_cooldown_hours"`
+	Enabled                    bool `mapstructure:"enabled"`
+	EvaluationWorkerCount      int  `mapstructure:"evaluation_worker_count"`
+	QueueSize                  int  `mapstructure:"queue_size"`
+	EvaluationTimeoutSeconds   int  `mapstructure:"evaluation_timeout_seconds"`
+	GroupBalanceConcurrency    int  `mapstructure:"group_balance_concurrency"`
+	GroupBalanceTimeoutSeconds int  `mapstructure:"group_balance_timeout_seconds"`
+	DeliveryWorkerCount        int  `mapstructure:"delivery_worker_count"`
+	DeliveryBatchSize          int  `mapstructure:"delivery_batch_size"`
+	PollIntervalSeconds        int  `mapstructure:"poll_interval_seconds"`
+	LeaseSeconds               int  `mapstructure:"lease_seconds"`
+	MaxAttempts                int  `mapstructure:"max_attempts"`
+	RetryBaseSeconds           int  `mapstructure:"retry_base_seconds"`
+	MaxRetrySeconds            int  `mapstructure:"max_retry_seconds"`
+	SendTimeoutSeconds         int  `mapstructure:"send_timeout_seconds"`
+	ReminderCooldownHours      int  `mapstructure:"reminder_cooldown_hours"`
 }
 
 type BatchImageConfig struct {
@@ -2192,6 +2194,8 @@ func setDefaults() {
 	viper.SetDefault("pool_capacity_alert.evaluation_worker_count", 2)
 	viper.SetDefault("pool_capacity_alert.queue_size", 256)
 	viper.SetDefault("pool_capacity_alert.evaluation_timeout_seconds", 15)
+	viper.SetDefault("pool_capacity_alert.group_balance_concurrency", 4)
+	viper.SetDefault("pool_capacity_alert.group_balance_timeout_seconds", 60)
 	viper.SetDefault("pool_capacity_alert.delivery_worker_count", 4)
 	viper.SetDefault("pool_capacity_alert.delivery_batch_size", 50)
 	viper.SetDefault("pool_capacity_alert.poll_interval_seconds", 5)
@@ -3861,6 +3865,16 @@ func normalizePoolCapacityAlertConfig(cfg *PoolCapacityAlertConfig) {
 		cfg.EvaluationTimeoutSeconds = 15
 	} else if cfg.EvaluationTimeoutSeconds > 300 {
 		cfg.EvaluationTimeoutSeconds = 300
+	}
+	if cfg.GroupBalanceConcurrency < 1 {
+		cfg.GroupBalanceConcurrency = 4
+	} else if cfg.GroupBalanceConcurrency > 16 {
+		cfg.GroupBalanceConcurrency = 16
+	}
+	if cfg.GroupBalanceTimeoutSeconds < 5 {
+		cfg.GroupBalanceTimeoutSeconds = 60
+	} else if cfg.GroupBalanceTimeoutSeconds > 300 {
+		cfg.GroupBalanceTimeoutSeconds = 300
 	}
 	if cfg.DeliveryWorkerCount < 1 {
 		cfg.DeliveryWorkerCount = 4

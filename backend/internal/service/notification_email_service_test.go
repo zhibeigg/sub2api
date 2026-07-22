@@ -159,7 +159,12 @@ func TestNotificationEmailAdditionalEventsAreListedAndPreviewable(t *testing.T) 
 	}
 
 	poolInfo := events[NotificationEmailEventPoolCapacityLow]
-	for _, placeholder := range []string{"alert_metric", "alert_metric_label", "alert_metric_value", "alert_metric_threshold", "alert_metric_unit", "remaining_balance_usd", "threshold_usd"} {
+	for _, placeholder := range []string{
+		"alert_metric", "alert_metric_label", "alert_metric_value", "alert_metric_threshold", "alert_metric_unit",
+		"group_balance_display", "context_capacity_display", "remaining_balance_usd", "threshold_usd",
+		"pool_authoritative_balance_usd", "normal_estimated_balance_usd",
+		"pool_account_count", "normal_account_count", "participating_account_count", "skipped_account_count", "unknown_account_count",
+	} {
 		require.Contains(t, poolInfo.Placeholders, placeholder)
 	}
 }
@@ -172,33 +177,50 @@ func TestPoolCapacityLowPreviewSupportsRemainingBalanceUSD(t *testing.T) {
 		Event:  NotificationEmailEventPoolCapacityLow,
 		Locale: "en",
 		Variables: map[string]string{
-			"group_name":             "production",
-			"account_name":           "pool-account",
-			"api_key_name":           "gateway-key",
-			"alert_metric":           PoolCapacityAlertMetricRemainingBalanceUSD,
-			"alert_metric_label":     "Remaining upstream balance",
-			"alert_metric_value":     "9.25",
-			"alert_metric_threshold": "10.00",
-			"alert_metric_unit":      "USD",
-			"alert_summary":          "The remaining comparable balance is $9.25, below the configured $10.00 threshold.",
-			"remaining_balance_usd":  "9.25",
-			"threshold_usd":          "10.00",
-			"account_remaining":      "12.00",
-			"api_key_remaining":      "9.25",
-			"wallet_remaining":       "11.00",
-			"bottleneck":             "API key quota",
-			"sample_count":           "0",
-			"predicted_requests":     "N/A",
-			"threshold_requests":     "N/A",
-			"avg_account_cost":       "N/A",
-			"avg_actual_cost":        "N/A",
+			"group_name":                      "production",
+			"group_id":                        "17",
+			"account_name":                    "N/A",
+			"account_id":                      "N/A",
+			"api_key_name":                    "N/A",
+			"api_key_id":                      "N/A",
+			"alert_metric":                    PoolCapacityAlertMetricRemainingBalanceUSD,
+			"alert_metric_label":              "Group predicted remaining balance",
+			"alert_metric_value":              "9.25",
+			"alert_metric_threshold":          "10.00",
+			"alert_metric_unit":               "USD",
+			"alert_summary":                   "The group predicted remaining balance is $9.25, below the configured $10.00 threshold.",
+			"group_balance_display":           "table-row",
+			"context_capacity_display":        "none",
+			"remaining_balance_usd":           "9.25",
+			"pool_authoritative_balance_usd":  "5.25",
+			"normal_estimated_balance_usd":    "4.00",
+			"pool_account_count":              "2",
+			"normal_account_count":            "3",
+			"participating_account_count":     "5",
+			"skipped_account_count":           "1",
+			"unknown_account_count":           "0",
+			"stale_account_count":             "0",
+			"incompatible_unit_account_count": "0",
+			"threshold_usd":                   "10.00",
+			"account_remaining":               "N/A",
+			"api_key_remaining":               "N/A",
+			"wallet_remaining":                "N/A",
+			"bottleneck":                      "group_predicted_balance",
+			"sample_count":                    "5",
+			"predicted_requests":              "N/A",
+			"threshold_requests":              "N/A",
+			"avg_account_cost":                "N/A",
+			"avg_actual_cost":                 "N/A",
 		},
 	})
 	require.NoError(t, err)
-	require.Contains(t, preview.Subject, "pool-account")
+	require.Contains(t, preview.Subject, "production")
 	require.Contains(t, preview.HTML, "9.25 / 10.00 USD")
-	require.Contains(t, preview.HTML, "$9.25")
-	require.Contains(t, preview.HTML, "$10.00")
+	require.Contains(t, preview.HTML, "$5.25")
+	require.Contains(t, preview.HTML, "$4.00")
+	require.Contains(t, preview.HTML, "5 (pool 2 / normal 3)")
+	require.Contains(t, preview.HTML, `style="display:table-row"><td>Pool authoritative USD subtotal`)
+	require.Contains(t, preview.HTML, `style="display:none"><td>Context account`)
 	require.NotContains(t, preview.HTML, "{{remaining_balance_usd}}")
 }
 

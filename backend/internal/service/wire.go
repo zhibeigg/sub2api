@@ -932,6 +932,7 @@ var ProviderSet = wire.NewSet(
 	NewAccountCapacityService,
 	ProvideRateLimitService,
 	ProvideAccountUsageService,
+	ProvideGroupPredictedBalanceService,
 	ProvideAccountTestServiceWithAgentIdentity,
 	ProvideUpstreamBillingProbeService,
 	ProvideSettingService,

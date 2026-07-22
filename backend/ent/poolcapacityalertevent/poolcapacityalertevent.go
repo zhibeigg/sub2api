@@ -21,6 +21,8 @@ const (
 	FieldGroupID = "group_id"
 	// FieldGroupGeneration holds the string denoting the group_generation field in the database.
 	FieldGroupGeneration = "group_generation"
+	// FieldScopeType holds the string denoting the scope_type field in the database.
+	FieldScopeType = "scope_type"
 	// FieldAccountID holds the string denoting the account_id field in the database.
 	FieldAccountID = "account_id"
 	// FieldAPIKeyID holds the string denoting the api_key_id field in the database.
@@ -43,6 +45,22 @@ const (
 	FieldPredictedRequests = "predicted_requests"
 	// FieldRemainingBalanceUsd holds the string denoting the remaining_balance_usd field in the database.
 	FieldRemainingBalanceUsd = "remaining_balance_usd"
+	// FieldPoolAuthoritativeBalanceUsd holds the string denoting the pool_authoritative_balance_usd field in the database.
+	FieldPoolAuthoritativeBalanceUsd = "pool_authoritative_balance_usd"
+	// FieldNormalEstimatedBalanceUsd holds the string denoting the normal_estimated_balance_usd field in the database.
+	FieldNormalEstimatedBalanceUsd = "normal_estimated_balance_usd"
+	// FieldPoolAccountCount holds the string denoting the pool_account_count field in the database.
+	FieldPoolAccountCount = "pool_account_count"
+	// FieldNormalAccountCount holds the string denoting the normal_account_count field in the database.
+	FieldNormalAccountCount = "normal_account_count"
+	// FieldSkippedAccountCount holds the string denoting the skipped_account_count field in the database.
+	FieldSkippedAccountCount = "skipped_account_count"
+	// FieldUnknownAccountCount holds the string denoting the unknown_account_count field in the database.
+	FieldUnknownAccountCount = "unknown_account_count"
+	// FieldStaleAccountCount holds the string denoting the stale_account_count field in the database.
+	FieldStaleAccountCount = "stale_account_count"
+	// FieldIncompatibleUnitAccountCount holds the string denoting the incompatible_unit_account_count field in the database.
+	FieldIncompatibleUnitAccountCount = "incompatible_unit_account_count"
 	// FieldThresholdRequests holds the string denoting the threshold_requests field in the database.
 	FieldThresholdRequests = "threshold_requests"
 	// FieldThresholdUsd holds the string denoting the threshold_usd field in the database.
@@ -82,6 +100,7 @@ var Columns = []string{
 	FieldEpisode,
 	FieldGroupID,
 	FieldGroupGeneration,
+	FieldScopeType,
 	FieldAccountID,
 	FieldAPIKeyID,
 	FieldUserID,
@@ -93,6 +112,14 @@ var Columns = []string{
 	FieldAlertMetric,
 	FieldPredictedRequests,
 	FieldRemainingBalanceUsd,
+	FieldPoolAuthoritativeBalanceUsd,
+	FieldNormalEstimatedBalanceUsd,
+	FieldPoolAccountCount,
+	FieldNormalAccountCount,
+	FieldSkippedAccountCount,
+	FieldUnknownAccountCount,
+	FieldStaleAccountCount,
+	FieldIncompatibleUnitAccountCount,
 	FieldThresholdRequests,
 	FieldThresholdUsd,
 	FieldAccountRequests,
@@ -122,6 +149,10 @@ func ValidColumn(column string) bool {
 var (
 	// DefaultGroupGeneration holds the default value on creation for the "group_generation" field.
 	DefaultGroupGeneration int64
+	// DefaultScopeType holds the default value on creation for the "scope_type" field.
+	DefaultScopeType string
+	// ScopeTypeValidator is a validator for the "scope_type" field. It is called by the builders before save.
+	ScopeTypeValidator func(string) error
 	// DefaultGroupName holds the default value on creation for the "group_name" field.
 	DefaultGroupName string
 	// GroupNameValidator is a validator for the "group_name" field. It is called by the builders before save.
@@ -142,6 +173,18 @@ var (
 	DefaultAlertMetric string
 	// AlertMetricValidator is a validator for the "alert_metric" field. It is called by the builders before save.
 	AlertMetricValidator func(string) error
+	// DefaultPoolAccountCount holds the default value on creation for the "pool_account_count" field.
+	DefaultPoolAccountCount int
+	// DefaultNormalAccountCount holds the default value on creation for the "normal_account_count" field.
+	DefaultNormalAccountCount int
+	// DefaultSkippedAccountCount holds the default value on creation for the "skipped_account_count" field.
+	DefaultSkippedAccountCount int
+	// DefaultUnknownAccountCount holds the default value on creation for the "unknown_account_count" field.
+	DefaultUnknownAccountCount int
+	// DefaultStaleAccountCount holds the default value on creation for the "stale_account_count" field.
+	DefaultStaleAccountCount int
+	// DefaultIncompatibleUnitAccountCount holds the default value on creation for the "incompatible_unit_account_count" field.
+	DefaultIncompatibleUnitAccountCount int
 	// DefaultSampleCount holds the default value on creation for the "sample_count" field.
 	DefaultSampleCount int
 	// DefaultBottleneck holds the default value on creation for the "bottleneck" field.
@@ -182,6 +225,11 @@ func ByGroupID(opts ...sql.OrderTermOption) OrderOption {
 // ByGroupGeneration orders the results by the group_generation field.
 func ByGroupGeneration(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldGroupGeneration, opts...).ToFunc()
+}
+
+// ByScopeType orders the results by the scope_type field.
+func ByScopeType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldScopeType, opts...).ToFunc()
 }
 
 // ByAccountID orders the results by the account_id field.
@@ -237,6 +285,46 @@ func ByPredictedRequests(opts ...sql.OrderTermOption) OrderOption {
 // ByRemainingBalanceUsd orders the results by the remaining_balance_usd field.
 func ByRemainingBalanceUsd(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRemainingBalanceUsd, opts...).ToFunc()
+}
+
+// ByPoolAuthoritativeBalanceUsd orders the results by the pool_authoritative_balance_usd field.
+func ByPoolAuthoritativeBalanceUsd(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPoolAuthoritativeBalanceUsd, opts...).ToFunc()
+}
+
+// ByNormalEstimatedBalanceUsd orders the results by the normal_estimated_balance_usd field.
+func ByNormalEstimatedBalanceUsd(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldNormalEstimatedBalanceUsd, opts...).ToFunc()
+}
+
+// ByPoolAccountCount orders the results by the pool_account_count field.
+func ByPoolAccountCount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPoolAccountCount, opts...).ToFunc()
+}
+
+// ByNormalAccountCount orders the results by the normal_account_count field.
+func ByNormalAccountCount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldNormalAccountCount, opts...).ToFunc()
+}
+
+// BySkippedAccountCount orders the results by the skipped_account_count field.
+func BySkippedAccountCount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSkippedAccountCount, opts...).ToFunc()
+}
+
+// ByUnknownAccountCount orders the results by the unknown_account_count field.
+func ByUnknownAccountCount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUnknownAccountCount, opts...).ToFunc()
+}
+
+// ByStaleAccountCount orders the results by the stale_account_count field.
+func ByStaleAccountCount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStaleAccountCount, opts...).ToFunc()
+}
+
+// ByIncompatibleUnitAccountCount orders the results by the incompatible_unit_account_count field.
+func ByIncompatibleUnitAccountCount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldIncompatibleUnitAccountCount, opts...).ToFunc()
 }
 
 // ByThresholdRequests orders the results by the threshold_requests field.

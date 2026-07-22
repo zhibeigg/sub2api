@@ -92,6 +92,149 @@ func TestPoolCapacityAlertSubmitAfterBillingUsesFinalSelection(t *testing.T) {
 	}
 }
 
+func TestPoolCapacityAlertSubmitAfterBillingRemainingBalanceEnqueuesNormalAccountAndCoalesces(t *testing.T) {
+	groupID := int64(17)
+	threshold := 10.0
+	group := &Group{
+		ID:                            groupID,
+		PoolCapacityAlertEnabled:      true,
+		PoolCapacityAlertGeneration:   9,
+		PoolCapacityAlertMetric:       PoolCapacityAlertMetricRemainingBalanceUSD,
+		PoolCapacityAlertThresholdUSD: &threshold,
+	}
+	account := &Account{ID: 21, Type: AccountTypeOAuth}
+	apiKey := &APIKey{ID: 31, GroupID: &groupID, Group: group}
+	params := &postUsageBillingParams{
+		Cost:    &CostBreakdown{ActualCost: 0.2},
+		User:    &User{ID: 41},
+		APIKey:  apiKey,
+		Account: account,
+	}
+	usageLog := &UsageLog{GroupID: &groupID, ActualCost: 0.2}
+	svc := &PoolCapacityAlertService{
+		cfg:   &config.Config{PoolCapacityAlert: config.PoolCapacityAlertConfig{Enabled: true}},
+		queue: make(chan poolCapacityAlertTask, 2),
+	}
+
+	svc.SubmitAfterBilling(usageLog, params, &UsageBillingApplyResult{Applied: true})
+	svc.SubmitAfterBilling(usageLog, params, &UsageBillingApplyResult{Applied: true})
+
+	require.Len(t, svc.queue, 1)
+	task := <-svc.queue
+	require.Equal(t, PoolCapacityAlertMetricRemainingBalanceUSD, task.AlertMetric)
+	require.Zero(t, task.AccountID, "amount mode must not create a request-context scope")
+	key := poolCapacityGroupTaskKey(groupID, group.PoolCapacityAlertGeneration)
+	svc.balanceMu.Lock()
+	require.True(t, svc.balanceActive[key], "a second trigger is retained as one dirty follow-up")
+	svc.balanceMu.Unlock()
+}
+
+func TestPoolCapacityAlertGroupBalanceIncompleteDoesNotAdvanceState(t *testing.T) {
+	threshold := 10.0
+	group := &Group{
+		ID:                            17,
+		PoolCapacityAlertEnabled:      true,
+		PoolCapacityAlertGeneration:   4,
+		PoolCapacityAlertMetric:       PoolCapacityAlertMetricRemainingBalanceUSD,
+		PoolCapacityAlertThresholdUSD: &threshold,
+	}
+	repo := &poolCapacityDispatchRepo{}
+	svc := &PoolCapacityAlertService{
+		repo:               repo,
+		groupRepo:          poolCapacityGroupRepoStub{group: group},
+		groupBalanceReader: &groupPredictedBalanceReaderStub{summary: &GroupPredictedBalanceSummary{Complete: false, UnknownAccountCount: 1}},
+	}
+
+	require.NoError(t, svc.evaluateGroupBalance(context.Background(), poolCapacityAlertTask{GroupID: group.ID, GroupGeneration: group.PoolCapacityAlertGeneration}))
+	require.Empty(t, repo.groupEvaluations)
+}
+
+func TestPoolCapacityAlertGroupBalanceUnlimitedWritesTrustedHealthyEvaluation(t *testing.T) {
+	threshold := 10.0
+	group := &Group{
+		ID:                            17,
+		PoolCapacityAlertEnabled:      true,
+		PoolCapacityAlertGeneration:   4,
+		PoolCapacityAlertMetric:       PoolCapacityAlertMetricRemainingBalanceUSD,
+		PoolCapacityAlertThresholdUSD: &threshold,
+	}
+	repo := &poolCapacityDispatchRepo{}
+	svc := &PoolCapacityAlertService{
+		repo:      repo,
+		groupRepo: poolCapacityGroupRepoStub{group: group},
+		groupBalanceReader: &groupPredictedBalanceReaderStub{summary: &GroupPredictedBalanceSummary{
+			Complete:         true,
+			Unlimited:        true,
+			PoolAccountCount: 1,
+		}},
+	}
+
+	require.NoError(t, svc.evaluateGroupBalance(context.Background(), poolCapacityAlertTask{GroupID: group.ID, GroupGeneration: group.PoolCapacityAlertGeneration}))
+	require.Len(t, repo.groupEvaluations, 1)
+	require.True(t, repo.groupEvaluations[0].Unlimited)
+	require.Nil(t, repo.groupEvaluations[0].RemainingBalanceUSD)
+}
+
+func TestPoolCapacityAlertGroupTaskDirtyFollowUpRunsOnce(t *testing.T) {
+	threshold := 10.0
+	total := 9.0
+	group := &Group{
+		ID:                            17,
+		PoolCapacityAlertEnabled:      true,
+		PoolCapacityAlertGeneration:   4,
+		PoolCapacityAlertMetric:       PoolCapacityAlertMetricRemainingBalanceUSD,
+		PoolCapacityAlertThresholdUSD: &threshold,
+	}
+	reader := &groupPredictedBalanceReaderStub{summary: &GroupPredictedBalanceSummary{Complete: true, RemainingBalanceUSD: &total}}
+	repo := &poolCapacityDispatchRepo{}
+	svc := &PoolCapacityAlertService{
+		repo:               repo,
+		groupRepo:          poolCapacityGroupRepoStub{group: group},
+		groupBalanceReader: reader,
+		balanceActive:      map[string]bool{poolCapacityGroupTaskKey(group.ID, group.PoolCapacityAlertGeneration): true},
+	}
+	task := poolCapacityAlertTask{GroupID: group.ID, GroupGeneration: group.PoolCapacityAlertGeneration, AlertMetric: PoolCapacityAlertMetricRemainingBalanceUSD}
+
+	require.NoError(t, svc.evaluateGroupBalanceCoalesced(context.Background(), task))
+	require.Equal(t, 2, reader.calls)
+	require.Len(t, repo.groupEvaluations, 2)
+	svc.balanceMu.Lock()
+	require.Empty(t, svc.balanceActive)
+	svc.balanceMu.Unlock()
+}
+
+func TestPoolCapacityAlertGroupTaskDirtyFollowUpRetriesAfterFirstFailure(t *testing.T) {
+	threshold := 10.0
+	total := 9.0
+	group := &Group{
+		ID:                            17,
+		PoolCapacityAlertEnabled:      true,
+		PoolCapacityAlertGeneration:   4,
+		PoolCapacityAlertMetric:       PoolCapacityAlertMetricRemainingBalanceUSD,
+		PoolCapacityAlertThresholdUSD: &threshold,
+	}
+	reader := &groupPredictedBalanceReaderStub{
+		summary: &GroupPredictedBalanceSummary{Complete: true, RemainingBalanceUSD: &total},
+		errors:  []error{context.DeadlineExceeded, nil},
+	}
+	repo := &poolCapacityDispatchRepo{}
+	key := poolCapacityGroupTaskKey(group.ID, group.PoolCapacityAlertGeneration)
+	svc := &PoolCapacityAlertService{
+		repo:               repo,
+		groupRepo:          poolCapacityGroupRepoStub{group: group},
+		groupBalanceReader: reader,
+		balanceActive:      map[string]bool{key: true},
+	}
+	task := poolCapacityAlertTask{GroupID: group.ID, GroupGeneration: group.PoolCapacityAlertGeneration, AlertMetric: PoolCapacityAlertMetricRemainingBalanceUSD}
+
+	require.NoError(t, svc.evaluateGroupBalanceCoalesced(context.Background(), task))
+	require.Equal(t, 2, reader.calls)
+	require.Len(t, repo.groupEvaluations, 1)
+	svc.balanceMu.Lock()
+	require.Empty(t, svc.balanceActive)
+	svc.balanceMu.Unlock()
+}
+
 func TestPoolCapacityAlertSubmitAfterBillingRejectsNonFinalOrDisabledContexts(t *testing.T) {
 	baseGroupID := int64(17)
 	otherGroupID := int64(18)
@@ -325,64 +468,45 @@ func TestPoolCapacityAlertEvaluateUsesVerifiedUpstreamWithLocalSafetyLimit(t *te
 func TestPoolCapacityAlertEvaluateRemainingBalanceUSDDoesNotRequireHistory(t *testing.T) {
 	threshold := 8.0
 	group := &Group{
-		ID:                                 17,
-		Name:                               "production",
-		PoolCapacityAlertEnabled:           true,
-		PoolCapacityAlertGeneration:        4,
-		PoolCapacityAlertMetric:            PoolCapacityAlertMetricRemainingBalanceUSD,
-		PoolCapacityAlertThresholdRequests: DefaultPoolCapacityAlertThresholdRequests,
-		PoolCapacityAlertThresholdUSD:      &threshold,
+		ID:                            17,
+		Name:                          "production",
+		PoolCapacityAlertEnabled:      true,
+		PoolCapacityAlertGeneration:   4,
+		PoolCapacityAlertMetric:       PoolCapacityAlertMetricRemainingBalanceUSD,
+		PoolCapacityAlertThresholdUSD: &threshold,
 	}
-	account := &Account{
-		ID:          21,
-		Name:        "pool-account",
-		Platform:    PlatformOpenAI,
-		Type:        AccountTypeAPIKey,
-		Credentials: map[string]any{"pool_mode": true},
-	}
-	upstreamRemaining := 12.0
-	wallet := 9.0
+	total := 18.0
+	reader := &groupPredictedBalanceReaderStub{summary: &GroupPredictedBalanceSummary{
+		Complete:                    true,
+		RemainingBalanceUSD:         &total,
+		PoolAuthoritativeBalanceUSD: 12,
+		NormalEstimatedBalanceUSD:   6,
+		PoolAccountCount:            2,
+		NormalAccountCount:          3,
+		SkippedAccountCount:         1,
+	}}
 	repo := &poolCapacityDispatchRepo{}
 	svc := &PoolCapacityAlertService{
-		repo:        repo,
-		groupRepo:   poolCapacityGroupRepoStub{group: group},
-		accountRepo: &stubOpenAIAccountRepo{accounts: []Account{*account}},
-		capacityReader: &poolCapacityBalanceReaderStub{snapshot: &AccountCapacitySnapshot{
-			Mode:          AccountCapacityModeUpstreamBalance,
-			State:         AccountCapacityStateVerified,
-			Authoritative: true,
-			Remaining:     &upstreamRemaining,
-			Unit:          "USD",
-		}},
-		cfg: &config.Config{Billing: config.BillingConfig{MinimumBalanceReserve: 1}},
+		repo:               repo,
+		groupRepo:          poolCapacityGroupRepoStub{group: group},
+		groupBalanceReader: reader,
 	}
-	err := svc.evaluate(context.Background(), poolCapacityAlertTask{
-		RequestID:          "request-first",
-		GroupID:            group.ID,
-		GroupGeneration:    group.PoolCapacityAlertGeneration,
-		AccountID:          account.ID,
-		APIKeyID:           31,
-		UserID:             41,
-		CurrentAccountCost: 1,
-		CurrentActualCost:  1,
-		APIKeyQuota:        20,
-		APIKeyQuotaState:   &APIKeyQuotaUsageState{Quota: 20, QuotaUsed: 13},
-		NewBalance:         &wallet,
-		AccountQuotaState:  &AccountQuotaState{TotalLimit: 100, TotalUsed: 90},
+	err := svc.evaluateGroupBalance(context.Background(), poolCapacityAlertTask{
+		GroupID:         group.ID,
+		GroupGeneration: group.PoolCapacityAlertGeneration,
+		AlertMetric:     PoolCapacityAlertMetricRemainingBalanceUSD,
 	})
 	require.NoError(t, err)
-	require.Len(t, repo.evaluations, 1)
-	evaluation := repo.evaluations[0]
-	require.Equal(t, PoolCapacityAlertMetricRemainingBalanceUSD, evaluation.AlertMetric)
-	require.Nil(t, evaluation.PredictedRequests)
-	require.Zero(t, evaluation.SampleCount)
-	require.InDelta(t, 7, *evaluation.RemainingBalanceUSD, 1e-12)
-	require.InDelta(t, 10, *evaluation.AccountRemaining, 1e-12)
-	require.InDelta(t, 7, *evaluation.APIKeyRemaining, 1e-12)
-	require.InDelta(t, 8, *evaluation.WalletRemaining, 1e-12)
-	require.Equal(t, DefaultPoolCapacityAlertThresholdRequests, *evaluation.ThresholdRequests, "state snapshots retain the complete group policy")
-	require.InDelta(t, threshold, *evaluation.ThresholdUSD, 1e-12)
-	require.Equal(t, "api_key", evaluation.Bottleneck)
+	require.Equal(t, 1, reader.calls)
+	require.Len(t, repo.groupEvaluations, 1)
+	evaluation := repo.groupEvaluations[0]
+	require.InDelta(t, total, *evaluation.RemainingBalanceUSD, 1e-12)
+	require.InDelta(t, 12, evaluation.PoolAuthoritativeBalanceUSD, 1e-12)
+	require.InDelta(t, 6, evaluation.NormalEstimatedBalanceUSD, 1e-12)
+	require.Equal(t, 2, evaluation.PoolAccountCount)
+	require.Equal(t, 3, evaluation.NormalAccountCount)
+	require.Equal(t, 1, evaluation.SkippedAccountCount)
+	require.InDelta(t, threshold, evaluation.ThresholdUSD, 1e-12)
 }
 
 func TestPoolCapacityAlertEvaluateRemainingBalanceUSDSkipsIncompatibleUpstreamUnit(t *testing.T) {
@@ -459,27 +583,48 @@ func TestPoolCapacityAlertEvaluateSkipsStaleBalanceWithoutStateTransition(t *tes
 func TestPoolCapacityAlertAmountNotificationsKeepLegacyRequestFieldsAsNA(t *testing.T) {
 	remaining := 9.25
 	threshold := 10.0
+	poolSubtotal := 5.25
+	normalSubtotal := 4.0
 	event := PoolCapacityAlertEvent{
-		AlertMetric:         PoolCapacityAlertMetricRemainingBalanceUSD,
-		RemainingBalanceUSD: &remaining,
-		ThresholdUSD:        &threshold,
-		GroupName:           "production",
-		AccountName:         "pool-account",
-		APIKeyName:          "gateway-key",
-		CreatedAt:           time.Date(2026, time.July, 22, 1, 0, 0, 0, time.UTC),
+		ScopeType:                    PoolCapacityAlertScopeGroup,
+		AlertMetric:                  PoolCapacityAlertMetricRemainingBalanceUSD,
+		RemainingBalanceUSD:          &remaining,
+		PoolAuthoritativeBalanceUSD:  &poolSubtotal,
+		NormalEstimatedBalanceUSD:    &normalSubtotal,
+		PoolAccountCount:             2,
+		NormalAccountCount:           3,
+		SkippedAccountCount:          1,
+		UnknownAccountCount:          0,
+		StaleAccountCount:            0,
+		IncompatibleUnitAccountCount: 0,
+		ThresholdUSD:                 &threshold,
+		GroupID:                      17,
+		GroupName:                    "production",
+		CreatedAt:                    time.Date(2026, time.July, 22, 1, 0, 0, 0, time.UTC),
 	}
 
 	variables := poolCapacityAlertEmailVariables(event)
 	require.Equal(t, "9.250000", variables["alert_metric_value"])
 	require.Equal(t, "10.000000", variables["alert_metric_threshold"])
 	require.Equal(t, "USD", variables["alert_metric_unit"])
+	require.Equal(t, "5.250000", variables["pool_authoritative_balance_usd"])
+	require.Equal(t, "4.000000", variables["normal_estimated_balance_usd"])
+	require.Equal(t, "5", variables["participating_account_count"])
+	require.Equal(t, "1", variables["skipped_account_count"])
+	require.Equal(t, "0", variables["unknown_account_count"])
+	require.Equal(t, "table-row", variables["group_balance_display"])
+	require.Equal(t, "none", variables["context_capacity_display"])
+	require.Equal(t, "N/A", variables["account_name"])
 	require.Equal(t, "N/A", variables["predicted_requests"])
 	require.Equal(t, "N/A", variables["threshold_requests"])
 	require.Equal(t, "N/A", variables["avg_account_cost"])
 	require.Equal(t, "N/A", variables["account_requests"])
 
 	message := renderPoolCapacityQQMessage(event)
-	require.Contains(t, message, "剩余可用金额：$9.250000（阈值 $10.000000）")
+	require.Contains(t, message, "分组预测剩余余额：$9.250000（阈值 $10.000000）")
+	require.Contains(t, message, "池模式权威余额小计：$5.250000")
+	require.Contains(t, message, "普通账号估算余额小计：$4.000000")
+	require.Contains(t, message, "参与 5（池 2 / 普通 3），跳过 1，未知 0")
 	require.NotContains(t, message, "最近 50 次均值")
 }
 
@@ -575,21 +720,44 @@ func (s *poolCapacityBalanceReaderStub) GetPoolBalance(context.Context, *Account
 	return cloneAccountCapacitySnapshot(s.snapshot), s.err
 }
 
+type groupPredictedBalanceReaderStub struct {
+	summary *GroupPredictedBalanceSummary
+	err     error
+	errors  []error
+	calls   int
+}
+
+func (s *groupPredictedBalanceReaderStub) EstimateGroupPredictedBalance(context.Context, int64) (*GroupPredictedBalanceSummary, error) {
+	s.calls++
+	if s.calls <= len(s.errors) {
+		return s.summary, s.errors[s.calls-1]
+	}
+	return s.summary, s.err
+}
+
 type poolCapacityDispatchRepo struct {
-	mu              sync.Mutex
-	pending         []PoolCapacityAlertDelivery
-	claimLimits     []int
-	currentOverride map[int64]bool
-	sent            []int64
-	cancelled       []int64
-	failed          []int64
-	evaluations     []PoolCapacityEvaluation
+	mu               sync.Mutex
+	pending          []PoolCapacityAlertDelivery
+	claimLimits      []int
+	currentOverride  map[int64]bool
+	sent             []int64
+	cancelled        []int64
+	failed           []int64
+	evaluations      []PoolCapacityEvaluation
+	groupEvaluations []PoolCapacityGroupBalanceEvaluation
 }
 
 func (r *poolCapacityDispatchRepo) EvaluateAndMaybeCreateEvent(_ context.Context, evaluation PoolCapacityEvaluation, _ time.Time) (*PoolCapacityAlertEvent, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.evaluations = append(r.evaluations, evaluation)
+	return nil, nil
+}
+
+func (r *poolCapacityDispatchRepo) EvaluateGroupBalanceAndMaybeCreateEvent(_ context.Context, evaluation PoolCapacityGroupBalanceEvaluation, _ time.Time) (*PoolCapacityAlertEvent, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.groupEvaluations = append(r.groupEvaluations, evaluation)
 	return nil, nil
 }
 

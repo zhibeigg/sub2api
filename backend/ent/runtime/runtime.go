@@ -1693,54 +1693,84 @@ func init() {
 	poolcapacityalerteventDescGroupGeneration := poolcapacityalerteventFields[3].Descriptor()
 	// poolcapacityalertevent.DefaultGroupGeneration holds the default value on creation for the group_generation field.
 	poolcapacityalertevent.DefaultGroupGeneration = poolcapacityalerteventDescGroupGeneration.Default.(int64)
+	// poolcapacityalerteventDescScopeType is the schema descriptor for scope_type field.
+	poolcapacityalerteventDescScopeType := poolcapacityalerteventFields[4].Descriptor()
+	// poolcapacityalertevent.DefaultScopeType holds the default value on creation for the scope_type field.
+	poolcapacityalertevent.DefaultScopeType = poolcapacityalerteventDescScopeType.Default.(string)
+	// poolcapacityalertevent.ScopeTypeValidator is a validator for the "scope_type" field. It is called by the builders before save.
+	poolcapacityalertevent.ScopeTypeValidator = poolcapacityalerteventDescScopeType.Validators[0].(func(string) error)
 	// poolcapacityalerteventDescGroupName is the schema descriptor for group_name field.
-	poolcapacityalerteventDescGroupName := poolcapacityalerteventFields[8].Descriptor()
+	poolcapacityalerteventDescGroupName := poolcapacityalerteventFields[9].Descriptor()
 	// poolcapacityalertevent.DefaultGroupName holds the default value on creation for the group_name field.
 	poolcapacityalertevent.DefaultGroupName = poolcapacityalerteventDescGroupName.Default.(string)
 	// poolcapacityalertevent.GroupNameValidator is a validator for the "group_name" field. It is called by the builders before save.
 	poolcapacityalertevent.GroupNameValidator = poolcapacityalerteventDescGroupName.Validators[0].(func(string) error)
 	// poolcapacityalerteventDescAccountName is the schema descriptor for account_name field.
-	poolcapacityalerteventDescAccountName := poolcapacityalerteventFields[9].Descriptor()
+	poolcapacityalerteventDescAccountName := poolcapacityalerteventFields[10].Descriptor()
 	// poolcapacityalertevent.DefaultAccountName holds the default value on creation for the account_name field.
 	poolcapacityalertevent.DefaultAccountName = poolcapacityalerteventDescAccountName.Default.(string)
 	// poolcapacityalertevent.AccountNameValidator is a validator for the "account_name" field. It is called by the builders before save.
 	poolcapacityalertevent.AccountNameValidator = poolcapacityalerteventDescAccountName.Validators[0].(func(string) error)
 	// poolcapacityalerteventDescAPIKeyName is the schema descriptor for api_key_name field.
-	poolcapacityalerteventDescAPIKeyName := poolcapacityalerteventFields[10].Descriptor()
+	poolcapacityalerteventDescAPIKeyName := poolcapacityalerteventFields[11].Descriptor()
 	// poolcapacityalertevent.DefaultAPIKeyName holds the default value on creation for the api_key_name field.
 	poolcapacityalertevent.DefaultAPIKeyName = poolcapacityalerteventDescAPIKeyName.Default.(string)
 	// poolcapacityalertevent.APIKeyNameValidator is a validator for the "api_key_name" field. It is called by the builders before save.
 	poolcapacityalertevent.APIKeyNameValidator = poolcapacityalerteventDescAPIKeyName.Validators[0].(func(string) error)
 	// poolcapacityalerteventDescUserEmail is the schema descriptor for user_email field.
-	poolcapacityalerteventDescUserEmail := poolcapacityalerteventFields[11].Descriptor()
+	poolcapacityalerteventDescUserEmail := poolcapacityalerteventFields[12].Descriptor()
 	// poolcapacityalertevent.DefaultUserEmail holds the default value on creation for the user_email field.
 	poolcapacityalertevent.DefaultUserEmail = poolcapacityalerteventDescUserEmail.Default.(string)
 	// poolcapacityalertevent.UserEmailValidator is a validator for the "user_email" field. It is called by the builders before save.
 	poolcapacityalertevent.UserEmailValidator = poolcapacityalerteventDescUserEmail.Validators[0].(func(string) error)
 	// poolcapacityalerteventDescAlertMetric is the schema descriptor for alert_metric field.
-	poolcapacityalerteventDescAlertMetric := poolcapacityalerteventFields[12].Descriptor()
+	poolcapacityalerteventDescAlertMetric := poolcapacityalerteventFields[13].Descriptor()
 	// poolcapacityalertevent.DefaultAlertMetric holds the default value on creation for the alert_metric field.
 	poolcapacityalertevent.DefaultAlertMetric = poolcapacityalerteventDescAlertMetric.Default.(string)
 	// poolcapacityalertevent.AlertMetricValidator is a validator for the "alert_metric" field. It is called by the builders before save.
 	poolcapacityalertevent.AlertMetricValidator = poolcapacityalerteventDescAlertMetric.Validators[0].(func(string) error)
+	// poolcapacityalerteventDescPoolAccountCount is the schema descriptor for pool_account_count field.
+	poolcapacityalerteventDescPoolAccountCount := poolcapacityalerteventFields[18].Descriptor()
+	// poolcapacityalertevent.DefaultPoolAccountCount holds the default value on creation for the pool_account_count field.
+	poolcapacityalertevent.DefaultPoolAccountCount = poolcapacityalerteventDescPoolAccountCount.Default.(int)
+	// poolcapacityalerteventDescNormalAccountCount is the schema descriptor for normal_account_count field.
+	poolcapacityalerteventDescNormalAccountCount := poolcapacityalerteventFields[19].Descriptor()
+	// poolcapacityalertevent.DefaultNormalAccountCount holds the default value on creation for the normal_account_count field.
+	poolcapacityalertevent.DefaultNormalAccountCount = poolcapacityalerteventDescNormalAccountCount.Default.(int)
+	// poolcapacityalerteventDescSkippedAccountCount is the schema descriptor for skipped_account_count field.
+	poolcapacityalerteventDescSkippedAccountCount := poolcapacityalerteventFields[20].Descriptor()
+	// poolcapacityalertevent.DefaultSkippedAccountCount holds the default value on creation for the skipped_account_count field.
+	poolcapacityalertevent.DefaultSkippedAccountCount = poolcapacityalerteventDescSkippedAccountCount.Default.(int)
+	// poolcapacityalerteventDescUnknownAccountCount is the schema descriptor for unknown_account_count field.
+	poolcapacityalerteventDescUnknownAccountCount := poolcapacityalerteventFields[21].Descriptor()
+	// poolcapacityalertevent.DefaultUnknownAccountCount holds the default value on creation for the unknown_account_count field.
+	poolcapacityalertevent.DefaultUnknownAccountCount = poolcapacityalerteventDescUnknownAccountCount.Default.(int)
+	// poolcapacityalerteventDescStaleAccountCount is the schema descriptor for stale_account_count field.
+	poolcapacityalerteventDescStaleAccountCount := poolcapacityalerteventFields[22].Descriptor()
+	// poolcapacityalertevent.DefaultStaleAccountCount holds the default value on creation for the stale_account_count field.
+	poolcapacityalertevent.DefaultStaleAccountCount = poolcapacityalerteventDescStaleAccountCount.Default.(int)
+	// poolcapacityalerteventDescIncompatibleUnitAccountCount is the schema descriptor for incompatible_unit_account_count field.
+	poolcapacityalerteventDescIncompatibleUnitAccountCount := poolcapacityalerteventFields[23].Descriptor()
+	// poolcapacityalertevent.DefaultIncompatibleUnitAccountCount holds the default value on creation for the incompatible_unit_account_count field.
+	poolcapacityalertevent.DefaultIncompatibleUnitAccountCount = poolcapacityalerteventDescIncompatibleUnitAccountCount.Default.(int)
 	// poolcapacityalerteventDescSampleCount is the schema descriptor for sample_count field.
-	poolcapacityalerteventDescSampleCount := poolcapacityalerteventFields[25].Descriptor()
+	poolcapacityalerteventDescSampleCount := poolcapacityalerteventFields[34].Descriptor()
 	// poolcapacityalertevent.DefaultSampleCount holds the default value on creation for the sample_count field.
 	poolcapacityalertevent.DefaultSampleCount = poolcapacityalerteventDescSampleCount.Default.(int)
 	// poolcapacityalerteventDescBottleneck is the schema descriptor for bottleneck field.
-	poolcapacityalerteventDescBottleneck := poolcapacityalerteventFields[26].Descriptor()
+	poolcapacityalerteventDescBottleneck := poolcapacityalerteventFields[35].Descriptor()
 	// poolcapacityalertevent.DefaultBottleneck holds the default value on creation for the bottleneck field.
 	poolcapacityalertevent.DefaultBottleneck = poolcapacityalerteventDescBottleneck.Default.(string)
 	// poolcapacityalertevent.BottleneckValidator is a validator for the "bottleneck" field. It is called by the builders before save.
 	poolcapacityalertevent.BottleneckValidator = poolcapacityalerteventDescBottleneck.Validators[0].(func(string) error)
 	// poolcapacityalerteventDescQqbotAppID is the schema descriptor for qqbot_app_id field.
-	poolcapacityalerteventDescQqbotAppID := poolcapacityalerteventFields[27].Descriptor()
+	poolcapacityalerteventDescQqbotAppID := poolcapacityalerteventFields[36].Descriptor()
 	// poolcapacityalertevent.DefaultQqbotAppID holds the default value on creation for the qqbot_app_id field.
 	poolcapacityalertevent.DefaultQqbotAppID = poolcapacityalerteventDescQqbotAppID.Default.(string)
 	// poolcapacityalertevent.QqbotAppIDValidator is a validator for the "qqbot_app_id" field. It is called by the builders before save.
 	poolcapacityalertevent.QqbotAppIDValidator = poolcapacityalerteventDescQqbotAppID.Validators[0].(func(string) error)
 	// poolcapacityalerteventDescCreatedAt is the schema descriptor for created_at field.
-	poolcapacityalerteventDescCreatedAt := poolcapacityalerteventFields[28].Descriptor()
+	poolcapacityalerteventDescCreatedAt := poolcapacityalerteventFields[37].Descriptor()
 	// poolcapacityalertevent.DefaultCreatedAt holds the default value on creation for the created_at field.
 	poolcapacityalertevent.DefaultCreatedAt = poolcapacityalerteventDescCreatedAt.Default.(func() time.Time)
 	poolcapacityalertstateFields := schema.PoolCapacityAlertState{}.Fields()
@@ -1749,54 +1779,84 @@ func init() {
 	poolcapacityalertstateDescGroupGeneration := poolcapacityalertstateFields[1].Descriptor()
 	// poolcapacityalertstate.DefaultGroupGeneration holds the default value on creation for the group_generation field.
 	poolcapacityalertstate.DefaultGroupGeneration = poolcapacityalertstateDescGroupGeneration.Default.(int64)
+	// poolcapacityalertstateDescScopeType is the schema descriptor for scope_type field.
+	poolcapacityalertstateDescScopeType := poolcapacityalertstateFields[2].Descriptor()
+	// poolcapacityalertstate.DefaultScopeType holds the default value on creation for the scope_type field.
+	poolcapacityalertstate.DefaultScopeType = poolcapacityalertstateDescScopeType.Default.(string)
+	// poolcapacityalertstate.ScopeTypeValidator is a validator for the "scope_type" field. It is called by the builders before save.
+	poolcapacityalertstate.ScopeTypeValidator = poolcapacityalertstateDescScopeType.Validators[0].(func(string) error)
 	// poolcapacityalertstateDescStatus is the schema descriptor for status field.
-	poolcapacityalertstateDescStatus := poolcapacityalertstateFields[6].Descriptor()
+	poolcapacityalertstateDescStatus := poolcapacityalertstateFields[7].Descriptor()
 	// poolcapacityalertstate.DefaultStatus holds the default value on creation for the status field.
 	poolcapacityalertstate.DefaultStatus = poolcapacityalertstateDescStatus.Default.(string)
 	// poolcapacityalertstate.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	poolcapacityalertstate.StatusValidator = poolcapacityalertstateDescStatus.Validators[0].(func(string) error)
 	// poolcapacityalertstateDescEpisode is the schema descriptor for episode field.
-	poolcapacityalertstateDescEpisode := poolcapacityalertstateFields[7].Descriptor()
+	poolcapacityalertstateDescEpisode := poolcapacityalertstateFields[8].Descriptor()
 	// poolcapacityalertstate.DefaultEpisode holds the default value on creation for the episode field.
 	poolcapacityalertstate.DefaultEpisode = poolcapacityalertstateDescEpisode.Default.(int64)
 	// poolcapacityalertstateDescAlertMetric is the schema descriptor for alert_metric field.
-	poolcapacityalertstateDescAlertMetric := poolcapacityalertstateFields[8].Descriptor()
+	poolcapacityalertstateDescAlertMetric := poolcapacityalertstateFields[9].Descriptor()
 	// poolcapacityalertstate.DefaultAlertMetric holds the default value on creation for the alert_metric field.
 	poolcapacityalertstate.DefaultAlertMetric = poolcapacityalertstateDescAlertMetric.Default.(string)
 	// poolcapacityalertstate.AlertMetricValidator is a validator for the "alert_metric" field. It is called by the builders before save.
 	poolcapacityalertstate.AlertMetricValidator = poolcapacityalertstateDescAlertMetric.Validators[0].(func(string) error)
+	// poolcapacityalertstateDescPoolAccountCount is the schema descriptor for pool_account_count field.
+	poolcapacityalertstateDescPoolAccountCount := poolcapacityalertstateFields[14].Descriptor()
+	// poolcapacityalertstate.DefaultPoolAccountCount holds the default value on creation for the pool_account_count field.
+	poolcapacityalertstate.DefaultPoolAccountCount = poolcapacityalertstateDescPoolAccountCount.Default.(int)
+	// poolcapacityalertstateDescNormalAccountCount is the schema descriptor for normal_account_count field.
+	poolcapacityalertstateDescNormalAccountCount := poolcapacityalertstateFields[15].Descriptor()
+	// poolcapacityalertstate.DefaultNormalAccountCount holds the default value on creation for the normal_account_count field.
+	poolcapacityalertstate.DefaultNormalAccountCount = poolcapacityalertstateDescNormalAccountCount.Default.(int)
+	// poolcapacityalertstateDescSkippedAccountCount is the schema descriptor for skipped_account_count field.
+	poolcapacityalertstateDescSkippedAccountCount := poolcapacityalertstateFields[16].Descriptor()
+	// poolcapacityalertstate.DefaultSkippedAccountCount holds the default value on creation for the skipped_account_count field.
+	poolcapacityalertstate.DefaultSkippedAccountCount = poolcapacityalertstateDescSkippedAccountCount.Default.(int)
+	// poolcapacityalertstateDescUnknownAccountCount is the schema descriptor for unknown_account_count field.
+	poolcapacityalertstateDescUnknownAccountCount := poolcapacityalertstateFields[17].Descriptor()
+	// poolcapacityalertstate.DefaultUnknownAccountCount holds the default value on creation for the unknown_account_count field.
+	poolcapacityalertstate.DefaultUnknownAccountCount = poolcapacityalertstateDescUnknownAccountCount.Default.(int)
+	// poolcapacityalertstateDescStaleAccountCount is the schema descriptor for stale_account_count field.
+	poolcapacityalertstateDescStaleAccountCount := poolcapacityalertstateFields[18].Descriptor()
+	// poolcapacityalertstate.DefaultStaleAccountCount holds the default value on creation for the stale_account_count field.
+	poolcapacityalertstate.DefaultStaleAccountCount = poolcapacityalertstateDescStaleAccountCount.Default.(int)
+	// poolcapacityalertstateDescIncompatibleUnitAccountCount is the schema descriptor for incompatible_unit_account_count field.
+	poolcapacityalertstateDescIncompatibleUnitAccountCount := poolcapacityalertstateFields[19].Descriptor()
+	// poolcapacityalertstate.DefaultIncompatibleUnitAccountCount holds the default value on creation for the incompatible_unit_account_count field.
+	poolcapacityalertstate.DefaultIncompatibleUnitAccountCount = poolcapacityalertstateDescIncompatibleUnitAccountCount.Default.(int)
 	// poolcapacityalertstateDescThresholdRequests is the schema descriptor for threshold_requests field.
-	poolcapacityalertstateDescThresholdRequests := poolcapacityalertstateFields[11].Descriptor()
+	poolcapacityalertstateDescThresholdRequests := poolcapacityalertstateFields[20].Descriptor()
 	// poolcapacityalertstate.DefaultThresholdRequests holds the default value on creation for the threshold_requests field.
 	poolcapacityalertstate.DefaultThresholdRequests = poolcapacityalertstateDescThresholdRequests.Default.(int64)
 	// poolcapacityalertstateDescAvgAccountCost is the schema descriptor for avg_account_cost field.
-	poolcapacityalertstateDescAvgAccountCost := poolcapacityalertstateFields[16].Descriptor()
+	poolcapacityalertstateDescAvgAccountCost := poolcapacityalertstateFields[25].Descriptor()
 	// poolcapacityalertstate.DefaultAvgAccountCost holds the default value on creation for the avg_account_cost field.
 	poolcapacityalertstate.DefaultAvgAccountCost = poolcapacityalertstateDescAvgAccountCost.Default.(float64)
 	// poolcapacityalertstateDescAvgActualCost is the schema descriptor for avg_actual_cost field.
-	poolcapacityalertstateDescAvgActualCost := poolcapacityalertstateFields[17].Descriptor()
+	poolcapacityalertstateDescAvgActualCost := poolcapacityalertstateFields[26].Descriptor()
 	// poolcapacityalertstate.DefaultAvgActualCost holds the default value on creation for the avg_actual_cost field.
 	poolcapacityalertstate.DefaultAvgActualCost = poolcapacityalertstateDescAvgActualCost.Default.(float64)
 	// poolcapacityalertstateDescSampleCount is the schema descriptor for sample_count field.
-	poolcapacityalertstateDescSampleCount := poolcapacityalertstateFields[18].Descriptor()
+	poolcapacityalertstateDescSampleCount := poolcapacityalertstateFields[27].Descriptor()
 	// poolcapacityalertstate.DefaultSampleCount holds the default value on creation for the sample_count field.
 	poolcapacityalertstate.DefaultSampleCount = poolcapacityalertstateDescSampleCount.Default.(int)
 	// poolcapacityalertstateDescBottleneck is the schema descriptor for bottleneck field.
-	poolcapacityalertstateDescBottleneck := poolcapacityalertstateFields[19].Descriptor()
+	poolcapacityalertstateDescBottleneck := poolcapacityalertstateFields[28].Descriptor()
 	// poolcapacityalertstate.DefaultBottleneck holds the default value on creation for the bottleneck field.
 	poolcapacityalertstate.DefaultBottleneck = poolcapacityalertstateDescBottleneck.Default.(string)
 	// poolcapacityalertstate.BottleneckValidator is a validator for the "bottleneck" field. It is called by the builders before save.
 	poolcapacityalertstate.BottleneckValidator = poolcapacityalertstateDescBottleneck.Validators[0].(func(string) error)
 	// poolcapacityalertstateDescLastEvaluatedAt is the schema descriptor for last_evaluated_at field.
-	poolcapacityalertstateDescLastEvaluatedAt := poolcapacityalertstateFields[20].Descriptor()
+	poolcapacityalertstateDescLastEvaluatedAt := poolcapacityalertstateFields[29].Descriptor()
 	// poolcapacityalertstate.DefaultLastEvaluatedAt holds the default value on creation for the last_evaluated_at field.
 	poolcapacityalertstate.DefaultLastEvaluatedAt = poolcapacityalertstateDescLastEvaluatedAt.Default.(func() time.Time)
 	// poolcapacityalertstateDescCreatedAt is the schema descriptor for created_at field.
-	poolcapacityalertstateDescCreatedAt := poolcapacityalertstateFields[22].Descriptor()
+	poolcapacityalertstateDescCreatedAt := poolcapacityalertstateFields[31].Descriptor()
 	// poolcapacityalertstate.DefaultCreatedAt holds the default value on creation for the created_at field.
 	poolcapacityalertstate.DefaultCreatedAt = poolcapacityalertstateDescCreatedAt.Default.(func() time.Time)
 	// poolcapacityalertstateDescUpdatedAt is the schema descriptor for updated_at field.
-	poolcapacityalertstateDescUpdatedAt := poolcapacityalertstateFields[23].Descriptor()
+	poolcapacityalertstateDescUpdatedAt := poolcapacityalertstateFields[32].Descriptor()
 	// poolcapacityalertstate.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	poolcapacityalertstate.DefaultUpdatedAt = poolcapacityalertstateDescUpdatedAt.Default.(func() time.Time)
 	// poolcapacityalertstate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

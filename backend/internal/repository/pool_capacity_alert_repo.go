@@ -36,9 +36,7 @@ func (r *poolCapacityAlertRepository) EvaluateAndMaybeCreateEvent(ctx context.Co
 	switch evaluation.AlertMetric {
 	case service.PoolCapacityAlertMetricPredictedRequests:
 	case service.PoolCapacityAlertMetricRemainingBalanceUSD:
-		if evaluation.ThresholdUSD == nil || *evaluation.ThresholdUSD <= 0 {
-			return nil, errors.New("invalid pool capacity alert USD threshold")
-		}
+		return nil, errors.New("remaining_balance_usd requires group alert scope")
 	default:
 		return nil, errors.New("invalid pool capacity alert metric")
 	}
@@ -60,8 +58,9 @@ func (r *poolCapacityAlertRepository) EvaluateAndMaybeCreateEvent(ctx context.Co
 		SELECT name FROM groups
 		WHERE id=$1 AND status=$2
 		  AND pool_capacity_alert_enabled=TRUE
-		  AND pool_capacity_alert_generation=$3`,
-		evaluation.GroupID, service.StatusActive, evaluation.GroupGeneration,
+		  AND pool_capacity_alert_generation=$3
+		  AND pool_capacity_alert_metric=$4`,
+		evaluation.GroupID, service.StatusActive, evaluation.GroupGeneration, service.PoolCapacityAlertMetricPredictedRequests,
 	).Scan(&currentGroupName)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, tx.Commit()
@@ -80,12 +79,12 @@ func (r *poolCapacityAlertRepository) EvaluateAndMaybeCreateEvent(ctx context.Co
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO pool_capacity_alert_states (
-			group_id,group_generation,account_id,api_key_id,user_id,billing_type,status,episode,
+			group_id,group_generation,scope_type,account_id,api_key_id,user_id,billing_type,status,episode,
 			alert_metric,predicted_requests,remaining_balance_usd,threshold_requests,threshold_usd,
 			account_requests,api_key_requests,wallet_requests,avg_account_cost,avg_actual_cost,
 			sample_count,bottleneck,last_evaluated_at,created_at,updated_at
-		) VALUES ($1,$2,$3,$4,$5,$6,'healthy',0,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$19,$19)
-		ON CONFLICT (group_id,group_generation,account_id,api_key_id,user_id,billing_type) DO NOTHING`,
+		) VALUES ($1,$2,'context',$3,$4,$5,$6,'healthy',0,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$19,$19)
+		ON CONFLICT (group_id,group_generation,account_id,api_key_id,user_id,billing_type) WHERE scope_type='context' DO NOTHING`,
 		evaluation.GroupID, evaluation.GroupGeneration, evaluation.AccountID, evaluation.APIKeyID, evaluation.UserID, evaluation.BillingType,
 		evaluation.AlertMetric, evaluation.PredictedRequests, evaluation.RemainingBalanceUSD, evaluation.ThresholdRequests, evaluation.ThresholdUSD,
 		evaluation.AccountRequests, evaluation.APIKeyRequests, evaluation.WalletRequests, evaluation.AverageAccountCost, evaluation.AverageActualCost,
@@ -100,7 +99,7 @@ func (r *poolCapacityAlertRepository) EvaluateAndMaybeCreateEvent(ctx context.Co
 	if err := tx.QueryRowContext(ctx, `
 		SELECT id,status,episode,last_alerted_at
 		FROM pool_capacity_alert_states
-		WHERE group_id=$1 AND group_generation=$2 AND account_id=$3 AND api_key_id=$4 AND user_id=$5 AND billing_type=$6
+		WHERE group_id=$1 AND group_generation=$2 AND scope_type='context' AND account_id=$3 AND api_key_id=$4 AND user_id=$5 AND billing_type=$6
 		FOR UPDATE`, evaluation.GroupID, evaluation.GroupGeneration, evaluation.AccountID, evaluation.APIKeyID, evaluation.UserID, evaluation.BillingType,
 	).Scan(&stateID, &oldStatus, &episode, &lastAlerted); err != nil {
 		return nil, err
@@ -148,6 +147,7 @@ func (r *poolCapacityAlertRepository) EvaluateAndMaybeCreateEvent(ctx context.Co
 		Episode:             episode,
 		GroupID:             evaluation.GroupID,
 		GroupGeneration:     evaluation.GroupGeneration,
+		ScopeType:           service.PoolCapacityAlertScopeContext,
 		AccountID:           evaluation.AccountID,
 		APIKeyID:            evaluation.APIKeyID,
 		UserID:              evaluation.UserID,
@@ -176,11 +176,11 @@ func (r *poolCapacityAlertRepository) EvaluateAndMaybeCreateEvent(ctx context.Co
 	}
 	if err := tx.QueryRowContext(ctx, `
 		INSERT INTO pool_capacity_alert_events (
-			state_id,episode,group_id,group_generation,account_id,api_key_id,user_id,billing_type,
+			state_id,episode,group_id,group_generation,scope_type,account_id,api_key_id,user_id,billing_type,
 			group_name,account_name,api_key_name,user_email,alert_metric,predicted_requests,remaining_balance_usd,
 			threshold_requests,threshold_usd,account_requests,api_key_requests,wallet_requests,avg_account_cost,avg_actual_cost,
 			account_remaining,api_key_remaining,wallet_remaining,sample_count,bottleneck,qqbot_app_id,created_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
+		) VALUES ($1,$2,$3,$4,'context',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
 		ON CONFLICT (state_id,episode) DO UPDATE SET state_id=EXCLUDED.state_id
 		RETURNING id`,
 		event.StateID, event.Episode, event.GroupID, event.GroupGeneration, event.AccountID, event.APIKeyID, event.UserID, event.BillingType,
@@ -264,6 +264,7 @@ func (r *poolCapacityAlertRepository) ClaimDeliveries(ctx context.Context, owner
 		  AND NOT EXISTS (
 			SELECT 1 FROM groups g WHERE g.id=e.group_id AND g.status=$2
 			  AND g.pool_capacity_alert_enabled=TRUE AND g.pool_capacity_alert_generation=e.group_generation
+			  AND g.pool_capacity_alert_metric=e.alert_metric
 		  )`, now, service.StatusActive); err != nil {
 		return nil, err
 	}
@@ -301,8 +302,11 @@ func (r *poolCapacityAlertRepository) ClaimDeliveries(ctx context.Context, owner
 			RETURNING d.id,d.event_id,d.channel,d.recipient_user_id,d.identity_channel_id,d.recipient_email,d.recipient_name,d.locale,d.attempt_count,d.max_attempts
 		)
 		SELECT c.id,c.channel,c.recipient_user_id,c.identity_channel_id,c.recipient_email,c.recipient_name,c.locale,c.attempt_count,c.max_attempts,
-		       e.id,e.state_id,e.episode,e.group_id,e.group_generation,e.account_id,e.api_key_id,e.user_id,e.billing_type,
+		       e.id,e.state_id,e.episode,e.group_id,e.group_generation,e.scope_type,
+		       COALESCE(e.account_id,0),COALESCE(e.api_key_id,0),COALESCE(e.user_id,0),COALESCE(e.billing_type,0),
 		       e.group_name,e.account_name,e.api_key_name,e.user_email,e.alert_metric,e.predicted_requests,e.remaining_balance_usd,
+		       e.pool_authoritative_balance_usd,e.normal_estimated_balance_usd,e.pool_account_count,e.normal_account_count,
+		       e.skipped_account_count,e.unknown_account_count,e.stale_account_count,e.incompatible_unit_account_count,
 		       e.threshold_requests,e.threshold_usd,e.account_requests,e.api_key_requests,e.wallet_requests,e.avg_account_cost,e.avg_actual_cost,
 		       e.account_remaining,e.api_key_remaining,e.wallet_remaining,e.sample_count,e.bottleneck,e.qqbot_app_id,e.created_at
 		FROM claimed c JOIN pool_capacity_alert_events e ON e.id=c.event_id
@@ -317,15 +321,18 @@ func (r *poolCapacityAlertRepository) ClaimDeliveries(ctx context.Context, owner
 		var delivery service.PoolCapacityAlertDelivery
 		var predictedRequests, thresholdRequests sql.NullInt64
 		var accountRequests, apiKeyRequests, walletRequests sql.NullInt64
-		var remainingBalanceUSD, thresholdUSD sql.NullFloat64
+		var remainingBalanceUSD, poolAuthoritativeBalanceUSD, normalEstimatedBalanceUSD, thresholdUSD sql.NullFloat64
 		var accountRemaining, apiKeyRemaining, walletRemaining sql.NullFloat64
 		if err := rows.Scan(
 			&delivery.ID, &delivery.Channel, &delivery.RecipientUserID, &delivery.IdentityChannelID,
 			&delivery.RecipientEmail, &delivery.RecipientName, &delivery.Locale, &delivery.AttemptCount, &delivery.MaxAttempts,
 			&delivery.Event.ID, &delivery.Event.StateID, &delivery.Event.Episode, &delivery.Event.GroupID, &delivery.Event.GroupGeneration,
-			&delivery.Event.AccountID, &delivery.Event.APIKeyID, &delivery.Event.UserID, &delivery.Event.BillingType,
+			&delivery.Event.ScopeType, &delivery.Event.AccountID, &delivery.Event.APIKeyID, &delivery.Event.UserID, &delivery.Event.BillingType,
 			&delivery.Event.GroupName, &delivery.Event.AccountName, &delivery.Event.APIKeyName, &delivery.Event.UserEmail,
-			&delivery.Event.AlertMetric, &predictedRequests, &remainingBalanceUSD, &thresholdRequests, &thresholdUSD,
+			&delivery.Event.AlertMetric, &predictedRequests, &remainingBalanceUSD,
+			&poolAuthoritativeBalanceUSD, &normalEstimatedBalanceUSD, &delivery.Event.PoolAccountCount, &delivery.Event.NormalAccountCount,
+			&delivery.Event.SkippedAccountCount, &delivery.Event.UnknownAccountCount, &delivery.Event.StaleAccountCount, &delivery.Event.IncompatibleUnitAccountCount,
+			&thresholdRequests, &thresholdUSD,
 			&accountRequests, &apiKeyRequests, &walletRequests, &delivery.Event.AverageAccountCost, &delivery.Event.AverageActualCost,
 			&accountRemaining, &apiKeyRemaining, &walletRemaining, &delivery.Event.SampleCount, &delivery.Event.Bottleneck,
 			&delivery.Event.QQBotAppID, &delivery.Event.CreatedAt,
@@ -334,6 +341,8 @@ func (r *poolCapacityAlertRepository) ClaimDeliveries(ctx context.Context, owner
 		}
 		delivery.Event.PredictedRequests = poolCapacityNullableInt64Ptr(predictedRequests)
 		delivery.Event.RemainingBalanceUSD = poolCapacityNullableFloat64Ptr(remainingBalanceUSD)
+		delivery.Event.PoolAuthoritativeBalanceUSD = poolCapacityNullableFloat64Ptr(poolAuthoritativeBalanceUSD)
+		delivery.Event.NormalEstimatedBalanceUSD = poolCapacityNullableFloat64Ptr(normalEstimatedBalanceUSD)
 		delivery.Event.ThresholdRequests = poolCapacityNullableInt64Ptr(thresholdRequests)
 		delivery.Event.ThresholdUSD = poolCapacityNullableFloat64Ptr(thresholdUSD)
 		delivery.Event.AccountRequests = poolCapacityNullableInt64Ptr(accountRequests)
@@ -366,17 +375,20 @@ func (r *poolCapacityAlertRepository) IsDeliveryCurrent(ctx context.Context, del
 			SELECT 1
 			FROM pool_capacity_alert_deliveries d
 			JOIN pool_capacity_alert_events e ON e.id=d.event_id
+			JOIN pool_capacity_alert_states s ON s.id=e.state_id
 			JOIN groups g ON g.id=e.group_id
 			WHERE d.id=$1 AND d.status='sending' AND d.lease_owner=$2 AND d.lease_expires_at > NOW()
+			  AND s.status=$5 AND s.episode=e.episode
 			  AND g.status=$3 AND g.pool_capacity_alert_enabled=TRUE
 			  AND g.pool_capacity_alert_generation=e.group_generation
+			  AND g.pool_capacity_alert_metric=e.alert_metric
 			  AND EXISTS (
 				SELECT 1 FROM users u
 				WHERE u.role=$4 AND u.status=$3 AND u.deleted_at IS NULL
 				  AND ((d.channel='email' AND LOWER(BTRIM(u.email))=LOWER(BTRIM(d.recipient_email)))
 				       OR (d.channel<>'email' AND u.id=d.recipient_user_id))
 			  )
-		)`, deliveryID, owner, service.StatusActive, service.RoleAdmin).Scan(&current)
+		)`, deliveryID, owner, service.StatusActive, service.RoleAdmin, service.PoolCapacityAlertStatusLow).Scan(&current)
 	return current, err
 }
 

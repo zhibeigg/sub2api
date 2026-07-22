@@ -23,6 +23,9 @@ const (
 	PoolCapacityAlertStatusHealthy = "healthy"
 	PoolCapacityAlertStatusLow     = "low"
 
+	PoolCapacityAlertScopeContext = "context"
+	PoolCapacityAlertScopeGroup   = "group"
+
 	PoolCapacityAlertChannelEmail = "email"
 	PoolCapacityAlertChannelQQBot = "qqbot"
 
@@ -48,8 +51,8 @@ type PoolCapacityUsageReader interface {
 	GetRecentPoolCapacityCostSummary(ctx context.Context, groupID int64, excludeRequestID string, excludeAPIKeyID int64, limit int) (*PoolCapacityCostSummary, error)
 }
 
-// PoolCapacityEvaluation is the normalized result persisted by the alert state
-// machine. Nil capacities are unbounded.
+// PoolCapacityEvaluation is the normalized request-context result persisted by
+// the predicted_requests alert state machine. Nil capacities are unbounded.
 type PoolCapacityEvaluation struct {
 	GroupID             int64
 	GroupGeneration     int64
@@ -81,37 +84,69 @@ type PoolCapacityEvaluation struct {
 	DeliveryMaxAttempts int
 }
 
+// PoolCapacityGroupBalanceEvaluation is a complete group-level amount sample.
+// Incomplete samples are filtered by the service and never reach the durable
+// state machine.
+type PoolCapacityGroupBalanceEvaluation struct {
+	GroupID                      int64
+	GroupGeneration              int64
+	GroupName                    string
+	RemainingBalanceUSD          *float64
+	Unlimited                    bool
+	PoolAuthoritativeBalanceUSD  float64
+	NormalEstimatedBalanceUSD    float64
+	PoolAccountCount             int
+	NormalAccountCount           int
+	SkippedAccountCount          int
+	UnknownAccountCount          int
+	StaleAccountCount            int
+	IncompatibleUnitAccountCount int
+	ThresholdUSD                 float64
+	QQBotAppID                   string
+	ReminderCooldown             time.Duration
+	DeliveryMaxAttempts          int
+}
+
 type PoolCapacityAlertEvent struct {
-	ID                  int64
-	StateID             int64
-	Episode             int64
-	GroupID             int64
-	GroupGeneration     int64
-	AccountID           int64
-	APIKeyID            int64
-	UserID              int64
-	BillingType         int8
-	GroupName           string
-	AccountName         string
-	APIKeyName          string
-	UserEmail           string
-	AlertMetric         string
-	PredictedRequests   *int64
-	RemainingBalanceUSD *float64
-	ThresholdRequests   *int64
-	ThresholdUSD        *float64
-	AccountRequests     *int64
-	APIKeyRequests      *int64
-	WalletRequests      *int64
-	AverageAccountCost  float64
-	AverageActualCost   float64
-	AccountRemaining    *float64
-	APIKeyRemaining     *float64
-	WalletRemaining     *float64
-	SampleCount         int
-	Bottleneck          string
-	QQBotAppID          string
-	CreatedAt           time.Time
+	ID                           int64
+	StateID                      int64
+	Episode                      int64
+	GroupID                      int64
+	GroupGeneration              int64
+	ScopeType                    string
+	AccountID                    int64
+	APIKeyID                     int64
+	UserID                       int64
+	BillingType                  int8
+	GroupName                    string
+	AccountName                  string
+	APIKeyName                   string
+	UserEmail                    string
+	AlertMetric                  string
+	PredictedRequests            *int64
+	RemainingBalanceUSD          *float64
+	PoolAuthoritativeBalanceUSD  *float64
+	NormalEstimatedBalanceUSD    *float64
+	PoolAccountCount             int
+	NormalAccountCount           int
+	SkippedAccountCount          int
+	UnknownAccountCount          int
+	StaleAccountCount            int
+	IncompatibleUnitAccountCount int
+	ThresholdRequests            *int64
+	ThresholdUSD                 *float64
+	AccountRequests              *int64
+	APIKeyRequests               *int64
+	WalletRequests               *int64
+	AverageAccountCost           float64
+	AverageActualCost            float64
+	AccountRemaining             *float64
+	APIKeyRemaining              *float64
+	WalletRemaining              *float64
+	SampleCount                  int
+	Bottleneck                   string
+	QQBotAppID                   string
+	CreatedAt                    time.Time
 }
 
 type PoolCapacityAlertDelivery struct {
@@ -131,6 +166,7 @@ type PoolCapacityAlertDelivery struct {
 // durable per-recipient delivery queue.
 type PoolCapacityAlertRepository interface {
 	EvaluateAndMaybeCreateEvent(ctx context.Context, evaluation PoolCapacityEvaluation, now time.Time) (*PoolCapacityAlertEvent, error)
+	EvaluateGroupBalanceAndMaybeCreateEvent(ctx context.Context, evaluation PoolCapacityGroupBalanceEvaluation, now time.Time) (*PoolCapacityAlertEvent, error)
 	ClaimDeliveries(ctx context.Context, owner string, now time.Time, lease time.Duration, limit int) ([]PoolCapacityAlertDelivery, error)
 	IsDeliveryCurrent(ctx context.Context, deliveryID int64, owner string) (bool, error)
 	MarkDeliverySent(ctx context.Context, deliveryID int64, owner string, sentAt time.Time) error
@@ -149,6 +185,7 @@ type poolCapacityAlertTask struct {
 	RequestID          string
 	GroupID            int64
 	GroupGeneration    int64
+	AlertMetric        string
 	AccountID          int64
 	APIKeyID           int64
 	UserID             int64
@@ -170,14 +207,15 @@ type poolCapacityAlertTask struct {
 // PoolCapacityAlertService evaluates predictions asynchronously and dispatches
 // durable email / QQ deliveries outside request and usage-record workers.
 type PoolCapacityAlertService struct {
-	repo           PoolCapacityAlertRepository
-	usageReader    PoolCapacityUsageReader
-	groupRepo      GroupRepository
-	accountRepo    AccountRepository
-	capacityReader PoolBalanceReader
-	notifications  *NotificationEmailService
-	qqNotifier     PoolCapacityQQNotifier
-	cfg            *config.Config
+	repo               PoolCapacityAlertRepository
+	usageReader        PoolCapacityUsageReader
+	groupRepo          GroupRepository
+	accountRepo        AccountRepository
+	capacityReader     PoolBalanceReader
+	groupBalanceReader GroupPredictedBalanceReader
+	notifications      *NotificationEmailService
+	qqNotifier         PoolCapacityQQNotifier
+	cfg                *config.Config
 
 	owner string
 	queue chan poolCapacityAlertTask
@@ -185,6 +223,9 @@ type PoolCapacityAlertService struct {
 	mu     sync.Mutex
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	balanceMu     sync.Mutex
+	balanceActive map[string]bool
 }
 
 func NewPoolCapacityAlertService(
@@ -217,6 +258,7 @@ func NewPoolCapacityAlertService(
 		cfg:            cfg,
 		owner:          fmt.Sprintf("%s:%d:%d", host, os.Getpid(), time.Now().UnixNano()),
 		queue:          make(chan poolCapacityAlertTask, queueSize),
+		balanceActive:  make(map[string]bool),
 	}
 }
 
@@ -226,11 +268,13 @@ func ProvidePoolCapacityAlertService(
 	groupRepo GroupRepository,
 	accountRepo AccountRepository,
 	capacityService *AccountCapacityService,
+	groupBalanceService *GroupPredictedBalanceService,
 	notifications *NotificationEmailService,
 	qqNotifier PoolCapacityQQNotifier,
 	cfg *config.Config,
 ) *PoolCapacityAlertService {
 	svc := NewPoolCapacityAlertService(repo, usageLogRepo, groupRepo, accountRepo, capacityService, notifications, qqNotifier, cfg)
+	svc.groupBalanceReader = groupBalanceService
 	svc.Start()
 	return svc
 }
@@ -288,6 +332,9 @@ func (s *PoolCapacityAlertService) Stop() {
 		cancel()
 	}
 	s.wg.Wait()
+	s.balanceMu.Lock()
+	clear(s.balanceActive)
+	s.balanceMu.Unlock()
 }
 
 func (s *PoolCapacityAlertService) SubmitAfterBilling(usageLog *UsageLog, p *postUsageBillingParams, result *UsageBillingApplyResult) {
@@ -297,49 +344,83 @@ func (s *PoolCapacityAlertService) SubmitAfterBilling(usageLog *UsageLog, p *pos
 	if s.cfg != nil && !s.cfg.PoolCapacityAlert.Enabled {
 		return
 	}
-	if !p.Account.IsPoolMode() || p.APIKey.Group == nil || p.APIKey.GroupID == nil || !p.APIKey.Group.PoolCapacityAlertEnabled {
+	if p.APIKey.Group == nil || p.APIKey.GroupID == nil || !p.APIKey.Group.PoolCapacityAlertEnabled {
 		return
 	}
-	if strings.TrimSpace(usageLog.RequestID) == "" || usageLog.GroupID == nil || *usageLog.GroupID != *p.APIKey.GroupID {
-		return
-	}
-	if usageLog.RequestType == RequestTypeCyberBlocked || p.Cost.ActualCost <= 0 {
-		return
-	}
-	accountCost := effectiveUsageLogAccountCost(usageLog)
-	if accountCost <= 0 {
-		return
-	}
-	if !p.IsSubscriptionBill && result.NewBalance == nil {
+	if usageLog.GroupID == nil || *usageLog.GroupID != *p.APIKey.GroupID || usageLog.RequestType == RequestTypeCyberBlocked || p.Cost.ActualCost <= 0 {
 		return
 	}
 
+	policy := p.APIKey.Group.PoolCapacityAlertPolicy()
 	task := poolCapacityAlertTask{
-		RequestID:          strings.TrimSpace(usageLog.RequestID),
-		GroupID:            *p.APIKey.GroupID,
-		GroupGeneration:    p.APIKey.Group.PoolCapacityAlertGeneration,
-		AccountID:          p.Account.ID,
-		APIKeyID:           p.APIKey.ID,
-		UserID:             p.User.ID,
-		BillingType:        usageLog.BillingType,
-		IsSubscriptionBill: p.IsSubscriptionBill,
-		GroupName:          p.APIKey.Group.Name,
-		AccountName:        p.Account.Name,
-		APIKeyName:         p.APIKey.Name,
-		UserEmail:          p.User.Email,
-		CurrentAccountCost: accountCost,
-		CurrentActualCost:  p.Cost.ActualCost,
-		APIKeyQuota:        p.APIKey.Quota,
-		APIKeyStatus:       p.APIKey.Status,
-		NewBalance:         cloneFloat64Ptr(result.NewBalance),
-		AccountQuotaState:  cloneAccountQuotaState(result.QuotaState),
-		APIKeyQuotaState:   cloneAPIKeyQuotaUsageState(result.APIKeyQuotaState),
+		RequestID:       strings.TrimSpace(usageLog.RequestID),
+		GroupID:         *p.APIKey.GroupID,
+		GroupGeneration: p.APIKey.Group.PoolCapacityAlertGeneration,
+		AlertMetric:     policy.Metric,
+		GroupName:       p.APIKey.Group.Name,
 	}
+	if policy.Metric == PoolCapacityAlertMetricRemainingBalanceUSD {
+		s.enqueueGroupBalanceTask(task)
+		return
+	}
+	if policy.Metric != PoolCapacityAlertMetricPredictedRequests || !p.Account.IsPoolMode() || task.RequestID == "" {
+		return
+	}
+
+	accountCost := effectiveUsageLogAccountCost(usageLog)
+	if accountCost <= 0 || (!p.IsSubscriptionBill && result.NewBalance == nil) {
+		return
+	}
+	task.AccountID = p.Account.ID
+	task.APIKeyID = p.APIKey.ID
+	task.UserID = p.User.ID
+	task.BillingType = usageLog.BillingType
+	task.IsSubscriptionBill = p.IsSubscriptionBill
+	task.AccountName = p.Account.Name
+	task.APIKeyName = p.APIKey.Name
+	task.UserEmail = p.User.Email
+	task.CurrentAccountCost = accountCost
+	task.CurrentActualCost = p.Cost.ActualCost
+	task.APIKeyQuota = p.APIKey.Quota
+	task.APIKeyStatus = p.APIKey.Status
+	task.NewBalance = cloneFloat64Ptr(result.NewBalance)
+	task.AccountQuotaState = cloneAccountQuotaState(result.QuotaState)
+	task.APIKeyQuotaState = cloneAPIKeyQuotaUsageState(result.APIKeyQuotaState)
+
 	select {
 	case s.queue <- task:
 	default:
 		slog.Warn("pool capacity alert evaluation queue full", "group_id", task.GroupID, "account_id", task.AccountID, "api_key_id", task.APIKeyID)
 	}
+}
+
+func (s *PoolCapacityAlertService) enqueueGroupBalanceTask(task poolCapacityAlertTask) {
+	if s == nil || task.GroupID <= 0 {
+		return
+	}
+	key := poolCapacityGroupTaskKey(task.GroupID, task.GroupGeneration)
+	s.balanceMu.Lock()
+	if s.balanceActive == nil {
+		s.balanceActive = make(map[string]bool)
+	}
+	if _, active := s.balanceActive[key]; active {
+		s.balanceActive[key] = true
+		s.balanceMu.Unlock()
+		return
+	}
+	s.balanceActive[key] = false
+	select {
+	case s.queue <- task:
+		s.balanceMu.Unlock()
+	default:
+		delete(s.balanceActive, key)
+		s.balanceMu.Unlock()
+		slog.Warn("group balance alert evaluation queue full", "group_id", task.GroupID)
+	}
+}
+
+func poolCapacityGroupTaskKey(groupID, generation int64) string {
+	return strconv.FormatInt(groupID, 10) + ":" + strconv.FormatInt(generation, 10)
 }
 
 func cloneFloat64Ptr(value *float64) *float64 {
@@ -388,11 +469,16 @@ func (s *PoolCapacityAlertService) evaluationWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case task := <-s.queue:
-			taskCtx, cancel := context.WithTimeout(ctx, s.evaluationTimeout())
-			err := s.evaluate(taskCtx, task)
-			cancel()
+			var err error
+			if task.AlertMetric == PoolCapacityAlertMetricRemainingBalanceUSD {
+				err = s.evaluateGroupBalanceCoalesced(ctx, task)
+			} else {
+				taskCtx, cancel := context.WithTimeout(ctx, s.evaluationTimeout())
+				err = s.evaluate(taskCtx, task)
+				cancel()
+			}
 			if err != nil && !errors.Is(err, context.Canceled) {
-				slog.Error("pool capacity alert evaluation failed", "group_id", task.GroupID, "account_id", task.AccountID, "api_key_id", task.APIKeyID, "error", err)
+				slog.Error("pool capacity alert evaluation failed", "group_id", task.GroupID, "account_id", task.AccountID, "api_key_id", task.APIKeyID, "metric", task.AlertMetric, "error", err)
 			}
 		}
 	}
@@ -406,19 +492,103 @@ func (s *PoolCapacityAlertService) evaluationTimeout() time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
+func (s *PoolCapacityAlertService) groupBalanceEvaluationTimeout() time.Duration {
+	seconds := 60
+	if s.cfg != nil && s.cfg.PoolCapacityAlert.GroupBalanceTimeoutSeconds > 0 {
+		seconds = s.cfg.PoolCapacityAlert.GroupBalanceTimeoutSeconds
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func (s *PoolCapacityAlertService) evaluateGroupBalanceCoalesced(ctx context.Context, task poolCapacityAlertTask) error {
+	key := poolCapacityGroupTaskKey(task.GroupID, task.GroupGeneration)
+	ranDirtyFollowUp := false
+	for {
+		taskCtx, cancel := context.WithTimeout(ctx, s.groupBalanceEvaluationTimeout())
+		err := s.evaluateGroupBalance(taskCtx, task)
+		cancel()
+
+		s.balanceMu.Lock()
+		dirty, active := s.balanceActive[key]
+		if active && dirty && !ranDirtyFollowUp && ctx.Err() == nil {
+			s.balanceActive[key] = false
+			s.balanceMu.Unlock()
+			ranDirtyFollowUp = true
+			continue
+		}
+		delete(s.balanceActive, key)
+		s.balanceMu.Unlock()
+		if active && dirty && ctx.Err() == nil {
+			// Triggers that arrive during the single dirty follow-up become one
+			// fresh queued task rather than keeping this worker in an unbounded loop.
+			s.enqueueGroupBalanceTask(task)
+		}
+		return err
+	}
+}
+
+func (s *PoolCapacityAlertService) evaluateGroupBalance(ctx context.Context, task poolCapacityAlertTask) error {
+	if s.groupBalanceReader == nil {
+		return nil
+	}
+	group, err := s.groupRepo.GetByIDLite(ctx, task.GroupID)
+	if err != nil {
+		return err
+	}
+	policy := group.PoolCapacityAlertPolicy()
+	if !group.PoolCapacityAlertEnabled || group.PoolCapacityAlertGeneration != task.GroupGeneration || policy.Metric != PoolCapacityAlertMetricRemainingBalanceUSD || policy.ThresholdUSD == nil {
+		return nil
+	}
+
+	summary, err := s.groupBalanceReader.EstimateGroupPredictedBalance(ctx, task.GroupID)
+	if err != nil {
+		return err
+	}
+	if summary == nil || !summary.Complete || (!summary.Unlimited && summary.RemainingBalanceUSD == nil) {
+		return nil
+	}
+
+	evaluation := PoolCapacityGroupBalanceEvaluation{
+		GroupID:                      task.GroupID,
+		GroupGeneration:              task.GroupGeneration,
+		GroupName:                    firstNonEmpty(group.Name, task.GroupName),
+		RemainingBalanceUSD:          cloneFloat64Ptr(summary.RemainingBalanceUSD),
+		Unlimited:                    summary.Unlimited,
+		PoolAuthoritativeBalanceUSD:  summary.PoolAuthoritativeBalanceUSD,
+		NormalEstimatedBalanceUSD:    summary.NormalEstimatedBalanceUSD,
+		PoolAccountCount:             summary.PoolAccountCount,
+		NormalAccountCount:           summary.NormalAccountCount,
+		SkippedAccountCount:          summary.SkippedAccountCount,
+		UnknownAccountCount:          summary.UnknownAccountCount,
+		StaleAccountCount:            summary.StaleAccountCount,
+		IncompatibleUnitAccountCount: summary.IncompatibleUnitAccountCount,
+		ThresholdUSD:                 *policy.ThresholdUSD,
+		QQBotAppID:                   s.activeQQBotAppID(),
+		ReminderCooldown:             s.reminderCooldown(),
+		DeliveryMaxAttempts:          s.deliveryMaxAttempts(),
+	}
+	_, err = s.repo.EvaluateGroupBalanceAndMaybeCreateEvent(ctx, evaluation, time.Now().UTC())
+	return err
+}
+
 func (s *PoolCapacityAlertService) evaluate(ctx context.Context, task poolCapacityAlertTask) error {
 	group, err := s.groupRepo.GetByIDLite(ctx, task.GroupID)
 	if err != nil {
 		return err
 	}
-	if !group.PoolCapacityAlertEnabled || group.PoolCapacityAlertGeneration != task.GroupGeneration {
+	policy := group.PoolCapacityAlertPolicy()
+	taskMetric := strings.TrimSpace(task.AlertMetric)
+	if taskMetric == "" {
+		taskMetric = PoolCapacityAlertMetricPredictedRequests
+	}
+	if !group.PoolCapacityAlertEnabled || group.PoolCapacityAlertGeneration != task.GroupGeneration || taskMetric != PoolCapacityAlertMetricPredictedRequests || policy.Metric != PoolCapacityAlertMetricPredictedRequests {
 		return nil
 	}
 	account, err := s.accountRepo.GetByID(ctx, task.AccountID)
 	if err != nil {
 		return err
 	}
-	if !account.IsPoolMode() || s.capacityReader == nil {
+	if !account.IsPoolMode() || s.capacityReader == nil || s.usageReader == nil {
 		return nil
 	}
 
@@ -429,9 +599,32 @@ func (s *PoolCapacityAlertService) evaluate(ctx context.Context, task poolCapaci
 		}
 		return nil
 	}
-
-	policy := group.PoolCapacityAlertPolicy()
-	metric := policy.Metric
+	history, historyErr := s.usageReader.GetRecentPoolCapacityCostSummary(ctx, task.GroupID, task.RequestID, task.APIKeyID, PoolCapacityAlertSampleSize-1)
+	if historyErr != nil {
+		return historyErr
+	}
+	avgAccount, avgActual, ready := averagePoolCapacityCosts(history, task.CurrentAccountCost, task.CurrentActualCost)
+	if !ready {
+		return nil
+	}
+	upstreamRequests, upstreamRemaining, upstreamKnown := calculatePoolUpstreamCapacity(upstreamCapacity, avgAccount)
+	if !upstreamKnown {
+		return nil
+	}
+	localRequests, localRemaining, localKnown := calculatePoolAccountCapacity(account, task.AccountQuotaState, avgAccount)
+	if account.HasAnyQuotaLimit() && !localKnown {
+		return nil
+	}
+	accountRequests, accountRemaining := minimumAccountCapacity(upstreamRequests, upstreamRemaining, localRequests, localRemaining)
+	apiKeyRequests, apiKeyRemaining, apiKeyKnown := calculatePoolAPIKeyCapacity(task, avgActual)
+	if task.APIKeyQuota > 0 && !apiKeyKnown {
+		return nil
+	}
+	walletRequests, walletRemaining, walletKnown := s.calculatePoolWalletCapacity(task, avgActual)
+	if !task.IsSubscriptionBill && !walletKnown {
+		return nil
+	}
+	predicted, bottleneck := minimumFiniteCapacity(accountRequests, apiKeyRequests, walletRequests)
 	thresholdRequests := policy.ThresholdRequests
 	evaluation := PoolCapacityEvaluation{
 		GroupID:             task.GroupID,
@@ -444,89 +637,23 @@ func (s *PoolCapacityAlertService) evaluate(ctx context.Context, task poolCapaci
 		AccountName:         firstNonEmpty(account.Name, task.AccountName),
 		APIKeyName:          task.APIKeyName,
 		UserEmail:           task.UserEmail,
-		AlertMetric:         metric,
+		AlertMetric:         PoolCapacityAlertMetricPredictedRequests,
+		PredictedRequests:   predicted,
 		ThresholdRequests:   &thresholdRequests,
-		ThresholdUSD:        cloneFloat64Ptr(policy.ThresholdUSD),
+		AccountRequests:     accountRequests,
+		APIKeyRequests:      apiKeyRequests,
+		WalletRequests:      walletRequests,
+		AverageAccountCost:  avgAccount.InexactFloat64(),
+		AverageActualCost:   avgActual.InexactFloat64(),
+		AccountRemaining:    accountRemaining,
+		APIKeyRemaining:     apiKeyRemaining,
+		WalletRemaining:     walletRemaining,
+		SampleCount:         PoolCapacityAlertSampleSize,
+		Bottleneck:          bottleneck,
 		QQBotAppID:          s.activeQQBotAppID(),
 		ReminderCooldown:    s.reminderCooldown(),
 		DeliveryMaxAttempts: s.deliveryMaxAttempts(),
 	}
-
-	switch metric {
-	case PoolCapacityAlertMetricRemainingBalanceUSD:
-		if policy.ThresholdUSD == nil {
-			return nil
-		}
-		upstreamRemaining, upstreamKnown := calculatePoolUpstreamBalanceUSD(upstreamCapacity)
-		if !upstreamKnown {
-			return nil
-		}
-		localRemaining, localKnown := calculatePoolAccountRemainingUSD(account, task.AccountQuotaState)
-		if account.HasAnyQuotaLimit() && !localKnown {
-			return nil
-		}
-		accountRemaining := minimumFiniteAmountValue(upstreamRemaining, localRemaining)
-		apiKeyRemaining, apiKeyKnown := calculatePoolAPIKeyRemainingUSD(task)
-		if task.APIKeyQuota > 0 && !apiKeyKnown {
-			return nil
-		}
-		walletRemaining, walletKnown := s.calculatePoolWalletRemainingUSD(task)
-		if !task.IsSubscriptionBill && !walletKnown {
-			return nil
-		}
-		remaining, bottleneck := minimumFiniteAmount(accountRemaining, apiKeyRemaining, walletRemaining)
-		evaluation.RemainingBalanceUSD = remaining
-		evaluation.AccountRemaining = accountRemaining
-		evaluation.APIKeyRemaining = apiKeyRemaining
-		evaluation.WalletRemaining = walletRemaining
-		evaluation.Bottleneck = bottleneck
-
-	case PoolCapacityAlertMetricPredictedRequests:
-		if s.usageReader == nil {
-			return nil
-		}
-		history, historyErr := s.usageReader.GetRecentPoolCapacityCostSummary(ctx, task.GroupID, task.RequestID, task.APIKeyID, PoolCapacityAlertSampleSize-1)
-		if historyErr != nil {
-			return historyErr
-		}
-		avgAccount, avgActual, ready := averagePoolCapacityCosts(history, task.CurrentAccountCost, task.CurrentActualCost)
-		if !ready {
-			return nil
-		}
-		upstreamRequests, upstreamRemaining, upstreamKnown := calculatePoolUpstreamCapacity(upstreamCapacity, avgAccount)
-		if !upstreamKnown {
-			return nil
-		}
-		localRequests, localRemaining, localKnown := calculatePoolAccountCapacity(account, task.AccountQuotaState, avgAccount)
-		if account.HasAnyQuotaLimit() && !localKnown {
-			return nil
-		}
-		accountRequests, accountRemaining := minimumAccountCapacity(upstreamRequests, upstreamRemaining, localRequests, localRemaining)
-		apiKeyRequests, apiKeyRemaining, apiKeyKnown := calculatePoolAPIKeyCapacity(task, avgActual)
-		if task.APIKeyQuota > 0 && !apiKeyKnown {
-			return nil
-		}
-		walletRequests, walletRemaining, walletKnown := s.calculatePoolWalletCapacity(task, avgActual)
-		if !task.IsSubscriptionBill && !walletKnown {
-			return nil
-		}
-		predicted, bottleneck := minimumFiniteCapacity(accountRequests, apiKeyRequests, walletRequests)
-		evaluation.PredictedRequests = predicted
-		evaluation.AccountRequests = accountRequests
-		evaluation.APIKeyRequests = apiKeyRequests
-		evaluation.WalletRequests = walletRequests
-		evaluation.AverageAccountCost = avgAccount.InexactFloat64()
-		evaluation.AverageActualCost = avgActual.InexactFloat64()
-		evaluation.AccountRemaining = accountRemaining
-		evaluation.APIKeyRemaining = apiKeyRemaining
-		evaluation.WalletRemaining = walletRemaining
-		evaluation.SampleCount = PoolCapacityAlertSampleSize
-		evaluation.Bottleneck = bottleneck
-
-	default:
-		return nil
-	}
-
 	_, err = s.repo.EvaluateAndMaybeCreateEvent(ctx, evaluation, time.Now().UTC())
 	return err
 }
@@ -980,12 +1107,12 @@ func poolCapacityAlertEmailVariables(event PoolCapacityAlertEvent) map[string]st
 		alertValue = formatOptionalMetricAmount(event.RemainingBalanceUSD)
 		alertThreshold = formatOptionalMetricAmount(event.ThresholdUSD)
 		alertUnit = "USD"
-		alertLabel = "Remaining balance"
-		alertLabelZH = "剩余可用金额"
-		alertSummary = fmt.Sprintf("The remaining comparable balance is $%s, below the configured $%s threshold.", alertValue, alertThreshold)
-		alertSummaryZH = fmt.Sprintf("可比较的剩余金额为 $%s，已低于配置的 $%s 阈值。", alertValue, alertThreshold)
-		disclaimer = "Uses only authoritative USD balances and post-billing local USD limits; unavailable or incompatible units are not treated as zero."
-		disclaimerZH = "仅使用权威 USD 余额与扣费后本地 USD 限额；不可用或单位不兼容的数据不会按 0 处理。"
+		alertLabel = "Group predicted remaining balance"
+		alertLabelZH = "分组预测剩余余额"
+		alertSummary = fmt.Sprintf("The group predicted remaining balance is $%s, below the configured $%s threshold.", alertValue, alertThreshold)
+		alertSummaryZH = fmt.Sprintf("分组预测剩余余额为 $%s，已低于配置的 $%s 阈值。", alertValue, alertThreshold)
+		disclaimer = "The total is the authoritative USD subtotal for pool-mode accounts plus the estimated USD subtotal for normal accounts. Unknown, stale, or incompatible account data is never treated as zero; incomplete evaluations do not change alert state."
+		disclaimerZH = "总额等于池模式账号权威 USD 余额小计加普通账号估算 USD 余额小计。未知、过期或单位不兼容的数据不会按 0 处理；聚合不完整时不会改变告警状态。"
 	case PoolCapacityAlertMetricPredictedRequests:
 		alertValue = formatOptionalMetricCapacity(event.PredictedRequests)
 		alertThreshold = formatOptionalMetricCapacity(event.ThresholdRequests)
@@ -1009,56 +1136,83 @@ func poolCapacityAlertEmailVariables(event PoolCapacityAlertEvent) map[string]st
 	}
 	averageAccountCost := "N/A"
 	averageActualCost := "N/A"
-	if event.SampleCount > 0 {
+	if requestMetric && event.SampleCount > 0 {
 		averageAccountCost = fmt.Sprintf("%.6f", event.AverageAccountCost)
 		averageActualCost = fmt.Sprintf("%.6f", event.AverageActualCost)
 	}
 
+	accountName := event.AccountName
+	accountID := strconv.FormatInt(event.AccountID, 10)
+	apiKeyName := event.APIKeyName
+	apiKeyID := strconv.FormatInt(event.APIKeyID, 10)
+	userID := strconv.FormatInt(event.UserID, 10)
+	if metric == PoolCapacityAlertMetricRemainingBalanceUSD || event.ScopeType == PoolCapacityAlertScopeGroup {
+		accountName, accountID, apiKeyName, apiKeyID, userID = "N/A", "N/A", "N/A", "N/A", "N/A"
+	}
+	participatingAccounts := event.PoolAccountCount + event.NormalAccountCount
+	groupBalanceDisplay := "none"
+	contextCapacityDisplay := "table-row"
+	if metric == PoolCapacityAlertMetricRemainingBalanceUSD {
+		groupBalanceDisplay = "table-row"
+		contextCapacityDisplay = "none"
+	}
+
 	return map[string]string{
-		"group_name":               event.GroupName,
-		"group_id":                 strconv.FormatInt(event.GroupID, 10),
-		"account_name":             event.AccountName,
-		"account_id":               strconv.FormatInt(event.AccountID, 10),
-		"api_key_name":             event.APIKeyName,
-		"api_key_id":               strconv.FormatInt(event.APIKeyID, 10),
-		"user_id":                  strconv.FormatInt(event.UserID, 10),
-		"alert_metric":             metric,
-		"alert_metric_label":       alertLabel,
-		"alert_metric_label_zh":    alertLabelZH,
-		"alert_metric_value":       alertValue,
-		"alert_metric_threshold":   alertThreshold,
-		"alert_metric_unit":        alertUnit,
-		"alert_summary":            alertSummary,
-		"alert_summary_zh":         alertSummaryZH,
-		"predicted_requests":       formatOptionalMetricCapacity(event.PredictedRequests),
-		"remaining_balance_usd":    formatOptionalMetricAmount(event.RemainingBalanceUSD),
-		"threshold_requests":       formatOptionalMetricCapacity(event.ThresholdRequests),
-		"threshold_usd":            formatOptionalMetricAmount(event.ThresholdUSD),
-		"avg_account_cost":         averageAccountCost,
-		"avg_actual_cost":          averageActualCost,
-		"account_requests":         accountRequests,
-		"api_key_requests":         apiKeyRequests,
-		"wallet_requests":          walletRequests,
-		"account_remaining":        formatOptionalAmount(event.AccountRemaining),
-		"api_key_remaining":        formatOptionalAmount(event.APIKeyRemaining),
-		"wallet_remaining":         formatOptionalAmount(event.WalletRemaining),
-		"bottleneck":               event.Bottleneck,
-		"sample_count":             strconv.Itoa(event.SampleCount),
-		"triggered_at":             event.CreatedAt.UTC().Format(time.RFC3339),
-		"prediction_disclaimer":    disclaimer,
-		"prediction_disclaimer_zh": disclaimerZH,
+		"group_name":                      event.GroupName,
+		"group_id":                        strconv.FormatInt(event.GroupID, 10),
+		"account_name":                    accountName,
+		"account_id":                      accountID,
+		"api_key_name":                    apiKeyName,
+		"api_key_id":                      apiKeyID,
+		"user_id":                         userID,
+		"alert_metric":                    metric,
+		"alert_metric_label":              alertLabel,
+		"alert_metric_label_zh":           alertLabelZH,
+		"alert_metric_value":              alertValue,
+		"alert_metric_threshold":          alertThreshold,
+		"alert_metric_unit":               alertUnit,
+		"alert_summary":                   alertSummary,
+		"alert_summary_zh":                alertSummaryZH,
+		"group_balance_display":           groupBalanceDisplay,
+		"context_capacity_display":        contextCapacityDisplay,
+		"predicted_requests":              formatOptionalMetricCapacity(event.PredictedRequests),
+		"remaining_balance_usd":           formatOptionalMetricAmount(event.RemainingBalanceUSD),
+		"pool_authoritative_balance_usd":  formatOptionalMetricAmount(event.PoolAuthoritativeBalanceUSD),
+		"normal_estimated_balance_usd":    formatOptionalMetricAmount(event.NormalEstimatedBalanceUSD),
+		"pool_account_count":              strconv.Itoa(event.PoolAccountCount),
+		"normal_account_count":            strconv.Itoa(event.NormalAccountCount),
+		"participating_account_count":     strconv.Itoa(participatingAccounts),
+		"skipped_account_count":           strconv.Itoa(event.SkippedAccountCount),
+		"unknown_account_count":           strconv.Itoa(event.UnknownAccountCount),
+		"stale_account_count":             strconv.Itoa(event.StaleAccountCount),
+		"incompatible_unit_account_count": strconv.Itoa(event.IncompatibleUnitAccountCount),
+		"threshold_requests":              formatOptionalMetricCapacity(event.ThresholdRequests),
+		"threshold_usd":                   formatOptionalMetricAmount(event.ThresholdUSD),
+		"avg_account_cost":                averageAccountCost,
+		"avg_actual_cost":                 averageActualCost,
+		"account_requests":                accountRequests,
+		"api_key_requests":                apiKeyRequests,
+		"wallet_requests":                 walletRequests,
+		"account_remaining":               formatOptionalAmount(event.AccountRemaining),
+		"api_key_remaining":               formatOptionalAmount(event.APIKeyRemaining),
+		"wallet_remaining":                formatOptionalAmount(event.WalletRemaining),
+		"bottleneck":                      event.Bottleneck,
+		"sample_count":                    strconv.Itoa(event.SampleCount),
+		"triggered_at":                    event.CreatedAt.UTC().Format(time.RFC3339),
+		"prediction_disclaimer":           disclaimer,
+		"prediction_disclaimer_zh":        disclaimerZH,
 	}
 }
 
 func renderPoolCapacityQQMessage(event PoolCapacityAlertEvent) string {
 	if event.AlertMetric == PoolCapacityAlertMetricRemainingBalanceUSD {
-		return fmt.Sprintf("【池账户容量提醒】\n分组：%s (#%d)\n账户：%s (#%d)\nAPI Key：%s (#%d)\n剩余可用金额：$%s（阈值 $%s）\n账户/Key/用户余额：%s / %s / %s USD\n瓶颈：%s\n时间：%s\n仅使用权威 USD 余额与扣费后本地 USD 限额；未知或单位不兼容的数据不会按 0 处理。",
+		return fmt.Sprintf("【分组预测余额提醒】\n分组：%s (#%d)\n分组预测剩余余额：$%s（阈值 $%s）\n池模式权威余额小计：$%s\n普通账号估算余额小计：$%s\n账号统计：参与 %d（池 %d / 普通 %d），跳过 %d，未知 %d\n未知明细：过期快照 %d，单位不兼容 %d\n时间：%s\n总额=池模式权威 USD 余额小计+普通账号估算 USD 余额小计。未知、过期或单位不兼容的数据不会按 0 处理；聚合不完整时不会改变告警状态。",
 			event.GroupName, event.GroupID,
-			event.AccountName, event.AccountID,
-			event.APIKeyName, event.APIKeyID,
 			formatOptionalMetricAmount(event.RemainingBalanceUSD), formatOptionalMetricAmount(event.ThresholdUSD),
-			formatOptionalAmount(event.AccountRemaining), formatOptionalAmount(event.APIKeyRemaining), formatOptionalAmount(event.WalletRemaining),
-			event.Bottleneck, event.CreatedAt.UTC().Format(time.RFC3339),
+			formatOptionalMetricAmount(event.PoolAuthoritativeBalanceUSD), formatOptionalMetricAmount(event.NormalEstimatedBalanceUSD),
+			event.PoolAccountCount+event.NormalAccountCount, event.PoolAccountCount, event.NormalAccountCount,
+			event.SkippedAccountCount, event.UnknownAccountCount, event.StaleAccountCount, event.IncompatibleUnitAccountCount,
+			event.CreatedAt.UTC().Format(time.RFC3339),
 		)
 	}
 	return fmt.Sprintf("【池账户容量提醒】\n分组：%s (#%d)\n账户：%s (#%d)\nAPI Key：%s (#%d)\n预计剩余：%s 次（阈值 %s）\n账户/Key/用户容量：%s / %s / %s\n最近 %d 次均值：账户 $%.6f，用户 $%.6f\n瓶颈：%s\n时间：%s\n该结果基于最近 50 次成功计费请求的历史均值估算，实际容量可能变化。",

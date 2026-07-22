@@ -21,14 +21,16 @@ type PoolCapacityAlertState struct {
 	GroupID int64 `json:"group_id,omitempty"`
 	// GroupGeneration holds the value of the "group_generation" field.
 	GroupGeneration int64 `json:"group_generation,omitempty"`
+	// ScopeType holds the value of the "scope_type" field.
+	ScopeType string `json:"scope_type,omitempty"`
 	// AccountID holds the value of the "account_id" field.
-	AccountID int64 `json:"account_id,omitempty"`
+	AccountID *int64 `json:"account_id,omitempty"`
 	// APIKeyID holds the value of the "api_key_id" field.
-	APIKeyID int64 `json:"api_key_id,omitempty"`
+	APIKeyID *int64 `json:"api_key_id,omitempty"`
 	// UserID holds the value of the "user_id" field.
-	UserID int64 `json:"user_id,omitempty"`
+	UserID *int64 `json:"user_id,omitempty"`
 	// BillingType holds the value of the "billing_type" field.
-	BillingType int8 `json:"billing_type,omitempty"`
+	BillingType *int8 `json:"billing_type,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
 	// Episode holds the value of the "episode" field.
@@ -39,6 +41,22 @@ type PoolCapacityAlertState struct {
 	PredictedRequests *int64 `json:"predicted_requests,omitempty"`
 	// RemainingBalanceUsd holds the value of the "remaining_balance_usd" field.
 	RemainingBalanceUsd *float64 `json:"remaining_balance_usd,omitempty"`
+	// PoolAuthoritativeBalanceUsd holds the value of the "pool_authoritative_balance_usd" field.
+	PoolAuthoritativeBalanceUsd *float64 `json:"pool_authoritative_balance_usd,omitempty"`
+	// NormalEstimatedBalanceUsd holds the value of the "normal_estimated_balance_usd" field.
+	NormalEstimatedBalanceUsd *float64 `json:"normal_estimated_balance_usd,omitempty"`
+	// PoolAccountCount holds the value of the "pool_account_count" field.
+	PoolAccountCount int `json:"pool_account_count,omitempty"`
+	// NormalAccountCount holds the value of the "normal_account_count" field.
+	NormalAccountCount int `json:"normal_account_count,omitempty"`
+	// SkippedAccountCount holds the value of the "skipped_account_count" field.
+	SkippedAccountCount int `json:"skipped_account_count,omitempty"`
+	// UnknownAccountCount holds the value of the "unknown_account_count" field.
+	UnknownAccountCount int `json:"unknown_account_count,omitempty"`
+	// StaleAccountCount holds the value of the "stale_account_count" field.
+	StaleAccountCount int `json:"stale_account_count,omitempty"`
+	// IncompatibleUnitAccountCount holds the value of the "incompatible_unit_account_count" field.
+	IncompatibleUnitAccountCount int `json:"incompatible_unit_account_count,omitempty"`
 	// ThresholdRequests holds the value of the "threshold_requests" field.
 	ThresholdRequests int64 `json:"threshold_requests,omitempty"`
 	// ThresholdUsd holds the value of the "threshold_usd" field.
@@ -73,11 +91,11 @@ func (*PoolCapacityAlertState) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case poolcapacityalertstate.FieldRemainingBalanceUsd, poolcapacityalertstate.FieldThresholdUsd, poolcapacityalertstate.FieldAvgAccountCost, poolcapacityalertstate.FieldAvgActualCost:
+		case poolcapacityalertstate.FieldRemainingBalanceUsd, poolcapacityalertstate.FieldPoolAuthoritativeBalanceUsd, poolcapacityalertstate.FieldNormalEstimatedBalanceUsd, poolcapacityalertstate.FieldThresholdUsd, poolcapacityalertstate.FieldAvgAccountCost, poolcapacityalertstate.FieldAvgActualCost:
 			values[i] = new(sql.NullFloat64)
-		case poolcapacityalertstate.FieldID, poolcapacityalertstate.FieldGroupID, poolcapacityalertstate.FieldGroupGeneration, poolcapacityalertstate.FieldAccountID, poolcapacityalertstate.FieldAPIKeyID, poolcapacityalertstate.FieldUserID, poolcapacityalertstate.FieldBillingType, poolcapacityalertstate.FieldEpisode, poolcapacityalertstate.FieldPredictedRequests, poolcapacityalertstate.FieldThresholdRequests, poolcapacityalertstate.FieldAccountRequests, poolcapacityalertstate.FieldAPIKeyRequests, poolcapacityalertstate.FieldWalletRequests, poolcapacityalertstate.FieldSampleCount:
+		case poolcapacityalertstate.FieldID, poolcapacityalertstate.FieldGroupID, poolcapacityalertstate.FieldGroupGeneration, poolcapacityalertstate.FieldAccountID, poolcapacityalertstate.FieldAPIKeyID, poolcapacityalertstate.FieldUserID, poolcapacityalertstate.FieldBillingType, poolcapacityalertstate.FieldEpisode, poolcapacityalertstate.FieldPredictedRequests, poolcapacityalertstate.FieldPoolAccountCount, poolcapacityalertstate.FieldNormalAccountCount, poolcapacityalertstate.FieldSkippedAccountCount, poolcapacityalertstate.FieldUnknownAccountCount, poolcapacityalertstate.FieldStaleAccountCount, poolcapacityalertstate.FieldIncompatibleUnitAccountCount, poolcapacityalertstate.FieldThresholdRequests, poolcapacityalertstate.FieldAccountRequests, poolcapacityalertstate.FieldAPIKeyRequests, poolcapacityalertstate.FieldWalletRequests, poolcapacityalertstate.FieldSampleCount:
 			values[i] = new(sql.NullInt64)
-		case poolcapacityalertstate.FieldStatus, poolcapacityalertstate.FieldAlertMetric, poolcapacityalertstate.FieldBottleneck:
+		case poolcapacityalertstate.FieldScopeType, poolcapacityalertstate.FieldStatus, poolcapacityalertstate.FieldAlertMetric, poolcapacityalertstate.FieldBottleneck:
 			values[i] = new(sql.NullString)
 		case poolcapacityalertstate.FieldLastEvaluatedAt, poolcapacityalertstate.FieldLastAlertedAt, poolcapacityalertstate.FieldCreatedAt, poolcapacityalertstate.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -114,29 +132,39 @@ func (_m *PoolCapacityAlertState) assignValues(columns []string, values []any) e
 			} else if value.Valid {
 				_m.GroupGeneration = value.Int64
 			}
+		case poolcapacityalertstate.FieldScopeType:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field scope_type", values[i])
+			} else if value.Valid {
+				_m.ScopeType = value.String
+			}
 		case poolcapacityalertstate.FieldAccountID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field account_id", values[i])
 			} else if value.Valid {
-				_m.AccountID = value.Int64
+				_m.AccountID = new(int64)
+				*_m.AccountID = value.Int64
 			}
 		case poolcapacityalertstate.FieldAPIKeyID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field api_key_id", values[i])
 			} else if value.Valid {
-				_m.APIKeyID = value.Int64
+				_m.APIKeyID = new(int64)
+				*_m.APIKeyID = value.Int64
 			}
 		case poolcapacityalertstate.FieldUserID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field user_id", values[i])
 			} else if value.Valid {
-				_m.UserID = value.Int64
+				_m.UserID = new(int64)
+				*_m.UserID = value.Int64
 			}
 		case poolcapacityalertstate.FieldBillingType:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field billing_type", values[i])
 			} else if value.Valid {
-				_m.BillingType = int8(value.Int64)
+				_m.BillingType = new(int8)
+				*_m.BillingType = int8(value.Int64)
 			}
 		case poolcapacityalertstate.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -169,6 +197,56 @@ func (_m *PoolCapacityAlertState) assignValues(columns []string, values []any) e
 			} else if value.Valid {
 				_m.RemainingBalanceUsd = new(float64)
 				*_m.RemainingBalanceUsd = value.Float64
+			}
+		case poolcapacityalertstate.FieldPoolAuthoritativeBalanceUsd:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field pool_authoritative_balance_usd", values[i])
+			} else if value.Valid {
+				_m.PoolAuthoritativeBalanceUsd = new(float64)
+				*_m.PoolAuthoritativeBalanceUsd = value.Float64
+			}
+		case poolcapacityalertstate.FieldNormalEstimatedBalanceUsd:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field normal_estimated_balance_usd", values[i])
+			} else if value.Valid {
+				_m.NormalEstimatedBalanceUsd = new(float64)
+				*_m.NormalEstimatedBalanceUsd = value.Float64
+			}
+		case poolcapacityalertstate.FieldPoolAccountCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field pool_account_count", values[i])
+			} else if value.Valid {
+				_m.PoolAccountCount = int(value.Int64)
+			}
+		case poolcapacityalertstate.FieldNormalAccountCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field normal_account_count", values[i])
+			} else if value.Valid {
+				_m.NormalAccountCount = int(value.Int64)
+			}
+		case poolcapacityalertstate.FieldSkippedAccountCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field skipped_account_count", values[i])
+			} else if value.Valid {
+				_m.SkippedAccountCount = int(value.Int64)
+			}
+		case poolcapacityalertstate.FieldUnknownAccountCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field unknown_account_count", values[i])
+			} else if value.Valid {
+				_m.UnknownAccountCount = int(value.Int64)
+			}
+		case poolcapacityalertstate.FieldStaleAccountCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field stale_account_count", values[i])
+			} else if value.Valid {
+				_m.StaleAccountCount = int(value.Int64)
+			}
+		case poolcapacityalertstate.FieldIncompatibleUnitAccountCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field incompatible_unit_account_count", values[i])
+			} else if value.Valid {
+				_m.IncompatibleUnitAccountCount = int(value.Int64)
 			}
 		case poolcapacityalertstate.FieldThresholdRequests:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -295,17 +373,28 @@ func (_m *PoolCapacityAlertState) String() string {
 	builder.WriteString("group_generation=")
 	builder.WriteString(fmt.Sprintf("%v", _m.GroupGeneration))
 	builder.WriteString(", ")
-	builder.WriteString("account_id=")
-	builder.WriteString(fmt.Sprintf("%v", _m.AccountID))
+	builder.WriteString("scope_type=")
+	builder.WriteString(_m.ScopeType)
 	builder.WriteString(", ")
-	builder.WriteString("api_key_id=")
-	builder.WriteString(fmt.Sprintf("%v", _m.APIKeyID))
+	if v := _m.AccountID; v != nil {
+		builder.WriteString("account_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
-	builder.WriteString("user_id=")
-	builder.WriteString(fmt.Sprintf("%v", _m.UserID))
+	if v := _m.APIKeyID; v != nil {
+		builder.WriteString("api_key_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
-	builder.WriteString("billing_type=")
-	builder.WriteString(fmt.Sprintf("%v", _m.BillingType))
+	if v := _m.UserID; v != nil {
+		builder.WriteString("user_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.BillingType; v != nil {
+		builder.WriteString("billing_type=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
@@ -325,6 +414,34 @@ func (_m *PoolCapacityAlertState) String() string {
 		builder.WriteString("remaining_balance_usd=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
+	if v := _m.PoolAuthoritativeBalanceUsd; v != nil {
+		builder.WriteString("pool_authoritative_balance_usd=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.NormalEstimatedBalanceUsd; v != nil {
+		builder.WriteString("normal_estimated_balance_usd=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("pool_account_count=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PoolAccountCount))
+	builder.WriteString(", ")
+	builder.WriteString("normal_account_count=")
+	builder.WriteString(fmt.Sprintf("%v", _m.NormalAccountCount))
+	builder.WriteString(", ")
+	builder.WriteString("skipped_account_count=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SkippedAccountCount))
+	builder.WriteString(", ")
+	builder.WriteString("unknown_account_count=")
+	builder.WriteString(fmt.Sprintf("%v", _m.UnknownAccountCount))
+	builder.WriteString(", ")
+	builder.WriteString("stale_account_count=")
+	builder.WriteString(fmt.Sprintf("%v", _m.StaleAccountCount))
+	builder.WriteString(", ")
+	builder.WriteString("incompatible_unit_account_count=")
+	builder.WriteString(fmt.Sprintf("%v", _m.IncompatibleUnitAccountCount))
 	builder.WriteString(", ")
 	builder.WriteString("threshold_requests=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ThresholdRequests))
