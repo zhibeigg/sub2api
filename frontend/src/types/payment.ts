@@ -102,8 +102,16 @@ export interface AdminOrderFilters {
   time_field?: AdminOrderTimeField
 }
 
+export interface AdminOrderPaidAmount {
+  currency: string
+  order_count: number
+  amount: string
+}
+
 export interface AdminOrderSummaryTotals {
   filtered_order_count: number
+  paid_order_count: number
+  paid_amounts: AdminOrderPaidAmount[]
   successful_order_count: number
   recharged_user_count: number
   gross_recharge_amount: string

@@ -353,14 +353,15 @@ User selects amount and payment method
 
 The admin **Order Management** page attributes orders to the promo code bound when the user registered; it does not use payment-time promotions. New orders snapshot the registration promo ID, code, and attribution state. Historical records that cannot be classified reliably are shown as “legacy attribution unknown” instead of being counted as organic registrations. Promo codes already bound to users or present in usage records can be disabled but not deleted.
 
-Filters include status, order type, payment method, keyword, registration promo code, and date range. A date range can use **order creation time** (default) or **payment time**, and the backend converts the browser-provided IANA timezone into an inclusive calendar-date, half-open timestamp range.
+Filters include status, order type, payment method, keyword, registration promo code, and date range. A date range can use **payment time** or **order creation time**, and the backend converts the browser-provided IANA timezone into an inclusive calendar-date, half-open timestamp range. The admin order page defaults to payment time so orders created earlier but paid in the selected period are not omitted. For compatibility, the reporting API still defaults to creation time when `time_field` is omitted.
 
-Recharge totals use the system balance/USD crediting basis:
+The page exposes separate payment-reconciliation and balance-crediting scopes:
 
-- Gross recharge: `amount` from completed balance-recharge orders;
-- Refunded amount: only finalized partial or full refunds;
-- Net recharge: gross recharge minus finalized refunds;
-- Pending, failed, cancelled, unfulfilled, and subscription orders do not contribute to recharge totals.
+- Gross payments collected: all orders with `paid_at`, summed from `pay_amount` by payment currency. This includes balance top-ups and subscriptions, and later refunds do not reverse the gross amount; combine it with the payment-method filter to reconcile gateway statements;
+- Gross balance credited: `amount` from completed balance-recharge orders;
+- Balance refunded: only finalized partial or full refunds;
+- Net balance credited: gross balance credited minus finalized refunds;
+- Unpaid orders do not contribute to gross payments collected. Failed, cancelled, unfulfilled, and subscription orders do not contribute to balance-credit totals.
 
 Admins can export all rows matching the active filters, not only the current page:
 

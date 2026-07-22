@@ -2,14 +2,17 @@
   <AppLayout>
     <div class="space-y-4 sm:space-y-6">
       <section class="space-y-3">
-        <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div class="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <div v-for="card in summaryCards" :key="card.key" class="card min-w-0 p-4">
             <p class="truncate text-xs font-medium text-gray-500 dark:text-gray-400">{{ card.label }}</p>
-            <div class="mt-2 flex items-end justify-between gap-2">
-              <p class="truncate text-xl font-semibold tracking-tight text-gray-900 dark:text-white sm:text-2xl">
-                <span v-if="summaryLoading" class="inline-block h-7 w-24 animate-pulse rounded bg-gray-200 dark:bg-dark-700"></span>
-                <template v-else>{{ card.value }}</template>
-              </p>
+            <div class="mt-2 flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <p class="break-words text-xl font-semibold tracking-tight text-gray-900 dark:text-white sm:text-2xl">
+                  <span v-if="summaryLoading" class="inline-block h-7 w-24 animate-pulse rounded bg-gray-200 dark:bg-dark-700"></span>
+                  <template v-else>{{ card.value }}</template>
+                </p>
+                <p v-if="!summaryLoading && card.hint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ card.hint }}</p>
+              </div>
               <Icon :name="card.icon" size="md" class="shrink-0 text-gray-400 dark:text-gray-500" />
             </div>
           </div>
@@ -210,6 +213,7 @@ import { formatOrderDateTime } from '@/components/payment/orderUtils'
 import type {
   AdminOrderAttributionGroup,
   AdminOrderFilters,
+  AdminOrderPaidAmount,
   AdminOrderPromoCodeOption,
   AdminOrderSummary,
   PaymentOrder,
@@ -226,7 +230,7 @@ import Icon from '@/components/icons/Icon.vue'
 import AdminRefundDialog from '@/components/admin/payment/AdminRefundDialog.vue'
 import OrderStatusBadge from '@/components/payment/OrderStatusBadge.vue'
 import OrderTable from '@/components/payment/OrderTable.vue'
-import { currencySymbol } from '@/components/payment/currency'
+import { currencySymbol, formatPaymentAmount } from '@/components/payment/currency'
 
 interface AuditLog {
   id: number
@@ -258,7 +262,7 @@ const orderFilters = reactive({
   order_type: '',
   start_date: '',
   end_date: '',
-  time_field: 'created_at' as 'created_at' | 'paid_at',
+  time_field: 'paid_at' as 'created_at' | 'paid_at',
 })
 const orderPagination = reactive({ page: 1, page_size: 20, total: 0 })
 const groupPagination = reactive({ page: 1, page_size: 20, total: 0 })
@@ -284,9 +288,16 @@ const viewOptions = computed<Array<{ value: OrdersView; label: string; icon: 'me
   { value: 'attribution', label: t('payment.admin.promoAttributionView'), icon: 'chart' },
 ])
 
-const summaryCards = computed<Array<{ key: string; label: string; value: string; icon: 'dollar' | 'creditCard' | 'refresh' | 'check' }>>(() => {
+const summaryCards = computed<Array<{ key: string; label: string; value: string; hint?: string; icon: 'dollar' | 'creditCard' | 'refresh' | 'check' }>>(() => {
   const totals = summary.value?.totals
   return [
+    {
+      key: 'paid',
+      label: t('payment.admin.paidAmount'),
+      value: formatPaidAmounts(totals?.paid_amounts),
+      hint: t('payment.admin.paidOrderCount', { count: totals?.paid_order_count || 0 }),
+      icon: 'creditCard',
+    },
     { key: 'net', label: t('payment.admin.netRecharge'), value: formatUsd(totals?.net_recharge_amount), icon: 'dollar' },
     { key: 'gross', label: t('payment.admin.grossRecharge'), value: formatUsd(totals?.gross_recharge_amount), icon: 'creditCard' },
     { key: 'refund', label: t('payment.admin.refundedTotal'), value: formatUsd(totals?.refunded_amount), icon: 'refresh' },
@@ -323,8 +334,8 @@ const orderTypeFilterOptions = computed(() => [
 ])
 
 const timeFieldOptions = computed(() => [
-  { value: 'created_at', label: t('payment.admin.filterByCreatedAt') },
   { value: 'paid_at', label: t('payment.admin.filterByPaidAt') },
+  { value: 'created_at', label: t('payment.admin.filterByCreatedAt') },
 ])
 
 const promoFilterOptions = computed(() => {
@@ -462,7 +473,7 @@ function resetFilters() {
   orderFilters.order_type = ''
   orderFilters.start_date = ''
   orderFilters.end_date = ''
-  orderFilters.time_field = 'created_at'
+  orderFilters.time_field = 'paid_at'
   void refreshFilteredData(true)
 }
 
@@ -518,6 +529,15 @@ async function handleExport(mode: 'orders' | 'attribution') {
   } finally {
     exporting.value = false
   }
+}
+
+function formatPaidAmounts(amounts: AdminOrderPaidAmount[] | undefined): string {
+  if (!amounts?.length) return formatPaymentAmount(0, 'CNY')
+  const showCurrencyCode = amounts.length > 1
+  return amounts.map((item) => {
+    const formatted = formatPaymentAmount(Number(item.amount || 0), item.currency)
+    return showCurrencyCode ? `${formatted} ${item.currency}` : formatted
+  }).join(' · ')
 }
 
 function formatUsd(value: string | number | undefined): string {

@@ -291,7 +291,7 @@ V2 请求结构示例（仅占位符，不是可用密钥）：
 | `timezone` | IANA 时区，例如 `Asia/Shanghai` |
 | `time_field` | `created_at`（默认）或 `paid_at` |
 
-`summary` 额外支持 `group_page`、`group_page_size`。其金额字段使用固定两位小数字符串：`gross_recharge_amount`、`refunded_amount`、`net_recharge_amount`。充值仅统计已完成到账的余额充值订单；退款只在部分/全额退款最终完成后扣减。
+`summary` 额外支持 `group_page`、`group_page_size`。`totals.paid_order_count` 统计存在 `paid_at` 的订单数，`totals.paid_amounts` 按支付币种返回 `{ currency, order_count, amount }`，金额来自 `pay_amount`，包含余额充值和订阅订单，后续退款不回冲，便于与支付渠道账单核对。余额金额字段使用固定两位小数字符串：`gross_recharge_amount`、`refunded_amount`、`net_recharge_amount`；余额到账仅统计已完成到账的余额充值订单，退款只在部分/全额退款最终完成后扣减。
 
 订单明细新增稳定归因字段：
 
@@ -694,7 +694,7 @@ Common query parameters:
 | `timezone` | IANA timezone such as `Asia/Shanghai` |
 | `time_field` | `created_at` (default) or `paid_at` |
 
-`summary` additionally accepts `group_page` and `group_page_size`. Monetary totals are fixed-two-decimal strings: `gross_recharge_amount`, `refunded_amount`, and `net_recharge_amount`. Recharge totals include only fulfilled balance-recharge orders, and refunds are deducted only after a partial or full refund is finalized.
+`summary` additionally accepts `group_page` and `group_page_size`. `totals.paid_order_count` counts orders with `paid_at`, while `totals.paid_amounts` returns `{ currency, order_count, amount }` grouped by payment currency and summed from `pay_amount`. It includes balance top-ups and subscriptions and does not reverse later refunds, which makes it suitable for reconciling gateway statements. Balance totals remain fixed-two-decimal strings in `gross_recharge_amount`, `refunded_amount`, and `net_recharge_amount`; they include only fulfilled balance top-ups, and refunds are deducted only after a partial or full refund is finalized.
 
 Order detail responses include stable attribution fields:
 

@@ -54,3 +54,34 @@ func TestAdminOrderSQLWhereFiltersNaturalAndLegacyAttribution(t *testing.T) {
 		}
 	}
 }
+
+func TestAdminOrderPaidAmountsSQLUsesPaymentTimeAndGatewayAmount(t *testing.T) {
+	start := time.Date(2026, 7, 22, 0, 0, 0, 0, time.UTC)
+	end := start.Add(24 * time.Hour)
+	query, args := adminOrderPaidAmountsSQL(OrderListParams{
+		PaymentType: "wxpay",
+		StartTime:   &start,
+		EndTime:     &end,
+		TimeField:   AdminOrderTimeFieldPaidAt,
+	})
+
+	for _, fragment := range []string{
+		"payment_type = $1",
+		"paid_at >= $2",
+		"paid_at < $3",
+		"paid_at IS NOT NULL",
+		"SUM(pay_amount)",
+		"provider_snapshot->>'currency'",
+		"ELSE 'CNY'",
+	} {
+		if !strings.Contains(query, fragment) {
+			t.Fatalf("expected paid amount query to contain %q: %s", fragment, query)
+		}
+	}
+	if strings.Contains(query, "order_type = 'balance'") {
+		t.Fatalf("paid amount query must include subscription receipts: %s", query)
+	}
+	if len(args) != 3 {
+		t.Fatalf("expected 3 arguments, got %d", len(args))
+	}
+}

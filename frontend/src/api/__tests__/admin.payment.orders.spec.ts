@@ -76,6 +76,8 @@ describe('admin payment order reporting API', () => {
     const summary: AdminOrderSummary = {
       totals: {
         filtered_order_count: 2,
+        paid_order_count: 2,
+        paid_amounts: [{ currency: 'CNY', order_count: 2, amount: '20.40' }],
         successful_order_count: 1,
         recharged_user_count: 1,
         gross_recharge_amount: '10.20',
@@ -89,5 +91,6 @@ describe('admin payment order reporting API', () => {
     }
 
     expect(summary.totals.net_recharge_amount).toBe('9.10')
+    expect(summary.totals.paid_amounts).toEqual([{ currency: 'CNY', order_count: 2, amount: '20.40' }])
   })
 })

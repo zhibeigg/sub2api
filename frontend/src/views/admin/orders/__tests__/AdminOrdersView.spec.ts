@@ -59,6 +59,8 @@ const order = {
 const summary = {
   totals: {
     filtered_order_count: 1,
+    paid_order_count: 1,
+    paid_amounts: [{ currency: 'CNY', order_count: 1, amount: '12.34' }],
     successful_order_count: 0,
     recharged_user_count: 0,
     gross_recharge_amount: '0',
@@ -139,16 +141,23 @@ beforeEach(() => {
 })
 
 describe('AdminOrdersView reporting interactions', () => {
-  it('loads orders, summary, and promo options on mount', async () => {
-    mountView()
+  it('loads orders and reconciliation totals using payment time by default', async () => {
+    const wrapper = mountView()
     await flushPromises()
 
-    expect(adminPaymentAPI.getOrders).toHaveBeenCalledTimes(1)
-    expect(adminPaymentAPI.getOrderSummary).toHaveBeenCalledTimes(1)
+    expect(adminPaymentAPI.getOrders).toHaveBeenCalledWith(
+      expect.objectContaining({ time_field: 'paid_at' }),
+      { signal: expect.any(AbortSignal) },
+    )
+    expect(adminPaymentAPI.getOrderSummary).toHaveBeenCalledWith(
+      expect.objectContaining({ time_field: 'paid_at' }),
+      { signal: expect.any(AbortSignal) },
+    )
     expect(adminPaymentAPI.getOrderPromoCodeOptions).toHaveBeenCalledWith(
       { search: undefined, limit: 100 },
       { signal: expect.any(AbortSignal) },
     )
+    expect(wrapper.text()).toContain('12.34')
   })
 
   it('refreshes only the order list when order pagination changes', async () => {
@@ -178,11 +187,11 @@ describe('AdminOrdersView reporting interactions', () => {
     await flushPromises()
 
     expect(adminPaymentAPI.getOrders).toHaveBeenCalledWith(
-      expect.objectContaining({ page: 1, start_date: '2026-01-01', end_date: '2026-01-31' }),
+      expect.objectContaining({ page: 1, start_date: '2026-01-01', end_date: '2026-01-31', time_field: 'paid_at' }),
       { signal: expect.any(AbortSignal) },
     )
     expect(adminPaymentAPI.getOrderSummary).toHaveBeenCalledWith(
-      expect.objectContaining({ group_page: 1, start_date: '2026-01-01', end_date: '2026-01-31' }),
+      expect.objectContaining({ group_page: 1, start_date: '2026-01-01', end_date: '2026-01-31', time_field: 'paid_at' }),
       { signal: expect.any(AbortSignal) },
     )
   })

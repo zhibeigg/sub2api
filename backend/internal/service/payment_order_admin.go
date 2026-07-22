@@ -16,13 +16,21 @@ const (
 	AdminOrderTimeFieldPaidAt    = "paid_at"
 )
 
+type AdminOrderPaidAmount struct {
+	Currency   string `json:"currency"`
+	OrderCount int64  `json:"order_count"`
+	Amount     string `json:"amount"`
+}
+
 type AdminOrderAmountSummary struct {
-	FilteredOrderCount   int64  `json:"filtered_order_count"`
-	SuccessfulOrderCount int64  `json:"successful_order_count"`
-	RechargedUserCount   int64  `json:"recharged_user_count"`
-	GrossRechargeAmount  string `json:"gross_recharge_amount"`
-	RefundedAmount       string `json:"refunded_amount"`
-	NetRechargeAmount    string `json:"net_recharge_amount"`
+	FilteredOrderCount   int64                  `json:"filtered_order_count"`
+	PaidOrderCount       int64                  `json:"paid_order_count"`
+	PaidAmounts          []AdminOrderPaidAmount `json:"paid_amounts"`
+	SuccessfulOrderCount int64                  `json:"successful_order_count"`
+	RechargedUserCount   int64                  `json:"recharged_user_count"`
+	GrossRechargeAmount  string                 `json:"gross_recharge_amount"`
+	RefundedAmount       string                 `json:"refunded_amount"`
+	NetRechargeAmount    string                 `json:"net_recharge_amount"`
 }
 
 type AdminOrderAttributionGroup struct {
@@ -200,6 +208,13 @@ FROM payment_orders` + where
 	result.Totals.RefundedAmount = refunded.StringFixed(2)
 	result.Totals.NetRechargeAmount = nonNegativeAdminOrderAmount(gross.Sub(refunded)).StringFixed(2)
 
+	paidAmounts, paidOrderCount, err := s.listAdminOrderPaidAmounts(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	result.Totals.PaidOrderCount = paidOrderCount
+	result.Totals.PaidAmounts = paidAmounts
+
 	countSQL := `SELECT COUNT(*)::bigint FROM (
 SELECT 1
 FROM payment_orders` + where + `
@@ -286,6 +301,53 @@ LIMIT ` + limitPlaceholder + ` OFFSET ` + offsetPlaceholder
 		return nil, fmt.Errorf("iterate admin order attribution groups: %w", err)
 	}
 	return result, nil
+}
+
+func (s *PaymentService) listAdminOrderPaidAmounts(ctx context.Context, p OrderListParams) ([]AdminOrderPaidAmount, int64, error) {
+	query, args := adminOrderPaidAmountsSQL(p)
+	rows, err := s.entClient.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("query admin paid order amounts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	amounts := []AdminOrderPaidAmount{}
+	var totalCount int64
+	for rows.Next() {
+		var item AdminOrderPaidAmount
+		var amount decimal.Decimal
+		if err := rows.Scan(&item.Currency, &item.OrderCount, &amount); err != nil {
+			return nil, 0, fmt.Errorf("scan admin paid order amount: %w", err)
+		}
+		item.Amount = amount.StringFixed(2)
+		totalCount += item.OrderCount
+		amounts = append(amounts, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate admin paid order amounts: %w", err)
+	}
+	return amounts, totalCount, nil
+}
+
+func adminOrderPaidAmountsSQL(p OrderListParams) (string, []any) {
+	where, args := adminOrderSQLWhere(p)
+	if where == "" {
+		where = " WHERE paid_at IS NOT NULL"
+	} else {
+		where += " AND paid_at IS NOT NULL"
+	}
+	query := `
+SELECT CASE
+           WHEN UPPER(COALESCE(provider_snapshot->>'currency', '')) ~ '^[A-Z]{3}$'
+               THEN UPPER(provider_snapshot->>'currency')
+           ELSE 'CNY'
+       END AS currency,
+       COUNT(*)::bigint,
+       COALESCE(SUM(pay_amount), 0)
+FROM payment_orders` + where + `
+GROUP BY 1
+ORDER BY 1`
+	return query, args
 }
 
 func (s *PaymentService) ListAdminOrderPromoCodeOptions(ctx context.Context, search string, limit int) ([]AdminOrderPromoCodeOption, error) {
