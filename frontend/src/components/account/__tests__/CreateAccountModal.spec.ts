@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   createAccountMock,
+  validateCredentialsMock,
   probeUpstreamBillingMock,
   importCodexSessionMock,
   createOpenAICodexPATMock,
 } = vi.hoisted(() => ({
   createAccountMock: vi.fn(),
+  validateCredentialsMock: vi.fn(),
   probeUpstreamBillingMock: vi.fn(),
   importCodexSessionMock: vi.fn(),
   createOpenAICodexPATMock: vi.fn(),
@@ -30,6 +32,7 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
       create: createAccountMock,
+      validateCredentials: validateCredentialsMock,
       probeUpstreamBilling: probeUpstreamBillingMock,
       checkMixedChannelRisk: vi.fn().mockResolvedValue({ has_risk: false }),
       importCodexSession: importCodexSessionMock,
@@ -148,6 +151,12 @@ async function openCodexImportStep(toggleClicks = 0) {
 describe('CreateAccountModal OpenCode Go', () => {
   beforeEach(() => {
     createAccountMock.mockReset().mockResolvedValue({})
+    validateCredentialsMock.mockReset().mockResolvedValue({
+      success: true,
+      platform: 'opencode',
+      message: 'OpenCode Go inference access verified',
+      summary: 'Authenticated inference request succeeded with kimi-k3'
+    })
   })
 
   it('creates an apikey account with quota credentials, official protocols and mixed scheduling', async () => {
@@ -161,7 +170,21 @@ describe('CreateAccountModal OpenCode Go', () => {
     await wrapper.get('[data-testid="mixed-scheduling-checkbox"]').setValue(true)
     await wrapper.get('form#create-account-form').trigger('submit.prevent')
     await flushPromises()
+    expect(createAccountMock).not.toHaveBeenCalled()
 
+    await wrapper.get('form#credential-validation-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(validateCredentialsMock).toHaveBeenCalledTimes(1)
+    expect(validateCredentialsMock.mock.calls[0]?.[0]).toMatchObject({
+      platform: 'opencode',
+      type: 'apikey',
+      proxy_id: null,
+      credentials: {
+        api_key: 'open-code-key',
+        base_url: 'https://opencode.ai/zen/go'
+      }
+    })
     expect(createAccountMock).toHaveBeenCalledTimes(1)
     const payload = createAccountMock.mock.calls[0]?.[0]
     expect(payload).toMatchObject({
@@ -184,6 +207,23 @@ describe('CreateAccountModal OpenCode Go', () => {
       'minimax-m3': 'messages',
       'qwen3.7-plus': 'messages'
     })
+  })
+
+  it('does not create the account when the inference preflight fails', async () => {
+    validateCredentialsMock.mockRejectedValueOnce(new Error('inference access rejected'))
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenCode Go')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('Blocked OpenCode account')
+    const passwords = wrapper.findAll('form#create-account-form input[type="password"]')
+    await passwords[0].setValue('blocked-open-code-key')
+
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await wrapper.get('form#credential-validation-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(validateCredentialsMock).toHaveBeenCalledTimes(1)
+    expect(createAccountMock).not.toHaveBeenCalled()
+    expect(wrapper.find('form#credential-validation-form').exists()).toBe(true)
   })
 })
 

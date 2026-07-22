@@ -4,6 +4,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 
 const {
   updateAccountMock,
+  validateCredentialsMock,
   checkMixedChannelRiskMock,
   getUsageMock,
   startCursorDashboardAuthMock,
@@ -11,6 +12,7 @@ const {
   authIsSimpleMode
 } = vi.hoisted(() => ({
   updateAccountMock: vi.fn(),
+  validateCredentialsMock: vi.fn(),
   checkMixedChannelRiskMock: vi.fn(),
   getUsageMock: vi.fn(),
   startCursorDashboardAuthMock: vi.fn(),
@@ -38,6 +40,7 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
       update: updateAccountMock,
+      validateCredentials: validateCredentialsMock,
       checkMixedChannelRisk: checkMixedChannelRiskMock,
       getUsage: getUsageMock
     },
@@ -372,6 +375,11 @@ function mountModal(account = buildAccount()) {
 describe('EditAccountModal', () => {
   beforeEach(() => {
     authIsSimpleMode.value = true
+    validateCredentialsMock.mockReset().mockResolvedValue({
+      success: true,
+      platform: 'opencode',
+      message: 'OpenCode Go inference access verified'
+    })
     getUsageMock.mockReset()
     startCursorDashboardAuthMock.mockReset()
     pollCursorDashboardAuthMock.mockReset()
@@ -950,6 +958,15 @@ describe('EditAccountModal', () => {
     await wrapper.get('form#edit-account-form').trigger('submit.prevent')
     await flushPromises()
 
+    expect(validateCredentialsMock).toHaveBeenCalledTimes(1)
+    expect(validateCredentialsMock.mock.calls[0]?.[0]).toMatchObject({
+      platform: 'opencode',
+      type: 'apikey',
+      credentials: {
+        api_key: 'new-open-code-key',
+        base_url: 'https://opencode.ai/zen/go'
+      }
+    })
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     const payload = updateAccountMock.mock.calls[0]?.[1]
     expect(payload.credentials).toMatchObject({
@@ -963,6 +980,24 @@ describe('EditAccountModal', () => {
     expect(payload.clear_credentials).toEqual(['quota_cookie'])
     expect(payload.extra).toEqual({ mixed_scheduling: true })
     confirmSpy.mockRestore()
+  })
+
+  it('keeps the existing OpenCode key when replacement preflight fails', async () => {
+    const account = buildOpenCodeAccount()
+    validateCredentialsMock.mockRejectedValueOnce(new Error('inference access rejected'))
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+
+    const wrapper = mountModal(account)
+    const section = wrapper.get('[data-testid="opencode-edit-sensitive-credentials"]')
+    await section.findAll('select')[0].setValue('replace')
+    await wrapper.get('[data-testid="opencode-api-key-input"]').setValue('blocked-open-code-key')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(validateCredentialsMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="opencode-api-key-input"]').element).toHaveProperty('value', 'blocked-open-code-key')
   })
 
   it('keeps the existing Cursor API Key by default', async () => {

@@ -161,6 +161,118 @@ func TestOpenCodeFetchModelsUsesBearerGET(t *testing.T) {
 	require.JSONEq(t, `{"object":"list","data":[]}`, recorder.Body.String())
 }
 
+func TestOpenCodeProbeInferenceUsesSelectedModelAfterCatalogCheck(t *testing.T) {
+	var paths []string
+	var inferenceBody string
+	upstream := &openCodeHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+		paths = append(paths, req.URL.Path)
+		switch req.URL.Path {
+		case "/v1/models":
+			return openCodeResponse(http.StatusOK, `{"object":"list","data":[{"id":"grok-4.5"},{"id":"kimi-k3"}]}`, nil), nil
+		case "/v1/chat/completions":
+			body, err := io.ReadAll(req.Body)
+			require.NoError(t, err)
+			inferenceBody = string(body)
+			return openCodeResponse(http.StatusOK, `{"id":"chat-probe","object":"chat.completion","model":"kimi-k3","choices":[{"index":0,"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}`, http.Header{"X-Request-Id": []string{"probe-request"}}), nil
+		default:
+			t.Fatalf("unexpected OpenCode probe path %q", req.URL.Path)
+			return nil, nil
+		}
+	}}
+	gateway := NewOpenCodeGatewayService(upstream, nil, &config.Config{}, nil)
+
+	result, err := gateway.ProbeInference(t.Context(), openCodeAccount(nil), "kimi-k3", "Reply only OK")
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"/v1/models", "/v1/chat/completions"}, paths)
+	require.JSONEq(t, `{"model":"kimi-k3","messages":[{"role":"user","content":"Reply only OK"}],"max_tokens":8,"stream":false}`, inferenceBody)
+	require.Equal(t, "kimi-k3", result.Model)
+	require.Equal(t, "kimi-k3", result.UpstreamModel)
+	require.Equal(t, "/v1/chat/completions", result.UpstreamEndpoint)
+	require.Equal(t, "chat-probe", result.RequestID)
+	require.Equal(t, "OK", result.Text)
+}
+
+func TestOpenCodeProbeInferenceRejectsCatalogOnlyKey(t *testing.T) {
+	callCount := 0
+	upstream := &openCodeHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+		callCount++
+		if req.URL.Path == "/v1/models" {
+			return openCodeResponse(http.StatusOK, `{"object":"list","data":[{"id":"kimi-k3"}]}`, nil), nil
+		}
+		return openCodeResponse(http.StatusUnauthorized, `{"type":"error","error":{"type":"AuthError","message":"Request blocked by upstream provider."}}`, nil), nil
+	}}
+	gateway := NewOpenCodeGatewayService(upstream, nil, &config.Config{}, nil)
+
+	_, err := gateway.ProbeInference(t.Context(), openCodeAccount(nil), "kimi-k3", "")
+
+	var failure *UpstreamFailoverError
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, 2, callCount)
+	require.Equal(t, http.StatusUnauthorized, failure.StatusCode)
+	require.True(t, failure.IsCredentialFailure())
+	require.Equal(t, "OpenCode Go inference access was rejected by the upstream provider", OpenCodeValidationErrorMessage(err))
+}
+
+func TestOpenCodeProviderWrapped400RetriesSameAccount(t *testing.T) {
+	callCount := 0
+	upstream := &openCodeHTTPUpstreamStub{do: func(*http.Request, string, int64, int) (*http.Response, error) {
+		callCount++
+		if callCount < 3 {
+			return openCodeResponse(http.StatusBadRequest, `{"type":"error","error":{"type":"UpstreamProviderError","message":"Provider returned error"}}`, nil), nil
+		}
+		return openCodeResponse(http.StatusOK, `{"id":"chat-retry","object":"chat.completion","model":"kimi-k3","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}`, nil), nil
+	}}
+	gateway := NewOpenCodeGatewayService(upstream, nil, &config.Config{}, nil)
+	_, c := openCodeTestContext()
+
+	_, err := gateway.ForwardChatCompletions(t.Context(), c, openCodeAccount(nil), []byte(`{"model":"kimi-k3","messages":[{"role":"user","content":"hi"}]}`))
+
+	require.NoError(t, err)
+	require.Equal(t, 3, callCount)
+}
+
+func TestOpenCodeProviderWrapped400ExhaustionDoesNotUnscheduleAccount(t *testing.T) {
+	callCount := 0
+	upstream := &openCodeHTTPUpstreamStub{do: func(*http.Request, string, int64, int) (*http.Response, error) {
+		callCount++
+		return openCodeResponse(http.StatusBadRequest, `{"type":"error","error":{"type":"UpstreamProviderError","message":"Provider returned error"}}`, nil), nil
+	}}
+	gateway := NewOpenCodeGatewayService(upstream, nil, &config.Config{}, nil)
+	_, c := openCodeTestContext()
+
+	_, err := gateway.ForwardChatCompletions(t.Context(), c, openCodeAccount(nil), []byte(`{"model":"kimi-k3","messages":[{"role":"user","content":"hi"}]}`))
+
+	var failure *UpstreamFailoverError
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, 3, callCount)
+	require.Equal(t, openCodeProviderUpstreamFailureReason, failure.Reason)
+	require.Equal(t, GatewayFailureScopeProvider, failure.Scope)
+	require.Equal(t, NextAccountRetry, failure.NextAccountAction)
+	require.True(t, failure.RetryableOnSameAccount)
+	require.NotPanics(t, func() {
+		(&GatewayService{}).TempUnscheduleRetryableError(context.Background(), 1, failure)
+	})
+}
+
+func TestOpenCodeOrdinary400DoesNotRetry(t *testing.T) {
+	callCount := 0
+	upstream := &openCodeHTTPUpstreamStub{do: func(*http.Request, string, int64, int) (*http.Response, error) {
+		callCount++
+		return openCodeResponse(http.StatusBadRequest, `{"error":{"type":"invalid_request_error","message":"messages is required"}}`, nil), nil
+	}}
+	gateway := NewOpenCodeGatewayService(upstream, nil, &config.Config{}, nil)
+	_, c := openCodeTestContext()
+
+	_, err := gateway.ForwardChatCompletions(t.Context(), c, openCodeAccount(nil), []byte(`{"model":"kimi-k3","messages":[]}`))
+
+	var failure *UpstreamFailoverError
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, 1, callCount)
+	require.Equal(t, GatewayFailureScopeRequest, failure.Scope)
+	require.Equal(t, NextAccountStop, failure.NextAccountAction)
+}
+
 func TestOpenCodeStreamTracksFirstTokenUsageAndRequestID(t *testing.T) {
 	stream := strings.Join([]string{
 		`data: {"id":"chat-stream","model":"grok-4.5","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}`,

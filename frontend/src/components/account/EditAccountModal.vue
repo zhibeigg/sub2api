@@ -208,6 +208,14 @@
             <input v-model="openCodeQuotaWorkspaceId" type="text" class="input font-mono" :placeholder="t('admin.accounts.opencode.quotaWorkspaceIdPlaceholder')" />
             <p class="input-hint">{{ t('admin.accounts.opencode.quotaWorkspaceIdHint') }}</p>
           </div>
+          <div v-if="openCodeCredentialState.api_key.action === 'replace'" class="rounded-lg border border-teal-200 bg-teal-50/50 p-3 dark:border-teal-900/40 dark:bg-teal-950/20" data-testid="opencode-replacement-preflight">
+            <label class="input-label" for="opencode-edit-validation-model">{{ t('admin.accounts.opencode.validationModel') }}</label>
+            <select id="opencode-edit-validation-model" v-model="openCodeValidationModel" class="input font-mono" data-testid="opencode-edit-validation-model">
+              <option value="">{{ t('admin.accounts.opencode.validationModelAuto') }}</option>
+              <option v-for="model in openCodeValidationModels" :key="model" :value="model">{{ model }}</option>
+            </select>
+            <p class="input-hint">{{ t('admin.accounts.opencode.replacementValidationHint') }}</p>
+          </div>
         </div>
         <div v-else>
           <label class="input-label">{{ t('admin.accounts.apiKey') }}</label>
@@ -2719,12 +2727,12 @@
         <button
           type="submit"
           form="edit-account-form"
-          :disabled="submitting"
+          :disabled="submitting || openCodePreflightRunning"
           class="btn btn-primary"
           data-tour="account-form-submit"
         >
           <svg
-            v-if="submitting"
+            v-if="submitting || openCodePreflightRunning"
             class="-ml-1 mr-2 h-4 w-4 animate-spin"
             fill="none"
             viewBox="0 0 24 24"
@@ -2743,7 +2751,11 @@
               d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
             ></path>
           </svg>
-          {{ submitting ? t('admin.accounts.updating') : t('common.update') }}
+          {{ openCodePreflightRunning
+            ? t('admin.accounts.credentialsValidation.verifying')
+            : submitting
+              ? t('admin.accounts.updating')
+              : t('common.update') }}
         </button>
       </div>
     </template>
@@ -2908,6 +2920,7 @@ interface TempUnschedRuleForm {
 
 // State
 const submitting = ref(false)
+const openCodePreflightRunning = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
 const openCodeSensitiveCredentialKeys = OPEN_CODE_SENSITIVE_CREDENTIAL_KEYS
@@ -2917,7 +2930,11 @@ const onOpenCodeCredentialActionChange = (key: OpenCodeSensitiveCredentialKey) =
   if (openCodeCredentialState[key].action !== 'replace') openCodeCredentialState[key].value = ''
 }
 const openCodeQuotaWorkspaceId = ref('')
+const openCodeValidationModel = ref('')
 const openCodeModelProtocols = ref<OpenCodeModelProtocolEntry[]>(createDefaultOpenCodeModelProtocols())
+const openCodeValidationModels = computed(() => Array.from(new Set(
+  openCodeModelProtocols.value.map((item) => item.model.trim()).filter(Boolean)
+)).sort())
 const addOpenCodeModelProtocol = () => openCodeModelProtocols.value.push({ model: '', protocol: 'chat_completions' })
 const removeOpenCodeModelProtocol = (index: number) => openCodeModelProtocols.value.splice(index, 1)
 const buildOpenCodeModelProtocols = () => normalizeOpenCodeModelProtocols(
@@ -3677,6 +3694,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   antigravityMixedChannelConfirmed.value = false
   resetAdobeCredentialEditState(adobeCredentialState)
   resetOpenCodeCredentialEditState(openCodeCredentialState)
+  openCodeValidationModel.value = ''
+  openCodePreflightRunning.value = false
   resetCursorCredentialEditState(cursorCredentialState)
   resetCursorDashboardAuthState(Boolean(newAccount.credentials_status?.has_dashboard_access_token))
   showMixedChannelWarning.value = false
@@ -4474,6 +4493,8 @@ const parseDateTimeLocal = parseDateTimeLocalInput
 const handleClose = () => {
   resetAdobeCredentialEditState(adobeCredentialState)
   resetOpenCodeCredentialEditState(openCodeCredentialState)
+  openCodeValidationModel.value = ''
+  openCodePreflightRunning.value = false
   resetCursorCredentialEditState(cursorCredentialState)
   resetCursorDashboardAuthState()
   antigravityMixedChannelConfirmed.value = false
@@ -4542,6 +4563,7 @@ const handleSubmit = async () => {
   }
 
   const updatePayload: Record<string, unknown> = { ...form }
+  let openCodeReplacementCredentials: Record<string, unknown> | null = null
   try {
     // 后端期望 proxy_id: 0 表示清除代理，而不是 null
     if (updatePayload.proxy_id === null) {
@@ -4728,6 +4750,9 @@ const handleSubmit = async () => {
       }
 
       updatePayload.credentials = newCredentials
+      if (props.account.platform === 'opencode' && openCodeCredentialState.api_key.action === 'replace') {
+        openCodeReplacementCredentials = newCredentials
+      }
     } else if (props.account.type === 'upstream') {
       const currentCredentials = (props.account.credentials as Record<string, unknown>) || {}
       const newCredentials: Record<string, unknown> = { ...currentCredentials }
@@ -5242,6 +5267,28 @@ const handleSubmit = async () => {
       // Quota notify config
       writeQuotaNotifyToExtra(newExtra, 'update')
       updatePayload.extra = newExtra
+    }
+
+    if (openCodeReplacementCredentials) {
+      openCodePreflightRunning.value = true
+      try {
+        const validation = await adminAPI.accounts.validateCredentials({
+          platform: 'opencode',
+          type: 'apikey',
+          credentials: openCodeReplacementCredentials,
+          proxy_id: form.proxy_id,
+          model_id: openCodeValidationModel.value || undefined
+        })
+        if (!validation.success) {
+          appStore.showError(t('admin.accounts.credentialsValidation.failed'))
+          return
+        }
+      } catch (error: any) {
+        appStore.showError(error?.message || t('admin.accounts.credentialsValidation.failed'))
+        return
+      } finally {
+        openCodePreflightRunning.value = false
+      }
     }
 
     const canContinue = await ensureAntigravityMixedChannelConfirmed(async () => {

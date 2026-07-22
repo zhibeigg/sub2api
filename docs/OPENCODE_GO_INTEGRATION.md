@@ -73,9 +73,22 @@ OpenCode Go 的账号平台值统一为 `opencode`，但不同模型家族不应
 
 敏感字段不会在账号列表、详情或普通响应中返回明文。更新时不发送敏感字段表示保留，在 `credentials` 中发送非空值表示替换，在 `clear_credentials` 中发送 `api_key` 或 `quota_cookie` 表示显式清除；同一字段不能同时替换和清除。
 
+## 真实推理健康检查与保存前预检
+
+`GET /v1/models` 只证明 API Key 能读取模型目录，不能证明该 Key 仍有真实推理权限。上游可能允许读取目录，却在 `/v1/chat/completions` 或 `/v1/messages` 返回 `401` 和 `Request blocked by upstream provider.`。因此管理端账号测试不再把目录请求成功视为健康，而是按以下顺序执行：
+
+1. 使用候选凭据调用认证后的 `GET /v1/models`；
+2. 使用管理员显式选择的模型发送一次非流式最小推理请求；
+3. 未显式选择模型时，按稳定优先级从目录与账号协议配置中选择，当前优先 `kimi-k3`、`deepseek-v4-flash`、`glm-5.1`、`grok-4.5`；
+4. 只有真实推理返回成功响应才判定账号健康。
+
+管理后台创建 OpenCode Go 账号时会先调用 `POST /api/v1/admin/accounts/validate-credentials` 完成真实推理预检，成功后才创建。编辑账号时，仅当 `api_key` 选择“替换”时执行同样预检；预检失败不会发送更新请求，服务端原有 Key 保持不变。仅修改非敏感配置或保留现有 Key 时不会重复消耗推理请求。
+
+直接调用管理 API 的自动化客户端也应先调用验证端点，提交与待保存账号一致的 `credentials`、`proxy_id`，以及可选的 `model_id` / `prompt`。不要仅以 `/v1/models` 作为上线或轮换 Key 的验收条件。
+
 ## 官方当前模型目录
 
-截至 2026 年 7 月 18 日，本版本内置的 OpenCode Go 目录如下；实际官方可用范围始终以账号认证后的 `GET https://opencode.ai/zen/go/v1/models` 为准，管理员可使用账号模型同步功能刷新白名单。
+截至 2026 年 7 月 22 日，本版本内置的 OpenCode Go 目录如下；实际官方可用范围始终以账号认证后的 `GET https://opencode.ai/zen/go/v1/models` 为准，管理员可使用账号模型同步功能刷新白名单。
 
 **Chat Completions 上游**
 
@@ -119,6 +132,7 @@ OpenCode Go 的账号平台值统一为 `opencode`，但不同模型家族不应
 
 - 无效 JSON、缺少模型、未知模型或无协议映射返回 `400`。
 - OpenCode Go 上游返回的普通 `4xx` 属于请求级错误：网关立即终止账号切换，并在 `/v1/messages`、`/v1/chat/completions`、`/v1/responses` 中返回脱敏后的具体上游消息。请求级 `400` 不再改写为 `All available accounts exhausted`；该文案只用于真实的账号池或提供商故障转移耗尽。
+- Console Go 可能把供应商内部瞬时故障包装成 HTTP `400`。网关只对已知的 `UpstreamProviderError` / provider-upstream-failed 结构执行同账号有限重试；重试耗尽后仍允许切换账号，但不会把该共享供应商故障写成账号停调或账号健康异常。普通参数错误、模型错误和其他 `400` 不会进入此路径。
 - 缺少或失效的 OpenCode API Key 通常返回 `401` / `403`，按账号错误参与故障转移，并对客户端返回安全的账号凭据不可用提示。
 - 上游 `429` 会按账号参与 failover。响应含 `Retry-After` 时支持秒数与 HTTP-date，并把恢复时间持久化到现有 `rate_limit_reset_at`；未提供可用恢复时间时使用系统现有的秒级 429 兜底冷却（默认 5 秒）。账号仓储更新会触发 Scheduler Snapshot outbox，使后续请求在冷却结束前排除该账号。
 - 三种兼容入口在 429 耗尽时均返回 HTTP `429` 和 `rate_limit_error`，并在安全校验通过后保留 `Retry-After`；已开始流式输出后使用对应协议的流内错误格式返回。

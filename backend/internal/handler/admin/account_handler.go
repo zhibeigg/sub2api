@@ -1055,18 +1055,27 @@ func (h *AccountHandler) ValidateCredentials(c *gin.Context) {
 	platform := service.NormalizePlatform(req.Platform)
 	accountType := strings.ToLower(strings.TrimSpace(req.Type))
 	if (platform != service.PlatformAdobe || accountType != service.AccountTypeOAuth) &&
-		(platform != service.PlatformCursor || accountType != service.AccountTypeAPIKey) {
+		(platform != service.PlatformCursor || accountType != service.AccountTypeAPIKey) &&
+		(platform != service.PlatformOpenCode || accountType != service.AccountTypeAPIKey) {
 		response.BadRequest(c, "Unsupported platform or account type")
 		return
 	}
-	if platform == service.PlatformAdobe {
+	switch platform {
+	case service.PlatformAdobe:
 		if err := service.ValidateAdobeAccountCredentials(accountType, req.Credentials); err != nil {
 			response.BadRequest(c, "Invalid Adobe credentials")
 			return
 		}
-	} else if err := service.ValidateCursorAccountCredentials(accountType, req.Credentials); err != nil {
-		response.BadRequest(c, "Invalid Cursor credentials")
-		return
+	case service.PlatformCursor:
+		if err := service.ValidateCursorAccountCredentials(accountType, req.Credentials); err != nil {
+			response.BadRequest(c, "Invalid Cursor credentials")
+			return
+		}
+	case service.PlatformOpenCode:
+		if err := service.ValidateOpenCodeAccountCredentials(accountType, req.Credentials); err != nil {
+			response.BadRequest(c, "Invalid OpenCode Go credentials")
+			return
+		}
 	}
 	if h == nil || h.accountTestService == nil {
 		response.Error(c, http.StatusServiceUnavailable, "Credential validation unavailable")
@@ -1084,6 +1093,10 @@ func (h *AccountHandler) ValidateCredentials(c *gin.Context) {
 	if err != nil {
 		if errors.Is(err, service.ErrTransientCredentialValidationUnavailable) {
 			response.Error(c, http.StatusServiceUnavailable, "Credential validation unavailable")
+			return
+		}
+		if platform == service.PlatformOpenCode {
+			response.BadRequest(c, "Credential validation failed: "+service.OpenCodeValidationErrorMessage(err))
 			return
 		}
 		response.BadRequest(c, "Credential validation failed")

@@ -183,6 +183,40 @@ describe('AccountTestModal', () => {
     })
   })
 
+  it('OpenCode 账号测试会携带管理员选择的真实推理模型', async () => {
+    getAvailableModels.mockResolvedValue([
+      { id: 'grok-4.5', display_name: 'Grok 4.5' },
+      { id: 'kimi-k3', display_name: 'Kimi K3' }
+    ])
+    global.fetch = vi.fn().mockResolvedValue(
+      createStreamResponse([
+        'data: {"type":"test_start","model":"kimi-k3"}\n',
+        'data: {"type":"content","text":"OK"}\n',
+        'data: {"type":"test_complete","success":true}\n'
+      ])
+    ) as any
+
+    const wrapper = mountModal({
+      id: 940,
+      name: 'OpenCode Go',
+      platform: 'opencode',
+      type: 'apikey',
+      status: 'active'
+    })
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+
+    ;(wrapper.vm as any).selectedModelId = 'kimi-k3'
+    await (wrapper.vm as any).startTest()
+    await flushPromises()
+
+    const [, request] = (global.fetch as any).mock.calls[0]
+    expect(JSON.parse(request.body)).toEqual({
+      model_id: 'kimi-k3',
+      prompt: ''
+    })
+  })
+
   it('OpenAI Compact 探测会携带 compact 测试模式', async () => {
     getAvailableModels.mockResolvedValue([
       { id: 'gpt-5.4', display_name: 'GPT-5.4' }

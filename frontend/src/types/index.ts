@@ -1390,7 +1390,7 @@ export interface OpenAIResponsesState {
 }
 
 export interface ValidateAccountCredentialsRequest {
-  platform: 'adobe' | 'cursor'
+  platform: 'adobe' | 'cursor' | 'opencode'
   type: 'oauth' | 'apikey'
   credentials: Record<string, unknown>
   proxy_id?: number | null

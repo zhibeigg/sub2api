@@ -3,6 +3,7 @@ package service
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -113,6 +114,8 @@ func (s *OpenCodeGatewayService) forwardStream(c *gin.Context, body io.Reader, m
 	return nil
 }
 
+const openCodeProviderUpstreamFailureReason GatewayFailureReason = "opencode_provider_upstream_failed"
+
 func opencodeHTTPFailure(response *http.Response) *UpstreamFailoverError {
 	if response == nil {
 		return opencodeNetworkFailure(errors.New("empty upstream response"))
@@ -134,6 +137,16 @@ func opencodeHTTPFailure(response *http.Response) *UpstreamFailoverError {
 		failure.NextAccountAction = NextAccountRetry
 		failure.ClientStatusCode = http.StatusServiceUnavailable
 		failure.ClientMessage = "OpenCode Go account credentials are unavailable"
+		if isOpenCodeInferenceBlocked(body) {
+			failure.ClientMessage = "OpenCode Go inference access was blocked by the upstream provider"
+		}
+	case isOpenCodeProviderUpstreamFailure(response.StatusCode, body):
+		failure.Scope = GatewayFailureScopeProvider
+		failure.Reason = openCodeProviderUpstreamFailureReason
+		failure.NextAccountAction = NextAccountRetry
+		failure.RetryableOnSameAccount = true
+		failure.ClientStatusCode = http.StatusBadGateway
+		failure.ClientMessage = "OpenCode Go upstream provider temporarily failed, please retry"
 	case response.StatusCode == http.StatusTooManyRequests:
 		failure.Scope = GatewayFailureScopeAccount
 		failure.Reason = GatewayFailureReason("opencode_rate_limited")
@@ -153,6 +166,42 @@ func opencodeHTTPFailure(response *http.Response) *UpstreamFailoverError {
 		failure.NextAccountAction = NextAccountRetry
 	}
 	return failure
+}
+
+func isOpenCodeProviderUpstreamFailure(statusCode int, body []byte) bool {
+	if statusCode != http.StatusBadRequest {
+		return false
+	}
+	message := strings.ToLower(strings.TrimSpace(extractUpstreamErrorMessage(body)))
+	if strings.Contains(message, "error from provider") && strings.Contains(message, "upstream request failed") {
+		return true
+	}
+	var envelope struct {
+		Type  string `json:"type"`
+		Error struct {
+			Type    string `json:"type"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		return false
+	}
+	errorType := strings.ToLower(strings.TrimSpace(envelope.Error.Type))
+	if errorType == "" {
+		errorType = strings.ToLower(strings.TrimSpace(envelope.Type))
+	}
+	if errorType != "upstreamprovidererror" && errorType != "providererror" {
+		return false
+	}
+	providerMessage := strings.ToLower(strings.TrimSpace(envelope.Error.Message))
+	return strings.Contains(providerMessage, "provider returned error") ||
+		strings.Contains(providerMessage, "upstream request failed") ||
+		strings.Contains(providerMessage, "error from provider")
+}
+
+func isOpenCodeInferenceBlocked(body []byte) bool {
+	message := strings.ToLower(strings.TrimSpace(extractUpstreamErrorMessage(body)))
+	return strings.Contains(message, "request blocked by upstream provider")
 }
 
 func opencodeNetworkFailure(err error) *UpstreamFailoverError {
@@ -185,6 +234,25 @@ func opencodeAccountFailure(status int, body []byte, headers http.Header) *Upstr
 		NextAccountAction: NextAccountRetry, ClientStatusCode: http.StatusServiceUnavailable,
 		ClientMessage: "OpenCode Go account configuration is unavailable",
 	}
+}
+
+func OpenCodeValidationErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	var failure *UpstreamFailoverError
+	if errors.As(err, &failure) && failure != nil {
+		switch failure.Reason {
+		case openCodeProviderUpstreamFailureReason:
+			return "OpenCode Go upstream provider is temporarily unavailable"
+		case GatewayFailureReason("opencode_credentials_rejected"):
+			return "OpenCode Go inference access was rejected by the upstream provider"
+		}
+		if message := strings.TrimSpace(failure.ClientMessage); message != "" {
+			return message
+		}
+	}
+	return "OpenCode Go credential validation failed"
 }
 
 func openCodeSafeErrorMessage(status int, body []byte, fallback string) string {

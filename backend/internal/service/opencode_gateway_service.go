@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -16,7 +18,27 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const opencodeErrorBodyLimit int64 = 1 << 20
+const (
+	opencodeErrorBodyLimit         int64 = 1 << 20
+	opencodeProbeResponseBodyLimit int64 = 1 << 20
+	openCodeProviderRetryAttempts        = 2
+	openCodeProviderRetryBaseDelay       = 150 * time.Millisecond
+)
+
+var openCodeProbeModelPriority = []string{
+	"kimi-k3",
+	"deepseek-v4-flash",
+	"glm-5.1",
+	"grok-4.5",
+}
+
+type OpenCodeInferenceProbeResult struct {
+	Model            string
+	UpstreamModel    string
+	UpstreamEndpoint string
+	RequestID        string
+	Text             string
+}
 
 type OpenCodeGatewayService struct {
 	httpUpstream     HTTPUpstream
@@ -60,56 +82,17 @@ func (s *OpenCodeGatewayService) forward(ctx context.Context, c *gin.Context, ac
 	requestCtx, cancel := s.withInferenceTimeout(ctx)
 	defer cancel()
 
-	meta, endpoint, err := s.prepareRequest(account, body, inbound)
-	if err != nil {
-		return nil, err
-	}
-	upstreamBody, err := opencodepkg.TransformRequest(body, meta)
-	if err != nil {
-		return nil, opencodeRequestError(http.StatusBadRequest, []byte(err.Error()))
-	}
-
-	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(upstreamBody))
-	if err != nil {
-		return nil, opencodeRequestError(http.StatusBadRequest, []byte(err.Error()))
-	}
-	request.Header.Set("Content-Type", "application/json")
-	if account != nil {
-		account.ApplyHeaderOverrides(request.Header)
-	}
-	// Authentication is authoritative and follows the selected upstream protocol.
-	// OpenCode's Chat Completions endpoint accepts Bearer auth, while its Anthropic
-	// Messages endpoint follows the Anthropic SDK contract (x-api-key + version).
-	request.Header.Del("Authorization")
-	request.Header.Del("X-Api-Key")
-	request.Header.Del("Anthropic-Version")
-	if meta.UpstreamProtocol == opencodepkg.ProtocolMessages {
-		request.Header.Set("X-Api-Key", opencodeAPIKey(account))
-		request.Header.Set("Anthropic-Version", "2023-06-01")
-	} else {
-		request.Header.Set("Authorization", "Bearer "+opencodeAPIKey(account))
-	}
-	if meta.Stream {
-		request.Header.Set("Accept", "text/event-stream")
-	} else {
-		request.Header.Set("Accept", "application/json")
-	}
-
-	proxyURL, err := s.resolveProxyURL(ctx, account)
+	proxyURL, err := s.resolveProxyURL(requestCtx, account)
 	if err != nil {
 		return nil, opencodeAccountFailure(http.StatusBadGateway, []byte(err.Error()), nil)
 	}
 	upstreamStart := time.Now()
-	response, err := s.httpUpstream.Do(request, proxyURL, account.ID, opencodeAccountConcurrency(account))
+	response, _, meta, err := s.forwardWithProviderRetry(requestCtx, c, account, body, inbound, proxyURL)
 	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 	if err != nil {
-		return nil, opencodeNetworkFailure(err)
+		return nil, err
 	}
 	defer func() { _ = response.Body.Close() }()
-
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return nil, s.handleHTTPFailure(c, account, request, response, meta.UpstreamModel)
-	}
 	notifyOpenCodeUpstreamAccepted(c)
 	copyOpenCodeResponseHeaders(c.Writer.Header(), response.Header)
 
@@ -156,6 +139,80 @@ func (s *OpenCodeGatewayService) forward(ctx context.Context, c *gin.Context, ac
 	return result, nil
 }
 
+func (s *OpenCodeGatewayService) forwardWithProviderRetry(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	body []byte,
+	inbound opencodepkg.Protocol,
+	proxyURL string,
+) (*http.Response, *http.Request, opencodepkg.RequestMeta, error) {
+	var lastFailure error
+	for attempt := 0; attempt <= openCodeProviderRetryAttempts; attempt++ {
+		request, meta, err := s.buildInferenceRequest(ctx, account, body, inbound)
+		if err != nil {
+			return nil, nil, opencodepkg.RequestMeta{}, err
+		}
+		response, err := s.httpUpstream.Do(request, proxyURL, account.ID, opencodeAccountConcurrency(account))
+		if err != nil {
+			return nil, request, meta, opencodeNetworkFailure(err)
+		}
+		if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
+			return response, request, meta, nil
+		}
+
+		failure := s.handleHTTPFailure(c, account, request, response, meta.UpstreamModel)
+		_ = response.Body.Close()
+		lastFailure = failure
+		if failure == nil || failure.Reason != openCodeProviderUpstreamFailureReason || attempt == openCodeProviderRetryAttempts {
+			return nil, request, meta, failure
+		}
+		delay := openCodeProviderRetryBaseDelay * time.Duration(attempt+1)
+		select {
+		case <-ctx.Done():
+			return nil, request, meta, opencodeNetworkFailure(ctx.Err())
+		case <-time.After(delay):
+		}
+	}
+	return nil, nil, opencodepkg.RequestMeta{}, lastFailure
+}
+
+func (s *OpenCodeGatewayService) buildInferenceRequest(ctx context.Context, account *Account, body []byte, inbound opencodepkg.Protocol) (*http.Request, opencodepkg.RequestMeta, error) {
+	meta, endpoint, err := s.prepareRequest(account, body, inbound)
+	if err != nil {
+		return nil, opencodepkg.RequestMeta{}, err
+	}
+	upstreamBody, err := opencodepkg.TransformRequest(body, meta)
+	if err != nil {
+		return nil, opencodepkg.RequestMeta{}, opencodeRequestError(http.StatusBadRequest, []byte(err.Error()))
+	}
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(upstreamBody))
+	if err != nil {
+		return nil, opencodepkg.RequestMeta{}, opencodeRequestError(http.StatusBadRequest, []byte(err.Error()))
+	}
+	request.Header.Set("Content-Type", "application/json")
+	account.ApplyHeaderOverrides(request.Header)
+	// Authentication is authoritative and follows the selected upstream protocol.
+	// OpenCode's Chat Completions endpoint accepts Bearer auth, while its Anthropic
+	// Messages endpoint follows the Anthropic SDK contract (x-api-key + version).
+	request.Header.Del("Authorization")
+	request.Header.Del("X-Api-Key")
+	request.Header.Del("Anthropic-Version")
+	if meta.UpstreamProtocol == opencodepkg.ProtocolMessages {
+		request.Header.Set("X-Api-Key", opencodeAPIKey(account))
+		request.Header.Set("Anthropic-Version", "2023-06-01")
+	} else {
+		request.Header.Set("Authorization", "Bearer "+opencodeAPIKey(account))
+	}
+	if meta.Stream {
+		request.Header.Set("Accept", "text/event-stream")
+	} else {
+		request.Header.Set("Accept", "application/json")
+	}
+	return request, meta, nil
+}
+
 func (s *OpenCodeGatewayService) handleHTTPFailure(c *gin.Context, account *Account, request *http.Request, response *http.Response, requestedModel string) *UpstreamFailoverError {
 	failure := opencodeHTTPFailure(response)
 	if failure == nil {
@@ -196,12 +253,14 @@ func (s *OpenCodeGatewayService) handleHTTPFailure(c *gin.Context, account *Acco
 		appendOpsUpstreamError(c, event)
 	}
 
-	s.reconcileAccountFailureAsync(account, failure, requestedModel)
+	if failure.Reason != openCodeProviderUpstreamFailureReason {
+		s.reconcileAccountFailureAsync(account, failure, requestedModel)
+	}
 	return failure
 }
 
 func (s *OpenCodeGatewayService) reconcileAccountFailureAsync(account *Account, failure *UpstreamFailoverError, requestedModel string) {
-	if s == nil || s.rateLimitService == nil || account == nil || failure == nil || failure.Scope == GatewayFailureScopeRequest {
+	if s == nil || s.rateLimitService == nil || account == nil || account.ID <= 0 || failure == nil || failure.Scope == GatewayFailureScopeRequest {
 		return
 	}
 
@@ -314,6 +373,146 @@ func (s *OpenCodeGatewayService) ListModels(ctx context.Context, account *Accoun
 		return nil, opencodeRequestError(http.StatusBadGateway, []byte("OpenCode returned no supported models"))
 	}
 	return models, nil
+}
+
+func (s *OpenCodeGatewayService) ProbeInference(ctx context.Context, account *Account, modelID, prompt string) (*OpenCodeInferenceProbeResult, error) {
+	if account == nil {
+		return nil, opencodeRequestError(http.StatusBadRequest, []byte("account is required"))
+	}
+	if s == nil || s.httpUpstream == nil {
+		return nil, fmt.Errorf("OpenCode HTTP upstream is not configured")
+	}
+	requestCtx, cancel := s.withInferenceTimeout(ctx)
+	defer cancel()
+
+	models, err := s.ListModels(requestCtx, account)
+	if err != nil {
+		return nil, err
+	}
+	probeModel, err := chooseOpenCodeProbeModel(account, modelID, models)
+	if err != nil {
+		return nil, opencodeRequestError(http.StatusBadRequest, []byte(err.Error()))
+	}
+	if strings.TrimSpace(prompt) == "" {
+		prompt = "Reply only OK"
+	}
+	probeBody, err := json.Marshal(map[string]any{
+		"model": probeModel,
+		"messages": []map[string]string{{
+			"role":    "user",
+			"content": prompt,
+		}},
+		"max_tokens": 8,
+		"stream":     false,
+	})
+	if err != nil {
+		return nil, opencodeRequestError(http.StatusBadRequest, []byte(err.Error()))
+	}
+	proxyURL, err := s.resolveProxyURL(requestCtx, account)
+	if err != nil {
+		return nil, opencodeAccountFailure(http.StatusBadGateway, []byte(err.Error()), nil)
+	}
+	response, _, meta, err := s.forwardWithProviderRetry(
+		requestCtx,
+		nil,
+		account,
+		probeBody,
+		opencodepkg.ProtocolChatCompletions,
+		proxyURL,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = response.Body.Close() }()
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, opencodeProbeResponseBodyLimit+1))
+	if err != nil {
+		return nil, opencodeNetworkFailure(err)
+	}
+	if int64(len(responseBody)) > opencodeProbeResponseBodyLimit {
+		return nil, opencodeNetworkFailure(errors.New("OpenCode inference probe response is too large"))
+	}
+	converted, _, requestID, err := opencodepkg.TransformResponse(responseBody, meta)
+	if err != nil {
+		return nil, opencodeNetworkFailure(err)
+	}
+	if requestID == "" {
+		requestID = opencodeRequestID(response.Header)
+	}
+	return &OpenCodeInferenceProbeResult{
+		Model:            probeModel,
+		UpstreamModel:    meta.UpstreamModel,
+		UpstreamEndpoint: openCodeEndpointPath(meta.UpstreamProtocol),
+		RequestID:        requestID,
+		Text:             openCodeProbeResponseText(converted),
+	}, nil
+}
+
+func chooseOpenCodeProbeModel(account *Account, requestedModel string, availableModels []string) (string, error) {
+	available := make(map[string]struct{}, len(availableModels))
+	for _, model := range availableModels {
+		if normalized := opencodepkg.NormalizeModelID(model); normalized != "" {
+			available[normalized] = struct{}{}
+		}
+	}
+	isAvailable := func(model string) bool {
+		_, ok := available[opencodepkg.NormalizeModelID(model)]
+		return ok
+	}
+	resolveAvailable := func(model string) bool {
+		resolution, err := ResolveOpenCodeModel(account, model)
+		return err == nil && isAvailable(resolution.UpstreamModel)
+	}
+
+	if requestedModel = strings.TrimSpace(requestedModel); requestedModel != "" {
+		if !resolveAvailable(requestedModel) {
+			return "", fmt.Errorf("OpenCode probe model %q is not available for this account", requestedModel)
+		}
+		return requestedModel, nil
+	}
+	for _, model := range openCodeProbeModelPriority {
+		if resolveAvailable(model) {
+			return model, nil
+		}
+	}
+	if account != nil {
+		mapping := account.GetModelMapping()
+		aliases := make([]string, 0, len(mapping))
+		for alias := range mapping {
+			aliases = append(aliases, alias)
+		}
+		sort.Strings(aliases)
+		for _, alias := range aliases {
+			if resolveAvailable(alias) {
+				return alias, nil
+			}
+		}
+	}
+	fallback := append([]string(nil), availableModels...)
+	sort.Strings(fallback)
+	for _, model := range fallback {
+		if resolveAvailable(model) {
+			return model, nil
+		}
+	}
+	return "", errors.New("OpenCode returned no model with a configured inference protocol")
+}
+
+func openCodeProbeResponseText(body []byte) string {
+	var response struct {
+		Choices []struct {
+			Message struct {
+				Content          string `json:"content"`
+				ReasoningContent string `json:"reasoning_content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil || len(response.Choices) == 0 {
+		return ""
+	}
+	if text := strings.TrimSpace(response.Choices[0].Message.Content); text != "" {
+		return text
+	}
+	return strings.TrimSpace(response.Choices[0].Message.ReasoningContent)
 }
 
 func (s *OpenCodeGatewayService) TestConnection(ctx context.Context, account *Account) (*ForwardResult, error) {

@@ -205,14 +205,15 @@ func (s *AccountTestService) ValidateTransientCredentials(ctx context.Context, i
 		if err := ValidateOpenCodeAccountCredentials(accountType, account.Credentials); err != nil {
 			return nil, err
 		}
-		if _, err := s.openCodeGatewayService.TestConnection(ctx, account); err != nil {
+		probe, err := s.openCodeGatewayService.ProbeInference(ctx, account, input.ModelID, input.Prompt)
+		if err != nil {
 			return nil, err
 		}
 		return &TransientCredentialValidationResult{
 			Success:  true,
 			Platform: PlatformOpenCode,
-			Message:  "OpenCode Go API key verified",
-			Summary:  "Authenticated /v1/models request succeeded",
+			Message:  "OpenCode Go inference access verified",
+			Summary:  fmt.Sprintf("Authenticated inference request succeeded with %s", probe.Model),
 		}, nil
 
 	case platform == PlatformCursor && accountType == AccountTypeAPIKey:
@@ -322,7 +323,7 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 		return s.testCursorAccountConnection(c, account, modelID, prompt)
 	}
 	if account.IsOpenCode() {
-		return s.testOpenCodeAccountConnection(c, account)
+		return s.testOpenCodeAccountConnection(c, account, modelID, prompt)
 	}
 	if account.IsOpenAI() {
 		return s.testOpenAIAccountConnection(c, account, modelID, prompt, normalizeAccountTestMode(mode))
@@ -347,7 +348,7 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	return s.testClaudeAccountConnection(c, account, modelID)
 }
 
-func (s *AccountTestService) testOpenCodeAccountConnection(c *gin.Context, account *Account) error {
+func (s *AccountTestService) testOpenCodeAccountConnection(c *gin.Context, account *Account, modelID, prompt string) error {
 	if s.openCodeGatewayService == nil {
 		return s.sendErrorAndEnd(c, "OpenCode Go gateway service not configured")
 	}
@@ -356,11 +357,16 @@ func (s *AccountTestService) testOpenCodeAccountConnection(c *gin.Context, accou
 	c.Writer.Header().Set("Connection", "keep-alive")
 	c.Writer.Header().Set("X-Accel-Buffering", "no")
 	c.Writer.Flush()
-	s.sendEvent(c, TestEvent{Type: "test_start", Model: "OpenCode Go /v1/models"})
-	if _, err := s.openCodeGatewayService.TestConnection(c.Request.Context(), account); err != nil {
-		return s.sendErrorAndEnd(c, fmt.Sprintf("OpenCode Go connection check failed: %s", err.Error()))
+	probe, err := s.openCodeGatewayService.ProbeInference(c.Request.Context(), account, modelID, prompt)
+	if err != nil {
+		return s.sendErrorAndEnd(c, "OpenCode Go inference check failed: "+OpenCodeValidationErrorMessage(err))
 	}
-	s.sendEvent(c, TestEvent{Type: "content", Text: "OpenCode Go API key verified"})
+	s.sendEvent(c, TestEvent{Type: "test_start", Model: probe.Model})
+	message := "OpenCode Go inference request succeeded"
+	if text := strings.TrimSpace(probe.Text); text != "" {
+		message += ": " + text
+	}
+	s.sendEvent(c, TestEvent{Type: "content", Text: message})
 	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 	return nil
 }

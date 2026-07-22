@@ -143,7 +143,7 @@ export async function create(accountData: CreateAccountRequest): Promise<Account
 }
 
 /**
- * Validate Adobe/Cursor credentials before account creation.
+ * Validate Adobe, Cursor, or OpenCode credentials before saving an account.
  */
 export async function validateCredentials(
   payload: ValidateAccountCredentialsRequest

@@ -675,6 +675,11 @@ func (s *GatewayService) TempUnscheduleRetryableError(ctx context.Context, accou
 	if failoverErr == nil || !failoverErr.RetryableOnSameAccount {
 		return
 	}
+	// OpenCode Go 的精确 provider 400 是共享上游瞬时故障，不应复用
+	// Google 项目配置错误的账号级持久停调策略。
+	if failoverErr.Reason == openCodeProviderUpstreamFailureReason {
+		return
+	}
 	// 根据状态码选择封禁策略
 	switch failoverErr.StatusCode {
 	case http.StatusBadRequest:

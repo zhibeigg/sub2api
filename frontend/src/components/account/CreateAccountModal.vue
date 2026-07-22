@@ -3393,6 +3393,21 @@
         </div>
       </section>
 
+      <section v-else-if="form.platform === 'opencode'" class="space-y-4" data-testid="opencode-credentials-validation">
+        <div>
+          <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.accounts.opencode.validationTitle') }}</h3>
+          <p class="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-gray-400">{{ t('admin.accounts.opencode.validationHint') }}</p>
+        </div>
+        <div>
+          <label class="input-label" for="opencode-validation-model">{{ t('admin.accounts.opencode.validationModel') }}</label>
+          <select id="opencode-validation-model" v-model="openCodeValidationModel" class="input font-mono" data-testid="opencode-validation-model">
+            <option value="">{{ t('admin.accounts.opencode.validationModelAuto') }}</option>
+            <option v-for="model in openCodeValidationModels" :key="model" :value="model">{{ model }}</option>
+          </select>
+          <p class="input-hint">{{ t('admin.accounts.opencode.validationModelHint') }}</p>
+        </div>
+      </section>
+
       <section v-else-if="form.platform === 'adobe'" class="space-y-4" data-testid="adobe-credentials-form">
         <div>
           <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.accounts.adobe.credentialsTitle') }}</h3>
@@ -4007,6 +4022,7 @@ const authStore = useAuthStore()
 const oauthStepTitle = computed(() => {
   if (form.platform === 'adobe') return t('admin.accounts.credentialsValidation.adobeStepTitle')
   if (form.platform === 'cursor') return t('admin.accounts.credentialsValidation.cursorStepTitle')
+  if (form.platform === 'opencode') return t('admin.accounts.credentialsValidation.openCodeStepTitle')
   if (form.platform === 'openai') return t('admin.accounts.oauth.openai.title')
   if (form.platform === 'gemini') return t('admin.accounts.oauth.gemini.title')
   if (form.platform === 'antigravity') return t('admin.accounts.oauth.antigravity.title')
@@ -4016,7 +4032,7 @@ const oauthStepTitle = computed(() => {
 })
 
 const firstStepTitle = computed(() =>
-  form.platform === 'adobe' || form.platform === 'cursor'
+  form.platform === 'adobe' || form.platform === 'cursor' || form.platform === 'opencode'
     ? t('admin.accounts.credentialsValidation.basicConfiguration')
     : t('admin.accounts.oauth.authMethod')
 )
@@ -4131,7 +4147,11 @@ const apiKeyValue = ref('')
 const upstreamBillingAutoProbeEnabled = ref(true)
 const openCodeQuotaCookie = ref('')
 const openCodeQuotaWorkspaceId = ref('')
+const openCodeValidationModel = ref('')
 const openCodeModelProtocols = ref<OpenCodeModelProtocolEntry[]>(createDefaultOpenCodeModelProtocols())
+const openCodeValidationModels = computed(() => Array.from(new Set(
+  openCodeModelProtocols.value.map((item) => item.model.trim()).filter(Boolean)
+)).sort())
 const addOpenCodeModelProtocol = () => openCodeModelProtocols.value.push({ model: '', protocol: 'chat_completions' })
 const removeOpenCodeModelProtocol = (index: number) => openCodeModelProtocols.value.splice(index, 1)
 const buildOpenCodeModelProtocols = () => normalizeOpenCodeModelProtocols(
@@ -4582,7 +4602,7 @@ const form = reactive({
 
 // Helper to check if current type needs OAuth flow
 const isCredentialValidationFlow = computed(() =>
-  form.platform === 'adobe' || form.platform === 'cursor'
+  form.platform === 'adobe' || form.platform === 'cursor' || form.platform === 'opencode'
 )
 
 const isOAuthFlow = computed(() => {
@@ -5336,6 +5356,7 @@ const handleClose = () => {
   cursorCredentials.dashboard_refresh_token = ''
   Object.assign(adobeCredentials, { access_token: '', cookie: '', device_token: '', device_id: '', password: '', expires_at: '' })
   adobeValidationAttempted.value = false
+  openCodeValidationModel.value = ''
   verifyingCredentials.value = false
   credentialValidationResult.value = null
   antigravityMixedChannelConfirmed.value = false
@@ -5680,6 +5701,46 @@ const buildCredentialValidationCreatePayload = (): CreateAccountRequest | null =
     }
   }
 
+  if (form.platform === 'opencode') {
+    if (!apiKeyValue.value.trim()) {
+      appStore.showError(t('admin.accounts.pleaseEnterApiKey'))
+      return null
+    }
+    const credentials: Record<string, unknown> = buildOpenCodeCreateCredentials({
+      base_url: apiKeyBaseUrl.value,
+      api_key: apiKeyValue.value,
+      quota_cookie: openCodeQuotaCookie.value,
+      quota_workspace_id: openCodeQuotaWorkspaceId.value,
+      model_protocols: buildOpenCodeModelProtocols()
+    })
+    const modelMapping = buildModelMappingObject(
+      modelRestrictionMode.value,
+      allowedModels.value,
+      modelMappings.value
+    )
+    if (modelMapping) credentials.model_mapping = modelMapping
+    if (poolModeEnabled.value) {
+      credentials.pool_mode = true
+      credentials.pool_mode_retry_count = normalizePoolModeRetryCount(poolModeRetryCount.value)
+      const retryStatusCodes = parsePoolModeRetryStatusCodes(poolModeRetryStatusCodesInput.value)
+      if (retryStatusCodes.length > 0) credentials.pool_mode_retry_status_codes = retryStatusCodes
+    }
+    if (customErrorCodesEnabled.value) {
+      credentials.custom_error_codes_enabled = true
+      credentials.custom_error_codes = [...selectedErrorCodes.value]
+    }
+    applyInterceptWarmup(credentials, interceptWarmupRequests.value, 'create')
+    if (!applyTempUnschedConfig(credentials)) return null
+    form.credentials = credentials
+    return {
+      ...form,
+      type: 'apikey',
+      credentials,
+      extra: buildMixedSchedulingExtra(),
+      auto_pause_on_expired: autoPauseOnExpired.value
+    }
+  }
+
   if (form.platform === 'adobe') {
     adobeValidationAttempted.value = true
     const validationError = validateAdobeCredentialSource(adobeCredentials)
@@ -5708,24 +5769,25 @@ const handleValidateAndCreate = async () => {
   if (verifyingCredentials.value || submitting.value) return
 
   const payload = buildCredentialValidationCreatePayload()
-  if (!payload || (payload.platform !== 'adobe' && payload.platform !== 'cursor')) return
+  if (!payload || (payload.platform !== 'adobe' && payload.platform !== 'cursor' && payload.platform !== 'opencode')) return
 
   credentialValidationResult.value = null
   verifyingCredentials.value = true
   try {
     const result = await adminAPI.accounts.validateCredentials({
-      platform: payload.platform,
+      platform: payload.platform as 'adobe' | 'cursor' | 'opencode',
       type: payload.type as 'oauth' | 'apikey',
       credentials: payload.credentials,
-      proxy_id: payload.proxy_id
+      proxy_id: payload.proxy_id,
+      model_id: payload.platform === 'opencode' ? openCodeValidationModel.value || undefined : undefined
     })
     if (!result.success) {
       appStore.showError(t('admin.accounts.credentialsValidation.failed'))
       return
     }
     credentialValidationResult.value = result
-  } catch {
-    appStore.showError(t('admin.accounts.credentialsValidation.failed'))
+  } catch (error: any) {
+    appStore.showError(error?.message || t('admin.accounts.credentialsValidation.failed'))
     return
   } finally {
     verifyingCredentials.value = false
