@@ -94,9 +94,29 @@ func Episode(v int64) predicate.PoolCapacityAlertState {
 	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldEpisode, v))
 }
 
+// AlertMetric applies equality check predicate on the "alert_metric" field. It's identical to AlertMetricEQ.
+func AlertMetric(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldAlertMetric, v))
+}
+
 // PredictedRequests applies equality check predicate on the "predicted_requests" field. It's identical to PredictedRequestsEQ.
 func PredictedRequests(v int64) predicate.PoolCapacityAlertState {
 	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldPredictedRequests, v))
+}
+
+// RemainingBalanceUsd applies equality check predicate on the "remaining_balance_usd" field. It's identical to RemainingBalanceUsdEQ.
+func RemainingBalanceUsd(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldRemainingBalanceUsd, v))
+}
+
+// ThresholdRequests applies equality check predicate on the "threshold_requests" field. It's identical to ThresholdRequestsEQ.
+func ThresholdRequests(v int64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldThresholdRequests, v))
+}
+
+// ThresholdUsd applies equality check predicate on the "threshold_usd" field. It's identical to ThresholdUsdEQ.
+func ThresholdUsd(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldThresholdUsd, v))
 }
 
 // AccountRequests applies equality check predicate on the "account_requests" field. It's identical to AccountRequestsEQ.
@@ -499,6 +519,71 @@ func EpisodeLTE(v int64) predicate.PoolCapacityAlertState {
 	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldEpisode, v))
 }
 
+// AlertMetricEQ applies the EQ predicate on the "alert_metric" field.
+func AlertMetricEQ(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldAlertMetric, v))
+}
+
+// AlertMetricNEQ applies the NEQ predicate on the "alert_metric" field.
+func AlertMetricNEQ(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNEQ(FieldAlertMetric, v))
+}
+
+// AlertMetricIn applies the In predicate on the "alert_metric" field.
+func AlertMetricIn(vs ...string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIn(FieldAlertMetric, vs...))
+}
+
+// AlertMetricNotIn applies the NotIn predicate on the "alert_metric" field.
+func AlertMetricNotIn(vs ...string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotIn(FieldAlertMetric, vs...))
+}
+
+// AlertMetricGT applies the GT predicate on the "alert_metric" field.
+func AlertMetricGT(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGT(FieldAlertMetric, v))
+}
+
+// AlertMetricGTE applies the GTE predicate on the "alert_metric" field.
+func AlertMetricGTE(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGTE(FieldAlertMetric, v))
+}
+
+// AlertMetricLT applies the LT predicate on the "alert_metric" field.
+func AlertMetricLT(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLT(FieldAlertMetric, v))
+}
+
+// AlertMetricLTE applies the LTE predicate on the "alert_metric" field.
+func AlertMetricLTE(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldAlertMetric, v))
+}
+
+// AlertMetricContains applies the Contains predicate on the "alert_metric" field.
+func AlertMetricContains(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldContains(FieldAlertMetric, v))
+}
+
+// AlertMetricHasPrefix applies the HasPrefix predicate on the "alert_metric" field.
+func AlertMetricHasPrefix(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldHasPrefix(FieldAlertMetric, v))
+}
+
+// AlertMetricHasSuffix applies the HasSuffix predicate on the "alert_metric" field.
+func AlertMetricHasSuffix(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldHasSuffix(FieldAlertMetric, v))
+}
+
+// AlertMetricEqualFold applies the EqualFold predicate on the "alert_metric" field.
+func AlertMetricEqualFold(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEqualFold(FieldAlertMetric, v))
+}
+
+// AlertMetricContainsFold applies the ContainsFold predicate on the "alert_metric" field.
+func AlertMetricContainsFold(v string) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldContainsFold(FieldAlertMetric, v))
+}
+
 // PredictedRequestsEQ applies the EQ predicate on the "predicted_requests" field.
 func PredictedRequestsEQ(v int64) predicate.PoolCapacityAlertState {
 	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldPredictedRequests, v))
@@ -547,6 +632,146 @@ func PredictedRequestsIsNil() predicate.PoolCapacityAlertState {
 // PredictedRequestsNotNil applies the NotNil predicate on the "predicted_requests" field.
 func PredictedRequestsNotNil() predicate.PoolCapacityAlertState {
 	return predicate.PoolCapacityAlertState(sql.FieldNotNull(FieldPredictedRequests))
+}
+
+// RemainingBalanceUsdEQ applies the EQ predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdEQ(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldRemainingBalanceUsd, v))
+}
+
+// RemainingBalanceUsdNEQ applies the NEQ predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdNEQ(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNEQ(FieldRemainingBalanceUsd, v))
+}
+
+// RemainingBalanceUsdIn applies the In predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdIn(vs ...float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIn(FieldRemainingBalanceUsd, vs...))
+}
+
+// RemainingBalanceUsdNotIn applies the NotIn predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdNotIn(vs ...float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotIn(FieldRemainingBalanceUsd, vs...))
+}
+
+// RemainingBalanceUsdGT applies the GT predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdGT(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGT(FieldRemainingBalanceUsd, v))
+}
+
+// RemainingBalanceUsdGTE applies the GTE predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdGTE(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGTE(FieldRemainingBalanceUsd, v))
+}
+
+// RemainingBalanceUsdLT applies the LT predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdLT(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLT(FieldRemainingBalanceUsd, v))
+}
+
+// RemainingBalanceUsdLTE applies the LTE predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdLTE(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldRemainingBalanceUsd, v))
+}
+
+// RemainingBalanceUsdIsNil applies the IsNil predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdIsNil() predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIsNull(FieldRemainingBalanceUsd))
+}
+
+// RemainingBalanceUsdNotNil applies the NotNil predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdNotNil() predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotNull(FieldRemainingBalanceUsd))
+}
+
+// ThresholdRequestsEQ applies the EQ predicate on the "threshold_requests" field.
+func ThresholdRequestsEQ(v int64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldThresholdRequests, v))
+}
+
+// ThresholdRequestsNEQ applies the NEQ predicate on the "threshold_requests" field.
+func ThresholdRequestsNEQ(v int64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNEQ(FieldThresholdRequests, v))
+}
+
+// ThresholdRequestsIn applies the In predicate on the "threshold_requests" field.
+func ThresholdRequestsIn(vs ...int64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIn(FieldThresholdRequests, vs...))
+}
+
+// ThresholdRequestsNotIn applies the NotIn predicate on the "threshold_requests" field.
+func ThresholdRequestsNotIn(vs ...int64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotIn(FieldThresholdRequests, vs...))
+}
+
+// ThresholdRequestsGT applies the GT predicate on the "threshold_requests" field.
+func ThresholdRequestsGT(v int64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGT(FieldThresholdRequests, v))
+}
+
+// ThresholdRequestsGTE applies the GTE predicate on the "threshold_requests" field.
+func ThresholdRequestsGTE(v int64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGTE(FieldThresholdRequests, v))
+}
+
+// ThresholdRequestsLT applies the LT predicate on the "threshold_requests" field.
+func ThresholdRequestsLT(v int64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLT(FieldThresholdRequests, v))
+}
+
+// ThresholdRequestsLTE applies the LTE predicate on the "threshold_requests" field.
+func ThresholdRequestsLTE(v int64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldThresholdRequests, v))
+}
+
+// ThresholdUsdEQ applies the EQ predicate on the "threshold_usd" field.
+func ThresholdUsdEQ(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldEQ(FieldThresholdUsd, v))
+}
+
+// ThresholdUsdNEQ applies the NEQ predicate on the "threshold_usd" field.
+func ThresholdUsdNEQ(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNEQ(FieldThresholdUsd, v))
+}
+
+// ThresholdUsdIn applies the In predicate on the "threshold_usd" field.
+func ThresholdUsdIn(vs ...float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIn(FieldThresholdUsd, vs...))
+}
+
+// ThresholdUsdNotIn applies the NotIn predicate on the "threshold_usd" field.
+func ThresholdUsdNotIn(vs ...float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotIn(FieldThresholdUsd, vs...))
+}
+
+// ThresholdUsdGT applies the GT predicate on the "threshold_usd" field.
+func ThresholdUsdGT(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGT(FieldThresholdUsd, v))
+}
+
+// ThresholdUsdGTE applies the GTE predicate on the "threshold_usd" field.
+func ThresholdUsdGTE(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldGTE(FieldThresholdUsd, v))
+}
+
+// ThresholdUsdLT applies the LT predicate on the "threshold_usd" field.
+func ThresholdUsdLT(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLT(FieldThresholdUsd, v))
+}
+
+// ThresholdUsdLTE applies the LTE predicate on the "threshold_usd" field.
+func ThresholdUsdLTE(v float64) predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldLTE(FieldThresholdUsd, v))
+}
+
+// ThresholdUsdIsNil applies the IsNil predicate on the "threshold_usd" field.
+func ThresholdUsdIsNil() predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldIsNull(FieldThresholdUsd))
+}
+
+// ThresholdUsdNotNil applies the NotNil predicate on the "threshold_usd" field.
+func ThresholdUsdNotNil() predicate.PoolCapacityAlertState {
+	return predicate.PoolCapacityAlertState(sql.FieldNotNull(FieldThresholdUsd))
 }
 
 // AccountRequestsEQ applies the EQ predicate on the "account_requests" field.

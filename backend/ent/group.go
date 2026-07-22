@@ -121,6 +121,12 @@ type Group struct {
 	RpmLimit int `json:"rpm_limit,omitempty"`
 	// 是否启用分组池容量告警
 	PoolCapacityAlertEnabled bool `json:"pool_capacity_alert_enabled,omitempty"`
+	// 分组池容量告警指标：predicted_requests 或 remaining_balance_usd
+	PoolCapacityAlertMetric string `json:"pool_capacity_alert_metric,omitempty"`
+	// 预计剩余请求数告警阈值
+	PoolCapacityAlertThresholdRequests int64 `json:"pool_capacity_alert_threshold_requests,omitempty"`
+	// 剩余可用金额告警阈值（USD）
+	PoolCapacityAlertThresholdUsd *float64 `json:"pool_capacity_alert_threshold_usd,omitempty"`
 	// 分组池容量告警配置代际，仅供内部缓存一致性使用
 	PoolCapacityAlertGeneration int64 `json:"pool_capacity_alert_generation,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -321,11 +327,11 @@ func (*Group) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case group.FieldPeakRateEnabled, group.FieldIsExclusive, group.FieldAllowImageGeneration, group.FieldAllowBatchImageGeneration, group.FieldImageRateIndependent, group.FieldVideoRateIndependent, group.FieldClaudeCodeOnly, group.FieldModelRoutingEnabled, group.FieldMcpXMLInject, group.FieldAllowMessagesDispatch, group.FieldRequireOauthOnly, group.FieldRequirePrivacySet, group.FieldPoolCapacityAlertEnabled:
 			values[i] = new(sql.NullBool)
-		case group.FieldRateMultiplier, group.FieldPeakRateMultiplier, group.FieldDailyLimitUsd, group.FieldWeeklyLimitUsd, group.FieldMonthlyLimitUsd, group.FieldImageRateMultiplier, group.FieldImagePrice1k, group.FieldImagePrice2k, group.FieldImagePrice4k, group.FieldBatchImageDiscountMultiplier, group.FieldBatchImageHoldMultiplier, group.FieldVideoRateMultiplier, group.FieldVideoPrice480p, group.FieldVideoPrice720p, group.FieldVideoPrice1080p, group.FieldWebSearchPricePerCall:
+		case group.FieldRateMultiplier, group.FieldPeakRateMultiplier, group.FieldDailyLimitUsd, group.FieldWeeklyLimitUsd, group.FieldMonthlyLimitUsd, group.FieldImageRateMultiplier, group.FieldImagePrice1k, group.FieldImagePrice2k, group.FieldImagePrice4k, group.FieldBatchImageDiscountMultiplier, group.FieldBatchImageHoldMultiplier, group.FieldVideoRateMultiplier, group.FieldVideoPrice480p, group.FieldVideoPrice720p, group.FieldVideoPrice1080p, group.FieldWebSearchPricePerCall, group.FieldPoolCapacityAlertThresholdUsd:
 			values[i] = new(sql.NullFloat64)
-		case group.FieldID, group.FieldDefaultValidityDays, group.FieldFallbackGroupID, group.FieldFallbackGroupIDOnInvalidRequest, group.FieldSortOrder, group.FieldRpmLimit, group.FieldPoolCapacityAlertGeneration:
+		case group.FieldID, group.FieldDefaultValidityDays, group.FieldFallbackGroupID, group.FieldFallbackGroupIDOnInvalidRequest, group.FieldSortOrder, group.FieldRpmLimit, group.FieldPoolCapacityAlertThresholdRequests, group.FieldPoolCapacityAlertGeneration:
 			values[i] = new(sql.NullInt64)
-		case group.FieldName, group.FieldDescription, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldSubscriptionType, group.FieldDefaultMappedModel:
+		case group.FieldName, group.FieldDescription, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldSubscriptionType, group.FieldDefaultMappedModel, group.FieldPoolCapacityAlertMetric:
 			values[i] = new(sql.NullString)
 		case group.FieldCreatedAt, group.FieldUpdatedAt, group.FieldDeletedAt:
 			values[i] = new(sql.NullTime)
@@ -681,6 +687,25 @@ func (_m *Group) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.PoolCapacityAlertEnabled = value.Bool
 			}
+		case group.FieldPoolCapacityAlertMetric:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field pool_capacity_alert_metric", values[i])
+			} else if value.Valid {
+				_m.PoolCapacityAlertMetric = value.String
+			}
+		case group.FieldPoolCapacityAlertThresholdRequests:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field pool_capacity_alert_threshold_requests", values[i])
+			} else if value.Valid {
+				_m.PoolCapacityAlertThresholdRequests = value.Int64
+			}
+		case group.FieldPoolCapacityAlertThresholdUsd:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field pool_capacity_alert_threshold_usd", values[i])
+			} else if value.Valid {
+				_m.PoolCapacityAlertThresholdUsd = new(float64)
+				*_m.PoolCapacityAlertThresholdUsd = value.Float64
+			}
 		case group.FieldPoolCapacityAlertGeneration:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field pool_capacity_alert_generation", values[i])
@@ -985,6 +1010,17 @@ func (_m *Group) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("pool_capacity_alert_enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.PoolCapacityAlertEnabled))
+	builder.WriteString(", ")
+	builder.WriteString("pool_capacity_alert_metric=")
+	builder.WriteString(_m.PoolCapacityAlertMetric)
+	builder.WriteString(", ")
+	builder.WriteString("pool_capacity_alert_threshold_requests=")
+	builder.WriteString(fmt.Sprintf("%v", _m.PoolCapacityAlertThresholdRequests))
+	builder.WriteString(", ")
+	if v := _m.PoolCapacityAlertThresholdUsd; v != nil {
+		builder.WriteString("pool_capacity_alert_threshold_usd=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("pool_capacity_alert_generation=")
 	builder.WriteString(fmt.Sprintf("%v", _m.PoolCapacityAlertGeneration))

@@ -1715,7 +1715,7 @@ func (stubGroupRepo) Update(ctx context.Context, group *service.Group) error {
 	return errors.New("not implemented")
 }
 
-func (stubGroupRepo) UpdateWithPoolCapacityAlert(ctx context.Context, group *service.Group, enabled *bool) error {
+func (stubGroupRepo) UpdateWithPoolCapacityAlert(ctx context.Context, group *service.Group, patch service.PoolCapacityAlertPolicyPatch) error {
 	return errors.New("not implemented")
 }
 

@@ -114,14 +114,29 @@ func UserEmail(v string) predicate.PoolCapacityAlertEvent {
 	return predicate.PoolCapacityAlertEvent(sql.FieldEQ(FieldUserEmail, v))
 }
 
+// AlertMetric applies equality check predicate on the "alert_metric" field. It's identical to AlertMetricEQ.
+func AlertMetric(v string) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldEQ(FieldAlertMetric, v))
+}
+
 // PredictedRequests applies equality check predicate on the "predicted_requests" field. It's identical to PredictedRequestsEQ.
 func PredictedRequests(v int64) predicate.PoolCapacityAlertEvent {
 	return predicate.PoolCapacityAlertEvent(sql.FieldEQ(FieldPredictedRequests, v))
 }
 
+// RemainingBalanceUsd applies equality check predicate on the "remaining_balance_usd" field. It's identical to RemainingBalanceUsdEQ.
+func RemainingBalanceUsd(v float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldEQ(FieldRemainingBalanceUsd, v))
+}
+
 // ThresholdRequests applies equality check predicate on the "threshold_requests" field. It's identical to ThresholdRequestsEQ.
 func ThresholdRequests(v int64) predicate.PoolCapacityAlertEvent {
 	return predicate.PoolCapacityAlertEvent(sql.FieldEQ(FieldThresholdRequests, v))
+}
+
+// ThresholdUsd applies equality check predicate on the "threshold_usd" field. It's identical to ThresholdUsdEQ.
+func ThresholdUsd(v float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldEQ(FieldThresholdUsd, v))
 }
 
 // AccountRequests applies equality check predicate on the "account_requests" field. It's identical to AccountRequestsEQ.
@@ -764,6 +779,71 @@ func UserEmailContainsFold(v string) predicate.PoolCapacityAlertEvent {
 	return predicate.PoolCapacityAlertEvent(sql.FieldContainsFold(FieldUserEmail, v))
 }
 
+// AlertMetricEQ applies the EQ predicate on the "alert_metric" field.
+func AlertMetricEQ(v string) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldEQ(FieldAlertMetric, v))
+}
+
+// AlertMetricNEQ applies the NEQ predicate on the "alert_metric" field.
+func AlertMetricNEQ(v string) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldNEQ(FieldAlertMetric, v))
+}
+
+// AlertMetricIn applies the In predicate on the "alert_metric" field.
+func AlertMetricIn(vs ...string) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldIn(FieldAlertMetric, vs...))
+}
+
+// AlertMetricNotIn applies the NotIn predicate on the "alert_metric" field.
+func AlertMetricNotIn(vs ...string) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldNotIn(FieldAlertMetric, vs...))
+}
+
+// AlertMetricGT applies the GT predicate on the "alert_metric" field.
+func AlertMetricGT(v string) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldGT(FieldAlertMetric, v))
+}
+
+// AlertMetricGTE applies the GTE predicate on the "alert_metric" field.
+func AlertMetricGTE(v string) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldGTE(FieldAlertMetric, v))
+}
+
+// AlertMetricLT applies the LT predicate on the "alert_metric" field.
+func AlertMetricLT(v string) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldLT(FieldAlertMetric, v))
+}
+
+// AlertMetricLTE applies the LTE predicate on the "alert_metric" field.
+func AlertMetricLTE(v string) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldLTE(FieldAlertMetric, v))
+}
+
+// AlertMetricContains applies the Contains predicate on the "alert_metric" field.
+func AlertMetricContains(v string) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldContains(FieldAlertMetric, v))
+}
+
+// AlertMetricHasPrefix applies the HasPrefix predicate on the "alert_metric" field.
+func AlertMetricHasPrefix(v string) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldHasPrefix(FieldAlertMetric, v))
+}
+
+// AlertMetricHasSuffix applies the HasSuffix predicate on the "alert_metric" field.
+func AlertMetricHasSuffix(v string) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldHasSuffix(FieldAlertMetric, v))
+}
+
+// AlertMetricEqualFold applies the EqualFold predicate on the "alert_metric" field.
+func AlertMetricEqualFold(v string) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldEqualFold(FieldAlertMetric, v))
+}
+
+// AlertMetricContainsFold applies the ContainsFold predicate on the "alert_metric" field.
+func AlertMetricContainsFold(v string) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldContainsFold(FieldAlertMetric, v))
+}
+
 // PredictedRequestsEQ applies the EQ predicate on the "predicted_requests" field.
 func PredictedRequestsEQ(v int64) predicate.PoolCapacityAlertEvent {
 	return predicate.PoolCapacityAlertEvent(sql.FieldEQ(FieldPredictedRequests, v))
@@ -804,6 +884,66 @@ func PredictedRequestsLTE(v int64) predicate.PoolCapacityAlertEvent {
 	return predicate.PoolCapacityAlertEvent(sql.FieldLTE(FieldPredictedRequests, v))
 }
 
+// PredictedRequestsIsNil applies the IsNil predicate on the "predicted_requests" field.
+func PredictedRequestsIsNil() predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldIsNull(FieldPredictedRequests))
+}
+
+// PredictedRequestsNotNil applies the NotNil predicate on the "predicted_requests" field.
+func PredictedRequestsNotNil() predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldNotNull(FieldPredictedRequests))
+}
+
+// RemainingBalanceUsdEQ applies the EQ predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdEQ(v float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldEQ(FieldRemainingBalanceUsd, v))
+}
+
+// RemainingBalanceUsdNEQ applies the NEQ predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdNEQ(v float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldNEQ(FieldRemainingBalanceUsd, v))
+}
+
+// RemainingBalanceUsdIn applies the In predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdIn(vs ...float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldIn(FieldRemainingBalanceUsd, vs...))
+}
+
+// RemainingBalanceUsdNotIn applies the NotIn predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdNotIn(vs ...float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldNotIn(FieldRemainingBalanceUsd, vs...))
+}
+
+// RemainingBalanceUsdGT applies the GT predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdGT(v float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldGT(FieldRemainingBalanceUsd, v))
+}
+
+// RemainingBalanceUsdGTE applies the GTE predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdGTE(v float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldGTE(FieldRemainingBalanceUsd, v))
+}
+
+// RemainingBalanceUsdLT applies the LT predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdLT(v float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldLT(FieldRemainingBalanceUsd, v))
+}
+
+// RemainingBalanceUsdLTE applies the LTE predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdLTE(v float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldLTE(FieldRemainingBalanceUsd, v))
+}
+
+// RemainingBalanceUsdIsNil applies the IsNil predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdIsNil() predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldIsNull(FieldRemainingBalanceUsd))
+}
+
+// RemainingBalanceUsdNotNil applies the NotNil predicate on the "remaining_balance_usd" field.
+func RemainingBalanceUsdNotNil() predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldNotNull(FieldRemainingBalanceUsd))
+}
+
 // ThresholdRequestsEQ applies the EQ predicate on the "threshold_requests" field.
 func ThresholdRequestsEQ(v int64) predicate.PoolCapacityAlertEvent {
 	return predicate.PoolCapacityAlertEvent(sql.FieldEQ(FieldThresholdRequests, v))
@@ -842,6 +982,66 @@ func ThresholdRequestsLT(v int64) predicate.PoolCapacityAlertEvent {
 // ThresholdRequestsLTE applies the LTE predicate on the "threshold_requests" field.
 func ThresholdRequestsLTE(v int64) predicate.PoolCapacityAlertEvent {
 	return predicate.PoolCapacityAlertEvent(sql.FieldLTE(FieldThresholdRequests, v))
+}
+
+// ThresholdRequestsIsNil applies the IsNil predicate on the "threshold_requests" field.
+func ThresholdRequestsIsNil() predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldIsNull(FieldThresholdRequests))
+}
+
+// ThresholdRequestsNotNil applies the NotNil predicate on the "threshold_requests" field.
+func ThresholdRequestsNotNil() predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldNotNull(FieldThresholdRequests))
+}
+
+// ThresholdUsdEQ applies the EQ predicate on the "threshold_usd" field.
+func ThresholdUsdEQ(v float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldEQ(FieldThresholdUsd, v))
+}
+
+// ThresholdUsdNEQ applies the NEQ predicate on the "threshold_usd" field.
+func ThresholdUsdNEQ(v float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldNEQ(FieldThresholdUsd, v))
+}
+
+// ThresholdUsdIn applies the In predicate on the "threshold_usd" field.
+func ThresholdUsdIn(vs ...float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldIn(FieldThresholdUsd, vs...))
+}
+
+// ThresholdUsdNotIn applies the NotIn predicate on the "threshold_usd" field.
+func ThresholdUsdNotIn(vs ...float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldNotIn(FieldThresholdUsd, vs...))
+}
+
+// ThresholdUsdGT applies the GT predicate on the "threshold_usd" field.
+func ThresholdUsdGT(v float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldGT(FieldThresholdUsd, v))
+}
+
+// ThresholdUsdGTE applies the GTE predicate on the "threshold_usd" field.
+func ThresholdUsdGTE(v float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldGTE(FieldThresholdUsd, v))
+}
+
+// ThresholdUsdLT applies the LT predicate on the "threshold_usd" field.
+func ThresholdUsdLT(v float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldLT(FieldThresholdUsd, v))
+}
+
+// ThresholdUsdLTE applies the LTE predicate on the "threshold_usd" field.
+func ThresholdUsdLTE(v float64) predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldLTE(FieldThresholdUsd, v))
+}
+
+// ThresholdUsdIsNil applies the IsNil predicate on the "threshold_usd" field.
+func ThresholdUsdIsNil() predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldIsNull(FieldThresholdUsd))
+}
+
+// ThresholdUsdNotNil applies the NotNil predicate on the "threshold_usd" field.
+func ThresholdUsdNotNil() predicate.PoolCapacityAlertEvent {
+	return predicate.PoolCapacityAlertEvent(sql.FieldNotNull(FieldThresholdUsd))
 }
 
 // AccountRequestsEQ applies the EQ predicate on the "account_requests" field.

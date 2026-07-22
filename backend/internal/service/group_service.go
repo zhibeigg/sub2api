@@ -47,9 +47,9 @@ type GroupDuplicateRepository interface {
 }
 
 type GroupPoolCapacityAlertRepository interface {
-	// UpdateWithPoolCapacityAlert serializes the alert toggle against all other
-	// admin updates so enabled/generation can never be restored from a stale snapshot.
-	UpdateWithPoolCapacityAlert(ctx context.Context, group *Group, enabled *bool) error
+	// UpdateWithPoolCapacityAlert serializes the alert policy patch against all
+	// other admin updates so policy/generation cannot be restored from a stale snapshot.
+	UpdateWithPoolCapacityAlert(ctx context.Context, group *Group, patch PoolCapacityAlertPolicyPatch) error
 }
 
 // AdminGroupRepository makes admin-only group write capabilities explicit

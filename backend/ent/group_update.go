@@ -934,6 +934,68 @@ func (_u *GroupUpdate) SetNillablePoolCapacityAlertEnabled(v *bool) *GroupUpdate
 	return _u
 }
 
+// SetPoolCapacityAlertMetric sets the "pool_capacity_alert_metric" field.
+func (_u *GroupUpdate) SetPoolCapacityAlertMetric(v string) *GroupUpdate {
+	_u.mutation.SetPoolCapacityAlertMetric(v)
+	return _u
+}
+
+// SetNillablePoolCapacityAlertMetric sets the "pool_capacity_alert_metric" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillablePoolCapacityAlertMetric(v *string) *GroupUpdate {
+	if v != nil {
+		_u.SetPoolCapacityAlertMetric(*v)
+	}
+	return _u
+}
+
+// SetPoolCapacityAlertThresholdRequests sets the "pool_capacity_alert_threshold_requests" field.
+func (_u *GroupUpdate) SetPoolCapacityAlertThresholdRequests(v int64) *GroupUpdate {
+	_u.mutation.ResetPoolCapacityAlertThresholdRequests()
+	_u.mutation.SetPoolCapacityAlertThresholdRequests(v)
+	return _u
+}
+
+// SetNillablePoolCapacityAlertThresholdRequests sets the "pool_capacity_alert_threshold_requests" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillablePoolCapacityAlertThresholdRequests(v *int64) *GroupUpdate {
+	if v != nil {
+		_u.SetPoolCapacityAlertThresholdRequests(*v)
+	}
+	return _u
+}
+
+// AddPoolCapacityAlertThresholdRequests adds value to the "pool_capacity_alert_threshold_requests" field.
+func (_u *GroupUpdate) AddPoolCapacityAlertThresholdRequests(v int64) *GroupUpdate {
+	_u.mutation.AddPoolCapacityAlertThresholdRequests(v)
+	return _u
+}
+
+// SetPoolCapacityAlertThresholdUsd sets the "pool_capacity_alert_threshold_usd" field.
+func (_u *GroupUpdate) SetPoolCapacityAlertThresholdUsd(v float64) *GroupUpdate {
+	_u.mutation.ResetPoolCapacityAlertThresholdUsd()
+	_u.mutation.SetPoolCapacityAlertThresholdUsd(v)
+	return _u
+}
+
+// SetNillablePoolCapacityAlertThresholdUsd sets the "pool_capacity_alert_threshold_usd" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillablePoolCapacityAlertThresholdUsd(v *float64) *GroupUpdate {
+	if v != nil {
+		_u.SetPoolCapacityAlertThresholdUsd(*v)
+	}
+	return _u
+}
+
+// AddPoolCapacityAlertThresholdUsd adds value to the "pool_capacity_alert_threshold_usd" field.
+func (_u *GroupUpdate) AddPoolCapacityAlertThresholdUsd(v float64) *GroupUpdate {
+	_u.mutation.AddPoolCapacityAlertThresholdUsd(v)
+	return _u
+}
+
+// ClearPoolCapacityAlertThresholdUsd clears the value of the "pool_capacity_alert_threshold_usd" field.
+func (_u *GroupUpdate) ClearPoolCapacityAlertThresholdUsd() *GroupUpdate {
+	_u.mutation.ClearPoolCapacityAlertThresholdUsd()
+	return _u
+}
+
 // SetPoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field.
 func (_u *GroupUpdate) SetPoolCapacityAlertGeneration(v int64) *GroupUpdate {
 	_u.mutation.ResetPoolCapacityAlertGeneration()
@@ -1399,6 +1461,11 @@ func (_u *GroupUpdate) check() error {
 			return &ValidationError{Name: "default_mapped_model", err: fmt.Errorf(`ent: validator failed for field "Group.default_mapped_model": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.PoolCapacityAlertMetric(); ok {
+		if err := group.PoolCapacityAlertMetricValidator(v); err != nil {
+			return &ValidationError{Name: "pool_capacity_alert_metric", err: fmt.Errorf(`ent: validator failed for field "Group.pool_capacity_alert_metric": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -1676,6 +1743,24 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.PoolCapacityAlertEnabled(); ok {
 		_spec.SetField(group.FieldPoolCapacityAlertEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PoolCapacityAlertMetric(); ok {
+		_spec.SetField(group.FieldPoolCapacityAlertMetric, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.PoolCapacityAlertThresholdRequests(); ok {
+		_spec.SetField(group.FieldPoolCapacityAlertThresholdRequests, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedPoolCapacityAlertThresholdRequests(); ok {
+		_spec.AddField(group.FieldPoolCapacityAlertThresholdRequests, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.PoolCapacityAlertThresholdUsd(); ok {
+		_spec.SetField(group.FieldPoolCapacityAlertThresholdUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedPoolCapacityAlertThresholdUsd(); ok {
+		_spec.AddField(group.FieldPoolCapacityAlertThresholdUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.PoolCapacityAlertThresholdUsdCleared() {
+		_spec.ClearField(group.FieldPoolCapacityAlertThresholdUsd, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.PoolCapacityAlertGeneration(); ok {
 		_spec.SetField(group.FieldPoolCapacityAlertGeneration, field.TypeInt64, value)
@@ -3122,6 +3207,68 @@ func (_u *GroupUpdateOne) SetNillablePoolCapacityAlertEnabled(v *bool) *GroupUpd
 	return _u
 }
 
+// SetPoolCapacityAlertMetric sets the "pool_capacity_alert_metric" field.
+func (_u *GroupUpdateOne) SetPoolCapacityAlertMetric(v string) *GroupUpdateOne {
+	_u.mutation.SetPoolCapacityAlertMetric(v)
+	return _u
+}
+
+// SetNillablePoolCapacityAlertMetric sets the "pool_capacity_alert_metric" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillablePoolCapacityAlertMetric(v *string) *GroupUpdateOne {
+	if v != nil {
+		_u.SetPoolCapacityAlertMetric(*v)
+	}
+	return _u
+}
+
+// SetPoolCapacityAlertThresholdRequests sets the "pool_capacity_alert_threshold_requests" field.
+func (_u *GroupUpdateOne) SetPoolCapacityAlertThresholdRequests(v int64) *GroupUpdateOne {
+	_u.mutation.ResetPoolCapacityAlertThresholdRequests()
+	_u.mutation.SetPoolCapacityAlertThresholdRequests(v)
+	return _u
+}
+
+// SetNillablePoolCapacityAlertThresholdRequests sets the "pool_capacity_alert_threshold_requests" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillablePoolCapacityAlertThresholdRequests(v *int64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetPoolCapacityAlertThresholdRequests(*v)
+	}
+	return _u
+}
+
+// AddPoolCapacityAlertThresholdRequests adds value to the "pool_capacity_alert_threshold_requests" field.
+func (_u *GroupUpdateOne) AddPoolCapacityAlertThresholdRequests(v int64) *GroupUpdateOne {
+	_u.mutation.AddPoolCapacityAlertThresholdRequests(v)
+	return _u
+}
+
+// SetPoolCapacityAlertThresholdUsd sets the "pool_capacity_alert_threshold_usd" field.
+func (_u *GroupUpdateOne) SetPoolCapacityAlertThresholdUsd(v float64) *GroupUpdateOne {
+	_u.mutation.ResetPoolCapacityAlertThresholdUsd()
+	_u.mutation.SetPoolCapacityAlertThresholdUsd(v)
+	return _u
+}
+
+// SetNillablePoolCapacityAlertThresholdUsd sets the "pool_capacity_alert_threshold_usd" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillablePoolCapacityAlertThresholdUsd(v *float64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetPoolCapacityAlertThresholdUsd(*v)
+	}
+	return _u
+}
+
+// AddPoolCapacityAlertThresholdUsd adds value to the "pool_capacity_alert_threshold_usd" field.
+func (_u *GroupUpdateOne) AddPoolCapacityAlertThresholdUsd(v float64) *GroupUpdateOne {
+	_u.mutation.AddPoolCapacityAlertThresholdUsd(v)
+	return _u
+}
+
+// ClearPoolCapacityAlertThresholdUsd clears the value of the "pool_capacity_alert_threshold_usd" field.
+func (_u *GroupUpdateOne) ClearPoolCapacityAlertThresholdUsd() *GroupUpdateOne {
+	_u.mutation.ClearPoolCapacityAlertThresholdUsd()
+	return _u
+}
+
 // SetPoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field.
 func (_u *GroupUpdateOne) SetPoolCapacityAlertGeneration(v int64) *GroupUpdateOne {
 	_u.mutation.ResetPoolCapacityAlertGeneration()
@@ -3600,6 +3747,11 @@ func (_u *GroupUpdateOne) check() error {
 			return &ValidationError{Name: "default_mapped_model", err: fmt.Errorf(`ent: validator failed for field "Group.default_mapped_model": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.PoolCapacityAlertMetric(); ok {
+		if err := group.PoolCapacityAlertMetricValidator(v); err != nil {
+			return &ValidationError{Name: "pool_capacity_alert_metric", err: fmt.Errorf(`ent: validator failed for field "Group.pool_capacity_alert_metric": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -3894,6 +4046,24 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.PoolCapacityAlertEnabled(); ok {
 		_spec.SetField(group.FieldPoolCapacityAlertEnabled, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.PoolCapacityAlertMetric(); ok {
+		_spec.SetField(group.FieldPoolCapacityAlertMetric, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.PoolCapacityAlertThresholdRequests(); ok {
+		_spec.SetField(group.FieldPoolCapacityAlertThresholdRequests, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedPoolCapacityAlertThresholdRequests(); ok {
+		_spec.AddField(group.FieldPoolCapacityAlertThresholdRequests, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.PoolCapacityAlertThresholdUsd(); ok {
+		_spec.SetField(group.FieldPoolCapacityAlertThresholdUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedPoolCapacityAlertThresholdUsd(); ok {
+		_spec.AddField(group.FieldPoolCapacityAlertThresholdUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.PoolCapacityAlertThresholdUsdCleared() {
+		_spec.ClearField(group.FieldPoolCapacityAlertThresholdUsd, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.PoolCapacityAlertGeneration(); ok {
 		_spec.SetField(group.FieldPoolCapacityAlertGeneration, field.TypeInt64, value)

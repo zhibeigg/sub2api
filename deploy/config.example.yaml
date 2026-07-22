@@ -960,12 +960,14 @@ account_capacity:
   stale_cache_seconds: 300
 
 # =============================================================================
-# 池模式账户容量预测提醒
-# Pool-mode Account Capacity Prediction Alerts
+# 池模式账户容量提醒
+# Pool-mode Account Capacity Alerts
 # =============================================================================
 # 全局运行时默认开启，但每个分组的 pool_capacity_alert_enabled 默认关闭。
 # 仅最终实际命中的 pool_mode 账户 + 最终计费分组均开启时评估。
-# 样本数固定为最近 50 次成功落账；预计剩余请求数严格小于 50 才告警。
+# 每个分组在 predicted_requests 与 remaining_balance_usd 中二选一并配置阈值；
+# 请求预测样本数固定为最近 50 次成功落账，金额模式只接受权威 USD 余额。
+# 两种模式均使用严格小于判断，等于阈值不告警。
 pool_capacity_alert:
   enabled: true
   evaluation_worker_count: 2

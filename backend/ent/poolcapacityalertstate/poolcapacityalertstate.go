@@ -29,8 +29,16 @@ const (
 	FieldStatus = "status"
 	// FieldEpisode holds the string denoting the episode field in the database.
 	FieldEpisode = "episode"
+	// FieldAlertMetric holds the string denoting the alert_metric field in the database.
+	FieldAlertMetric = "alert_metric"
 	// FieldPredictedRequests holds the string denoting the predicted_requests field in the database.
 	FieldPredictedRequests = "predicted_requests"
+	// FieldRemainingBalanceUsd holds the string denoting the remaining_balance_usd field in the database.
+	FieldRemainingBalanceUsd = "remaining_balance_usd"
+	// FieldThresholdRequests holds the string denoting the threshold_requests field in the database.
+	FieldThresholdRequests = "threshold_requests"
+	// FieldThresholdUsd holds the string denoting the threshold_usd field in the database.
+	FieldThresholdUsd = "threshold_usd"
 	// FieldAccountRequests holds the string denoting the account_requests field in the database.
 	FieldAccountRequests = "account_requests"
 	// FieldAPIKeyRequests holds the string denoting the api_key_requests field in the database.
@@ -68,7 +76,11 @@ var Columns = []string{
 	FieldBillingType,
 	FieldStatus,
 	FieldEpisode,
+	FieldAlertMetric,
 	FieldPredictedRequests,
+	FieldRemainingBalanceUsd,
+	FieldThresholdRequests,
+	FieldThresholdUsd,
 	FieldAccountRequests,
 	FieldAPIKeyRequests,
 	FieldWalletRequests,
@@ -101,6 +113,12 @@ var (
 	StatusValidator func(string) error
 	// DefaultEpisode holds the default value on creation for the "episode" field.
 	DefaultEpisode int64
+	// DefaultAlertMetric holds the default value on creation for the "alert_metric" field.
+	DefaultAlertMetric string
+	// AlertMetricValidator is a validator for the "alert_metric" field. It is called by the builders before save.
+	AlertMetricValidator func(string) error
+	// DefaultThresholdRequests holds the default value on creation for the "threshold_requests" field.
+	DefaultThresholdRequests int64
 	// DefaultAvgAccountCost holds the default value on creation for the "avg_account_cost" field.
 	DefaultAvgAccountCost float64
 	// DefaultAvgActualCost holds the default value on creation for the "avg_actual_cost" field.
@@ -169,9 +187,29 @@ func ByEpisode(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEpisode, opts...).ToFunc()
 }
 
+// ByAlertMetric orders the results by the alert_metric field.
+func ByAlertMetric(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAlertMetric, opts...).ToFunc()
+}
+
 // ByPredictedRequests orders the results by the predicted_requests field.
 func ByPredictedRequests(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPredictedRequests, opts...).ToFunc()
+}
+
+// ByRemainingBalanceUsd orders the results by the remaining_balance_usd field.
+func ByRemainingBalanceUsd(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRemainingBalanceUsd, opts...).ToFunc()
+}
+
+// ByThresholdRequests orders the results by the threshold_requests field.
+func ByThresholdRequests(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldThresholdRequests, opts...).ToFunc()
+}
+
+// ByThresholdUsd orders the results by the threshold_usd field.
+func ByThresholdUsd(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldThresholdUsd, opts...).ToFunc()
 }
 
 // ByAccountRequests orders the results by the account_requests field.

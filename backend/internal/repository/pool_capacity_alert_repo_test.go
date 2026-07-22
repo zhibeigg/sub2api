@@ -11,15 +11,50 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPoolCapacityBelowThresholdIsStrict(t *testing.T) {
+func TestPoolCapacityEvaluationBelowThresholdIsStrict(t *testing.T) {
 	fortyNine := int64(49)
 	fifty := int64(50)
 	fiftyOne := int64(51)
+	thresholdRequests := int64(50)
 
-	require.True(t, poolCapacityBelowThreshold(&fortyNine, service.PoolCapacityAlertThresholdRequests))
-	require.False(t, poolCapacityBelowThreshold(&fifty, service.PoolCapacityAlertThresholdRequests), "exactly 50 requests must not alert")
-	require.False(t, poolCapacityBelowThreshold(&fiftyOne, service.PoolCapacityAlertThresholdRequests))
-	require.False(t, poolCapacityBelowThreshold(nil, service.PoolCapacityAlertThresholdRequests))
+	require.True(t, poolCapacityEvaluationBelowThreshold(service.PoolCapacityEvaluation{
+		AlertMetric:       service.PoolCapacityAlertMetricPredictedRequests,
+		PredictedRequests: &fortyNine,
+		ThresholdRequests: &thresholdRequests,
+	}))
+	require.False(t, poolCapacityEvaluationBelowThreshold(service.PoolCapacityEvaluation{
+		AlertMetric:       service.PoolCapacityAlertMetricPredictedRequests,
+		PredictedRequests: &fifty,
+		ThresholdRequests: &thresholdRequests,
+	}), "exactly 50 requests must not alert")
+	require.False(t, poolCapacityEvaluationBelowThreshold(service.PoolCapacityEvaluation{
+		AlertMetric:       service.PoolCapacityAlertMetricPredictedRequests,
+		PredictedRequests: &fiftyOne,
+		ThresholdRequests: &thresholdRequests,
+	}))
+
+	belowUSD := 9.99
+	equalUSD := 10.0
+	thresholdUSD := 10.0
+	require.True(t, poolCapacityEvaluationBelowThreshold(service.PoolCapacityEvaluation{
+		AlertMetric:         service.PoolCapacityAlertMetricRemainingBalanceUSD,
+		RemainingBalanceUSD: &belowUSD,
+		ThresholdUSD:        &thresholdUSD,
+	}))
+	require.False(t, poolCapacityEvaluationBelowThreshold(service.PoolCapacityEvaluation{
+		AlertMetric:         service.PoolCapacityAlertMetricRemainingBalanceUSD,
+		RemainingBalanceUSD: &equalUSD,
+		ThresholdUSD:        &thresholdUSD,
+	}), "exactly equal USD balance must not alert")
+
+	require.Nil(t, poolCapacityEventThresholdRequests(service.PoolCapacityEvaluation{
+		AlertMetric:       service.PoolCapacityAlertMetricRemainingBalanceUSD,
+		ThresholdRequests: &thresholdRequests,
+	}), "amount events must keep legacy request-threshold placeholders at N/A")
+	require.Equal(t, &thresholdRequests, poolCapacityEventThresholdRequests(service.PoolCapacityEvaluation{
+		AlertMetric:       service.PoolCapacityAlertMetricPredictedRequests,
+		ThresholdRequests: &thresholdRequests,
+	}))
 }
 
 func TestGetRecentPoolCapacityCostSummaryUsesBoundedSuccessfulBillingHistory(t *testing.T) {
@@ -62,7 +97,8 @@ func TestPoolCapacityAlertEventDeduplicatesAdministratorEmails(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"lock"}).AddRow(""))
 	mock.ExpectExec(`(?s)INSERT INTO pool_capacity_alert_states`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery(`(?s)SELECT id,status,episode,last_alerted_at.*FOR UPDATE`).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "episode", "last_alerted_at"}).AddRow(5, service.PoolCapacityAlertStatusHealthy, 0, nil))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "episode", "last_alerted_at"}).
+			AddRow(5, service.PoolCapacityAlertStatusHealthy, 0, nil))
 	mock.ExpectExec(`(?s)UPDATE pool_capacity_alert_states SET.*status='low'`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery(`(?s)INSERT INTO pool_capacity_alert_events.*RETURNING id`).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(9))
@@ -73,6 +109,7 @@ func TestPoolCapacityAlertEventDeduplicatesAdministratorEmails(t *testing.T) {
 	mock.ExpectCommit()
 	mock.ExpectClose()
 
+	thresholdRequests := service.DefaultPoolCapacityAlertThresholdRequests
 	event, err := repo.EvaluateAndMaybeCreateEvent(context.Background(), service.PoolCapacityEvaluation{
 		GroupID:             1,
 		GroupGeneration:     3,
@@ -80,12 +117,13 @@ func TestPoolCapacityAlertEventDeduplicatesAdministratorEmails(t *testing.T) {
 		APIKeyID:            3,
 		UserID:              4,
 		BillingType:         service.BillingTypeBalance,
+		AlertMetric:         service.PoolCapacityAlertMetricPredictedRequests,
 		PredictedRequests:   &predicted,
 		AverageAccountCost:  1,
 		AverageActualCost:   1,
 		SampleCount:         service.PoolCapacityAlertSampleSize,
 		QQBotAppID:          "app-1",
-		ThresholdRequests:   service.PoolCapacityAlertThresholdRequests,
+		ThresholdRequests:   &thresholdRequests,
 		ReminderCooldown:    time.Hour,
 		DeliveryMaxAttempts: 3,
 	}, now)

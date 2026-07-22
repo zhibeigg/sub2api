@@ -273,8 +273,11 @@ type CreateGroupInput struct {
 	ModelsListConfig            GroupModelsListConfig
 	// RPMLimit 分组 RPM 上限（0 = 不限制）
 	RPMLimit int
-	// PoolCapacityAlertEnabled 是否启用分组池容量告警；未提供时 bool 零值默认为 false。
-	PoolCapacityAlertEnabled bool
+	// 分组池容量告警策略；新字段缺省时使用 predicted_requests + 50 + null。
+	PoolCapacityAlertEnabled           bool
+	PoolCapacityAlertMetric            *string
+	PoolCapacityAlertThresholdRequests *int64
+	PoolCapacityAlertThresholdUSD      *float64
 	// 从指定分组复制账号（创建分组后在同一事务内绑定）
 	CopyAccountsFromGroupIDs []int64
 }
@@ -332,8 +335,11 @@ type UpdateGroupInput struct {
 	ModelsListConfig            *GroupModelsListConfig
 	// RPMLimit 分组 RPM 上限（0 = 不限制），nil 表示未提供不改动。
 	RPMLimit *int
-	// PoolCapacityAlertEnabled nil 表示未提供不改动；显式修改开关时由服务递增内部 generation。
-	PoolCapacityAlertEnabled *bool
+	// 分组池容量告警策略字段均采用 patch 语义；ThresholdUSD 的外层 nil 表示未提供，内层 nil 表示清空。
+	PoolCapacityAlertEnabled           *bool
+	PoolCapacityAlertMetric            *string
+	PoolCapacityAlertThresholdRequests *int64
+	PoolCapacityAlertThresholdUSD      **float64
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64
 }

@@ -712,6 +712,48 @@ func (_c *GroupCreate) SetNillablePoolCapacityAlertEnabled(v *bool) *GroupCreate
 	return _c
 }
 
+// SetPoolCapacityAlertMetric sets the "pool_capacity_alert_metric" field.
+func (_c *GroupCreate) SetPoolCapacityAlertMetric(v string) *GroupCreate {
+	_c.mutation.SetPoolCapacityAlertMetric(v)
+	return _c
+}
+
+// SetNillablePoolCapacityAlertMetric sets the "pool_capacity_alert_metric" field if the given value is not nil.
+func (_c *GroupCreate) SetNillablePoolCapacityAlertMetric(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetPoolCapacityAlertMetric(*v)
+	}
+	return _c
+}
+
+// SetPoolCapacityAlertThresholdRequests sets the "pool_capacity_alert_threshold_requests" field.
+func (_c *GroupCreate) SetPoolCapacityAlertThresholdRequests(v int64) *GroupCreate {
+	_c.mutation.SetPoolCapacityAlertThresholdRequests(v)
+	return _c
+}
+
+// SetNillablePoolCapacityAlertThresholdRequests sets the "pool_capacity_alert_threshold_requests" field if the given value is not nil.
+func (_c *GroupCreate) SetNillablePoolCapacityAlertThresholdRequests(v *int64) *GroupCreate {
+	if v != nil {
+		_c.SetPoolCapacityAlertThresholdRequests(*v)
+	}
+	return _c
+}
+
+// SetPoolCapacityAlertThresholdUsd sets the "pool_capacity_alert_threshold_usd" field.
+func (_c *GroupCreate) SetPoolCapacityAlertThresholdUsd(v float64) *GroupCreate {
+	_c.mutation.SetPoolCapacityAlertThresholdUsd(v)
+	return _c
+}
+
+// SetNillablePoolCapacityAlertThresholdUsd sets the "pool_capacity_alert_threshold_usd" field if the given value is not nil.
+func (_c *GroupCreate) SetNillablePoolCapacityAlertThresholdUsd(v *float64) *GroupCreate {
+	if v != nil {
+		_c.SetPoolCapacityAlertThresholdUsd(*v)
+	}
+	return _c
+}
+
 // SetPoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field.
 func (_c *GroupCreate) SetPoolCapacityAlertGeneration(v int64) *GroupCreate {
 	_c.mutation.SetPoolCapacityAlertGeneration(v)
@@ -1055,6 +1097,14 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultPoolCapacityAlertEnabled
 		_c.mutation.SetPoolCapacityAlertEnabled(v)
 	}
+	if _, ok := _c.mutation.PoolCapacityAlertMetric(); !ok {
+		v := group.DefaultPoolCapacityAlertMetric
+		_c.mutation.SetPoolCapacityAlertMetric(v)
+	}
+	if _, ok := _c.mutation.PoolCapacityAlertThresholdRequests(); !ok {
+		v := group.DefaultPoolCapacityAlertThresholdRequests
+		_c.mutation.SetPoolCapacityAlertThresholdRequests(v)
+	}
 	if _, ok := _c.mutation.PoolCapacityAlertGeneration(); !ok {
 		v := group.DefaultPoolCapacityAlertGeneration
 		_c.mutation.SetPoolCapacityAlertGeneration(v)
@@ -1208,6 +1258,17 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.PoolCapacityAlertEnabled(); !ok {
 		return &ValidationError{Name: "pool_capacity_alert_enabled", err: errors.New(`ent: missing required field "Group.pool_capacity_alert_enabled"`)}
+	}
+	if _, ok := _c.mutation.PoolCapacityAlertMetric(); !ok {
+		return &ValidationError{Name: "pool_capacity_alert_metric", err: errors.New(`ent: missing required field "Group.pool_capacity_alert_metric"`)}
+	}
+	if v, ok := _c.mutation.PoolCapacityAlertMetric(); ok {
+		if err := group.PoolCapacityAlertMetricValidator(v); err != nil {
+			return &ValidationError{Name: "pool_capacity_alert_metric", err: fmt.Errorf(`ent: validator failed for field "Group.pool_capacity_alert_metric": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.PoolCapacityAlertThresholdRequests(); !ok {
+		return &ValidationError{Name: "pool_capacity_alert_threshold_requests", err: errors.New(`ent: missing required field "Group.pool_capacity_alert_threshold_requests"`)}
 	}
 	if _, ok := _c.mutation.PoolCapacityAlertGeneration(); !ok {
 		return &ValidationError{Name: "pool_capacity_alert_generation", err: errors.New(`ent: missing required field "Group.pool_capacity_alert_generation"`)}
@@ -1442,6 +1503,18 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.PoolCapacityAlertEnabled(); ok {
 		_spec.SetField(group.FieldPoolCapacityAlertEnabled, field.TypeBool, value)
 		_node.PoolCapacityAlertEnabled = value
+	}
+	if value, ok := _c.mutation.PoolCapacityAlertMetric(); ok {
+		_spec.SetField(group.FieldPoolCapacityAlertMetric, field.TypeString, value)
+		_node.PoolCapacityAlertMetric = value
+	}
+	if value, ok := _c.mutation.PoolCapacityAlertThresholdRequests(); ok {
+		_spec.SetField(group.FieldPoolCapacityAlertThresholdRequests, field.TypeInt64, value)
+		_node.PoolCapacityAlertThresholdRequests = value
+	}
+	if value, ok := _c.mutation.PoolCapacityAlertThresholdUsd(); ok {
+		_spec.SetField(group.FieldPoolCapacityAlertThresholdUsd, field.TypeFloat64, value)
+		_node.PoolCapacityAlertThresholdUsd = &value
 	}
 	if value, ok := _c.mutation.PoolCapacityAlertGeneration(); ok {
 		_spec.SetField(group.FieldPoolCapacityAlertGeneration, field.TypeInt64, value)
@@ -2487,6 +2560,60 @@ func (u *GroupUpsert) UpdatePoolCapacityAlertEnabled() *GroupUpsert {
 	return u
 }
 
+// SetPoolCapacityAlertMetric sets the "pool_capacity_alert_metric" field.
+func (u *GroupUpsert) SetPoolCapacityAlertMetric(v string) *GroupUpsert {
+	u.Set(group.FieldPoolCapacityAlertMetric, v)
+	return u
+}
+
+// UpdatePoolCapacityAlertMetric sets the "pool_capacity_alert_metric" field to the value that was provided on create.
+func (u *GroupUpsert) UpdatePoolCapacityAlertMetric() *GroupUpsert {
+	u.SetExcluded(group.FieldPoolCapacityAlertMetric)
+	return u
+}
+
+// SetPoolCapacityAlertThresholdRequests sets the "pool_capacity_alert_threshold_requests" field.
+func (u *GroupUpsert) SetPoolCapacityAlertThresholdRequests(v int64) *GroupUpsert {
+	u.Set(group.FieldPoolCapacityAlertThresholdRequests, v)
+	return u
+}
+
+// UpdatePoolCapacityAlertThresholdRequests sets the "pool_capacity_alert_threshold_requests" field to the value that was provided on create.
+func (u *GroupUpsert) UpdatePoolCapacityAlertThresholdRequests() *GroupUpsert {
+	u.SetExcluded(group.FieldPoolCapacityAlertThresholdRequests)
+	return u
+}
+
+// AddPoolCapacityAlertThresholdRequests adds v to the "pool_capacity_alert_threshold_requests" field.
+func (u *GroupUpsert) AddPoolCapacityAlertThresholdRequests(v int64) *GroupUpsert {
+	u.Add(group.FieldPoolCapacityAlertThresholdRequests, v)
+	return u
+}
+
+// SetPoolCapacityAlertThresholdUsd sets the "pool_capacity_alert_threshold_usd" field.
+func (u *GroupUpsert) SetPoolCapacityAlertThresholdUsd(v float64) *GroupUpsert {
+	u.Set(group.FieldPoolCapacityAlertThresholdUsd, v)
+	return u
+}
+
+// UpdatePoolCapacityAlertThresholdUsd sets the "pool_capacity_alert_threshold_usd" field to the value that was provided on create.
+func (u *GroupUpsert) UpdatePoolCapacityAlertThresholdUsd() *GroupUpsert {
+	u.SetExcluded(group.FieldPoolCapacityAlertThresholdUsd)
+	return u
+}
+
+// AddPoolCapacityAlertThresholdUsd adds v to the "pool_capacity_alert_threshold_usd" field.
+func (u *GroupUpsert) AddPoolCapacityAlertThresholdUsd(v float64) *GroupUpsert {
+	u.Add(group.FieldPoolCapacityAlertThresholdUsd, v)
+	return u
+}
+
+// ClearPoolCapacityAlertThresholdUsd clears the value of the "pool_capacity_alert_threshold_usd" field.
+func (u *GroupUpsert) ClearPoolCapacityAlertThresholdUsd() *GroupUpsert {
+	u.SetNull(group.FieldPoolCapacityAlertThresholdUsd)
+	return u
+}
+
 // SetPoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field.
 func (u *GroupUpsert) SetPoolCapacityAlertGeneration(v int64) *GroupUpsert {
 	u.Set(group.FieldPoolCapacityAlertGeneration, v)
@@ -3488,6 +3615,69 @@ func (u *GroupUpsertOne) SetPoolCapacityAlertEnabled(v bool) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdatePoolCapacityAlertEnabled() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdatePoolCapacityAlertEnabled()
+	})
+}
+
+// SetPoolCapacityAlertMetric sets the "pool_capacity_alert_metric" field.
+func (u *GroupUpsertOne) SetPoolCapacityAlertMetric(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetPoolCapacityAlertMetric(v)
+	})
+}
+
+// UpdatePoolCapacityAlertMetric sets the "pool_capacity_alert_metric" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdatePoolCapacityAlertMetric() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdatePoolCapacityAlertMetric()
+	})
+}
+
+// SetPoolCapacityAlertThresholdRequests sets the "pool_capacity_alert_threshold_requests" field.
+func (u *GroupUpsertOne) SetPoolCapacityAlertThresholdRequests(v int64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetPoolCapacityAlertThresholdRequests(v)
+	})
+}
+
+// AddPoolCapacityAlertThresholdRequests adds v to the "pool_capacity_alert_threshold_requests" field.
+func (u *GroupUpsertOne) AddPoolCapacityAlertThresholdRequests(v int64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddPoolCapacityAlertThresholdRequests(v)
+	})
+}
+
+// UpdatePoolCapacityAlertThresholdRequests sets the "pool_capacity_alert_threshold_requests" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdatePoolCapacityAlertThresholdRequests() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdatePoolCapacityAlertThresholdRequests()
+	})
+}
+
+// SetPoolCapacityAlertThresholdUsd sets the "pool_capacity_alert_threshold_usd" field.
+func (u *GroupUpsertOne) SetPoolCapacityAlertThresholdUsd(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetPoolCapacityAlertThresholdUsd(v)
+	})
+}
+
+// AddPoolCapacityAlertThresholdUsd adds v to the "pool_capacity_alert_threshold_usd" field.
+func (u *GroupUpsertOne) AddPoolCapacityAlertThresholdUsd(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddPoolCapacityAlertThresholdUsd(v)
+	})
+}
+
+// UpdatePoolCapacityAlertThresholdUsd sets the "pool_capacity_alert_threshold_usd" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdatePoolCapacityAlertThresholdUsd() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdatePoolCapacityAlertThresholdUsd()
+	})
+}
+
+// ClearPoolCapacityAlertThresholdUsd clears the value of the "pool_capacity_alert_threshold_usd" field.
+func (u *GroupUpsertOne) ClearPoolCapacityAlertThresholdUsd() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearPoolCapacityAlertThresholdUsd()
 	})
 }
 
@@ -4661,6 +4851,69 @@ func (u *GroupUpsertBulk) SetPoolCapacityAlertEnabled(v bool) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdatePoolCapacityAlertEnabled() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdatePoolCapacityAlertEnabled()
+	})
+}
+
+// SetPoolCapacityAlertMetric sets the "pool_capacity_alert_metric" field.
+func (u *GroupUpsertBulk) SetPoolCapacityAlertMetric(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetPoolCapacityAlertMetric(v)
+	})
+}
+
+// UpdatePoolCapacityAlertMetric sets the "pool_capacity_alert_metric" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdatePoolCapacityAlertMetric() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdatePoolCapacityAlertMetric()
+	})
+}
+
+// SetPoolCapacityAlertThresholdRequests sets the "pool_capacity_alert_threshold_requests" field.
+func (u *GroupUpsertBulk) SetPoolCapacityAlertThresholdRequests(v int64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetPoolCapacityAlertThresholdRequests(v)
+	})
+}
+
+// AddPoolCapacityAlertThresholdRequests adds v to the "pool_capacity_alert_threshold_requests" field.
+func (u *GroupUpsertBulk) AddPoolCapacityAlertThresholdRequests(v int64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddPoolCapacityAlertThresholdRequests(v)
+	})
+}
+
+// UpdatePoolCapacityAlertThresholdRequests sets the "pool_capacity_alert_threshold_requests" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdatePoolCapacityAlertThresholdRequests() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdatePoolCapacityAlertThresholdRequests()
+	})
+}
+
+// SetPoolCapacityAlertThresholdUsd sets the "pool_capacity_alert_threshold_usd" field.
+func (u *GroupUpsertBulk) SetPoolCapacityAlertThresholdUsd(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetPoolCapacityAlertThresholdUsd(v)
+	})
+}
+
+// AddPoolCapacityAlertThresholdUsd adds v to the "pool_capacity_alert_threshold_usd" field.
+func (u *GroupUpsertBulk) AddPoolCapacityAlertThresholdUsd(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddPoolCapacityAlertThresholdUsd(v)
+	})
+}
+
+// UpdatePoolCapacityAlertThresholdUsd sets the "pool_capacity_alert_threshold_usd" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdatePoolCapacityAlertThresholdUsd() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdatePoolCapacityAlertThresholdUsd()
+	})
+}
+
+// ClearPoolCapacityAlertThresholdUsd clears the value of the "pool_capacity_alert_threshold_usd" field.
+func (u *GroupUpsertBulk) ClearPoolCapacityAlertThresholdUsd() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearPoolCapacityAlertThresholdUsd()
 	})
 }
 

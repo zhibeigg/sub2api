@@ -697,7 +697,7 @@
               <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                 {{ t("admin.groups.poolCapacityAlert.description") }}
               </p>
-              <p class="mt-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+              <p class="mt-2 text-xs font-medium text-gray-600 dark:text-gray-300" aria-live="polite">
                 {{
                   createForm.pool_capacity_alert_enabled
                     ? t("admin.groups.poolCapacityAlert.enabled")
@@ -711,12 +711,14 @@
               data-testid="create-pool-capacity-alert-switch"
               :aria-label="t('admin.groups.poolCapacityAlert.title')"
               :aria-checked="createForm.pool_capacity_alert_enabled"
+              :aria-expanded="createForm.pool_capacity_alert_enabled"
+              aria-controls="create-pool-capacity-alert-config"
               @click="
                 createForm.pool_capacity_alert_enabled =
                   !createForm.pool_capacity_alert_enabled
               "
               :class="[
-                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2',
                 createForm.pool_capacity_alert_enabled
                   ? 'bg-primary-500'
                   : 'bg-gray-300 dark:bg-dark-600',
@@ -731,6 +733,141 @@
                 ]"
               />
             </button>
+          </div>
+
+          <div
+            v-if="createForm.pool_capacity_alert_enabled"
+            id="create-pool-capacity-alert-config"
+            class="mt-4 space-y-4 border-l-2 border-primary-200 pl-4 dark:border-primary-800"
+          >
+            <fieldset>
+              <legend class="input-label">
+                {{ t("admin.groups.poolCapacityAlert.basisLegend") }}
+              </legend>
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label
+                  class="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 transition-colors focus-within:ring-2 focus-within:ring-primary-500 dark:border-dark-600"
+                >
+                  <input
+                    v-model="createForm.pool_capacity_alert_metric"
+                    type="radio"
+                    name="create-pool-capacity-alert-metric"
+                    value="predicted_requests"
+                    class="mt-0.5 h-4 w-4 flex-none text-primary-600 focus:ring-primary-500"
+                    data-testid="create-pool-capacity-alert-metric-requests"
+                  />
+                  <span>
+                    <span class="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                      {{ t("admin.groups.poolCapacityAlert.predictedRequests.label") }}
+                    </span>
+                    <span class="mt-1 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                      {{ t("admin.groups.poolCapacityAlert.predictedRequests.description") }}
+                    </span>
+                  </span>
+                </label>
+                <label
+                  class="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 transition-colors focus-within:ring-2 focus-within:ring-primary-500 dark:border-dark-600"
+                >
+                  <input
+                    v-model="createForm.pool_capacity_alert_metric"
+                    type="radio"
+                    name="create-pool-capacity-alert-metric"
+                    value="remaining_balance_usd"
+                    class="mt-0.5 h-4 w-4 flex-none text-primary-600 focus:ring-primary-500"
+                    data-testid="create-pool-capacity-alert-metric-usd"
+                  />
+                  <span>
+                    <span class="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                      {{ t("admin.groups.poolCapacityAlert.remainingBalanceUsd.label") }}
+                    </span>
+                    <span class="mt-1 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                      {{ t("admin.groups.poolCapacityAlert.remainingBalanceUsd.description") }}
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </fieldset>
+
+            <div v-if="createForm.pool_capacity_alert_metric === 'predicted_requests'">
+              <label for="create-pool-capacity-alert-threshold-requests" class="input-label">
+                {{ t("admin.groups.poolCapacityAlert.requestsThreshold.label") }}
+              </label>
+              <div class="relative">
+                <input
+                  id="create-pool-capacity-alert-threshold-requests"
+                  v-model.number="createForm.pool_capacity_alert_threshold_requests"
+                  type="number"
+                  inputmode="numeric"
+                  min="1"
+                  max="1000000000"
+                  step="1"
+                  class="input w-full pr-24"
+                  data-testid="create-pool-capacity-alert-threshold-requests"
+                  :aria-invalid="Boolean(poolCapacityAlertErrors.create.requests)"
+                  :aria-describedby="
+                    poolCapacityAlertErrors.create.requests
+                      ? 'create-pool-capacity-alert-requests-hint create-pool-capacity-alert-requests-error'
+                      : 'create-pool-capacity-alert-requests-hint'
+                  "
+                  @input="poolCapacityAlertErrors.create.requests = ''"
+                />
+                <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-gray-500 dark:text-gray-400">
+                  {{ t("admin.groups.poolCapacityAlert.requestsThreshold.unit") }}
+                </span>
+              </div>
+              <p id="create-pool-capacity-alert-requests-hint" class="input-hint">
+                {{ t("admin.groups.poolCapacityAlert.requestsThreshold.hint") }}
+              </p>
+              <p
+                v-if="poolCapacityAlertErrors.create.requests"
+                id="create-pool-capacity-alert-requests-error"
+                class="mt-1 text-xs text-red-600 dark:text-red-400"
+                role="alert"
+              >
+                {{ poolCapacityAlertErrors.create.requests }}
+              </p>
+            </div>
+
+            <div v-else>
+              <label for="create-pool-capacity-alert-threshold-usd" class="input-label">
+                {{ t("admin.groups.poolCapacityAlert.usdThreshold.label") }}
+              </label>
+              <div class="relative">
+                <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-500 dark:text-gray-400">$</span>
+                <input
+                  id="create-pool-capacity-alert-threshold-usd"
+                  v-model.number="createForm.pool_capacity_alert_threshold_usd"
+                  type="number"
+                  inputmode="decimal"
+                  min="0.01"
+                  max="1000000000000000"
+                  step="0.01"
+                  class="input w-full pl-7 pr-16"
+                  data-testid="create-pool-capacity-alert-threshold-usd"
+                  :aria-invalid="Boolean(poolCapacityAlertErrors.create.usd)"
+                  :aria-describedby="
+                    poolCapacityAlertErrors.create.usd
+                      ? 'create-pool-capacity-alert-usd-hint create-pool-capacity-alert-usd-error'
+                      : 'create-pool-capacity-alert-usd-hint'
+                  "
+                  @input="poolCapacityAlertErrors.create.usd = ''"
+                />
+                <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-gray-500 dark:text-gray-400">
+                  {{ t("admin.groups.poolCapacityAlert.usdThreshold.unit") }}
+                </span>
+              </div>
+              <p id="create-pool-capacity-alert-usd-hint" class="input-hint">
+                {{ t("admin.groups.poolCapacityAlert.usdThreshold.hint") }}
+              </p>
+              <p
+                v-if="poolCapacityAlertErrors.create.usd"
+                id="create-pool-capacity-alert-usd-error"
+                class="mt-1 text-xs text-red-600 dark:text-red-400"
+                role="alert"
+              >
+                {{ poolCapacityAlertErrors.create.usd }}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -2325,7 +2462,7 @@
               <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
                 {{ t("admin.groups.poolCapacityAlert.description") }}
               </p>
-              <p class="mt-2 text-xs font-medium text-gray-600 dark:text-gray-300">
+              <p class="mt-2 text-xs font-medium text-gray-600 dark:text-gray-300" aria-live="polite">
                 {{
                   editForm.pool_capacity_alert_enabled
                     ? t("admin.groups.poolCapacityAlert.enabled")
@@ -2339,12 +2476,14 @@
               data-testid="edit-pool-capacity-alert-switch"
               :aria-label="t('admin.groups.poolCapacityAlert.title')"
               :aria-checked="editForm.pool_capacity_alert_enabled"
+              :aria-expanded="editForm.pool_capacity_alert_enabled"
+              aria-controls="edit-pool-capacity-alert-config"
               @click="
                 editForm.pool_capacity_alert_enabled =
                   !editForm.pool_capacity_alert_enabled
               "
               :class="[
-                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors',
+                'relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2',
                 editForm.pool_capacity_alert_enabled
                   ? 'bg-primary-500'
                   : 'bg-gray-300 dark:bg-dark-600',
@@ -2359,6 +2498,141 @@
                 ]"
               />
             </button>
+          </div>
+
+          <div
+            v-if="editForm.pool_capacity_alert_enabled"
+            id="edit-pool-capacity-alert-config"
+            class="mt-4 space-y-4 border-l-2 border-primary-200 pl-4 dark:border-primary-800"
+          >
+            <fieldset>
+              <legend class="input-label">
+                {{ t("admin.groups.poolCapacityAlert.basisLegend") }}
+              </legend>
+              <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label
+                  class="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 transition-colors focus-within:ring-2 focus-within:ring-primary-500 dark:border-dark-600"
+                >
+                  <input
+                    v-model="editForm.pool_capacity_alert_metric"
+                    type="radio"
+                    name="edit-pool-capacity-alert-metric"
+                    value="predicted_requests"
+                    class="mt-0.5 h-4 w-4 flex-none text-primary-600 focus:ring-primary-500"
+                    data-testid="edit-pool-capacity-alert-metric-requests"
+                  />
+                  <span>
+                    <span class="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                      {{ t("admin.groups.poolCapacityAlert.predictedRequests.label") }}
+                    </span>
+                    <span class="mt-1 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                      {{ t("admin.groups.poolCapacityAlert.predictedRequests.description") }}
+                    </span>
+                  </span>
+                </label>
+                <label
+                  class="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 transition-colors focus-within:ring-2 focus-within:ring-primary-500 dark:border-dark-600"
+                >
+                  <input
+                    v-model="editForm.pool_capacity_alert_metric"
+                    type="radio"
+                    name="edit-pool-capacity-alert-metric"
+                    value="remaining_balance_usd"
+                    class="mt-0.5 h-4 w-4 flex-none text-primary-600 focus:ring-primary-500"
+                    data-testid="edit-pool-capacity-alert-metric-usd"
+                  />
+                  <span>
+                    <span class="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                      {{ t("admin.groups.poolCapacityAlert.remainingBalanceUsd.label") }}
+                    </span>
+                    <span class="mt-1 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                      {{ t("admin.groups.poolCapacityAlert.remainingBalanceUsd.description") }}
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </fieldset>
+
+            <div v-if="editForm.pool_capacity_alert_metric === 'predicted_requests'">
+              <label for="edit-pool-capacity-alert-threshold-requests" class="input-label">
+                {{ t("admin.groups.poolCapacityAlert.requestsThreshold.label") }}
+              </label>
+              <div class="relative">
+                <input
+                  id="edit-pool-capacity-alert-threshold-requests"
+                  v-model.number="editForm.pool_capacity_alert_threshold_requests"
+                  type="number"
+                  inputmode="numeric"
+                  min="1"
+                  max="1000000000"
+                  step="1"
+                  class="input w-full pr-24"
+                  data-testid="edit-pool-capacity-alert-threshold-requests"
+                  :aria-invalid="Boolean(poolCapacityAlertErrors.edit.requests)"
+                  :aria-describedby="
+                    poolCapacityAlertErrors.edit.requests
+                      ? 'edit-pool-capacity-alert-requests-hint edit-pool-capacity-alert-requests-error'
+                      : 'edit-pool-capacity-alert-requests-hint'
+                  "
+                  @input="poolCapacityAlertErrors.edit.requests = ''"
+                />
+                <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-gray-500 dark:text-gray-400">
+                  {{ t("admin.groups.poolCapacityAlert.requestsThreshold.unit") }}
+                </span>
+              </div>
+              <p id="edit-pool-capacity-alert-requests-hint" class="input-hint">
+                {{ t("admin.groups.poolCapacityAlert.requestsThreshold.hint") }}
+              </p>
+              <p
+                v-if="poolCapacityAlertErrors.edit.requests"
+                id="edit-pool-capacity-alert-requests-error"
+                class="mt-1 text-xs text-red-600 dark:text-red-400"
+                role="alert"
+              >
+                {{ poolCapacityAlertErrors.edit.requests }}
+              </p>
+            </div>
+
+            <div v-else>
+              <label for="edit-pool-capacity-alert-threshold-usd" class="input-label">
+                {{ t("admin.groups.poolCapacityAlert.usdThreshold.label") }}
+              </label>
+              <div class="relative">
+                <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-500 dark:text-gray-400">$</span>
+                <input
+                  id="edit-pool-capacity-alert-threshold-usd"
+                  v-model.number="editForm.pool_capacity_alert_threshold_usd"
+                  type="number"
+                  inputmode="decimal"
+                  min="0.01"
+                  max="1000000000000000"
+                  step="0.01"
+                  class="input w-full pl-7 pr-16"
+                  data-testid="edit-pool-capacity-alert-threshold-usd"
+                  :aria-invalid="Boolean(poolCapacityAlertErrors.edit.usd)"
+                  :aria-describedby="
+                    poolCapacityAlertErrors.edit.usd
+                      ? 'edit-pool-capacity-alert-usd-hint edit-pool-capacity-alert-usd-error'
+                      : 'edit-pool-capacity-alert-usd-hint'
+                  "
+                  @input="poolCapacityAlertErrors.edit.usd = ''"
+                />
+                <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-gray-500 dark:text-gray-400">
+                  {{ t("admin.groups.poolCapacityAlert.usdThreshold.unit") }}
+                </span>
+              </div>
+              <p id="edit-pool-capacity-alert-usd-hint" class="input-hint">
+                {{ t("admin.groups.poolCapacityAlert.usdThreshold.hint") }}
+              </p>
+              <p
+                v-if="poolCapacityAlertErrors.edit.usd"
+                id="edit-pool-capacity-alert-usd-error"
+                class="mt-1 text-xs text-red-600 dark:text-red-400"
+                role="alert"
+              >
+                {{ poolCapacityAlertErrors.edit.usd }}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -3835,12 +4109,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, reactive, computed, nextTick, onMounted, onUnmounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useAppStore } from "@/stores/app";
 import { useOnboardingStore } from "@/stores/onboarding";
 import { adminAPI } from "@/api/admin";
-import type { AdminGroup, GroupPlatform, SubscriptionType } from "@/types";
+import type {
+  AdminGroup,
+  GroupPlatform,
+  PoolCapacityAlertMetric,
+  SubscriptionType,
+} from "@/types";
 import { PLATFORM_ORDER, PLATFORM_REGISTRY } from "@/constants/platforms";
 import type { Column } from "@/components/common/types";
 import AppLayout from "@/components/layout/AppLayout.vue";
@@ -4268,6 +4547,142 @@ const editModelsListSelectedCount = computed(
 const createModelRateMultiplierRows = ref<ModelRateMultiplierRow[]>([]);
 const editModelRateMultiplierRows = ref<ModelRateMultiplierRow[]>([]);
 
+const POOL_CAPACITY_ALERT_REQUESTS_MIN = 1;
+const POOL_CAPACITY_ALERT_REQUESTS_MAX = 1_000_000_000;
+const POOL_CAPACITY_ALERT_USD_MIN = 0.01;
+const POOL_CAPACITY_ALERT_USD_MAX = 1e15;
+
+type PoolCapacityAlertFormState = {
+  pool_capacity_alert_enabled: boolean;
+  pool_capacity_alert_metric: PoolCapacityAlertMetric;
+  pool_capacity_alert_threshold_requests: number | string;
+  pool_capacity_alert_threshold_usd: number | string | null;
+};
+
+type PoolCapacityAlertField = "requests" | "usd";
+type PoolCapacityAlertValidationResult =
+  | {
+      ok: true;
+      metric: PoolCapacityAlertMetric;
+      thresholdRequests: number;
+      thresholdUsd: number | null;
+    }
+  | {
+      ok: false;
+      field: PoolCapacityAlertField;
+      messageKey: string;
+    };
+
+const poolCapacityAlertErrors = reactive({
+  create: { requests: "", usd: "" },
+  edit: { requests: "", usd: "" },
+});
+
+const isEmptyNumericInput = (value: number | string | null | undefined) =>
+  value === null || value === undefined || (typeof value === "string" && value.trim() === "");
+
+const validatePoolCapacityAlertPolicy = (
+  form: PoolCapacityAlertFormState,
+): PoolCapacityAlertValidationResult => {
+  const rawRequests = form.pool_capacity_alert_threshold_requests;
+  if (isEmptyNumericInput(rawRequests)) {
+    return {
+      ok: false,
+      field: "requests",
+      messageKey: "admin.groups.poolCapacityAlert.validation.requestsRequired",
+    };
+  }
+
+  const thresholdRequests = Number(rawRequests);
+  if (!Number.isFinite(thresholdRequests)) {
+    return {
+      ok: false,
+      field: "requests",
+      messageKey: "admin.groups.poolCapacityAlert.validation.requestsFinite",
+    };
+  }
+  if (!Number.isInteger(thresholdRequests)) {
+    return {
+      ok: false,
+      field: "requests",
+      messageKey: "admin.groups.poolCapacityAlert.validation.requestsInteger",
+    };
+  }
+  if (
+    thresholdRequests < POOL_CAPACITY_ALERT_REQUESTS_MIN ||
+    thresholdRequests > POOL_CAPACITY_ALERT_REQUESTS_MAX
+  ) {
+    return {
+      ok: false,
+      field: "requests",
+      messageKey: "admin.groups.poolCapacityAlert.validation.requestsRange",
+    };
+  }
+
+  const rawUsd = form.pool_capacity_alert_threshold_usd;
+  if (isEmptyNumericInput(rawUsd)) {
+    if (form.pool_capacity_alert_metric === "remaining_balance_usd") {
+      return {
+        ok: false,
+        field: "usd",
+        messageKey: "admin.groups.poolCapacityAlert.validation.usdRequired",
+      };
+    }
+    return {
+      ok: true,
+      metric: form.pool_capacity_alert_metric,
+      thresholdRequests,
+      thresholdUsd: null,
+    };
+  }
+
+  const thresholdUsd = Number(rawUsd);
+  if (!Number.isFinite(thresholdUsd)) {
+    return {
+      ok: false,
+      field: "usd",
+      messageKey: "admin.groups.poolCapacityAlert.validation.usdFinite",
+    };
+  }
+  if (
+    thresholdUsd < POOL_CAPACITY_ALERT_USD_MIN ||
+    thresholdUsd > POOL_CAPACITY_ALERT_USD_MAX
+  ) {
+    return {
+      ok: false,
+      field: "usd",
+      messageKey: "admin.groups.poolCapacityAlert.validation.usdRange",
+    };
+  }
+
+  return {
+    ok: true,
+    metric: form.pool_capacity_alert_metric,
+    thresholdRequests,
+    thresholdUsd,
+  };
+};
+
+const clearPoolCapacityAlertErrors = (scope: "create" | "edit") => {
+  poolCapacityAlertErrors[scope].requests = "";
+  poolCapacityAlertErrors[scope].usd = "";
+};
+
+const showPoolCapacityAlertValidationError = async (
+  scope: "create" | "edit",
+  form: PoolCapacityAlertFormState,
+  result: Extract<PoolCapacityAlertValidationResult, { ok: false }>,
+) => {
+  clearPoolCapacityAlertErrors(scope);
+  poolCapacityAlertErrors[scope][result.field] = t(result.messageKey);
+  form.pool_capacity_alert_enabled = true;
+  form.pool_capacity_alert_metric =
+    result.field === "requests" ? "predicted_requests" : "remaining_balance_usd";
+  appStore.showError(t(result.messageKey));
+  await nextTick();
+  document.getElementById(`${scope}-pool-capacity-alert-threshold-${result.field}`)?.focus();
+};
+
 const createForm = reactive({
   name: "",
   description: "",
@@ -4324,8 +4739,11 @@ const createForm = reactive({
   copy_accounts_from_group_ids: [] as number[],
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
-  // 池账号容量预测提醒
+  // 池账号容量提醒
   pool_capacity_alert_enabled: false,
+  pool_capacity_alert_metric: "predicted_requests" as PoolCapacityAlertMetric,
+  pool_capacity_alert_threshold_requests: 50 as number | string,
+  pool_capacity_alert_threshold_usd: null as number | string | null,
 });
 
 // 简单账号类型（用于模型路由选择）
@@ -4686,8 +5104,11 @@ const editForm = reactive({
   copy_accounts_from_group_ids: [] as number[],
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
-  // 池账号容量预测提醒
+  // 池账号容量提醒
   pool_capacity_alert_enabled: false,
+  pool_capacity_alert_metric: "predicted_requests" as PoolCapacityAlertMetric,
+  pool_capacity_alert_threshold_requests: 50 as number | string,
+  pool_capacity_alert_threshold_usd: null as number | string | null,
 });
 
 type ImagePricingFormState = {
@@ -5078,6 +5499,10 @@ const closeCreateModal = () => {
   createForm.copy_accounts_from_group_ids = [];
   createForm.rpm_limit = 0;
   createForm.pool_capacity_alert_enabled = false;
+  createForm.pool_capacity_alert_metric = "predicted_requests";
+  createForm.pool_capacity_alert_threshold_requests = 50;
+  createForm.pool_capacity_alert_threshold_usd = null;
+  clearPoolCapacityAlertErrors("create");
   resetModelsListState(createModelsListState);
   createModelRoutingRules.value = [];
   createModelRateMultiplierRows.value = [];
@@ -5171,6 +5596,17 @@ const handleCreateGroup = async () => {
     return;
   }
 
+  const poolCapacityAlertPolicy = validatePoolCapacityAlertPolicy(createForm);
+  if (!poolCapacityAlertPolicy.ok) {
+    await showPoolCapacityAlertValidationError(
+      "create",
+      createForm,
+      poolCapacityAlertPolicy,
+    );
+    return;
+  }
+  clearPoolCapacityAlertErrors("create");
+
   let modelRateMultipliers: Record<string, number>;
   try {
     modelRateMultipliers = modelRateMultiplierRowsToMap(
@@ -5186,6 +5622,10 @@ const handleCreateGroup = async () => {
     // 构建请求数据，包含模型路由配置
     const requestData = {
       ...createForm,
+      pool_capacity_alert_metric: poolCapacityAlertPolicy.metric,
+      pool_capacity_alert_threshold_requests:
+        poolCapacityAlertPolicy.thresholdRequests,
+      pool_capacity_alert_threshold_usd: poolCapacityAlertPolicy.thresholdUsd,
       daily_limit_usd: normalizeOptionalLimit(
         createForm.daily_limit_usd as number | string | null,
       ),
@@ -5329,6 +5769,15 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.copy_accounts_from_group_ids = []; // 复制账号字段每次编辑时重置为空
   editForm.rpm_limit = group.rpm_limit ?? 0;
   editForm.pool_capacity_alert_enabled = group.pool_capacity_alert_enabled ?? false;
+  editForm.pool_capacity_alert_metric =
+    group.pool_capacity_alert_metric === "remaining_balance_usd"
+      ? "remaining_balance_usd"
+      : "predicted_requests";
+  editForm.pool_capacity_alert_threshold_requests =
+    group.pool_capacity_alert_threshold_requests ?? 50;
+  editForm.pool_capacity_alert_threshold_usd =
+    group.pool_capacity_alert_threshold_usd ?? null;
+  clearPoolCapacityAlertErrors("edit");
   editModelRateMultiplierRows.value = modelRateMultipliersToRows(
     group.model_rate_multipliers,
   );
@@ -5361,6 +5810,10 @@ const closeEditModal = () => {
   editForm.video_price_1080p = null;
   editForm.web_search_price_per_call = null;
   editForm.pool_capacity_alert_enabled = false;
+  editForm.pool_capacity_alert_metric = "predicted_requests";
+  editForm.pool_capacity_alert_threshold_requests = 50;
+  editForm.pool_capacity_alert_threshold_usd = null;
+  clearPoolCapacityAlertErrors("edit");
   resetMessagesDispatchFormState(editForm);
   resetModelsListState(editModelsListState);
   editModelRateMultiplierRows.value = [];
@@ -5372,6 +5825,17 @@ const handleUpdateGroup = async () => {
     appStore.showError(t("admin.groups.nameRequired"));
     return;
   }
+
+  const poolCapacityAlertPolicy = validatePoolCapacityAlertPolicy(editForm);
+  if (!poolCapacityAlertPolicy.ok) {
+    await showPoolCapacityAlertValidationError(
+      "edit",
+      editForm,
+      poolCapacityAlertPolicy,
+    );
+    return;
+  }
+  clearPoolCapacityAlertErrors("edit");
 
   let modelRateMultipliers: Record<string, number>;
   try {
@@ -5388,6 +5852,10 @@ const handleUpdateGroup = async () => {
     // 转换 fallback_group_id: null -> 0 (后端使用 0 表示清除)
     const payload = {
       ...editForm,
+      pool_capacity_alert_metric: poolCapacityAlertPolicy.metric,
+      pool_capacity_alert_threshold_requests:
+        poolCapacityAlertPolicy.thresholdRequests,
+      pool_capacity_alert_threshold_usd: poolCapacityAlertPolicy.thresholdUsd,
       daily_limit_usd: normalizeOptionalLimit(
         editForm.daily_limit_usd as number | string | null,
       ),

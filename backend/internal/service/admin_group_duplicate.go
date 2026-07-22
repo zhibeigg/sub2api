@@ -128,7 +128,12 @@ func cloneGroupForDuplicate(source *Group, operationID string) *Group {
 			Enabled: source.ModelsListConfig.Enabled,
 			Models:  append([]string(nil), source.ModelsListConfig.Models...),
 		},
-		RPMLimit: source.RPMLimit,
+		RPMLimit:                           source.RPMLimit,
+		PoolCapacityAlertEnabled:           false,
+		PoolCapacityAlertMetric:            source.PoolCapacityAlertPolicy().Metric,
+		PoolCapacityAlertThresholdRequests: source.PoolCapacityAlertPolicy().ThresholdRequests,
+		PoolCapacityAlertThresholdUSD:      cloneGroupValuePointer(source.PoolCapacityAlertThresholdUSD),
+		PoolCapacityAlertGeneration:        0,
 	}
 }
 

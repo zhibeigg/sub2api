@@ -251,6 +251,20 @@ func (_u *PoolCapacityAlertEventUpdate) SetNillableUserEmail(v *string) *PoolCap
 	return _u
 }
 
+// SetAlertMetric sets the "alert_metric" field.
+func (_u *PoolCapacityAlertEventUpdate) SetAlertMetric(v string) *PoolCapacityAlertEventUpdate {
+	_u.mutation.SetAlertMetric(v)
+	return _u
+}
+
+// SetNillableAlertMetric sets the "alert_metric" field if the given value is not nil.
+func (_u *PoolCapacityAlertEventUpdate) SetNillableAlertMetric(v *string) *PoolCapacityAlertEventUpdate {
+	if v != nil {
+		_u.SetAlertMetric(*v)
+	}
+	return _u
+}
+
 // SetPredictedRequests sets the "predicted_requests" field.
 func (_u *PoolCapacityAlertEventUpdate) SetPredictedRequests(v int64) *PoolCapacityAlertEventUpdate {
 	_u.mutation.ResetPredictedRequests()
@@ -272,6 +286,39 @@ func (_u *PoolCapacityAlertEventUpdate) AddPredictedRequests(v int64) *PoolCapac
 	return _u
 }
 
+// ClearPredictedRequests clears the value of the "predicted_requests" field.
+func (_u *PoolCapacityAlertEventUpdate) ClearPredictedRequests() *PoolCapacityAlertEventUpdate {
+	_u.mutation.ClearPredictedRequests()
+	return _u
+}
+
+// SetRemainingBalanceUsd sets the "remaining_balance_usd" field.
+func (_u *PoolCapacityAlertEventUpdate) SetRemainingBalanceUsd(v float64) *PoolCapacityAlertEventUpdate {
+	_u.mutation.ResetRemainingBalanceUsd()
+	_u.mutation.SetRemainingBalanceUsd(v)
+	return _u
+}
+
+// SetNillableRemainingBalanceUsd sets the "remaining_balance_usd" field if the given value is not nil.
+func (_u *PoolCapacityAlertEventUpdate) SetNillableRemainingBalanceUsd(v *float64) *PoolCapacityAlertEventUpdate {
+	if v != nil {
+		_u.SetRemainingBalanceUsd(*v)
+	}
+	return _u
+}
+
+// AddRemainingBalanceUsd adds value to the "remaining_balance_usd" field.
+func (_u *PoolCapacityAlertEventUpdate) AddRemainingBalanceUsd(v float64) *PoolCapacityAlertEventUpdate {
+	_u.mutation.AddRemainingBalanceUsd(v)
+	return _u
+}
+
+// ClearRemainingBalanceUsd clears the value of the "remaining_balance_usd" field.
+func (_u *PoolCapacityAlertEventUpdate) ClearRemainingBalanceUsd() *PoolCapacityAlertEventUpdate {
+	_u.mutation.ClearRemainingBalanceUsd()
+	return _u
+}
+
 // SetThresholdRequests sets the "threshold_requests" field.
 func (_u *PoolCapacityAlertEventUpdate) SetThresholdRequests(v int64) *PoolCapacityAlertEventUpdate {
 	_u.mutation.ResetThresholdRequests()
@@ -290,6 +337,39 @@ func (_u *PoolCapacityAlertEventUpdate) SetNillableThresholdRequests(v *int64) *
 // AddThresholdRequests adds value to the "threshold_requests" field.
 func (_u *PoolCapacityAlertEventUpdate) AddThresholdRequests(v int64) *PoolCapacityAlertEventUpdate {
 	_u.mutation.AddThresholdRequests(v)
+	return _u
+}
+
+// ClearThresholdRequests clears the value of the "threshold_requests" field.
+func (_u *PoolCapacityAlertEventUpdate) ClearThresholdRequests() *PoolCapacityAlertEventUpdate {
+	_u.mutation.ClearThresholdRequests()
+	return _u
+}
+
+// SetThresholdUsd sets the "threshold_usd" field.
+func (_u *PoolCapacityAlertEventUpdate) SetThresholdUsd(v float64) *PoolCapacityAlertEventUpdate {
+	_u.mutation.ResetThresholdUsd()
+	_u.mutation.SetThresholdUsd(v)
+	return _u
+}
+
+// SetNillableThresholdUsd sets the "threshold_usd" field if the given value is not nil.
+func (_u *PoolCapacityAlertEventUpdate) SetNillableThresholdUsd(v *float64) *PoolCapacityAlertEventUpdate {
+	if v != nil {
+		_u.SetThresholdUsd(*v)
+	}
+	return _u
+}
+
+// AddThresholdUsd adds value to the "threshold_usd" field.
+func (_u *PoolCapacityAlertEventUpdate) AddThresholdUsd(v float64) *PoolCapacityAlertEventUpdate {
+	_u.mutation.AddThresholdUsd(v)
+	return _u
+}
+
+// ClearThresholdUsd clears the value of the "threshold_usd" field.
+func (_u *PoolCapacityAlertEventUpdate) ClearThresholdUsd() *PoolCapacityAlertEventUpdate {
+	_u.mutation.ClearThresholdUsd()
 	return _u
 }
 
@@ -600,6 +680,11 @@ func (_u *PoolCapacityAlertEventUpdate) check() error {
 			return &ValidationError{Name: "user_email", err: fmt.Errorf(`ent: validator failed for field "PoolCapacityAlertEvent.user_email": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.AlertMetric(); ok {
+		if err := poolcapacityalertevent.AlertMetricValidator(v); err != nil {
+			return &ValidationError{Name: "alert_metric", err: fmt.Errorf(`ent: validator failed for field "PoolCapacityAlertEvent.alert_metric": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Bottleneck(); ok {
 		if err := poolcapacityalertevent.BottleneckValidator(v); err != nil {
 			return &ValidationError{Name: "bottleneck", err: fmt.Errorf(`ent: validator failed for field "PoolCapacityAlertEvent.bottleneck": %w`, err)}
@@ -685,17 +770,44 @@ func (_u *PoolCapacityAlertEventUpdate) sqlSave(ctx context.Context) (_node int,
 	if value, ok := _u.mutation.UserEmail(); ok {
 		_spec.SetField(poolcapacityalertevent.FieldUserEmail, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.AlertMetric(); ok {
+		_spec.SetField(poolcapacityalertevent.FieldAlertMetric, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.PredictedRequests(); ok {
 		_spec.SetField(poolcapacityalertevent.FieldPredictedRequests, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.AddedPredictedRequests(); ok {
 		_spec.AddField(poolcapacityalertevent.FieldPredictedRequests, field.TypeInt64, value)
 	}
+	if _u.mutation.PredictedRequestsCleared() {
+		_spec.ClearField(poolcapacityalertevent.FieldPredictedRequests, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.RemainingBalanceUsd(); ok {
+		_spec.SetField(poolcapacityalertevent.FieldRemainingBalanceUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedRemainingBalanceUsd(); ok {
+		_spec.AddField(poolcapacityalertevent.FieldRemainingBalanceUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.RemainingBalanceUsdCleared() {
+		_spec.ClearField(poolcapacityalertevent.FieldRemainingBalanceUsd, field.TypeFloat64)
+	}
 	if value, ok := _u.mutation.ThresholdRequests(); ok {
 		_spec.SetField(poolcapacityalertevent.FieldThresholdRequests, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.AddedThresholdRequests(); ok {
 		_spec.AddField(poolcapacityalertevent.FieldThresholdRequests, field.TypeInt64, value)
+	}
+	if _u.mutation.ThresholdRequestsCleared() {
+		_spec.ClearField(poolcapacityalertevent.FieldThresholdRequests, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.ThresholdUsd(); ok {
+		_spec.SetField(poolcapacityalertevent.FieldThresholdUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedThresholdUsd(); ok {
+		_spec.AddField(poolcapacityalertevent.FieldThresholdUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.ThresholdUsdCleared() {
+		_spec.ClearField(poolcapacityalertevent.FieldThresholdUsd, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.AccountRequests(); ok {
 		_spec.SetField(poolcapacityalertevent.FieldAccountRequests, field.TypeInt64, value)
@@ -1019,6 +1131,20 @@ func (_u *PoolCapacityAlertEventUpdateOne) SetNillableUserEmail(v *string) *Pool
 	return _u
 }
 
+// SetAlertMetric sets the "alert_metric" field.
+func (_u *PoolCapacityAlertEventUpdateOne) SetAlertMetric(v string) *PoolCapacityAlertEventUpdateOne {
+	_u.mutation.SetAlertMetric(v)
+	return _u
+}
+
+// SetNillableAlertMetric sets the "alert_metric" field if the given value is not nil.
+func (_u *PoolCapacityAlertEventUpdateOne) SetNillableAlertMetric(v *string) *PoolCapacityAlertEventUpdateOne {
+	if v != nil {
+		_u.SetAlertMetric(*v)
+	}
+	return _u
+}
+
 // SetPredictedRequests sets the "predicted_requests" field.
 func (_u *PoolCapacityAlertEventUpdateOne) SetPredictedRequests(v int64) *PoolCapacityAlertEventUpdateOne {
 	_u.mutation.ResetPredictedRequests()
@@ -1040,6 +1166,39 @@ func (_u *PoolCapacityAlertEventUpdateOne) AddPredictedRequests(v int64) *PoolCa
 	return _u
 }
 
+// ClearPredictedRequests clears the value of the "predicted_requests" field.
+func (_u *PoolCapacityAlertEventUpdateOne) ClearPredictedRequests() *PoolCapacityAlertEventUpdateOne {
+	_u.mutation.ClearPredictedRequests()
+	return _u
+}
+
+// SetRemainingBalanceUsd sets the "remaining_balance_usd" field.
+func (_u *PoolCapacityAlertEventUpdateOne) SetRemainingBalanceUsd(v float64) *PoolCapacityAlertEventUpdateOne {
+	_u.mutation.ResetRemainingBalanceUsd()
+	_u.mutation.SetRemainingBalanceUsd(v)
+	return _u
+}
+
+// SetNillableRemainingBalanceUsd sets the "remaining_balance_usd" field if the given value is not nil.
+func (_u *PoolCapacityAlertEventUpdateOne) SetNillableRemainingBalanceUsd(v *float64) *PoolCapacityAlertEventUpdateOne {
+	if v != nil {
+		_u.SetRemainingBalanceUsd(*v)
+	}
+	return _u
+}
+
+// AddRemainingBalanceUsd adds value to the "remaining_balance_usd" field.
+func (_u *PoolCapacityAlertEventUpdateOne) AddRemainingBalanceUsd(v float64) *PoolCapacityAlertEventUpdateOne {
+	_u.mutation.AddRemainingBalanceUsd(v)
+	return _u
+}
+
+// ClearRemainingBalanceUsd clears the value of the "remaining_balance_usd" field.
+func (_u *PoolCapacityAlertEventUpdateOne) ClearRemainingBalanceUsd() *PoolCapacityAlertEventUpdateOne {
+	_u.mutation.ClearRemainingBalanceUsd()
+	return _u
+}
+
 // SetThresholdRequests sets the "threshold_requests" field.
 func (_u *PoolCapacityAlertEventUpdateOne) SetThresholdRequests(v int64) *PoolCapacityAlertEventUpdateOne {
 	_u.mutation.ResetThresholdRequests()
@@ -1058,6 +1217,39 @@ func (_u *PoolCapacityAlertEventUpdateOne) SetNillableThresholdRequests(v *int64
 // AddThresholdRequests adds value to the "threshold_requests" field.
 func (_u *PoolCapacityAlertEventUpdateOne) AddThresholdRequests(v int64) *PoolCapacityAlertEventUpdateOne {
 	_u.mutation.AddThresholdRequests(v)
+	return _u
+}
+
+// ClearThresholdRequests clears the value of the "threshold_requests" field.
+func (_u *PoolCapacityAlertEventUpdateOne) ClearThresholdRequests() *PoolCapacityAlertEventUpdateOne {
+	_u.mutation.ClearThresholdRequests()
+	return _u
+}
+
+// SetThresholdUsd sets the "threshold_usd" field.
+func (_u *PoolCapacityAlertEventUpdateOne) SetThresholdUsd(v float64) *PoolCapacityAlertEventUpdateOne {
+	_u.mutation.ResetThresholdUsd()
+	_u.mutation.SetThresholdUsd(v)
+	return _u
+}
+
+// SetNillableThresholdUsd sets the "threshold_usd" field if the given value is not nil.
+func (_u *PoolCapacityAlertEventUpdateOne) SetNillableThresholdUsd(v *float64) *PoolCapacityAlertEventUpdateOne {
+	if v != nil {
+		_u.SetThresholdUsd(*v)
+	}
+	return _u
+}
+
+// AddThresholdUsd adds value to the "threshold_usd" field.
+func (_u *PoolCapacityAlertEventUpdateOne) AddThresholdUsd(v float64) *PoolCapacityAlertEventUpdateOne {
+	_u.mutation.AddThresholdUsd(v)
+	return _u
+}
+
+// ClearThresholdUsd clears the value of the "threshold_usd" field.
+func (_u *PoolCapacityAlertEventUpdateOne) ClearThresholdUsd() *PoolCapacityAlertEventUpdateOne {
+	_u.mutation.ClearThresholdUsd()
 	return _u
 }
 
@@ -1381,6 +1573,11 @@ func (_u *PoolCapacityAlertEventUpdateOne) check() error {
 			return &ValidationError{Name: "user_email", err: fmt.Errorf(`ent: validator failed for field "PoolCapacityAlertEvent.user_email": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.AlertMetric(); ok {
+		if err := poolcapacityalertevent.AlertMetricValidator(v); err != nil {
+			return &ValidationError{Name: "alert_metric", err: fmt.Errorf(`ent: validator failed for field "PoolCapacityAlertEvent.alert_metric": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Bottleneck(); ok {
 		if err := poolcapacityalertevent.BottleneckValidator(v); err != nil {
 			return &ValidationError{Name: "bottleneck", err: fmt.Errorf(`ent: validator failed for field "PoolCapacityAlertEvent.bottleneck": %w`, err)}
@@ -1483,17 +1680,44 @@ func (_u *PoolCapacityAlertEventUpdateOne) sqlSave(ctx context.Context) (_node *
 	if value, ok := _u.mutation.UserEmail(); ok {
 		_spec.SetField(poolcapacityalertevent.FieldUserEmail, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.AlertMetric(); ok {
+		_spec.SetField(poolcapacityalertevent.FieldAlertMetric, field.TypeString, value)
+	}
 	if value, ok := _u.mutation.PredictedRequests(); ok {
 		_spec.SetField(poolcapacityalertevent.FieldPredictedRequests, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.AddedPredictedRequests(); ok {
 		_spec.AddField(poolcapacityalertevent.FieldPredictedRequests, field.TypeInt64, value)
 	}
+	if _u.mutation.PredictedRequestsCleared() {
+		_spec.ClearField(poolcapacityalertevent.FieldPredictedRequests, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.RemainingBalanceUsd(); ok {
+		_spec.SetField(poolcapacityalertevent.FieldRemainingBalanceUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedRemainingBalanceUsd(); ok {
+		_spec.AddField(poolcapacityalertevent.FieldRemainingBalanceUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.RemainingBalanceUsdCleared() {
+		_spec.ClearField(poolcapacityalertevent.FieldRemainingBalanceUsd, field.TypeFloat64)
+	}
 	if value, ok := _u.mutation.ThresholdRequests(); ok {
 		_spec.SetField(poolcapacityalertevent.FieldThresholdRequests, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.AddedThresholdRequests(); ok {
 		_spec.AddField(poolcapacityalertevent.FieldThresholdRequests, field.TypeInt64, value)
+	}
+	if _u.mutation.ThresholdRequestsCleared() {
+		_spec.ClearField(poolcapacityalertevent.FieldThresholdRequests, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.ThresholdUsd(); ok {
+		_spec.SetField(poolcapacityalertevent.FieldThresholdUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedThresholdUsd(); ok {
+		_spec.AddField(poolcapacityalertevent.FieldThresholdUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.ThresholdUsdCleared() {
+		_spec.ClearField(poolcapacityalertevent.FieldThresholdUsd, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.AccountRequests(); ok {
 		_spec.SetField(poolcapacityalertevent.FieldAccountRequests, field.TypeInt64, value)

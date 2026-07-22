@@ -56,6 +56,21 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 	if groupIn == nil {
 		return errors.New("group is nil")
 	}
+	policy := service.NormalizePoolCapacityAlertPolicy(groupIn.PoolCapacityAlertPolicy())
+	if policy.Metric == "" {
+		policy.Metric = service.DefaultPoolCapacityAlertMetric
+	}
+	if policy.ThresholdRequests == 0 {
+		policy.ThresholdRequests = service.DefaultPoolCapacityAlertThresholdRequests
+	}
+	if err := service.ValidatePoolCapacityAlertPolicy(policy); err != nil {
+		return err
+	}
+	groupIn.PoolCapacityAlertEnabled = policy.Enabled
+	groupIn.PoolCapacityAlertMetric = policy.Metric
+	groupIn.PoolCapacityAlertThresholdRequests = policy.ThresholdRequests
+	groupIn.PoolCapacityAlertThresholdUSD = policy.ThresholdUSD
+
 	builder := client.Group.Create().
 		SetName(groupIn.Name).
 		SetDescription(groupIn.Description).
@@ -98,6 +113,9 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetModelsListConfig(groupIn.ModelsListConfig).
 		SetRpmLimit(groupIn.RPMLimit).
 		SetPoolCapacityAlertEnabled(groupIn.PoolCapacityAlertEnabled).
+		SetPoolCapacityAlertMetric(groupIn.PoolCapacityAlertMetric).
+		SetPoolCapacityAlertThresholdRequests(groupIn.PoolCapacityAlertThresholdRequests).
+		SetNillablePoolCapacityAlertThresholdUsd(groupIn.PoolCapacityAlertThresholdUSD).
 		SetPoolCapacityAlertGeneration(groupIn.PoolCapacityAlertGeneration).
 		SetPeakRateEnabled(groupIn.PeakRateEnabled).
 		SetPeakStart(groupIn.PeakStart).
@@ -237,6 +255,9 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 		return err
 	}
 	groupIn.PoolCapacityAlertEnabled = updated.PoolCapacityAlertEnabled
+	groupIn.PoolCapacityAlertMetric = updated.PoolCapacityAlertMetric
+	groupIn.PoolCapacityAlertThresholdRequests = updated.PoolCapacityAlertThresholdRequests
+	groupIn.PoolCapacityAlertThresholdUSD = updated.PoolCapacityAlertThresholdUsd
 	groupIn.PoolCapacityAlertGeneration = updated.PoolCapacityAlertGeneration
 	groupIn.UpdatedAt = updated.UpdatedAt
 	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
@@ -246,9 +267,9 @@ func (r *groupRepository) Update(ctx context.Context, groupIn *service.Group) er
 }
 
 // UpdateWithPoolCapacityAlert locks the current row before merging the alert
-// switch. Ordinary group updates never write the alert fields, so a stale
-// snapshot cannot restore an old generation after a concurrent toggle.
-func (r *groupRepository) UpdateWithPoolCapacityAlert(ctx context.Context, groupIn *service.Group, enabled *bool) error {
+// policy patch. Ordinary group updates never write these fields, so a stale
+// snapshot cannot restore an old policy or generation after a concurrent edit.
+func (r *groupRepository) UpdateWithPoolCapacityAlert(ctx context.Context, groupIn *service.Group, patch service.PoolCapacityAlertPolicyPatch) error {
 	if groupIn == nil {
 		return errors.New("group is nil")
 	}
@@ -271,10 +292,22 @@ func (r *groupRepository) UpdateWithPoolCapacityAlert(ctx context.Context, group
 	if err != nil {
 		return translatePersistenceError(err, service.ErrGroupNotFound, nil)
 	}
-	groupIn.PoolCapacityAlertEnabled = current.PoolCapacityAlertEnabled
+	currentPolicy := service.NormalizePoolCapacityAlertPolicy(service.PoolCapacityAlertPolicy{
+		Enabled:           current.PoolCapacityAlertEnabled,
+		Metric:            current.PoolCapacityAlertMetric,
+		ThresholdRequests: current.PoolCapacityAlertThresholdRequests,
+		ThresholdUSD:      current.PoolCapacityAlertThresholdUsd,
+	})
+	mergedPolicy := service.ApplyPoolCapacityAlertPolicyPatch(currentPolicy, patch)
+	if err := service.ValidatePoolCapacityAlertPolicy(mergedPolicy); err != nil {
+		return err
+	}
+	groupIn.PoolCapacityAlertEnabled = mergedPolicy.Enabled
+	groupIn.PoolCapacityAlertMetric = mergedPolicy.Metric
+	groupIn.PoolCapacityAlertThresholdRequests = mergedPolicy.ThresholdRequests
+	groupIn.PoolCapacityAlertThresholdUSD = mergedPolicy.ThresholdUSD
 	groupIn.PoolCapacityAlertGeneration = current.PoolCapacityAlertGeneration
-	if enabled != nil && current.PoolCapacityAlertEnabled != *enabled {
-		groupIn.PoolCapacityAlertEnabled = *enabled
+	if !service.PoolCapacityAlertPoliciesEqual(currentPolicy, mergedPolicy) {
 		groupIn.PoolCapacityAlertGeneration++
 	}
 
@@ -288,6 +321,9 @@ func (r *groupRepository) UpdateWithPoolCapacityAlert(ctx context.Context, group
 		}
 	}
 	groupIn.PoolCapacityAlertEnabled = updated.PoolCapacityAlertEnabled
+	groupIn.PoolCapacityAlertMetric = updated.PoolCapacityAlertMetric
+	groupIn.PoolCapacityAlertThresholdRequests = updated.PoolCapacityAlertThresholdRequests
+	groupIn.PoolCapacityAlertThresholdUSD = updated.PoolCapacityAlertThresholdUsd
 	groupIn.PoolCapacityAlertGeneration = updated.PoolCapacityAlertGeneration
 	groupIn.UpdatedAt = updated.UpdatedAt
 	if err := enqueueSchedulerOutbox(ctx, r.sql, service.SchedulerOutboxEventGroupChanged, nil, &groupIn.ID, nil); err != nil {
@@ -344,7 +380,14 @@ func updateGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 	if includePoolCapacityAlert {
 		builder = builder.
 			SetPoolCapacityAlertEnabled(groupIn.PoolCapacityAlertEnabled).
+			SetPoolCapacityAlertMetric(groupIn.PoolCapacityAlertMetric).
+			SetPoolCapacityAlertThresholdRequests(groupIn.PoolCapacityAlertThresholdRequests).
 			SetPoolCapacityAlertGeneration(groupIn.PoolCapacityAlertGeneration)
+		if groupIn.PoolCapacityAlertThresholdUSD != nil {
+			builder = builder.SetPoolCapacityAlertThresholdUsd(*groupIn.PoolCapacityAlertThresholdUSD)
+		} else {
+			builder = builder.ClearPoolCapacityAlertThresholdUsd()
+		}
 	}
 
 	// 显式处理可空字段：nil 需要 clear，非 nil 需要 set。

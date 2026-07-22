@@ -94,6 +94,20 @@ func (_c *PoolCapacityAlertStateCreate) SetNillableEpisode(v *int64) *PoolCapaci
 	return _c
 }
 
+// SetAlertMetric sets the "alert_metric" field.
+func (_c *PoolCapacityAlertStateCreate) SetAlertMetric(v string) *PoolCapacityAlertStateCreate {
+	_c.mutation.SetAlertMetric(v)
+	return _c
+}
+
+// SetNillableAlertMetric sets the "alert_metric" field if the given value is not nil.
+func (_c *PoolCapacityAlertStateCreate) SetNillableAlertMetric(v *string) *PoolCapacityAlertStateCreate {
+	if v != nil {
+		_c.SetAlertMetric(*v)
+	}
+	return _c
+}
+
 // SetPredictedRequests sets the "predicted_requests" field.
 func (_c *PoolCapacityAlertStateCreate) SetPredictedRequests(v int64) *PoolCapacityAlertStateCreate {
 	_c.mutation.SetPredictedRequests(v)
@@ -104,6 +118,48 @@ func (_c *PoolCapacityAlertStateCreate) SetPredictedRequests(v int64) *PoolCapac
 func (_c *PoolCapacityAlertStateCreate) SetNillablePredictedRequests(v *int64) *PoolCapacityAlertStateCreate {
 	if v != nil {
 		_c.SetPredictedRequests(*v)
+	}
+	return _c
+}
+
+// SetRemainingBalanceUsd sets the "remaining_balance_usd" field.
+func (_c *PoolCapacityAlertStateCreate) SetRemainingBalanceUsd(v float64) *PoolCapacityAlertStateCreate {
+	_c.mutation.SetRemainingBalanceUsd(v)
+	return _c
+}
+
+// SetNillableRemainingBalanceUsd sets the "remaining_balance_usd" field if the given value is not nil.
+func (_c *PoolCapacityAlertStateCreate) SetNillableRemainingBalanceUsd(v *float64) *PoolCapacityAlertStateCreate {
+	if v != nil {
+		_c.SetRemainingBalanceUsd(*v)
+	}
+	return _c
+}
+
+// SetThresholdRequests sets the "threshold_requests" field.
+func (_c *PoolCapacityAlertStateCreate) SetThresholdRequests(v int64) *PoolCapacityAlertStateCreate {
+	_c.mutation.SetThresholdRequests(v)
+	return _c
+}
+
+// SetNillableThresholdRequests sets the "threshold_requests" field if the given value is not nil.
+func (_c *PoolCapacityAlertStateCreate) SetNillableThresholdRequests(v *int64) *PoolCapacityAlertStateCreate {
+	if v != nil {
+		_c.SetThresholdRequests(*v)
+	}
+	return _c
+}
+
+// SetThresholdUsd sets the "threshold_usd" field.
+func (_c *PoolCapacityAlertStateCreate) SetThresholdUsd(v float64) *PoolCapacityAlertStateCreate {
+	_c.mutation.SetThresholdUsd(v)
+	return _c
+}
+
+// SetNillableThresholdUsd sets the "threshold_usd" field if the given value is not nil.
+func (_c *PoolCapacityAlertStateCreate) SetNillableThresholdUsd(v *float64) *PoolCapacityAlertStateCreate {
+	if v != nil {
+		_c.SetThresholdUsd(*v)
 	}
 	return _c
 }
@@ -309,6 +365,14 @@ func (_c *PoolCapacityAlertStateCreate) defaults() {
 		v := poolcapacityalertstate.DefaultEpisode
 		_c.mutation.SetEpisode(v)
 	}
+	if _, ok := _c.mutation.AlertMetric(); !ok {
+		v := poolcapacityalertstate.DefaultAlertMetric
+		_c.mutation.SetAlertMetric(v)
+	}
+	if _, ok := _c.mutation.ThresholdRequests(); !ok {
+		v := poolcapacityalertstate.DefaultThresholdRequests
+		_c.mutation.SetThresholdRequests(v)
+	}
 	if _, ok := _c.mutation.AvgAccountCost(); !ok {
 		v := poolcapacityalertstate.DefaultAvgAccountCost
 		_c.mutation.SetAvgAccountCost(v)
@@ -369,6 +433,17 @@ func (_c *PoolCapacityAlertStateCreate) check() error {
 	}
 	if _, ok := _c.mutation.Episode(); !ok {
 		return &ValidationError{Name: "episode", err: errors.New(`ent: missing required field "PoolCapacityAlertState.episode"`)}
+	}
+	if _, ok := _c.mutation.AlertMetric(); !ok {
+		return &ValidationError{Name: "alert_metric", err: errors.New(`ent: missing required field "PoolCapacityAlertState.alert_metric"`)}
+	}
+	if v, ok := _c.mutation.AlertMetric(); ok {
+		if err := poolcapacityalertstate.AlertMetricValidator(v); err != nil {
+			return &ValidationError{Name: "alert_metric", err: fmt.Errorf(`ent: validator failed for field "PoolCapacityAlertState.alert_metric": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.ThresholdRequests(); !ok {
+		return &ValidationError{Name: "threshold_requests", err: errors.New(`ent: missing required field "PoolCapacityAlertState.threshold_requests"`)}
 	}
 	if _, ok := _c.mutation.AvgAccountCost(); !ok {
 		return &ValidationError{Name: "avg_account_cost", err: errors.New(`ent: missing required field "PoolCapacityAlertState.avg_account_cost"`)}
@@ -455,9 +530,25 @@ func (_c *PoolCapacityAlertStateCreate) createSpec() (*PoolCapacityAlertState, *
 		_spec.SetField(poolcapacityalertstate.FieldEpisode, field.TypeInt64, value)
 		_node.Episode = value
 	}
+	if value, ok := _c.mutation.AlertMetric(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldAlertMetric, field.TypeString, value)
+		_node.AlertMetric = value
+	}
 	if value, ok := _c.mutation.PredictedRequests(); ok {
 		_spec.SetField(poolcapacityalertstate.FieldPredictedRequests, field.TypeInt64, value)
 		_node.PredictedRequests = &value
+	}
+	if value, ok := _c.mutation.RemainingBalanceUsd(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldRemainingBalanceUsd, field.TypeFloat64, value)
+		_node.RemainingBalanceUsd = &value
+	}
+	if value, ok := _c.mutation.ThresholdRequests(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldThresholdRequests, field.TypeInt64, value)
+		_node.ThresholdRequests = value
+	}
+	if value, ok := _c.mutation.ThresholdUsd(); ok {
+		_spec.SetField(poolcapacityalertstate.FieldThresholdUsd, field.TypeFloat64, value)
+		_node.ThresholdUsd = &value
 	}
 	if value, ok := _c.mutation.AccountRequests(); ok {
 		_spec.SetField(poolcapacityalertstate.FieldAccountRequests, field.TypeInt64, value)
@@ -693,6 +784,18 @@ func (u *PoolCapacityAlertStateUpsert) AddEpisode(v int64) *PoolCapacityAlertSta
 	return u
 }
 
+// SetAlertMetric sets the "alert_metric" field.
+func (u *PoolCapacityAlertStateUpsert) SetAlertMetric(v string) *PoolCapacityAlertStateUpsert {
+	u.Set(poolcapacityalertstate.FieldAlertMetric, v)
+	return u
+}
+
+// UpdateAlertMetric sets the "alert_metric" field to the value that was provided on create.
+func (u *PoolCapacityAlertStateUpsert) UpdateAlertMetric() *PoolCapacityAlertStateUpsert {
+	u.SetExcluded(poolcapacityalertstate.FieldAlertMetric)
+	return u
+}
+
 // SetPredictedRequests sets the "predicted_requests" field.
 func (u *PoolCapacityAlertStateUpsert) SetPredictedRequests(v int64) *PoolCapacityAlertStateUpsert {
 	u.Set(poolcapacityalertstate.FieldPredictedRequests, v)
@@ -714,6 +817,72 @@ func (u *PoolCapacityAlertStateUpsert) AddPredictedRequests(v int64) *PoolCapaci
 // ClearPredictedRequests clears the value of the "predicted_requests" field.
 func (u *PoolCapacityAlertStateUpsert) ClearPredictedRequests() *PoolCapacityAlertStateUpsert {
 	u.SetNull(poolcapacityalertstate.FieldPredictedRequests)
+	return u
+}
+
+// SetRemainingBalanceUsd sets the "remaining_balance_usd" field.
+func (u *PoolCapacityAlertStateUpsert) SetRemainingBalanceUsd(v float64) *PoolCapacityAlertStateUpsert {
+	u.Set(poolcapacityalertstate.FieldRemainingBalanceUsd, v)
+	return u
+}
+
+// UpdateRemainingBalanceUsd sets the "remaining_balance_usd" field to the value that was provided on create.
+func (u *PoolCapacityAlertStateUpsert) UpdateRemainingBalanceUsd() *PoolCapacityAlertStateUpsert {
+	u.SetExcluded(poolcapacityalertstate.FieldRemainingBalanceUsd)
+	return u
+}
+
+// AddRemainingBalanceUsd adds v to the "remaining_balance_usd" field.
+func (u *PoolCapacityAlertStateUpsert) AddRemainingBalanceUsd(v float64) *PoolCapacityAlertStateUpsert {
+	u.Add(poolcapacityalertstate.FieldRemainingBalanceUsd, v)
+	return u
+}
+
+// ClearRemainingBalanceUsd clears the value of the "remaining_balance_usd" field.
+func (u *PoolCapacityAlertStateUpsert) ClearRemainingBalanceUsd() *PoolCapacityAlertStateUpsert {
+	u.SetNull(poolcapacityalertstate.FieldRemainingBalanceUsd)
+	return u
+}
+
+// SetThresholdRequests sets the "threshold_requests" field.
+func (u *PoolCapacityAlertStateUpsert) SetThresholdRequests(v int64) *PoolCapacityAlertStateUpsert {
+	u.Set(poolcapacityalertstate.FieldThresholdRequests, v)
+	return u
+}
+
+// UpdateThresholdRequests sets the "threshold_requests" field to the value that was provided on create.
+func (u *PoolCapacityAlertStateUpsert) UpdateThresholdRequests() *PoolCapacityAlertStateUpsert {
+	u.SetExcluded(poolcapacityalertstate.FieldThresholdRequests)
+	return u
+}
+
+// AddThresholdRequests adds v to the "threshold_requests" field.
+func (u *PoolCapacityAlertStateUpsert) AddThresholdRequests(v int64) *PoolCapacityAlertStateUpsert {
+	u.Add(poolcapacityalertstate.FieldThresholdRequests, v)
+	return u
+}
+
+// SetThresholdUsd sets the "threshold_usd" field.
+func (u *PoolCapacityAlertStateUpsert) SetThresholdUsd(v float64) *PoolCapacityAlertStateUpsert {
+	u.Set(poolcapacityalertstate.FieldThresholdUsd, v)
+	return u
+}
+
+// UpdateThresholdUsd sets the "threshold_usd" field to the value that was provided on create.
+func (u *PoolCapacityAlertStateUpsert) UpdateThresholdUsd() *PoolCapacityAlertStateUpsert {
+	u.SetExcluded(poolcapacityalertstate.FieldThresholdUsd)
+	return u
+}
+
+// AddThresholdUsd adds v to the "threshold_usd" field.
+func (u *PoolCapacityAlertStateUpsert) AddThresholdUsd(v float64) *PoolCapacityAlertStateUpsert {
+	u.Add(poolcapacityalertstate.FieldThresholdUsd, v)
+	return u
+}
+
+// ClearThresholdUsd clears the value of the "threshold_usd" field.
+func (u *PoolCapacityAlertStateUpsert) ClearThresholdUsd() *PoolCapacityAlertStateUpsert {
+	u.SetNull(poolcapacityalertstate.FieldThresholdUsd)
 	return u
 }
 
@@ -1103,6 +1272,20 @@ func (u *PoolCapacityAlertStateUpsertOne) UpdateEpisode() *PoolCapacityAlertStat
 	})
 }
 
+// SetAlertMetric sets the "alert_metric" field.
+func (u *PoolCapacityAlertStateUpsertOne) SetAlertMetric(v string) *PoolCapacityAlertStateUpsertOne {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.SetAlertMetric(v)
+	})
+}
+
+// UpdateAlertMetric sets the "alert_metric" field to the value that was provided on create.
+func (u *PoolCapacityAlertStateUpsertOne) UpdateAlertMetric() *PoolCapacityAlertStateUpsertOne {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.UpdateAlertMetric()
+	})
+}
+
 // SetPredictedRequests sets the "predicted_requests" field.
 func (u *PoolCapacityAlertStateUpsertOne) SetPredictedRequests(v int64) *PoolCapacityAlertStateUpsertOne {
 	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
@@ -1128,6 +1311,83 @@ func (u *PoolCapacityAlertStateUpsertOne) UpdatePredictedRequests() *PoolCapacit
 func (u *PoolCapacityAlertStateUpsertOne) ClearPredictedRequests() *PoolCapacityAlertStateUpsertOne {
 	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
 		s.ClearPredictedRequests()
+	})
+}
+
+// SetRemainingBalanceUsd sets the "remaining_balance_usd" field.
+func (u *PoolCapacityAlertStateUpsertOne) SetRemainingBalanceUsd(v float64) *PoolCapacityAlertStateUpsertOne {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.SetRemainingBalanceUsd(v)
+	})
+}
+
+// AddRemainingBalanceUsd adds v to the "remaining_balance_usd" field.
+func (u *PoolCapacityAlertStateUpsertOne) AddRemainingBalanceUsd(v float64) *PoolCapacityAlertStateUpsertOne {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.AddRemainingBalanceUsd(v)
+	})
+}
+
+// UpdateRemainingBalanceUsd sets the "remaining_balance_usd" field to the value that was provided on create.
+func (u *PoolCapacityAlertStateUpsertOne) UpdateRemainingBalanceUsd() *PoolCapacityAlertStateUpsertOne {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.UpdateRemainingBalanceUsd()
+	})
+}
+
+// ClearRemainingBalanceUsd clears the value of the "remaining_balance_usd" field.
+func (u *PoolCapacityAlertStateUpsertOne) ClearRemainingBalanceUsd() *PoolCapacityAlertStateUpsertOne {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.ClearRemainingBalanceUsd()
+	})
+}
+
+// SetThresholdRequests sets the "threshold_requests" field.
+func (u *PoolCapacityAlertStateUpsertOne) SetThresholdRequests(v int64) *PoolCapacityAlertStateUpsertOne {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.SetThresholdRequests(v)
+	})
+}
+
+// AddThresholdRequests adds v to the "threshold_requests" field.
+func (u *PoolCapacityAlertStateUpsertOne) AddThresholdRequests(v int64) *PoolCapacityAlertStateUpsertOne {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.AddThresholdRequests(v)
+	})
+}
+
+// UpdateThresholdRequests sets the "threshold_requests" field to the value that was provided on create.
+func (u *PoolCapacityAlertStateUpsertOne) UpdateThresholdRequests() *PoolCapacityAlertStateUpsertOne {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.UpdateThresholdRequests()
+	})
+}
+
+// SetThresholdUsd sets the "threshold_usd" field.
+func (u *PoolCapacityAlertStateUpsertOne) SetThresholdUsd(v float64) *PoolCapacityAlertStateUpsertOne {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.SetThresholdUsd(v)
+	})
+}
+
+// AddThresholdUsd adds v to the "threshold_usd" field.
+func (u *PoolCapacityAlertStateUpsertOne) AddThresholdUsd(v float64) *PoolCapacityAlertStateUpsertOne {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.AddThresholdUsd(v)
+	})
+}
+
+// UpdateThresholdUsd sets the "threshold_usd" field to the value that was provided on create.
+func (u *PoolCapacityAlertStateUpsertOne) UpdateThresholdUsd() *PoolCapacityAlertStateUpsertOne {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.UpdateThresholdUsd()
+	})
+}
+
+// ClearThresholdUsd clears the value of the "threshold_usd" field.
+func (u *PoolCapacityAlertStateUpsertOne) ClearThresholdUsd() *PoolCapacityAlertStateUpsertOne {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.ClearThresholdUsd()
 	})
 }
 
@@ -1713,6 +1973,20 @@ func (u *PoolCapacityAlertStateUpsertBulk) UpdateEpisode() *PoolCapacityAlertSta
 	})
 }
 
+// SetAlertMetric sets the "alert_metric" field.
+func (u *PoolCapacityAlertStateUpsertBulk) SetAlertMetric(v string) *PoolCapacityAlertStateUpsertBulk {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.SetAlertMetric(v)
+	})
+}
+
+// UpdateAlertMetric sets the "alert_metric" field to the value that was provided on create.
+func (u *PoolCapacityAlertStateUpsertBulk) UpdateAlertMetric() *PoolCapacityAlertStateUpsertBulk {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.UpdateAlertMetric()
+	})
+}
+
 // SetPredictedRequests sets the "predicted_requests" field.
 func (u *PoolCapacityAlertStateUpsertBulk) SetPredictedRequests(v int64) *PoolCapacityAlertStateUpsertBulk {
 	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
@@ -1738,6 +2012,83 @@ func (u *PoolCapacityAlertStateUpsertBulk) UpdatePredictedRequests() *PoolCapaci
 func (u *PoolCapacityAlertStateUpsertBulk) ClearPredictedRequests() *PoolCapacityAlertStateUpsertBulk {
 	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
 		s.ClearPredictedRequests()
+	})
+}
+
+// SetRemainingBalanceUsd sets the "remaining_balance_usd" field.
+func (u *PoolCapacityAlertStateUpsertBulk) SetRemainingBalanceUsd(v float64) *PoolCapacityAlertStateUpsertBulk {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.SetRemainingBalanceUsd(v)
+	})
+}
+
+// AddRemainingBalanceUsd adds v to the "remaining_balance_usd" field.
+func (u *PoolCapacityAlertStateUpsertBulk) AddRemainingBalanceUsd(v float64) *PoolCapacityAlertStateUpsertBulk {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.AddRemainingBalanceUsd(v)
+	})
+}
+
+// UpdateRemainingBalanceUsd sets the "remaining_balance_usd" field to the value that was provided on create.
+func (u *PoolCapacityAlertStateUpsertBulk) UpdateRemainingBalanceUsd() *PoolCapacityAlertStateUpsertBulk {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.UpdateRemainingBalanceUsd()
+	})
+}
+
+// ClearRemainingBalanceUsd clears the value of the "remaining_balance_usd" field.
+func (u *PoolCapacityAlertStateUpsertBulk) ClearRemainingBalanceUsd() *PoolCapacityAlertStateUpsertBulk {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.ClearRemainingBalanceUsd()
+	})
+}
+
+// SetThresholdRequests sets the "threshold_requests" field.
+func (u *PoolCapacityAlertStateUpsertBulk) SetThresholdRequests(v int64) *PoolCapacityAlertStateUpsertBulk {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.SetThresholdRequests(v)
+	})
+}
+
+// AddThresholdRequests adds v to the "threshold_requests" field.
+func (u *PoolCapacityAlertStateUpsertBulk) AddThresholdRequests(v int64) *PoolCapacityAlertStateUpsertBulk {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.AddThresholdRequests(v)
+	})
+}
+
+// UpdateThresholdRequests sets the "threshold_requests" field to the value that was provided on create.
+func (u *PoolCapacityAlertStateUpsertBulk) UpdateThresholdRequests() *PoolCapacityAlertStateUpsertBulk {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.UpdateThresholdRequests()
+	})
+}
+
+// SetThresholdUsd sets the "threshold_usd" field.
+func (u *PoolCapacityAlertStateUpsertBulk) SetThresholdUsd(v float64) *PoolCapacityAlertStateUpsertBulk {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.SetThresholdUsd(v)
+	})
+}
+
+// AddThresholdUsd adds v to the "threshold_usd" field.
+func (u *PoolCapacityAlertStateUpsertBulk) AddThresholdUsd(v float64) *PoolCapacityAlertStateUpsertBulk {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.AddThresholdUsd(v)
+	})
+}
+
+// UpdateThresholdUsd sets the "threshold_usd" field to the value that was provided on create.
+func (u *PoolCapacityAlertStateUpsertBulk) UpdateThresholdUsd() *PoolCapacityAlertStateUpsertBulk {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.UpdateThresholdUsd()
+	})
+}
+
+// ClearThresholdUsd clears the value of the "threshold_usd" field.
+func (u *PoolCapacityAlertStateUpsertBulk) ClearThresholdUsd() *PoolCapacityAlertStateUpsertBulk {
+	return u.Update(func(s *PoolCapacityAlertStateUpsert) {
+		s.ClearThresholdUsd()
 	})
 }
 

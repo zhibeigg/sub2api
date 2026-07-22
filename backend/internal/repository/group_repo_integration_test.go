@@ -189,21 +189,28 @@ func (s *GroupRepoSuite) TestGetByIDLite_DoesNotUseAccountCount() {
 	s.Require().False(spy.called, "expected no direct sql executor usage")
 }
 
-func (s *GroupRepoSuite) TestUpdatePreservesPoolCapacityAlertGenerationFromStaleSnapshots() {
+func (s *GroupRepoSuite) TestUpdatePreservesPoolCapacityAlertPolicyFromStaleSnapshots() {
+	thresholdUSD := 12.5
 	group := &service.Group{
-		Name:                        "original",
-		Platform:                    service.PlatformAnthropic,
-		RateMultiplier:              1.0,
-		IsExclusive:                 false,
-		Status:                      service.StatusActive,
-		SubscriptionType:            service.SubscriptionTypeStandard,
-		PoolCapacityAlertEnabled:    true,
-		PoolCapacityAlertGeneration: 5,
+		Name:                               "original",
+		Platform:                           service.PlatformAnthropic,
+		RateMultiplier:                     1.0,
+		IsExclusive:                        false,
+		Status:                             service.StatusActive,
+		SubscriptionType:                   service.SubscriptionTypeStandard,
+		PoolCapacityAlertEnabled:           true,
+		PoolCapacityAlertMetric:            service.PoolCapacityAlertMetricRemainingBalanceUSD,
+		PoolCapacityAlertThresholdRequests: 123,
+		PoolCapacityAlertThresholdUSD:      &thresholdUSD,
+		PoolCapacityAlertGeneration:        5,
 	}
 	s.Require().NoError(s.repo.Create(s.ctx, group))
 
 	group.Name = "updated"
 	group.PoolCapacityAlertEnabled = false
+	group.PoolCapacityAlertMetric = service.PoolCapacityAlertMetricPredictedRequests
+	group.PoolCapacityAlertThresholdRequests = 50
+	group.PoolCapacityAlertThresholdUSD = nil
 	group.PoolCapacityAlertGeneration = 0
 	err := s.repo.Update(s.ctx, group)
 	s.Require().NoError(err, "Update")
@@ -212,30 +219,54 @@ func (s *GroupRepoSuite) TestUpdatePreservesPoolCapacityAlertGenerationFromStale
 	s.Require().NoError(err, "GetByID after update")
 	s.Require().Equal("updated", got.Name)
 	s.Require().True(got.PoolCapacityAlertEnabled)
+	s.Require().Equal(service.PoolCapacityAlertMetricRemainingBalanceUSD, got.PoolCapacityAlertMetric)
+	s.Require().Equal(int64(123), got.PoolCapacityAlertThresholdRequests)
+	s.Require().NotNil(got.PoolCapacityAlertThresholdUSD)
+	s.Require().Equal(12.5, *got.PoolCapacityAlertThresholdUSD)
 	s.Require().Equal(int64(5), got.PoolCapacityAlertGeneration)
 }
 
-func (s *GroupRepoSuite) TestUpdateWithPoolCapacityAlertIncrementsCurrentGenerationAtomically() {
+func (s *GroupRepoSuite) TestUpdateWithPoolCapacityAlertIncrementsGenerationOncePerPolicyPatch() {
+	thresholdUSD := 10.0
 	group := &service.Group{
-		Name:                        "alert-toggle",
-		Platform:                    service.PlatformAnthropic,
-		RateMultiplier:              1.0,
-		Status:                      service.StatusActive,
-		SubscriptionType:            service.SubscriptionTypeStandard,
-		PoolCapacityAlertEnabled:    true,
-		PoolCapacityAlertGeneration: 5,
+		Name:                               "alert-policy",
+		Platform:                           service.PlatformAnthropic,
+		RateMultiplier:                     1.0,
+		Status:                             service.StatusActive,
+		SubscriptionType:                   service.SubscriptionTypeStandard,
+		PoolCapacityAlertEnabled:           true,
+		PoolCapacityAlertMetric:            service.PoolCapacityAlertMetricPredictedRequests,
+		PoolCapacityAlertThresholdRequests: 50,
+		PoolCapacityAlertThresholdUSD:      &thresholdUSD,
+		PoolCapacityAlertGeneration:        5,
 	}
 	s.Require().NoError(s.repo.Create(s.ctx, group))
 
 	disabled := false
-	group.PoolCapacityAlertEnabled = true
+	metric := service.PoolCapacityAlertMetricRemainingBalanceUSD
+	requests := int64(75)
+	newThresholdUSD := 20.0
+	usdPatch := &newThresholdUSD
+	patch := service.PoolCapacityAlertPolicyPatch{
+		Enabled:           &disabled,
+		Metric:            &metric,
+		ThresholdRequests: &requests,
+		ThresholdUSD:      &usdPatch,
+	}
 	group.PoolCapacityAlertGeneration = 1
-	s.Require().NoError(s.repo.UpdateWithPoolCapacityAlert(s.ctx, group, &disabled))
+	s.Require().NoError(s.repo.UpdateWithPoolCapacityAlert(s.ctx, group, patch))
 	s.Require().False(group.PoolCapacityAlertEnabled)
-	s.Require().Equal(int64(6), group.PoolCapacityAlertGeneration)
+	s.Require().Equal(metric, group.PoolCapacityAlertMetric)
+	s.Require().Equal(requests, group.PoolCapacityAlertThresholdRequests)
+	s.Require().Equal(newThresholdUSD, *group.PoolCapacityAlertThresholdUSD)
+	s.Require().Equal(int64(6), group.PoolCapacityAlertGeneration, "multiple actual changes must advance generation only once")
 
-	s.Require().NoError(s.repo.UpdateWithPoolCapacityAlert(s.ctx, group, &disabled))
-	s.Require().Equal(int64(6), group.PoolCapacityAlertGeneration, "writing the same value must not advance the generation")
+	s.Require().NoError(s.repo.UpdateWithPoolCapacityAlert(s.ctx, group, patch))
+	s.Require().Equal(int64(6), group.PoolCapacityAlertGeneration, "writing the same policy must not advance generation")
+
+	updatedRequests := int64(76)
+	s.Require().NoError(s.repo.UpdateWithPoolCapacityAlert(s.ctx, group, service.PoolCapacityAlertPolicyPatch{ThresholdRequests: &updatedRequests}))
+	s.Require().Equal(int64(7), group.PoolCapacityAlertGeneration, "one threshold change must advance generation")
 }
 
 func (s *GroupRepoSuite) TestGetByID_PreservesMessagesDispatchModelConfig() {

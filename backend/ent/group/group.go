@@ -118,6 +118,12 @@ const (
 	FieldRpmLimit = "rpm_limit"
 	// FieldPoolCapacityAlertEnabled holds the string denoting the pool_capacity_alert_enabled field in the database.
 	FieldPoolCapacityAlertEnabled = "pool_capacity_alert_enabled"
+	// FieldPoolCapacityAlertMetric holds the string denoting the pool_capacity_alert_metric field in the database.
+	FieldPoolCapacityAlertMetric = "pool_capacity_alert_metric"
+	// FieldPoolCapacityAlertThresholdRequests holds the string denoting the pool_capacity_alert_threshold_requests field in the database.
+	FieldPoolCapacityAlertThresholdRequests = "pool_capacity_alert_threshold_requests"
+	// FieldPoolCapacityAlertThresholdUsd holds the string denoting the pool_capacity_alert_threshold_usd field in the database.
+	FieldPoolCapacityAlertThresholdUsd = "pool_capacity_alert_threshold_usd"
 	// FieldPoolCapacityAlertGeneration holds the string denoting the pool_capacity_alert_generation field in the database.
 	FieldPoolCapacityAlertGeneration = "pool_capacity_alert_generation"
 	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
@@ -310,6 +316,9 @@ var Columns = []string{
 	FieldModelsListConfig,
 	FieldRpmLimit,
 	FieldPoolCapacityAlertEnabled,
+	FieldPoolCapacityAlertMetric,
+	FieldPoolCapacityAlertThresholdRequests,
+	FieldPoolCapacityAlertThresholdUsd,
 	FieldPoolCapacityAlertGeneration,
 }
 
@@ -438,6 +447,12 @@ var (
 	DefaultRpmLimit int
 	// DefaultPoolCapacityAlertEnabled holds the default value on creation for the "pool_capacity_alert_enabled" field.
 	DefaultPoolCapacityAlertEnabled bool
+	// DefaultPoolCapacityAlertMetric holds the default value on creation for the "pool_capacity_alert_metric" field.
+	DefaultPoolCapacityAlertMetric string
+	// PoolCapacityAlertMetricValidator is a validator for the "pool_capacity_alert_metric" field. It is called by the builders before save.
+	PoolCapacityAlertMetricValidator func(string) error
+	// DefaultPoolCapacityAlertThresholdRequests holds the default value on creation for the "pool_capacity_alert_threshold_requests" field.
+	DefaultPoolCapacityAlertThresholdRequests int64
 	// DefaultPoolCapacityAlertGeneration holds the default value on creation for the "pool_capacity_alert_generation" field.
 	DefaultPoolCapacityAlertGeneration int64
 )
@@ -678,6 +693,21 @@ func ByRpmLimit(opts ...sql.OrderTermOption) OrderOption {
 // ByPoolCapacityAlertEnabled orders the results by the pool_capacity_alert_enabled field.
 func ByPoolCapacityAlertEnabled(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPoolCapacityAlertEnabled, opts...).ToFunc()
+}
+
+// ByPoolCapacityAlertMetric orders the results by the pool_capacity_alert_metric field.
+func ByPoolCapacityAlertMetric(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPoolCapacityAlertMetric, opts...).ToFunc()
+}
+
+// ByPoolCapacityAlertThresholdRequests orders the results by the pool_capacity_alert_threshold_requests field.
+func ByPoolCapacityAlertThresholdRequests(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPoolCapacityAlertThresholdRequests, opts...).ToFunc()
+}
+
+// ByPoolCapacityAlertThresholdUsd orders the results by the pool_capacity_alert_threshold_usd field.
+func ByPoolCapacityAlertThresholdUsd(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPoolCapacityAlertThresholdUsd, opts...).ToFunc()
 }
 
 // ByPoolCapacityAlertGeneration orders the results by the pool_capacity_alert_generation field.

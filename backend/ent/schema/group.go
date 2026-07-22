@@ -228,6 +228,18 @@ func (Group) Fields() []ent.Field {
 		field.Bool("pool_capacity_alert_enabled").
 			Default(false).
 			Comment("是否启用分组池容量告警"),
+		field.String("pool_capacity_alert_metric").
+			MaxLen(32).
+			Default("predicted_requests").
+			Comment("分组池容量告警指标：predicted_requests 或 remaining_balance_usd"),
+		field.Int64("pool_capacity_alert_threshold_requests").
+			Default(50).
+			Comment("预计剩余请求数告警阈值"),
+		field.Float("pool_capacity_alert_threshold_usd").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "numeric(30,12)"}).
+			Comment("剩余可用金额告警阈值（USD）"),
 		field.Int64("pool_capacity_alert_generation").
 			Default(0).
 			Comment("分组池容量告警配置代际，仅供内部缓存一致性使用"),

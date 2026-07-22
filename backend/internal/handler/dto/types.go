@@ -183,8 +183,11 @@ type AdminGroup struct {
 	// 分组排序
 	SortOrder int `json:"sort_order"`
 
-	// 分组池容量告警开关（仅管理员可见）；generation 为内部字段，不通过 DTO 暴露。
-	PoolCapacityAlertEnabled bool `json:"pool_capacity_alert_enabled"`
+	// 分组池容量告警策略（仅管理员可见）；generation 为内部字段，不通过 DTO 暴露。
+	PoolCapacityAlertEnabled           bool     `json:"pool_capacity_alert_enabled"`
+	PoolCapacityAlertMetric            string   `json:"pool_capacity_alert_metric"`
+	PoolCapacityAlertThresholdRequests int64    `json:"pool_capacity_alert_threshold_requests"`
+	PoolCapacityAlertThresholdUSD      *float64 `json:"pool_capacity_alert_threshold_usd"`
 }
 
 type Account struct {

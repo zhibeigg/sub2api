@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"testing"
 
@@ -16,6 +17,8 @@ func ptrString[T ~string](v T) *string {
 	s := string(v)
 	return &s
 }
+
+func adminGroupTestPointer[T any](value T) *T { return &value }
 
 // groupRepoStubForAdmin 用于测试 AdminService 的 GroupRepository Stub
 type groupRepoStubForAdmin struct {
@@ -751,6 +754,35 @@ func TestAdminService_CreateGroup_DefaultsPoolCapacityAlertDisabled(t *testing.T
 	require.NoError(t, err)
 	require.NotNil(t, group)
 	require.False(t, repo.created.PoolCapacityAlertEnabled)
+	require.Equal(t, DefaultPoolCapacityAlertMetric, repo.created.PoolCapacityAlertMetric)
+	require.Equal(t, DefaultPoolCapacityAlertThresholdRequests, repo.created.PoolCapacityAlertThresholdRequests)
+	require.Nil(t, repo.created.PoolCapacityAlertThresholdUSD)
+	require.Zero(t, repo.created.PoolCapacityAlertGeneration)
+}
+
+func TestAdminService_CreateGroupPersistsCustomPoolCapacityAlertPolicy(t *testing.T) {
+	repo := &groupRepoStubForAdmin{}
+	svc := &adminServiceImpl{groupRepo: repo}
+	metric := PoolCapacityAlertMetricRemainingBalanceUSD
+	requests := int64(125)
+	thresholdUSD := 42.5
+
+	group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
+		Name:                               "pool-alert-custom",
+		Platform:                           PlatformAnthropic,
+		RateMultiplier:                     1,
+		PoolCapacityAlertEnabled:           true,
+		PoolCapacityAlertMetric:            &metric,
+		PoolCapacityAlertThresholdRequests: &requests,
+		PoolCapacityAlertThresholdUSD:      &thresholdUSD,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, group)
+	require.True(t, repo.created.PoolCapacityAlertEnabled)
+	require.Equal(t, metric, repo.created.PoolCapacityAlertMetric)
+	require.Equal(t, requests, repo.created.PoolCapacityAlertThresholdRequests)
+	require.Equal(t, thresholdUSD, *repo.created.PoolCapacityAlertThresholdUSD)
 	require.Zero(t, repo.created.PoolCapacityAlertGeneration)
 }
 
@@ -791,6 +823,104 @@ func TestAdminService_UpdateGroup_PoolCapacityAlertGenerationChangesOnlyWithSwit
 			require.Equal(t, []int64{1}, invalidator.groupIDs, "既有 group 更新缓存失效机制必须保持")
 		})
 	}
+}
+
+func TestAdminService_CreateGroupRejectsInvalidPoolCapacityAlertPolicy(t *testing.T) {
+	tests := []struct {
+		name      string
+		metric    *string
+		requests  *int64
+		threshold *float64
+	}{
+		{name: "invalid metric", metric: adminGroupTestPointer("balance")},
+		{name: "requests below minimum", requests: adminGroupTestPointer(int64(0))},
+		{name: "requests above maximum", requests: adminGroupTestPointer(MaxPoolCapacityAlertThresholdRequests + 1)},
+		{name: "usd below minimum", threshold: adminGroupTestPointer(0.009)},
+		{name: "usd above maximum", threshold: adminGroupTestPointer(MaxPoolCapacityAlertThresholdUSD + 1)},
+		{name: "usd nan", threshold: adminGroupTestPointer(math.NaN())},
+		{name: "usd infinity", threshold: adminGroupTestPointer(math.Inf(1))},
+		{name: "balance metric requires usd", metric: adminGroupTestPointer(PoolCapacityAlertMetricRemainingBalanceUSD)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &groupRepoStubForAdmin{}
+			svc := &adminServiceImpl{groupRepo: repo}
+			_, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
+				Name:                               "invalid-policy",
+				Platform:                           PlatformAnthropic,
+				RateMultiplier:                     1,
+				PoolCapacityAlertMetric:            tt.metric,
+				PoolCapacityAlertThresholdRequests: tt.requests,
+				PoolCapacityAlertThresholdUSD:      tt.threshold,
+			})
+			require.Error(t, err)
+			require.Nil(t, repo.created)
+		})
+	}
+}
+
+func TestAdminService_UpdateGroupAppliesPoolCapacityAlertPolicyAsOnePatch(t *testing.T) {
+	existingUSD := 10.0
+	existingGroup := &Group{
+		ID:                                 1,
+		Name:                               "existing-group",
+		Platform:                           PlatformAnthropic,
+		Status:                             StatusActive,
+		PoolCapacityAlertEnabled:           true,
+		PoolCapacityAlertMetric:            PoolCapacityAlertMetricPredictedRequests,
+		PoolCapacityAlertThresholdRequests: 50,
+		PoolCapacityAlertThresholdUSD:      &existingUSD,
+		PoolCapacityAlertGeneration:        7,
+	}
+	repo := &groupRepoStubForAdmin{getByID: existingGroup}
+	svc := &adminServiceImpl{groupRepo: repo}
+	metric := PoolCapacityAlertMetricRemainingBalanceUSD
+	requests := int64(125)
+	thresholdUSD := 25.5
+	thresholdUSDPatch := &thresholdUSD
+	enabled := false
+
+	group, err := svc.UpdateGroup(context.Background(), 1, &UpdateGroupInput{
+		PoolCapacityAlertEnabled:           &enabled,
+		PoolCapacityAlertMetric:            &metric,
+		PoolCapacityAlertThresholdRequests: &requests,
+		PoolCapacityAlertThresholdUSD:      &thresholdUSDPatch,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, group)
+	require.False(t, repo.updated.PoolCapacityAlertEnabled)
+	require.Equal(t, metric, repo.updated.PoolCapacityAlertMetric)
+	require.Equal(t, requests, repo.updated.PoolCapacityAlertThresholdRequests)
+	require.NotNil(t, repo.updated.PoolCapacityAlertThresholdUSD)
+	require.Equal(t, thresholdUSD, *repo.updated.PoolCapacityAlertThresholdUSD)
+	require.Equal(t, int64(8), repo.updated.PoolCapacityAlertGeneration, "multiple changed policy fields increment generation once")
+}
+
+func TestAdminService_UpdateGroupCanClearUnusedPoolCapacityUSDThreshold(t *testing.T) {
+	existingUSD := 10.0
+	existingGroup := &Group{
+		ID:                                 1,
+		Name:                               "existing-group",
+		Platform:                           PlatformAnthropic,
+		Status:                             StatusActive,
+		PoolCapacityAlertMetric:            PoolCapacityAlertMetricPredictedRequests,
+		PoolCapacityAlertThresholdRequests: 50,
+		PoolCapacityAlertThresholdUSD:      &existingUSD,
+		PoolCapacityAlertGeneration:        3,
+	}
+	repo := &groupRepoStubForAdmin{getByID: existingGroup}
+	svc := &adminServiceImpl{groupRepo: repo}
+	var clearedUSD *float64
+
+	_, err := svc.UpdateGroup(context.Background(), 1, &UpdateGroupInput{
+		PoolCapacityAlertThresholdUSD: &clearedUSD,
+	})
+
+	require.NoError(t, err)
+	require.Nil(t, repo.updated.PoolCapacityAlertThresholdUSD)
+	require.Equal(t, int64(4), repo.updated.PoolCapacityAlertGeneration)
 }
 
 func TestAdminService_UpdateGroup_ClearsPeakRateWhenChangingToStandard(t *testing.T) {

@@ -312,8 +312,9 @@ type AccountCapacityConfig struct {
 }
 
 // PoolCapacityAlertConfig controls the bounded post-billing evaluator and the
-// durable administrator notification delivery workers. The product sample size
-// and request threshold are fixed constants in the service layer.
+// durable administrator notification delivery workers. The request-prediction
+// sample size is fixed in the service layer; each group selects one alert metric
+// and owns the corresponding custom threshold.
 type PoolCapacityAlertConfig struct {
 	Enabled                  bool `mapstructure:"enabled"`
 	EvaluationWorkerCount    int  `mapstructure:"evaluation_worker_count"`

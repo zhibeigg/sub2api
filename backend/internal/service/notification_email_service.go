@@ -978,8 +978,18 @@ func notificationEmailSampleVariables(locale string) map[string]string {
 			"api_key_name":             "生产密钥",
 			"api_key_id":               "3001",
 			"user_id":                  "42",
+			"alert_metric":             "predicted_requests",
+			"alert_metric_label":       "Estimated remaining requests",
+			"alert_metric_label_zh":    "预计剩余请求数",
+			"alert_metric_value":       "37",
+			"alert_metric_threshold":   "50",
+			"alert_metric_unit":        "requests",
+			"alert_summary":            "The estimated remaining request capacity is 37, below the configured 50-request threshold.",
+			"alert_summary_zh":         "预计剩余请求数为 37，已低于配置的 50 次阈值。",
 			"predicted_requests":       "37",
+			"remaining_balance_usd":    "0.795500",
 			"threshold_requests":       "50",
+			"threshold_usd":            "10.000000",
 			"avg_account_cost":         "0.021500",
 			"avg_actual_cost":          "0.032000",
 			"account_requests":         "37",
@@ -1052,8 +1062,18 @@ func notificationEmailSampleVariables(locale string) map[string]string {
 		"api_key_name":             "Production key",
 		"api_key_id":               "3001",
 		"user_id":                  "42",
+		"alert_metric":             "predicted_requests",
+		"alert_metric_label":       "Estimated remaining requests",
+		"alert_metric_label_zh":    "预计剩余请求数",
+		"alert_metric_value":       "37",
+		"alert_metric_threshold":   "50",
+		"alert_metric_unit":        "requests",
+		"alert_summary":            "The estimated remaining request capacity is 37, below the configured 50-request threshold.",
+		"alert_summary_zh":         "预计剩余请求数为 37，已低于配置的 50 次阈值。",
 		"predicted_requests":       "37",
+		"remaining_balance_usd":    "0.795500",
 		"threshold_requests":       "50",
+		"threshold_usd":            "10.000000",
 		"avg_account_cost":         "0.021500",
 		"avg_actual_cost":          "0.032000",
 		"account_requests":         "37",
@@ -1227,13 +1247,15 @@ var notificationEmailEventDefinitions = map[string]NotificationEmailEventInfo{
 	NotificationEmailEventPoolCapacityLow: {
 		Event:       NotificationEmailEventPoolCapacityLow,
 		Label:       "Pool account capacity low",
-		Description: "Sent to active administrators when a billed request predicts fewer than 50 remaining requests for the selected pool-mode account scope.",
+		Description: "Sent to active administrators when the configured request-count or authoritative USD-balance metric falls below its group threshold.",
 		Category:    "admin",
 		Optional:    false,
 		Placeholders: append(append([]string{}, notificationEmailCommonPlaceholders...),
 			"group_name", "group_id", "account_name", "account_id", "api_key_name", "api_key_id", "user_id",
-			"predicted_requests", "threshold_requests", "avg_account_cost", "avg_actual_cost", "account_requests", "api_key_requests",
-			"wallet_requests", "account_remaining", "api_key_remaining", "wallet_remaining", "bottleneck", "sample_count", "triggered_at",
+			"alert_metric", "alert_metric_label", "alert_metric_label_zh", "alert_metric_value", "alert_metric_threshold", "alert_metric_unit",
+			"alert_summary", "alert_summary_zh", "predicted_requests", "remaining_balance_usd", "threshold_requests", "threshold_usd",
+			"avg_account_cost", "avg_actual_cost", "account_requests", "api_key_requests", "wallet_requests",
+			"account_remaining", "api_key_remaining", "wallet_remaining", "bottleneck", "sample_count", "triggered_at",
 			"prediction_disclaimer", "prediction_disclaimer_zh"),
 	},
 	NotificationEmailEventContentModerationViolation: {
@@ -1517,14 +1539,16 @@ var notificationEmailOfficialTemplates = map[string]map[string]notificationEmail
 		notificationEmailDefaultLocale: {
 			Subject: "[{{site_name}}] Pool account capacity low - {{account_name}}",
 			HTML: notificationEmailCard("#dc2626", "Pool account capacity alert", `
-<p>The selected pool-mode account is estimated to have fewer than <strong>{{threshold_requests}}</strong> billable requests remaining.</p>
+<p>{{alert_summary}}</p>
 <table style="width:100%;border-collapse:collapse;">
   <tr><td>Group</td><td>{{group_name}} (#{{group_id}})</td></tr>
   <tr><td>Account</td><td>{{account_name}} (#{{account_id}})</td></tr>
   <tr><td>API Key</td><td>{{api_key_name}} (#{{api_key_id}})</td></tr>
-  <tr><td>Predicted requests</td><td><strong>{{predicted_requests}}</strong></td></tr>
+  <tr><td>Trigger metric</td><td>{{alert_metric_label}}</td></tr>
+  <tr><td>Current / Threshold</td><td><strong>{{alert_metric_value}} / {{alert_metric_threshold}} {{alert_metric_unit}}</strong></td></tr>
+  <tr><td>Account / Key / Wallet balance</td><td>{{account_remaining}} / {{api_key_remaining}} / {{wallet_remaining}} USD</td></tr>
   <tr><td>Account / Key / Wallet requests</td><td>{{account_requests}} / {{api_key_requests}} / {{wallet_requests}}</td></tr>
-  <tr><td>Average account / actual cost</td><td>${{avg_account_cost}} / ${{avg_actual_cost}}</td></tr>
+  <tr><td>Average account / actual cost</td><td>{{avg_account_cost}} / {{avg_actual_cost}}</td></tr>
   <tr><td>Bottleneck</td><td>{{bottleneck}}</td></tr>
   <tr><td>Sample / Triggered</td><td>{{sample_count}} / {{triggered_at}}</td></tr>
 </table>
@@ -1533,14 +1557,16 @@ var notificationEmailOfficialTemplates = map[string]map[string]notificationEmail
 		notificationEmailLocaleChinese: {
 			Subject: "[{{site_name}}] 池账户容量不足 - {{account_name}}",
 			HTML: notificationEmailCard("#dc2626", "池账户容量预测提醒", `
-<p>本次实际命中的池模式账户预计剩余可计费请求数已低于 <strong>{{threshold_requests}}</strong>。</p>
+<p>{{alert_summary_zh}}</p>
 <table style="width:100%;border-collapse:collapse;">
   <tr><td>分组</td><td>{{group_name}} (#{{group_id}})</td></tr>
   <tr><td>账户</td><td>{{account_name}} (#{{account_id}})</td></tr>
   <tr><td>API Key</td><td>{{api_key_name}} (#{{api_key_id}})</td></tr>
-  <tr><td>预计剩余请求</td><td><strong>{{predicted_requests}}</strong></td></tr>
-  <tr><td>账户 / Key / 用户容量</td><td>{{account_requests}} / {{api_key_requests}} / {{wallet_requests}}</td></tr>
-  <tr><td>账户 / 用户平均成本</td><td>${{avg_account_cost}} / ${{avg_actual_cost}}</td></tr>
+  <tr><td>触发指标</td><td>{{alert_metric_label_zh}}</td></tr>
+  <tr><td>当前值 / 阈值</td><td><strong>{{alert_metric_value}} / {{alert_metric_threshold}} {{alert_metric_unit}}</strong></td></tr>
+  <tr><td>账户 / Key / 用户余额</td><td>{{account_remaining}} / {{api_key_remaining}} / {{wallet_remaining}} USD</td></tr>
+  <tr><td>账户 / Key / 用户请求容量</td><td>{{account_requests}} / {{api_key_requests}} / {{wallet_requests}}</td></tr>
+  <tr><td>账户 / 用户平均成本</td><td>{{avg_account_cost}} / {{avg_actual_cost}}</td></tr>
   <tr><td>瓶颈</td><td>{{bottleneck}}</td></tr>
   <tr><td>样本数 / 触发时间</td><td>{{sample_count}} / {{triggered_at}}</td></tr>
 </table>

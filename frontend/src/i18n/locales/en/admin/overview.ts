@@ -867,10 +867,38 @@ export default {
         disabled: 'Disabled'
       },
       poolCapacityAlert: {
-        title: 'Pool account capacity forecast alert',
-        description: 'Only applies when a request actually hits a pool_mode account. The estimate uses the final group’s average consumption from its latest 50 successful settlements and notifies administrators when the estimated remaining request count falls below 50. This is only an estimate.',
-        enabled: 'Forecast alerts enabled',
-        disabled: 'Off by default'
+        title: 'Pool account capacity alert',
+        description: 'Only applies when a request actually hits a pool_mode account. An alert is sent when the selected metric is strictly below its threshold. Unknown, stale, or unsupported balances are skipped rather than treated as zero.',
+        enabled: 'Capacity alerts enabled',
+        disabled: 'Off by default',
+        basisLegend: 'Alert based on',
+        predictedRequests: {
+          label: 'Estimated remaining requests',
+          description: 'Estimates remaining requests from the final group’s latest 50 successful settlements.'
+        },
+        remainingBalanceUsd: {
+          label: 'Remaining available balance (USD)',
+          description: 'Compares only authoritative, available remaining balances denominated in USD.'
+        },
+        requestsThreshold: {
+          label: 'Request threshold',
+          hint: 'Alert when estimated remaining requests are strictly below this whole number from 1 to 1,000,000,000.',
+          unit: 'requests'
+        },
+        usdThreshold: {
+          label: 'USD threshold',
+          hint: 'Alert when the authoritative remaining USD balance is strictly below this amount from 0.01 to 1,000,000,000,000,000.',
+          unit: 'USD'
+        },
+        validation: {
+          requestsRequired: 'Enter a request threshold.',
+          requestsFinite: 'The request threshold must be a finite number.',
+          requestsInteger: 'The request threshold must be a positive whole number.',
+          requestsRange: 'The request threshold must be between 1 and 1,000,000,000.',
+          usdRequired: 'A USD threshold is required when remaining balance is selected.',
+          usdFinite: 'The USD threshold must be a finite number.',
+          usdRange: 'The USD threshold must be between 0.01 and 1,000,000,000,000,000.'
+        }
       },
       form: {
         name: 'Name',

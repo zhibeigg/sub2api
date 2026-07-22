@@ -56,6 +56,7 @@ func cloneGroupForDuplicateTest(group *Group) *Group {
 	cloned.VideoPrice720P = cloneGroupValuePointer(group.VideoPrice720P)
 	cloned.VideoPrice1080P = cloneGroupValuePointer(group.VideoPrice1080P)
 	cloned.WebSearchPricePerCall = cloneGroupValuePointer(group.WebSearchPricePerCall)
+	cloned.PoolCapacityAlertThresholdUSD = cloneGroupValuePointer(group.PoolCapacityAlertThresholdUSD)
 	cloned.FallbackGroupID = cloneGroupValuePointer(group.FallbackGroupID)
 	cloned.FallbackGroupIDOnInvalidRequest = cloneGroupValuePointer(group.FallbackGroupIDOnInvalidRequest)
 	cloned.ModelRouting = cloneGroupModelRouting(group.ModelRouting)
@@ -171,15 +172,20 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
 			HaikuMappedModel:   "gpt-5-mini",
 			ExactModelMappings: map[string]string{"claude-special": "gpt-special"},
 		},
-		ModelsListConfig:        GroupModelsListConfig{Enabled: true, Models: []string{"gpt-5.4", "gpt-5-mini"}},
-		RPMLimit:                99,
-		CreatedAt:               createdAt,
-		UpdatedAt:               createdAt,
-		AccountCount:            12,
-		ActiveAccountCount:      8,
-		RateLimitedAccountCount: 2,
-		DuplicateOperationID:    "old-operation-must-not-copy",
-		AccountGroups:           []AccountGroup{{AccountID: 13, GroupID: 41, Priority: 37}},
+		ModelsListConfig:                   GroupModelsListConfig{Enabled: true, Models: []string{"gpt-5.4", "gpt-5-mini"}},
+		RPMLimit:                           99,
+		PoolCapacityAlertEnabled:           true,
+		PoolCapacityAlertMetric:            PoolCapacityAlertMetricRemainingBalanceUSD,
+		PoolCapacityAlertThresholdRequests: 345,
+		PoolCapacityAlertThresholdUSD:      groupDuplicateTestPointer(18.75),
+		PoolCapacityAlertGeneration:        9,
+		CreatedAt:                          createdAt,
+		UpdatedAt:                          createdAt,
+		AccountCount:                       12,
+		ActiveAccountCount:                 8,
+		RateLimitedAccountCount:            2,
+		DuplicateOperationID:               "old-operation-must-not-copy",
+		AccountGroups:                      []AccountGroup{{AccountID: 13, GroupID: 41, Priority: 37}},
 	}
 	repo := newDuplicateGroupRepoStub(source)
 	repo.sourceBindings[source.ID] = []AccountGroup{
@@ -207,6 +213,11 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
 	require.Equal(t, source.MessagesDispatchModelConfig, duplicate.MessagesDispatchModelConfig)
 	require.Equal(t, source.ModelsListConfig, duplicate.ModelsListConfig)
 	require.Equal(t, source.RPMLimit, duplicate.RPMLimit)
+	require.False(t, duplicate.PoolCapacityAlertEnabled)
+	require.Equal(t, source.PoolCapacityAlertMetric, duplicate.PoolCapacityAlertMetric)
+	require.Equal(t, source.PoolCapacityAlertThresholdRequests, duplicate.PoolCapacityAlertThresholdRequests)
+	require.Equal(t, source.PoolCapacityAlertThresholdUSD, duplicate.PoolCapacityAlertThresholdUSD)
+	require.Zero(t, duplicate.PoolCapacityAlertGeneration)
 	require.EqualValues(t, 2, duplicate.AccountCount)
 	require.EqualValues(t, 2, duplicate.ActiveAccountCount)
 	require.NotEmpty(t, duplicate.DuplicateOperationID)
@@ -221,11 +232,13 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
 	duplicate.MessagesDispatchModelConfig.ExactModelMappings["claude-special"] = "changed"
 	duplicate.ModelsListConfig.Models[0] = "changed"
 	*duplicate.DailyLimitUSD = 999
+	*duplicate.PoolCapacityAlertThresholdUSD = 999
 	require.Equal(t, int64(13), source.ModelRouting["gpt-*"][0])
 	require.Equal(t, "claude", source.SupportedModelScopes[0])
 	require.Equal(t, "gpt-special", source.MessagesDispatchModelConfig.ExactModelMappings["claude-special"])
 	require.Equal(t, "gpt-5.4", source.ModelsListConfig.Models[0])
 	require.Equal(t, 11.0, *source.DailyLimitUSD)
+	require.Equal(t, 18.75, *source.PoolCapacityAlertThresholdUSD)
 }
 
 func TestDuplicateGroupRecoversSameOperationAndScopesByAdmin(t *testing.T) {

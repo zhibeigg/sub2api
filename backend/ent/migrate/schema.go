@@ -1039,6 +1039,9 @@ var (
 		{Name: "models_list_config", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
 		{Name: "rpm_limit", Type: field.TypeInt, Default: 0},
 		{Name: "pool_capacity_alert_enabled", Type: field.TypeBool, Default: false},
+		{Name: "pool_capacity_alert_metric", Type: field.TypeString, Size: 32, Default: "predicted_requests"},
+		{Name: "pool_capacity_alert_threshold_requests", Type: field.TypeInt64, Default: 50},
+		{Name: "pool_capacity_alert_threshold_usd", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(30,12)"}},
 		{Name: "pool_capacity_alert_generation", Type: field.TypeInt64, Default: 0},
 	}
 	// GroupsTable holds the schema information for the "groups" table.
@@ -1469,8 +1472,11 @@ var (
 		{Name: "account_name", Type: field.TypeString, Size: 255, Default: ""},
 		{Name: "api_key_name", Type: field.TypeString, Size: 255, Default: ""},
 		{Name: "user_email", Type: field.TypeString, Size: 255, Default: ""},
-		{Name: "predicted_requests", Type: field.TypeInt64},
-		{Name: "threshold_requests", Type: field.TypeInt64, Default: 50},
+		{Name: "alert_metric", Type: field.TypeString, Size: 32, Default: "predicted_requests"},
+		{Name: "predicted_requests", Type: field.TypeInt64, Nullable: true},
+		{Name: "remaining_balance_usd", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(30,12)"}},
+		{Name: "threshold_requests", Type: field.TypeInt64, Nullable: true},
+		{Name: "threshold_usd", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(30,12)"}},
 		{Name: "account_requests", Type: field.TypeInt64, Nullable: true},
 		{Name: "api_key_requests", Type: field.TypeInt64, Nullable: true},
 		{Name: "wallet_requests", Type: field.TypeInt64, Nullable: true},
@@ -1498,12 +1504,12 @@ var (
 			{
 				Name:    "poolcapacityalertevent_group_id_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{PoolCapacityAlertEventsColumns[3], PoolCapacityAlertEventsColumns[26]},
+				Columns: []*schema.Column{PoolCapacityAlertEventsColumns[3], PoolCapacityAlertEventsColumns[29]},
 			},
 			{
 				Name:    "poolcapacityalertevent_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{PoolCapacityAlertEventsColumns[26]},
+				Columns: []*schema.Column{PoolCapacityAlertEventsColumns[29]},
 			},
 		},
 	}
@@ -1518,7 +1524,11 @@ var (
 		{Name: "billing_type", Type: field.TypeInt8},
 		{Name: "status", Type: field.TypeString, Size: 16, Default: "healthy"},
 		{Name: "episode", Type: field.TypeInt64, Default: 0},
+		{Name: "alert_metric", Type: field.TypeString, Size: 32, Default: "predicted_requests"},
 		{Name: "predicted_requests", Type: field.TypeInt64, Nullable: true},
+		{Name: "remaining_balance_usd", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(30,12)"}},
+		{Name: "threshold_requests", Type: field.TypeInt64, Default: 50},
+		{Name: "threshold_usd", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(30,12)"}},
 		{Name: "account_requests", Type: field.TypeInt64, Nullable: true},
 		{Name: "api_key_requests", Type: field.TypeInt64, Nullable: true},
 		{Name: "wallet_requests", Type: field.TypeInt64, Nullable: true},
@@ -1550,7 +1560,7 @@ var (
 			{
 				Name:    "poolcapacityalertstate_status_updated_at",
 				Unique:  false,
-				Columns: []*schema.Column{PoolCapacityAlertStatesColumns[7], PoolCapacityAlertStatesColumns[20]},
+				Columns: []*schema.Column{PoolCapacityAlertStatesColumns[7], PoolCapacityAlertStatesColumns[24]},
 			},
 		},
 	}

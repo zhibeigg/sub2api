@@ -1,12 +1,15 @@
-# 管理员：池模式账户容量预测提醒
+# 管理员：池模式账户容量提醒
 
-池模式账户容量预测提醒用于提前发现即将耗尽的上游池账户、API Key 配额或用户余额。
+池模式账户容量提醒用于提前发现即将耗尽的上游池账户、API Key 配额或用户余额。每个分组开启后只选择一个生效指标，并配置对应阈值：
+
+- **预计剩余请求数**（`predicted_requests`）
+- **上游剩余余额（USD）**（`remaining_balance_usd`）
 
 ## 开启方式
 
-进入管理端 **分组管理**，在创建或编辑分组时开启“池模式账户容量预测提醒”。
+进入管理端 **分组管理**，在创建或编辑分组时开启“池模式账户容量提醒”。开关开启后会渐进显示指标二选一和带单位阈值输入；切换指标不会把 `50 requests` 重新解释成 `50 USD`，关闭开关也不会清空本次编辑值。
 
-该开关默认关闭。全局运行时即使已启用，也只有同时满足以下条件的请求才会评估：
+旧分组或旧响应缺少新字段时，界面按“预计剩余请求数 / 50”显示。该开关默认关闭。全局运行时即使已启用，也只有同时满足以下条件的请求才会评估：
 
 - 请求最终实际命中启用了 `pool_mode` 的 API Key / Bedrock 账户；
 - 最终计费分组开启容量提醒；
@@ -16,27 +19,30 @@
 故障转移过程中尝试过的账户不会触发提醒，只判断最终成功计费的账户和分组。
 :::
 
-## 预测口径
+## 两种指标
+
+### 预计剩余请求数
 
 系统使用最终分组最近 `50` 次成功落账请求，并将不同容量来源分开处理：
 
 - 池账户通过自定义上游的 `GET /v1/usage` 读取已验证真实余额；USD 余额除以账户平均成本，`requests` 单位直接使用。
 - 账户本地总/日/周额度不再冒充上游余额，只作为更严格的安全上限。
-- API Key 配额和用户钱包继续使用本次计费事务返回的扣费后状态，并除以用户平均实际扣费。
+- API Key 配额和用户钱包使用本次计费事务返回的扣费后状态，并除以用户平均实际扣费。
 - 账户、Key、用户三个有限容量取最小值作为最终预测。
 
-由于使用记录异步批量写入，本次请求直接作为第 50 个样本，数据库只查询此前 49 条。
+由于使用记录异步批量写入，本次请求直接作为第 50 个样本，数据库只查询此前 49 条。阈值为 `50` 时，`49` 提醒，`50` 和 `51` 不提醒。
 
-当预计剩余请求数**严格小于 50**时提醒：
+### 上游剩余余额（USD）
 
-| 预计剩余 | 是否提醒 |
-| --- | --- |
-| 49 | 是 |
-| 50 | 否 |
-| 51 | 否 |
+金额模式无需等待 50 次样本，第一次符合条件的成功计费即可评估：
 
-::: warning 权威余额与预测请求数不同
-上游余额必须是当前 `verified` 的权威快照；换算后的请求数仍取决于近期均次成本。`stale`、`unknown`、`unsupported`、非法响应或非 USD/requests 单位会跳过本次状态变更，不会误报恢复健康。
+- 账户使用权威上游 USD 剩余额度，并与本地总/日/周 USD 剩余额度取较小值。
+- API Key 使用扣费后的 `quota - quota_used`。
+- 余额计费的钱包使用扣费后余额减最小余额预留；订阅计费不加入钱包维度。
+- 最终取账户、Key、钱包中最小的有限 USD 金额。阈值为 `$10.00` 时，`$9.99` 提醒，`$10.00` 不提醒。
+
+::: warning 金额模式只接受权威 USD
+金额模式不会用预计请求数或均次成本伪造美元金额。上游必须是当前 `verified + authoritative` 且单位为 `USD/$`，或明确 `unlimited`；`requests`、EUR、空单位、`stale`、`unknown`、`unsupported`、非权威或非法数值都会跳过本次状态变更。
 :::
 
 ## 上游余额与用量窗口展示
@@ -65,8 +71,8 @@
 - 从健康首次进入低容量时立即提醒。
 - 持续低容量时默认每 24 小时最多提醒一次。
 - 恢复健康后再次降低，会进入新的提醒 episode。
-- 关闭或重新开启分组开关会切换内部 generation，旧队列任务和旧待投递提醒不会跨配置世代继续发送。
-- 复制分组时提醒开关不会复制，新的分组仍为关闭状态。
+- 开关、metric 或任一阈值实际变化时会切换内部 generation，旧队列任务和旧待投递提醒不会跨配置世代继续发送。
+- 复制分组时 metric/阈值会保留为惰性配置，但提醒开关强制关闭，新的分组 generation 从 `0` 开始。
 
 ## 管理员 API 字段
 
@@ -74,7 +80,10 @@
 
 ```json
 {
-  "pool_capacity_alert_enabled": true
+  "pool_capacity_alert_enabled": true,
+  "pool_capacity_alert_metric": "remaining_balance_usd",
+  "pool_capacity_alert_threshold_requests": 50,
+  "pool_capacity_alert_threshold_usd": 10.0
 }
 ```
 
@@ -85,11 +94,11 @@ POST /api/v1/admin/groups
 PUT /api/v1/admin/groups/:id
 ```
 
-管理员分组列表和详情响应会返回该字段。内部 generation 不通过 API 暴露，普通用户分组响应也不会暴露提醒配置。
+管理员分组列表和详情响应会返回四个字段。创建缺省为关闭、`predicted_requests`、`50` 和 `null`；更新采用可选 patch 语义。请求阈值必须是 `1..1,000,000,000` 的整数，USD 阈值必须是 `0.01..1e15` 的有限数，选择金额模式时 USD 阈值必填。内部 generation 不通过 API 暴露，普通用户分组响应也不会暴露提醒配置。
 
 ## 部署要求
 
-- 应用数据库迁移 `190_add_group_pool_capacity_alert.sql`、`191_pool_capacity_alert_runtime.sql` 和非事务迁移 `192_add_usage_logs_pool_capacity_samples_index_notx.sql`；最后一项使用 `CREATE INDEX CONCURRENTLY`，避免阻塞 `usage_logs` 热写入。
+- 应用数据库迁移 `190_add_group_pool_capacity_alert.sql`、`191_pool_capacity_alert_runtime.sql`、非事务迁移 `192_add_usage_logs_pool_capacity_samples_index_notx.sql`，以及 `193_add_group_pool_capacity_alert_thresholds.sql`；`192` 使用 `CREATE INDEX CONCURRENTLY`，避免阻塞 `usage_logs` 热写入。
 - 邮件提醒需要可用 SMTP 配置。
 - QQBot 提醒需要启用当前机器人，并完成管理员 C2C 绑定。
 - 上游余额探测参数见 `deploy/config.example.yaml` 的 `account_capacity` 段；默认超时 10 秒、成功缓存 60 秒、错误缓存 30 秒、stale 保留 300 秒。探测复用账户连通性测试的 URL 策略：白名单开启时必须把自定义主机加入 `upstream_hosts`；白名单关闭时仍会校验 URL 格式并按账户保存的 Base URL 请求余额。

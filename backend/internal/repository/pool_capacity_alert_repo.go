@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/shopspring/decimal"
 )
 
 type poolCapacityAlertRepository struct{ db *sql.DB }
@@ -24,8 +25,22 @@ func (r *poolCapacityAlertRepository) EvaluateAndMaybeCreateEvent(ctx context.Co
 	if evaluation.GroupID <= 0 || evaluation.AccountID <= 0 || evaluation.APIKeyID <= 0 || evaluation.UserID <= 0 {
 		return nil, errors.New("invalid pool capacity alert scope")
 	}
-	if evaluation.ThresholdRequests <= 0 {
-		evaluation.ThresholdRequests = service.PoolCapacityAlertThresholdRequests
+	evaluation.AlertMetric = strings.TrimSpace(evaluation.AlertMetric)
+	if evaluation.AlertMetric == "" {
+		evaluation.AlertMetric = service.PoolCapacityAlertMetricPredictedRequests
+	}
+	if evaluation.ThresholdRequests == nil || *evaluation.ThresholdRequests <= 0 {
+		threshold := service.DefaultPoolCapacityAlertThresholdRequests
+		evaluation.ThresholdRequests = &threshold
+	}
+	switch evaluation.AlertMetric {
+	case service.PoolCapacityAlertMetricPredictedRequests:
+	case service.PoolCapacityAlertMetricRemainingBalanceUSD:
+		if evaluation.ThresholdUSD == nil || *evaluation.ThresholdUSD <= 0 {
+			return nil, errors.New("invalid pool capacity alert USD threshold")
+		}
+	default:
+		return nil, errors.New("invalid pool capacity alert metric")
 	}
 	if evaluation.ReminderCooldown <= 0 {
 		evaluation.ReminderCooldown = 24 * time.Hour
@@ -66,11 +81,15 @@ func (r *poolCapacityAlertRepository) EvaluateAndMaybeCreateEvent(ctx context.Co
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO pool_capacity_alert_states (
 			group_id,group_generation,account_id,api_key_id,user_id,billing_type,status,episode,
-			avg_account_cost,avg_actual_cost,sample_count,bottleneck,last_evaluated_at,created_at,updated_at
-		) VALUES ($1,$2,$3,$4,$5,$6,'healthy',0,$7,$8,$9,$10,$11,$11,$11)
+			alert_metric,predicted_requests,remaining_balance_usd,threshold_requests,threshold_usd,
+			account_requests,api_key_requests,wallet_requests,avg_account_cost,avg_actual_cost,
+			sample_count,bottleneck,last_evaluated_at,created_at,updated_at
+		) VALUES ($1,$2,$3,$4,$5,$6,'healthy',0,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$19,$19)
 		ON CONFLICT (group_id,group_generation,account_id,api_key_id,user_id,billing_type) DO NOTHING`,
 		evaluation.GroupID, evaluation.GroupGeneration, evaluation.AccountID, evaluation.APIKeyID, evaluation.UserID, evaluation.BillingType,
-		evaluation.AverageAccountCost, evaluation.AverageActualCost, evaluation.SampleCount, evaluation.Bottleneck, now,
+		evaluation.AlertMetric, evaluation.PredictedRequests, evaluation.RemainingBalanceUSD, evaluation.ThresholdRequests, evaluation.ThresholdUSD,
+		evaluation.AccountRequests, evaluation.APIKeyRequests, evaluation.WalletRequests, evaluation.AverageAccountCost, evaluation.AverageActualCost,
+		evaluation.SampleCount, evaluation.Bottleneck, now,
 	); err != nil {
 		return nil, err
 	}
@@ -87,13 +106,15 @@ func (r *poolCapacityAlertRepository) EvaluateAndMaybeCreateEvent(ctx context.Co
 		return nil, err
 	}
 
-	isLow := poolCapacityBelowThreshold(evaluation.PredictedRequests, evaluation.ThresholdRequests)
+	isLow := poolCapacityEvaluationBelowThreshold(evaluation)
 	if !isLow {
 		_, err = tx.ExecContext(ctx, `
 			UPDATE pool_capacity_alert_states SET
-				status='healthy',predicted_requests=$1,account_requests=$2,api_key_requests=$3,wallet_requests=$4,
-				avg_account_cost=$5,avg_actual_cost=$6,sample_count=$7,bottleneck=$8,last_evaluated_at=$9,updated_at=$9
-			WHERE id=$10`, evaluation.PredictedRequests, evaluation.AccountRequests, evaluation.APIKeyRequests, evaluation.WalletRequests,
+				status='healthy',alert_metric=$1,predicted_requests=$2,remaining_balance_usd=$3,
+				threshold_requests=$4,threshold_usd=$5,account_requests=$6,api_key_requests=$7,wallet_requests=$8,
+				avg_account_cost=$9,avg_actual_cost=$10,sample_count=$11,bottleneck=$12,last_evaluated_at=$13,updated_at=$13
+			WHERE id=$14`, evaluation.AlertMetric, evaluation.PredictedRequests, evaluation.RemainingBalanceUSD,
+			evaluation.ThresholdRequests, evaluation.ThresholdUSD, evaluation.AccountRequests, evaluation.APIKeyRequests, evaluation.WalletRequests,
 			evaluation.AverageAccountCost, evaluation.AverageActualCost, evaluation.SampleCount, evaluation.Bottleneck, now, stateID)
 		if err != nil {
 			return nil, err
@@ -107,10 +128,12 @@ func (r *poolCapacityAlertRepository) EvaluateAndMaybeCreateEvent(ctx context.Co
 	}
 	_, err = tx.ExecContext(ctx, `
 		UPDATE pool_capacity_alert_states SET
-			status='low',episode=$1,predicted_requests=$2,account_requests=$3,api_key_requests=$4,wallet_requests=$5,
-			avg_account_cost=$6,avg_actual_cost=$7,sample_count=$8,bottleneck=$9,last_evaluated_at=$10,
-			last_alerted_at=CASE WHEN $11 THEN $10 ELSE last_alerted_at END,updated_at=$10
-		WHERE id=$12`, episode, evaluation.PredictedRequests, evaluation.AccountRequests, evaluation.APIKeyRequests, evaluation.WalletRequests,
+			status='low',episode=$1,alert_metric=$2,predicted_requests=$3,remaining_balance_usd=$4,
+			threshold_requests=$5,threshold_usd=$6,account_requests=$7,api_key_requests=$8,wallet_requests=$9,
+			avg_account_cost=$10,avg_actual_cost=$11,sample_count=$12,bottleneck=$13,last_evaluated_at=$14,
+			last_alerted_at=CASE WHEN $15 THEN $14 ELSE last_alerted_at END,updated_at=$14
+		WHERE id=$16`, episode, evaluation.AlertMetric, evaluation.PredictedRequests, evaluation.RemainingBalanceUSD,
+		evaluation.ThresholdRequests, evaluation.ThresholdUSD, evaluation.AccountRequests, evaluation.APIKeyRequests, evaluation.WalletRequests,
 		evaluation.AverageAccountCost, evaluation.AverageActualCost, evaluation.SampleCount, evaluation.Bottleneck, now, alertDue, stateID)
 	if err != nil {
 		return nil, err
@@ -119,46 +142,50 @@ func (r *poolCapacityAlertRepository) EvaluateAndMaybeCreateEvent(ctx context.Co
 		return nil, tx.Commit()
 	}
 
+	eventThresholdRequests := poolCapacityEventThresholdRequests(evaluation)
 	event := &service.PoolCapacityAlertEvent{
-		StateID:            stateID,
-		Episode:            episode,
-		GroupID:            evaluation.GroupID,
-		GroupGeneration:    evaluation.GroupGeneration,
-		AccountID:          evaluation.AccountID,
-		APIKeyID:           evaluation.APIKeyID,
-		UserID:             evaluation.UserID,
-		BillingType:        evaluation.BillingType,
-		GroupName:          evaluation.GroupName,
-		AccountName:        evaluation.AccountName,
-		APIKeyName:         evaluation.APIKeyName,
-		UserEmail:          evaluation.UserEmail,
-		PredictedRequests:  *evaluation.PredictedRequests,
-		ThresholdRequests:  evaluation.ThresholdRequests,
-		AccountRequests:    evaluation.AccountRequests,
-		APIKeyRequests:     evaluation.APIKeyRequests,
-		WalletRequests:     evaluation.WalletRequests,
-		AverageAccountCost: evaluation.AverageAccountCost,
-		AverageActualCost:  evaluation.AverageActualCost,
-		AccountRemaining:   evaluation.AccountRemaining,
-		APIKeyRemaining:    evaluation.APIKeyRemaining,
-		WalletRemaining:    evaluation.WalletRemaining,
-		SampleCount:        evaluation.SampleCount,
-		Bottleneck:         evaluation.Bottleneck,
-		QQBotAppID:         evaluation.QQBotAppID,
-		CreatedAt:          now,
+		StateID:             stateID,
+		Episode:             episode,
+		GroupID:             evaluation.GroupID,
+		GroupGeneration:     evaluation.GroupGeneration,
+		AccountID:           evaluation.AccountID,
+		APIKeyID:            evaluation.APIKeyID,
+		UserID:              evaluation.UserID,
+		BillingType:         evaluation.BillingType,
+		GroupName:           evaluation.GroupName,
+		AccountName:         evaluation.AccountName,
+		APIKeyName:          evaluation.APIKeyName,
+		UserEmail:           evaluation.UserEmail,
+		AlertMetric:         evaluation.AlertMetric,
+		PredictedRequests:   evaluation.PredictedRequests,
+		RemainingBalanceUSD: evaluation.RemainingBalanceUSD,
+		ThresholdRequests:   eventThresholdRequests,
+		ThresholdUSD:        evaluation.ThresholdUSD,
+		AccountRequests:     evaluation.AccountRequests,
+		APIKeyRequests:      evaluation.APIKeyRequests,
+		WalletRequests:      evaluation.WalletRequests,
+		AverageAccountCost:  evaluation.AverageAccountCost,
+		AverageActualCost:   evaluation.AverageActualCost,
+		AccountRemaining:    evaluation.AccountRemaining,
+		APIKeyRemaining:     evaluation.APIKeyRemaining,
+		WalletRemaining:     evaluation.WalletRemaining,
+		SampleCount:         evaluation.SampleCount,
+		Bottleneck:          evaluation.Bottleneck,
+		QQBotAppID:          evaluation.QQBotAppID,
+		CreatedAt:           now,
 	}
 	if err := tx.QueryRowContext(ctx, `
 		INSERT INTO pool_capacity_alert_events (
 			state_id,episode,group_id,group_generation,account_id,api_key_id,user_id,billing_type,
-			group_name,account_name,api_key_name,user_email,predicted_requests,threshold_requests,
-			account_requests,api_key_requests,wallet_requests,avg_account_cost,avg_actual_cost,
+			group_name,account_name,api_key_name,user_email,alert_metric,predicted_requests,remaining_balance_usd,
+			threshold_requests,threshold_usd,account_requests,api_key_requests,wallet_requests,avg_account_cost,avg_actual_cost,
 			account_remaining,api_key_remaining,wallet_remaining,sample_count,bottleneck,qqbot_app_id,created_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
 		ON CONFLICT (state_id,episode) DO UPDATE SET state_id=EXCLUDED.state_id
 		RETURNING id`,
 		event.StateID, event.Episode, event.GroupID, event.GroupGeneration, event.AccountID, event.APIKeyID, event.UserID, event.BillingType,
-		event.GroupName, event.AccountName, event.APIKeyName, event.UserEmail, event.PredictedRequests, event.ThresholdRequests,
-		event.AccountRequests, event.APIKeyRequests, event.WalletRequests, event.AverageAccountCost, event.AverageActualCost,
+		event.GroupName, event.AccountName, event.APIKeyName, event.UserEmail, event.AlertMetric, event.PredictedRequests, event.RemainingBalanceUSD,
+		event.ThresholdRequests, event.ThresholdUSD, event.AccountRequests, event.APIKeyRequests, event.WalletRequests, event.AverageAccountCost, event.AverageActualCost,
 		event.AccountRemaining, event.APIKeyRemaining, event.WalletRemaining, event.SampleCount, event.Bottleneck, event.QQBotAppID, event.CreatedAt,
 	).Scan(&event.ID); err != nil {
 		return nil, err
@@ -275,8 +302,8 @@ func (r *poolCapacityAlertRepository) ClaimDeliveries(ctx context.Context, owner
 		)
 		SELECT c.id,c.channel,c.recipient_user_id,c.identity_channel_id,c.recipient_email,c.recipient_name,c.locale,c.attempt_count,c.max_attempts,
 		       e.id,e.state_id,e.episode,e.group_id,e.group_generation,e.account_id,e.api_key_id,e.user_id,e.billing_type,
-		       e.group_name,e.account_name,e.api_key_name,e.user_email,e.predicted_requests,e.threshold_requests,
-		       e.account_requests,e.api_key_requests,e.wallet_requests,e.avg_account_cost,e.avg_actual_cost,
+		       e.group_name,e.account_name,e.api_key_name,e.user_email,e.alert_metric,e.predicted_requests,e.remaining_balance_usd,
+		       e.threshold_requests,e.threshold_usd,e.account_requests,e.api_key_requests,e.wallet_requests,e.avg_account_cost,e.avg_actual_cost,
 		       e.account_remaining,e.api_key_remaining,e.wallet_remaining,e.sample_count,e.bottleneck,e.qqbot_app_id,e.created_at
 		FROM claimed c JOIN pool_capacity_alert_events e ON e.id=c.event_id
 		ORDER BY c.id`, now, limit, owner, now.Add(lease))
@@ -288,7 +315,9 @@ func (r *poolCapacityAlertRepository) ClaimDeliveries(ctx context.Context, owner
 	out := make([]service.PoolCapacityAlertDelivery, 0, limit)
 	for rows.Next() {
 		var delivery service.PoolCapacityAlertDelivery
+		var predictedRequests, thresholdRequests sql.NullInt64
 		var accountRequests, apiKeyRequests, walletRequests sql.NullInt64
+		var remainingBalanceUSD, thresholdUSD sql.NullFloat64
 		var accountRemaining, apiKeyRemaining, walletRemaining sql.NullFloat64
 		if err := rows.Scan(
 			&delivery.ID, &delivery.Channel, &delivery.RecipientUserID, &delivery.IdentityChannelID,
@@ -296,13 +325,17 @@ func (r *poolCapacityAlertRepository) ClaimDeliveries(ctx context.Context, owner
 			&delivery.Event.ID, &delivery.Event.StateID, &delivery.Event.Episode, &delivery.Event.GroupID, &delivery.Event.GroupGeneration,
 			&delivery.Event.AccountID, &delivery.Event.APIKeyID, &delivery.Event.UserID, &delivery.Event.BillingType,
 			&delivery.Event.GroupName, &delivery.Event.AccountName, &delivery.Event.APIKeyName, &delivery.Event.UserEmail,
-			&delivery.Event.PredictedRequests, &delivery.Event.ThresholdRequests,
+			&delivery.Event.AlertMetric, &predictedRequests, &remainingBalanceUSD, &thresholdRequests, &thresholdUSD,
 			&accountRequests, &apiKeyRequests, &walletRequests, &delivery.Event.AverageAccountCost, &delivery.Event.AverageActualCost,
 			&accountRemaining, &apiKeyRemaining, &walletRemaining, &delivery.Event.SampleCount, &delivery.Event.Bottleneck,
 			&delivery.Event.QQBotAppID, &delivery.Event.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
+		delivery.Event.PredictedRequests = poolCapacityNullableInt64Ptr(predictedRequests)
+		delivery.Event.RemainingBalanceUSD = poolCapacityNullableFloat64Ptr(remainingBalanceUSD)
+		delivery.Event.ThresholdRequests = poolCapacityNullableInt64Ptr(thresholdRequests)
+		delivery.Event.ThresholdUSD = poolCapacityNullableFloat64Ptr(thresholdUSD)
 		delivery.Event.AccountRequests = poolCapacityNullableInt64Ptr(accountRequests)
 		delivery.Event.APIKeyRequests = poolCapacityNullableInt64Ptr(apiKeyRequests)
 		delivery.Event.WalletRequests = poolCapacityNullableInt64Ptr(walletRequests)
@@ -347,8 +380,23 @@ func (r *poolCapacityAlertRepository) IsDeliveryCurrent(ctx context.Context, del
 	return current, err
 }
 
-func poolCapacityBelowThreshold(predicted *int64, threshold int64) bool {
-	return predicted != nil && *predicted < threshold
+func poolCapacityEventThresholdRequests(evaluation service.PoolCapacityEvaluation) *int64 {
+	if evaluation.AlertMetric == service.PoolCapacityAlertMetricRemainingBalanceUSD {
+		return nil
+	}
+	return evaluation.ThresholdRequests
+}
+
+func poolCapacityEvaluationBelowThreshold(evaluation service.PoolCapacityEvaluation) bool {
+	switch evaluation.AlertMetric {
+	case service.PoolCapacityAlertMetricPredictedRequests:
+		return evaluation.PredictedRequests != nil && evaluation.ThresholdRequests != nil && *evaluation.PredictedRequests < *evaluation.ThresholdRequests
+	case service.PoolCapacityAlertMetricRemainingBalanceUSD:
+		return evaluation.RemainingBalanceUSD != nil && evaluation.ThresholdUSD != nil &&
+			decimal.NewFromFloat(*evaluation.RemainingBalanceUSD).LessThan(decimal.NewFromFloat(*evaluation.ThresholdUSD))
+	default:
+		return false
+	}
 }
 
 func poolCapacityNullableInt64Ptr(value sql.NullInt64) *int64 {

@@ -948,10 +948,38 @@ export default {
         disabled: '未启用'
       },
       poolCapacityAlert: {
-        title: '池账户容量预测提醒',
-        description: '仅在请求实际命中 pool_mode 账户时生效；系统取最终分组最近 50 次成功落账的平均消耗进行估算，预计剩余请求数低于 50 时通知管理员。结果仅为估算。',
-        enabled: '已开启预测提醒',
-        disabled: '默认关闭'
+        title: '池账户容量提醒',
+        description: '仅在请求实际命中 pool_mode 账户时生效；所选指标严格小于阈值时提醒。余额未知、过期或不受支持时跳过评估，不按 0 处理。',
+        enabled: '已开启容量提醒',
+        disabled: '默认关闭',
+        basisLegend: '提醒依据',
+        predictedRequests: {
+          label: '预计剩余请求数',
+          description: '根据最终分组最近 50 次成功落账的平均消耗估算剩余请求数。'
+        },
+        remainingBalanceUsd: {
+          label: '剩余可用金额（USD）',
+          description: '仅比较权威、可用且单位为 USD 的剩余余额。'
+        },
+        requestsThreshold: {
+          label: '请求阈值',
+          hint: '预计剩余请求数严格小于此正整数时提醒；可填 1 到 1,000,000,000。',
+          unit: '请求'
+        },
+        usdThreshold: {
+          label: 'USD 阈值',
+          hint: '权威剩余 USD 余额严格小于此金额时提醒；可填 0.01 到 1,000,000,000,000,000。',
+          unit: 'USD'
+        },
+        validation: {
+          requestsRequired: '请输入请求阈值。',
+          requestsFinite: '请求阈值必须是有限数字。',
+          requestsInteger: '请求阈值必须是正整数。',
+          requestsRange: '请求阈值必须在 1 到 1,000,000,000 之间。',
+          usdRequired: '选择剩余可用金额时必须填写 USD 阈值。',
+          usdFinite: 'USD 阈值必须是有限数字。',
+          usdRange: 'USD 阈值必须在 0.01 到 1,000,000,000,000,000 之间。'
+        }
       },
       enterGroupName: '请输入分组名称',
       optionalDescription: '可选描述',

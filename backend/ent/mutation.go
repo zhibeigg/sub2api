@@ -25133,118 +25133,123 @@ func (m *ErrorPassthroughRuleMutation) ResetEdge(name string) error {
 // GroupMutation represents an operation that mutates the Group nodes in the graph.
 type GroupMutation struct {
 	config
-	op                                      Op
-	typ                                     string
-	id                                      *int64
-	created_at                              *time.Time
-	updated_at                              *time.Time
-	deleted_at                              *time.Time
-	name                                    *string
-	description                             *string
-	rate_multiplier                         *float64
-	addrate_multiplier                      *float64
-	model_rate_multipliers                  *map[string]float64
-	peak_rate_enabled                       *bool
-	peak_start                              *string
-	peak_end                                *string
-	peak_rate_multiplier                    *float64
-	addpeak_rate_multiplier                 *float64
-	is_exclusive                            *bool
-	status                                  *string
-	duplicate_operation_id                  *string
-	platform                                *string
-	subscription_type                       *string
-	daily_limit_usd                         *float64
-	adddaily_limit_usd                      *float64
-	weekly_limit_usd                        *float64
-	addweekly_limit_usd                     *float64
-	monthly_limit_usd                       *float64
-	addmonthly_limit_usd                    *float64
-	default_validity_days                   *int
-	adddefault_validity_days                *int
-	allow_image_generation                  *bool
-	allow_batch_image_generation            *bool
-	image_rate_independent                  *bool
-	image_rate_multiplier                   *float64
-	addimage_rate_multiplier                *float64
-	image_price_1k                          *float64
-	addimage_price_1k                       *float64
-	image_price_2k                          *float64
-	addimage_price_2k                       *float64
-	image_price_4k                          *float64
-	addimage_price_4k                       *float64
-	batch_image_discount_multiplier         *float64
-	addbatch_image_discount_multiplier      *float64
-	batch_image_hold_multiplier             *float64
-	addbatch_image_hold_multiplier          *float64
-	video_rate_independent                  *bool
-	video_rate_multiplier                   *float64
-	addvideo_rate_multiplier                *float64
-	video_price_480p                        *float64
-	addvideo_price_480p                     *float64
-	video_price_720p                        *float64
-	addvideo_price_720p                     *float64
-	video_price_1080p                       *float64
-	addvideo_price_1080p                    *float64
-	web_search_price_per_call               *float64
-	addweb_search_price_per_call            *float64
-	claude_code_only                        *bool
-	fallback_group_id                       *int64
-	addfallback_group_id                    *int64
-	fallback_group_id_on_invalid_request    *int64
-	addfallback_group_id_on_invalid_request *int64
-	model_routing                           *map[string][]int64
-	model_routing_enabled                   *bool
-	mcp_xml_inject                          *bool
-	supported_model_scopes                  *[]string
-	appendsupported_model_scopes            []string
-	sort_order                              *int
-	addsort_order                           *int
-	allow_messages_dispatch                 *bool
-	require_oauth_only                      *bool
-	require_privacy_set                     *bool
-	default_mapped_model                    *string
-	messages_dispatch_model_config          *domain.OpenAIMessagesDispatchModelConfig
-	models_list_config                      *domain.GroupModelsListConfig
-	rpm_limit                               *int
-	addrpm_limit                            *int
-	pool_capacity_alert_enabled             *bool
-	pool_capacity_alert_generation          *int64
-	addpool_capacity_alert_generation       *int64
-	clearedFields                           map[string]struct{}
-	api_keys                                map[int64]struct{}
-	removedapi_keys                         map[int64]struct{}
-	clearedapi_keys                         bool
-	redeem_codes                            map[int64]struct{}
-	removedredeem_codes                     map[int64]struct{}
-	clearedredeem_codes                     bool
-	subscriptions                           map[int64]struct{}
-	removedsubscriptions                    map[int64]struct{}
-	clearedsubscriptions                    bool
-	usage_logs                              map[int64]struct{}
-	removedusage_logs                       map[int64]struct{}
-	clearedusage_logs                       bool
-	accounts                                map[int64]struct{}
-	removedaccounts                         map[int64]struct{}
-	clearedaccounts                         bool
-	bound_api_keys                          map[int64]struct{}
-	removedbound_api_keys                   map[int64]struct{}
-	clearedbound_api_keys                   bool
-	allowed_users                           map[int64]struct{}
-	removedallowed_users                    map[int64]struct{}
-	clearedallowed_users                    bool
-	access_restricted_users                 map[int64]struct{}
-	removedaccess_restricted_users          map[int64]struct{}
-	clearedaccess_restricted_users          bool
-	subscription_plans                      map[int64]struct{}
-	removedsubscription_plans               map[int64]struct{}
-	clearedsubscription_plans               bool
-	authorized_subscriptions                map[int64]struct{}
-	removedauthorized_subscriptions         map[int64]struct{}
-	clearedauthorized_subscriptions         bool
-	done                                    bool
-	oldValue                                func(context.Context) (*Group, error)
-	predicates                              []predicate.Group
+	op                                        Op
+	typ                                       string
+	id                                        *int64
+	created_at                                *time.Time
+	updated_at                                *time.Time
+	deleted_at                                *time.Time
+	name                                      *string
+	description                               *string
+	rate_multiplier                           *float64
+	addrate_multiplier                        *float64
+	model_rate_multipliers                    *map[string]float64
+	peak_rate_enabled                         *bool
+	peak_start                                *string
+	peak_end                                  *string
+	peak_rate_multiplier                      *float64
+	addpeak_rate_multiplier                   *float64
+	is_exclusive                              *bool
+	status                                    *string
+	duplicate_operation_id                    *string
+	platform                                  *string
+	subscription_type                         *string
+	daily_limit_usd                           *float64
+	adddaily_limit_usd                        *float64
+	weekly_limit_usd                          *float64
+	addweekly_limit_usd                       *float64
+	monthly_limit_usd                         *float64
+	addmonthly_limit_usd                      *float64
+	default_validity_days                     *int
+	adddefault_validity_days                  *int
+	allow_image_generation                    *bool
+	allow_batch_image_generation              *bool
+	image_rate_independent                    *bool
+	image_rate_multiplier                     *float64
+	addimage_rate_multiplier                  *float64
+	image_price_1k                            *float64
+	addimage_price_1k                         *float64
+	image_price_2k                            *float64
+	addimage_price_2k                         *float64
+	image_price_4k                            *float64
+	addimage_price_4k                         *float64
+	batch_image_discount_multiplier           *float64
+	addbatch_image_discount_multiplier        *float64
+	batch_image_hold_multiplier               *float64
+	addbatch_image_hold_multiplier            *float64
+	video_rate_independent                    *bool
+	video_rate_multiplier                     *float64
+	addvideo_rate_multiplier                  *float64
+	video_price_480p                          *float64
+	addvideo_price_480p                       *float64
+	video_price_720p                          *float64
+	addvideo_price_720p                       *float64
+	video_price_1080p                         *float64
+	addvideo_price_1080p                      *float64
+	web_search_price_per_call                 *float64
+	addweb_search_price_per_call              *float64
+	claude_code_only                          *bool
+	fallback_group_id                         *int64
+	addfallback_group_id                      *int64
+	fallback_group_id_on_invalid_request      *int64
+	addfallback_group_id_on_invalid_request   *int64
+	model_routing                             *map[string][]int64
+	model_routing_enabled                     *bool
+	mcp_xml_inject                            *bool
+	supported_model_scopes                    *[]string
+	appendsupported_model_scopes              []string
+	sort_order                                *int
+	addsort_order                             *int
+	allow_messages_dispatch                   *bool
+	require_oauth_only                        *bool
+	require_privacy_set                       *bool
+	default_mapped_model                      *string
+	messages_dispatch_model_config            *domain.OpenAIMessagesDispatchModelConfig
+	models_list_config                        *domain.GroupModelsListConfig
+	rpm_limit                                 *int
+	addrpm_limit                              *int
+	pool_capacity_alert_enabled               *bool
+	pool_capacity_alert_metric                *string
+	pool_capacity_alert_threshold_requests    *int64
+	addpool_capacity_alert_threshold_requests *int64
+	pool_capacity_alert_threshold_usd         *float64
+	addpool_capacity_alert_threshold_usd      *float64
+	pool_capacity_alert_generation            *int64
+	addpool_capacity_alert_generation         *int64
+	clearedFields                             map[string]struct{}
+	api_keys                                  map[int64]struct{}
+	removedapi_keys                           map[int64]struct{}
+	clearedapi_keys                           bool
+	redeem_codes                              map[int64]struct{}
+	removedredeem_codes                       map[int64]struct{}
+	clearedredeem_codes                       bool
+	subscriptions                             map[int64]struct{}
+	removedsubscriptions                      map[int64]struct{}
+	clearedsubscriptions                      bool
+	usage_logs                                map[int64]struct{}
+	removedusage_logs                         map[int64]struct{}
+	clearedusage_logs                         bool
+	accounts                                  map[int64]struct{}
+	removedaccounts                           map[int64]struct{}
+	clearedaccounts                           bool
+	bound_api_keys                            map[int64]struct{}
+	removedbound_api_keys                     map[int64]struct{}
+	clearedbound_api_keys                     bool
+	allowed_users                             map[int64]struct{}
+	removedallowed_users                      map[int64]struct{}
+	clearedallowed_users                      bool
+	access_restricted_users                   map[int64]struct{}
+	removedaccess_restricted_users            map[int64]struct{}
+	clearedaccess_restricted_users            bool
+	subscription_plans                        map[int64]struct{}
+	removedsubscription_plans                 map[int64]struct{}
+	clearedsubscription_plans                 bool
+	authorized_subscriptions                  map[int64]struct{}
+	removedauthorized_subscriptions           map[int64]struct{}
+	clearedauthorized_subscriptions           bool
+	done                                      bool
+	oldValue                                  func(context.Context) (*Group, error)
+	predicates                                []predicate.Group
 }
 
 var _ ent.Mutation = (*GroupMutation)(nil)
@@ -27836,6 +27841,168 @@ func (m *GroupMutation) ResetPoolCapacityAlertEnabled() {
 	m.pool_capacity_alert_enabled = nil
 }
 
+// SetPoolCapacityAlertMetric sets the "pool_capacity_alert_metric" field.
+func (m *GroupMutation) SetPoolCapacityAlertMetric(s string) {
+	m.pool_capacity_alert_metric = &s
+}
+
+// PoolCapacityAlertMetric returns the value of the "pool_capacity_alert_metric" field in the mutation.
+func (m *GroupMutation) PoolCapacityAlertMetric() (r string, exists bool) {
+	v := m.pool_capacity_alert_metric
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPoolCapacityAlertMetric returns the old "pool_capacity_alert_metric" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldPoolCapacityAlertMetric(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPoolCapacityAlertMetric is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPoolCapacityAlertMetric requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPoolCapacityAlertMetric: %w", err)
+	}
+	return oldValue.PoolCapacityAlertMetric, nil
+}
+
+// ResetPoolCapacityAlertMetric resets all changes to the "pool_capacity_alert_metric" field.
+func (m *GroupMutation) ResetPoolCapacityAlertMetric() {
+	m.pool_capacity_alert_metric = nil
+}
+
+// SetPoolCapacityAlertThresholdRequests sets the "pool_capacity_alert_threshold_requests" field.
+func (m *GroupMutation) SetPoolCapacityAlertThresholdRequests(i int64) {
+	m.pool_capacity_alert_threshold_requests = &i
+	m.addpool_capacity_alert_threshold_requests = nil
+}
+
+// PoolCapacityAlertThresholdRequests returns the value of the "pool_capacity_alert_threshold_requests" field in the mutation.
+func (m *GroupMutation) PoolCapacityAlertThresholdRequests() (r int64, exists bool) {
+	v := m.pool_capacity_alert_threshold_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPoolCapacityAlertThresholdRequests returns the old "pool_capacity_alert_threshold_requests" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldPoolCapacityAlertThresholdRequests(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPoolCapacityAlertThresholdRequests is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPoolCapacityAlertThresholdRequests requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPoolCapacityAlertThresholdRequests: %w", err)
+	}
+	return oldValue.PoolCapacityAlertThresholdRequests, nil
+}
+
+// AddPoolCapacityAlertThresholdRequests adds i to the "pool_capacity_alert_threshold_requests" field.
+func (m *GroupMutation) AddPoolCapacityAlertThresholdRequests(i int64) {
+	if m.addpool_capacity_alert_threshold_requests != nil {
+		*m.addpool_capacity_alert_threshold_requests += i
+	} else {
+		m.addpool_capacity_alert_threshold_requests = &i
+	}
+}
+
+// AddedPoolCapacityAlertThresholdRequests returns the value that was added to the "pool_capacity_alert_threshold_requests" field in this mutation.
+func (m *GroupMutation) AddedPoolCapacityAlertThresholdRequests() (r int64, exists bool) {
+	v := m.addpool_capacity_alert_threshold_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPoolCapacityAlertThresholdRequests resets all changes to the "pool_capacity_alert_threshold_requests" field.
+func (m *GroupMutation) ResetPoolCapacityAlertThresholdRequests() {
+	m.pool_capacity_alert_threshold_requests = nil
+	m.addpool_capacity_alert_threshold_requests = nil
+}
+
+// SetPoolCapacityAlertThresholdUsd sets the "pool_capacity_alert_threshold_usd" field.
+func (m *GroupMutation) SetPoolCapacityAlertThresholdUsd(f float64) {
+	m.pool_capacity_alert_threshold_usd = &f
+	m.addpool_capacity_alert_threshold_usd = nil
+}
+
+// PoolCapacityAlertThresholdUsd returns the value of the "pool_capacity_alert_threshold_usd" field in the mutation.
+func (m *GroupMutation) PoolCapacityAlertThresholdUsd() (r float64, exists bool) {
+	v := m.pool_capacity_alert_threshold_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPoolCapacityAlertThresholdUsd returns the old "pool_capacity_alert_threshold_usd" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldPoolCapacityAlertThresholdUsd(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPoolCapacityAlertThresholdUsd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPoolCapacityAlertThresholdUsd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPoolCapacityAlertThresholdUsd: %w", err)
+	}
+	return oldValue.PoolCapacityAlertThresholdUsd, nil
+}
+
+// AddPoolCapacityAlertThresholdUsd adds f to the "pool_capacity_alert_threshold_usd" field.
+func (m *GroupMutation) AddPoolCapacityAlertThresholdUsd(f float64) {
+	if m.addpool_capacity_alert_threshold_usd != nil {
+		*m.addpool_capacity_alert_threshold_usd += f
+	} else {
+		m.addpool_capacity_alert_threshold_usd = &f
+	}
+}
+
+// AddedPoolCapacityAlertThresholdUsd returns the value that was added to the "pool_capacity_alert_threshold_usd" field in this mutation.
+func (m *GroupMutation) AddedPoolCapacityAlertThresholdUsd() (r float64, exists bool) {
+	v := m.addpool_capacity_alert_threshold_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearPoolCapacityAlertThresholdUsd clears the value of the "pool_capacity_alert_threshold_usd" field.
+func (m *GroupMutation) ClearPoolCapacityAlertThresholdUsd() {
+	m.pool_capacity_alert_threshold_usd = nil
+	m.addpool_capacity_alert_threshold_usd = nil
+	m.clearedFields[group.FieldPoolCapacityAlertThresholdUsd] = struct{}{}
+}
+
+// PoolCapacityAlertThresholdUsdCleared returns if the "pool_capacity_alert_threshold_usd" field was cleared in this mutation.
+func (m *GroupMutation) PoolCapacityAlertThresholdUsdCleared() bool {
+	_, ok := m.clearedFields[group.FieldPoolCapacityAlertThresholdUsd]
+	return ok
+}
+
+// ResetPoolCapacityAlertThresholdUsd resets all changes to the "pool_capacity_alert_threshold_usd" field.
+func (m *GroupMutation) ResetPoolCapacityAlertThresholdUsd() {
+	m.pool_capacity_alert_threshold_usd = nil
+	m.addpool_capacity_alert_threshold_usd = nil
+	delete(m.clearedFields, group.FieldPoolCapacityAlertThresholdUsd)
+}
+
 // SetPoolCapacityAlertGeneration sets the "pool_capacity_alert_generation" field.
 func (m *GroupMutation) SetPoolCapacityAlertGeneration(i int64) {
 	m.pool_capacity_alert_generation = &i
@@ -28466,7 +28633,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 52)
+	fields := make([]string, 0, 55)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -28620,6 +28787,15 @@ func (m *GroupMutation) Fields() []string {
 	if m.pool_capacity_alert_enabled != nil {
 		fields = append(fields, group.FieldPoolCapacityAlertEnabled)
 	}
+	if m.pool_capacity_alert_metric != nil {
+		fields = append(fields, group.FieldPoolCapacityAlertMetric)
+	}
+	if m.pool_capacity_alert_threshold_requests != nil {
+		fields = append(fields, group.FieldPoolCapacityAlertThresholdRequests)
+	}
+	if m.pool_capacity_alert_threshold_usd != nil {
+		fields = append(fields, group.FieldPoolCapacityAlertThresholdUsd)
+	}
 	if m.pool_capacity_alert_generation != nil {
 		fields = append(fields, group.FieldPoolCapacityAlertGeneration)
 	}
@@ -28733,6 +28909,12 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.RpmLimit()
 	case group.FieldPoolCapacityAlertEnabled:
 		return m.PoolCapacityAlertEnabled()
+	case group.FieldPoolCapacityAlertMetric:
+		return m.PoolCapacityAlertMetric()
+	case group.FieldPoolCapacityAlertThresholdRequests:
+		return m.PoolCapacityAlertThresholdRequests()
+	case group.FieldPoolCapacityAlertThresholdUsd:
+		return m.PoolCapacityAlertThresholdUsd()
 	case group.FieldPoolCapacityAlertGeneration:
 		return m.PoolCapacityAlertGeneration()
 	}
@@ -28846,6 +29028,12 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldRpmLimit(ctx)
 	case group.FieldPoolCapacityAlertEnabled:
 		return m.OldPoolCapacityAlertEnabled(ctx)
+	case group.FieldPoolCapacityAlertMetric:
+		return m.OldPoolCapacityAlertMetric(ctx)
+	case group.FieldPoolCapacityAlertThresholdRequests:
+		return m.OldPoolCapacityAlertThresholdRequests(ctx)
+	case group.FieldPoolCapacityAlertThresholdUsd:
+		return m.OldPoolCapacityAlertThresholdUsd(ctx)
 	case group.FieldPoolCapacityAlertGeneration:
 		return m.OldPoolCapacityAlertGeneration(ctx)
 	}
@@ -29214,6 +29402,27 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetPoolCapacityAlertEnabled(v)
 		return nil
+	case group.FieldPoolCapacityAlertMetric:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPoolCapacityAlertMetric(v)
+		return nil
+	case group.FieldPoolCapacityAlertThresholdRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPoolCapacityAlertThresholdRequests(v)
+		return nil
+	case group.FieldPoolCapacityAlertThresholdUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPoolCapacityAlertThresholdUsd(v)
+		return nil
 	case group.FieldPoolCapacityAlertGeneration:
 		v, ok := value.(int64)
 		if !ok {
@@ -29292,6 +29501,12 @@ func (m *GroupMutation) AddedFields() []string {
 	if m.addrpm_limit != nil {
 		fields = append(fields, group.FieldRpmLimit)
 	}
+	if m.addpool_capacity_alert_threshold_requests != nil {
+		fields = append(fields, group.FieldPoolCapacityAlertThresholdRequests)
+	}
+	if m.addpool_capacity_alert_threshold_usd != nil {
+		fields = append(fields, group.FieldPoolCapacityAlertThresholdUsd)
+	}
 	if m.addpool_capacity_alert_generation != nil {
 		fields = append(fields, group.FieldPoolCapacityAlertGeneration)
 	}
@@ -29345,6 +29560,10 @@ func (m *GroupMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedSortOrder()
 	case group.FieldRpmLimit:
 		return m.AddedRpmLimit()
+	case group.FieldPoolCapacityAlertThresholdRequests:
+		return m.AddedPoolCapacityAlertThresholdRequests()
+	case group.FieldPoolCapacityAlertThresholdUsd:
+		return m.AddedPoolCapacityAlertThresholdUsd()
 	case group.FieldPoolCapacityAlertGeneration:
 		return m.AddedPoolCapacityAlertGeneration()
 	}
@@ -29503,6 +29722,20 @@ func (m *GroupMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddRpmLimit(v)
 		return nil
+	case group.FieldPoolCapacityAlertThresholdRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPoolCapacityAlertThresholdRequests(v)
+		return nil
+	case group.FieldPoolCapacityAlertThresholdUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPoolCapacityAlertThresholdUsd(v)
+		return nil
 	case group.FieldPoolCapacityAlertGeneration:
 		v, ok := value.(int64)
 		if !ok {
@@ -29566,6 +29799,9 @@ func (m *GroupMutation) ClearedFields() []string {
 	if m.FieldCleared(group.FieldModelRouting) {
 		fields = append(fields, group.FieldModelRouting)
 	}
+	if m.FieldCleared(group.FieldPoolCapacityAlertThresholdUsd) {
+		fields = append(fields, group.FieldPoolCapacityAlertThresholdUsd)
+	}
 	return fields
 }
 
@@ -29627,6 +29863,9 @@ func (m *GroupMutation) ClearField(name string) error {
 		return nil
 	case group.FieldModelRouting:
 		m.ClearModelRouting()
+		return nil
+	case group.FieldPoolCapacityAlertThresholdUsd:
+		m.ClearPoolCapacityAlertThresholdUsd()
 		return nil
 	}
 	return fmt.Errorf("unknown Group nullable field %s", name)
@@ -29788,6 +30027,15 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldPoolCapacityAlertEnabled:
 		m.ResetPoolCapacityAlertEnabled()
+		return nil
+	case group.FieldPoolCapacityAlertMetric:
+		m.ResetPoolCapacityAlertMetric()
+		return nil
+	case group.FieldPoolCapacityAlertThresholdRequests:
+		m.ResetPoolCapacityAlertThresholdRequests()
+		return nil
+	case group.FieldPoolCapacityAlertThresholdUsd:
+		m.ResetPoolCapacityAlertThresholdUsd()
 		return nil
 	case group.FieldPoolCapacityAlertGeneration:
 		m.ResetPoolCapacityAlertGeneration()
@@ -40108,58 +40356,63 @@ func (m *PoolCapacityAlertDeliveryMutation) ResetEdge(name string) error {
 // PoolCapacityAlertEventMutation represents an operation that mutates the PoolCapacityAlertEvent nodes in the graph.
 type PoolCapacityAlertEventMutation struct {
 	config
-	op                    Op
-	typ                   string
-	id                    *int64
-	state_id              *int64
-	addstate_id           *int64
-	episode               *int64
-	addepisode            *int64
-	group_id              *int64
-	addgroup_id           *int64
-	group_generation      *int64
-	addgroup_generation   *int64
-	account_id            *int64
-	addaccount_id         *int64
-	api_key_id            *int64
-	addapi_key_id         *int64
-	user_id               *int64
-	adduser_id            *int64
-	billing_type          *int8
-	addbilling_type       *int8
-	group_name            *string
-	account_name          *string
-	api_key_name          *string
-	user_email            *string
-	predicted_requests    *int64
-	addpredicted_requests *int64
-	threshold_requests    *int64
-	addthreshold_requests *int64
-	account_requests      *int64
-	addaccount_requests   *int64
-	api_key_requests      *int64
-	addapi_key_requests   *int64
-	wallet_requests       *int64
-	addwallet_requests    *int64
-	avg_account_cost      *float64
-	addavg_account_cost   *float64
-	avg_actual_cost       *float64
-	addavg_actual_cost    *float64
-	account_remaining     *float64
-	addaccount_remaining  *float64
-	api_key_remaining     *float64
-	addapi_key_remaining  *float64
-	wallet_remaining      *float64
-	addwallet_remaining   *float64
-	sample_count          *int
-	addsample_count       *int
-	bottleneck            *string
-	qqbot_app_id          *string
-	created_at            *time.Time
-	clearedFields         map[string]struct{}
-	done                  bool
-	oldValue              func(context.Context) (*PoolCapacityAlertEvent, error)
-	predicates            []predicate.PoolCapacityAlertEvent
+	op                       Op
+	typ                      string
+	id                       *int64
+	state_id                 *int64
+	addstate_id              *int64
+	episode                  *int64
+	addepisode               *int64
+	group_id                 *int64
+	addgroup_id              *int64
+	group_generation         *int64
+	addgroup_generation      *int64
+	account_id               *int64
+	addaccount_id            *int64
+	api_key_id               *int64
+	addapi_key_id            *int64
+	user_id                  *int64
+	adduser_id               *int64
+	billing_type             *int8
+	addbilling_type          *int8
+	group_name               *string
+	account_name             *string
+	api_key_name             *string
+	user_email               *string
+	alert_metric             *string
+	predicted_requests       *int64
+	addpredicted_requests    *int64
+	remaining_balance_usd    *float64
+	addremaining_balance_usd *float64
+	threshold_requests       *int64
+	addthreshold_requests    *int64
+	threshold_usd            *float64
+	addthreshold_usd         *float64
+	account_requests         *int64
+	addaccount_requests      *int64
+	api_key_requests         *int64
+	addapi_key_requests      *int64
+	wallet_requests          *int64
+	addwallet_requests       *int64
+	avg_account_cost         *float64
+	addavg_account_cost      *float64
+	avg_actual_cost          *float64
+	addavg_actual_cost       *float64
+	account_remaining        *float64
+	addaccount_remaining     *float64
+	api_key_remaining        *float64
+	addapi_key_remaining     *float64
+	wallet_remaining         *float64
+	addwallet_remaining      *float64
+	sample_count             *int
+	addsample_count          *int
+	bottleneck               *string
+	qqbot_app_id             *string
+	created_at               *time.Time
+	clearedFields            map[string]struct{}
+	done                     bool
+	oldValue                 func(context.Context) (*PoolCapacityAlertEvent, error)
+	predicates               []predicate.PoolCapacityAlertEvent
 }
 
 var _ ent.Mutation = (*PoolCapacityAlertEventMutation)(nil)
@@ -40852,6 +41105,42 @@ func (m *PoolCapacityAlertEventMutation) ResetUserEmail() {
 	m.user_email = nil
 }
 
+// SetAlertMetric sets the "alert_metric" field.
+func (m *PoolCapacityAlertEventMutation) SetAlertMetric(s string) {
+	m.alert_metric = &s
+}
+
+// AlertMetric returns the value of the "alert_metric" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) AlertMetric() (r string, exists bool) {
+	v := m.alert_metric
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAlertMetric returns the old "alert_metric" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldAlertMetric(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAlertMetric is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAlertMetric requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAlertMetric: %w", err)
+	}
+	return oldValue.AlertMetric, nil
+}
+
+// ResetAlertMetric resets all changes to the "alert_metric" field.
+func (m *PoolCapacityAlertEventMutation) ResetAlertMetric() {
+	m.alert_metric = nil
+}
+
 // SetPredictedRequests sets the "predicted_requests" field.
 func (m *PoolCapacityAlertEventMutation) SetPredictedRequests(i int64) {
 	m.predicted_requests = &i
@@ -40870,7 +41159,7 @@ func (m *PoolCapacityAlertEventMutation) PredictedRequests() (r int64, exists bo
 // OldPredictedRequests returns the old "predicted_requests" field's value of the PoolCapacityAlertEvent entity.
 // If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PoolCapacityAlertEventMutation) OldPredictedRequests(ctx context.Context) (v int64, err error) {
+func (m *PoolCapacityAlertEventMutation) OldPredictedRequests(ctx context.Context) (v *int64, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldPredictedRequests is only allowed on UpdateOne operations")
 	}
@@ -40902,10 +41191,94 @@ func (m *PoolCapacityAlertEventMutation) AddedPredictedRequests() (r int64, exis
 	return *v, true
 }
 
+// ClearPredictedRequests clears the value of the "predicted_requests" field.
+func (m *PoolCapacityAlertEventMutation) ClearPredictedRequests() {
+	m.predicted_requests = nil
+	m.addpredicted_requests = nil
+	m.clearedFields[poolcapacityalertevent.FieldPredictedRequests] = struct{}{}
+}
+
+// PredictedRequestsCleared returns if the "predicted_requests" field was cleared in this mutation.
+func (m *PoolCapacityAlertEventMutation) PredictedRequestsCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertevent.FieldPredictedRequests]
+	return ok
+}
+
 // ResetPredictedRequests resets all changes to the "predicted_requests" field.
 func (m *PoolCapacityAlertEventMutation) ResetPredictedRequests() {
 	m.predicted_requests = nil
 	m.addpredicted_requests = nil
+	delete(m.clearedFields, poolcapacityalertevent.FieldPredictedRequests)
+}
+
+// SetRemainingBalanceUsd sets the "remaining_balance_usd" field.
+func (m *PoolCapacityAlertEventMutation) SetRemainingBalanceUsd(f float64) {
+	m.remaining_balance_usd = &f
+	m.addremaining_balance_usd = nil
+}
+
+// RemainingBalanceUsd returns the value of the "remaining_balance_usd" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) RemainingBalanceUsd() (r float64, exists bool) {
+	v := m.remaining_balance_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRemainingBalanceUsd returns the old "remaining_balance_usd" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldRemainingBalanceUsd(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRemainingBalanceUsd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRemainingBalanceUsd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRemainingBalanceUsd: %w", err)
+	}
+	return oldValue.RemainingBalanceUsd, nil
+}
+
+// AddRemainingBalanceUsd adds f to the "remaining_balance_usd" field.
+func (m *PoolCapacityAlertEventMutation) AddRemainingBalanceUsd(f float64) {
+	if m.addremaining_balance_usd != nil {
+		*m.addremaining_balance_usd += f
+	} else {
+		m.addremaining_balance_usd = &f
+	}
+}
+
+// AddedRemainingBalanceUsd returns the value that was added to the "remaining_balance_usd" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedRemainingBalanceUsd() (r float64, exists bool) {
+	v := m.addremaining_balance_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearRemainingBalanceUsd clears the value of the "remaining_balance_usd" field.
+func (m *PoolCapacityAlertEventMutation) ClearRemainingBalanceUsd() {
+	m.remaining_balance_usd = nil
+	m.addremaining_balance_usd = nil
+	m.clearedFields[poolcapacityalertevent.FieldRemainingBalanceUsd] = struct{}{}
+}
+
+// RemainingBalanceUsdCleared returns if the "remaining_balance_usd" field was cleared in this mutation.
+func (m *PoolCapacityAlertEventMutation) RemainingBalanceUsdCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertevent.FieldRemainingBalanceUsd]
+	return ok
+}
+
+// ResetRemainingBalanceUsd resets all changes to the "remaining_balance_usd" field.
+func (m *PoolCapacityAlertEventMutation) ResetRemainingBalanceUsd() {
+	m.remaining_balance_usd = nil
+	m.addremaining_balance_usd = nil
+	delete(m.clearedFields, poolcapacityalertevent.FieldRemainingBalanceUsd)
 }
 
 // SetThresholdRequests sets the "threshold_requests" field.
@@ -40926,7 +41299,7 @@ func (m *PoolCapacityAlertEventMutation) ThresholdRequests() (r int64, exists bo
 // OldThresholdRequests returns the old "threshold_requests" field's value of the PoolCapacityAlertEvent entity.
 // If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PoolCapacityAlertEventMutation) OldThresholdRequests(ctx context.Context) (v int64, err error) {
+func (m *PoolCapacityAlertEventMutation) OldThresholdRequests(ctx context.Context) (v *int64, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldThresholdRequests is only allowed on UpdateOne operations")
 	}
@@ -40958,10 +41331,94 @@ func (m *PoolCapacityAlertEventMutation) AddedThresholdRequests() (r int64, exis
 	return *v, true
 }
 
+// ClearThresholdRequests clears the value of the "threshold_requests" field.
+func (m *PoolCapacityAlertEventMutation) ClearThresholdRequests() {
+	m.threshold_requests = nil
+	m.addthreshold_requests = nil
+	m.clearedFields[poolcapacityalertevent.FieldThresholdRequests] = struct{}{}
+}
+
+// ThresholdRequestsCleared returns if the "threshold_requests" field was cleared in this mutation.
+func (m *PoolCapacityAlertEventMutation) ThresholdRequestsCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertevent.FieldThresholdRequests]
+	return ok
+}
+
 // ResetThresholdRequests resets all changes to the "threshold_requests" field.
 func (m *PoolCapacityAlertEventMutation) ResetThresholdRequests() {
 	m.threshold_requests = nil
 	m.addthreshold_requests = nil
+	delete(m.clearedFields, poolcapacityalertevent.FieldThresholdRequests)
+}
+
+// SetThresholdUsd sets the "threshold_usd" field.
+func (m *PoolCapacityAlertEventMutation) SetThresholdUsd(f float64) {
+	m.threshold_usd = &f
+	m.addthreshold_usd = nil
+}
+
+// ThresholdUsd returns the value of the "threshold_usd" field in the mutation.
+func (m *PoolCapacityAlertEventMutation) ThresholdUsd() (r float64, exists bool) {
+	v := m.threshold_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldThresholdUsd returns the old "threshold_usd" field's value of the PoolCapacityAlertEvent entity.
+// If the PoolCapacityAlertEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertEventMutation) OldThresholdUsd(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldThresholdUsd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldThresholdUsd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldThresholdUsd: %w", err)
+	}
+	return oldValue.ThresholdUsd, nil
+}
+
+// AddThresholdUsd adds f to the "threshold_usd" field.
+func (m *PoolCapacityAlertEventMutation) AddThresholdUsd(f float64) {
+	if m.addthreshold_usd != nil {
+		*m.addthreshold_usd += f
+	} else {
+		m.addthreshold_usd = &f
+	}
+}
+
+// AddedThresholdUsd returns the value that was added to the "threshold_usd" field in this mutation.
+func (m *PoolCapacityAlertEventMutation) AddedThresholdUsd() (r float64, exists bool) {
+	v := m.addthreshold_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearThresholdUsd clears the value of the "threshold_usd" field.
+func (m *PoolCapacityAlertEventMutation) ClearThresholdUsd() {
+	m.threshold_usd = nil
+	m.addthreshold_usd = nil
+	m.clearedFields[poolcapacityalertevent.FieldThresholdUsd] = struct{}{}
+}
+
+// ThresholdUsdCleared returns if the "threshold_usd" field was cleared in this mutation.
+func (m *PoolCapacityAlertEventMutation) ThresholdUsdCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertevent.FieldThresholdUsd]
+	return ok
+}
+
+// ResetThresholdUsd resets all changes to the "threshold_usd" field.
+func (m *PoolCapacityAlertEventMutation) ResetThresholdUsd() {
+	m.threshold_usd = nil
+	m.addthreshold_usd = nil
+	delete(m.clearedFields, poolcapacityalertevent.FieldThresholdUsd)
 }
 
 // SetAccountRequests sets the "account_requests" field.
@@ -41694,7 +42151,7 @@ func (m *PoolCapacityAlertEventMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PoolCapacityAlertEventMutation) Fields() []string {
-	fields := make([]string, 0, 26)
+	fields := make([]string, 0, 29)
 	if m.state_id != nil {
 		fields = append(fields, poolcapacityalertevent.FieldStateID)
 	}
@@ -41731,11 +42188,20 @@ func (m *PoolCapacityAlertEventMutation) Fields() []string {
 	if m.user_email != nil {
 		fields = append(fields, poolcapacityalertevent.FieldUserEmail)
 	}
+	if m.alert_metric != nil {
+		fields = append(fields, poolcapacityalertevent.FieldAlertMetric)
+	}
 	if m.predicted_requests != nil {
 		fields = append(fields, poolcapacityalertevent.FieldPredictedRequests)
 	}
+	if m.remaining_balance_usd != nil {
+		fields = append(fields, poolcapacityalertevent.FieldRemainingBalanceUsd)
+	}
 	if m.threshold_requests != nil {
 		fields = append(fields, poolcapacityalertevent.FieldThresholdRequests)
+	}
+	if m.threshold_usd != nil {
+		fields = append(fields, poolcapacityalertevent.FieldThresholdUsd)
 	}
 	if m.account_requests != nil {
 		fields = append(fields, poolcapacityalertevent.FieldAccountRequests)
@@ -41805,10 +42271,16 @@ func (m *PoolCapacityAlertEventMutation) Field(name string) (ent.Value, bool) {
 		return m.APIKeyName()
 	case poolcapacityalertevent.FieldUserEmail:
 		return m.UserEmail()
+	case poolcapacityalertevent.FieldAlertMetric:
+		return m.AlertMetric()
 	case poolcapacityalertevent.FieldPredictedRequests:
 		return m.PredictedRequests()
+	case poolcapacityalertevent.FieldRemainingBalanceUsd:
+		return m.RemainingBalanceUsd()
 	case poolcapacityalertevent.FieldThresholdRequests:
 		return m.ThresholdRequests()
+	case poolcapacityalertevent.FieldThresholdUsd:
+		return m.ThresholdUsd()
 	case poolcapacityalertevent.FieldAccountRequests:
 		return m.AccountRequests()
 	case poolcapacityalertevent.FieldAPIKeyRequests:
@@ -41866,10 +42338,16 @@ func (m *PoolCapacityAlertEventMutation) OldField(ctx context.Context, name stri
 		return m.OldAPIKeyName(ctx)
 	case poolcapacityalertevent.FieldUserEmail:
 		return m.OldUserEmail(ctx)
+	case poolcapacityalertevent.FieldAlertMetric:
+		return m.OldAlertMetric(ctx)
 	case poolcapacityalertevent.FieldPredictedRequests:
 		return m.OldPredictedRequests(ctx)
+	case poolcapacityalertevent.FieldRemainingBalanceUsd:
+		return m.OldRemainingBalanceUsd(ctx)
 	case poolcapacityalertevent.FieldThresholdRequests:
 		return m.OldThresholdRequests(ctx)
+	case poolcapacityalertevent.FieldThresholdUsd:
+		return m.OldThresholdUsd(ctx)
 	case poolcapacityalertevent.FieldAccountRequests:
 		return m.OldAccountRequests(ctx)
 	case poolcapacityalertevent.FieldAPIKeyRequests:
@@ -41987,6 +42465,13 @@ func (m *PoolCapacityAlertEventMutation) SetField(name string, value ent.Value) 
 		}
 		m.SetUserEmail(v)
 		return nil
+	case poolcapacityalertevent.FieldAlertMetric:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAlertMetric(v)
+		return nil
 	case poolcapacityalertevent.FieldPredictedRequests:
 		v, ok := value.(int64)
 		if !ok {
@@ -41994,12 +42479,26 @@ func (m *PoolCapacityAlertEventMutation) SetField(name string, value ent.Value) 
 		}
 		m.SetPredictedRequests(v)
 		return nil
+	case poolcapacityalertevent.FieldRemainingBalanceUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRemainingBalanceUsd(v)
+		return nil
 	case poolcapacityalertevent.FieldThresholdRequests:
 		v, ok := value.(int64)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetThresholdRequests(v)
+		return nil
+	case poolcapacityalertevent.FieldThresholdUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetThresholdUsd(v)
 		return nil
 	case poolcapacityalertevent.FieldAccountRequests:
 		v, ok := value.(int64)
@@ -42120,8 +42619,14 @@ func (m *PoolCapacityAlertEventMutation) AddedFields() []string {
 	if m.addpredicted_requests != nil {
 		fields = append(fields, poolcapacityalertevent.FieldPredictedRequests)
 	}
+	if m.addremaining_balance_usd != nil {
+		fields = append(fields, poolcapacityalertevent.FieldRemainingBalanceUsd)
+	}
 	if m.addthreshold_requests != nil {
 		fields = append(fields, poolcapacityalertevent.FieldThresholdRequests)
+	}
+	if m.addthreshold_usd != nil {
+		fields = append(fields, poolcapacityalertevent.FieldThresholdUsd)
 	}
 	if m.addaccount_requests != nil {
 		fields = append(fields, poolcapacityalertevent.FieldAccountRequests)
@@ -42176,8 +42681,12 @@ func (m *PoolCapacityAlertEventMutation) AddedField(name string) (ent.Value, boo
 		return m.AddedBillingType()
 	case poolcapacityalertevent.FieldPredictedRequests:
 		return m.AddedPredictedRequests()
+	case poolcapacityalertevent.FieldRemainingBalanceUsd:
+		return m.AddedRemainingBalanceUsd()
 	case poolcapacityalertevent.FieldThresholdRequests:
 		return m.AddedThresholdRequests()
+	case poolcapacityalertevent.FieldThresholdUsd:
+		return m.AddedThresholdUsd()
 	case poolcapacityalertevent.FieldAccountRequests:
 		return m.AddedAccountRequests()
 	case poolcapacityalertevent.FieldAPIKeyRequests:
@@ -42268,12 +42777,26 @@ func (m *PoolCapacityAlertEventMutation) AddField(name string, value ent.Value) 
 		}
 		m.AddPredictedRequests(v)
 		return nil
+	case poolcapacityalertevent.FieldRemainingBalanceUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRemainingBalanceUsd(v)
+		return nil
 	case poolcapacityalertevent.FieldThresholdRequests:
 		v, ok := value.(int64)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddThresholdRequests(v)
+		return nil
+	case poolcapacityalertevent.FieldThresholdUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddThresholdUsd(v)
 		return nil
 	case poolcapacityalertevent.FieldAccountRequests:
 		v, ok := value.(int64)
@@ -42346,6 +42869,18 @@ func (m *PoolCapacityAlertEventMutation) AddField(name string, value ent.Value) 
 // mutation.
 func (m *PoolCapacityAlertEventMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(poolcapacityalertevent.FieldPredictedRequests) {
+		fields = append(fields, poolcapacityalertevent.FieldPredictedRequests)
+	}
+	if m.FieldCleared(poolcapacityalertevent.FieldRemainingBalanceUsd) {
+		fields = append(fields, poolcapacityalertevent.FieldRemainingBalanceUsd)
+	}
+	if m.FieldCleared(poolcapacityalertevent.FieldThresholdRequests) {
+		fields = append(fields, poolcapacityalertevent.FieldThresholdRequests)
+	}
+	if m.FieldCleared(poolcapacityalertevent.FieldThresholdUsd) {
+		fields = append(fields, poolcapacityalertevent.FieldThresholdUsd)
+	}
 	if m.FieldCleared(poolcapacityalertevent.FieldAccountRequests) {
 		fields = append(fields, poolcapacityalertevent.FieldAccountRequests)
 	}
@@ -42378,6 +42913,18 @@ func (m *PoolCapacityAlertEventMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *PoolCapacityAlertEventMutation) ClearField(name string) error {
 	switch name {
+	case poolcapacityalertevent.FieldPredictedRequests:
+		m.ClearPredictedRequests()
+		return nil
+	case poolcapacityalertevent.FieldRemainingBalanceUsd:
+		m.ClearRemainingBalanceUsd()
+		return nil
+	case poolcapacityalertevent.FieldThresholdRequests:
+		m.ClearThresholdRequests()
+		return nil
+	case poolcapacityalertevent.FieldThresholdUsd:
+		m.ClearThresholdUsd()
+		return nil
 	case poolcapacityalertevent.FieldAccountRequests:
 		m.ClearAccountRequests()
 		return nil
@@ -42440,11 +42987,20 @@ func (m *PoolCapacityAlertEventMutation) ResetField(name string) error {
 	case poolcapacityalertevent.FieldUserEmail:
 		m.ResetUserEmail()
 		return nil
+	case poolcapacityalertevent.FieldAlertMetric:
+		m.ResetAlertMetric()
+		return nil
 	case poolcapacityalertevent.FieldPredictedRequests:
 		m.ResetPredictedRequests()
 		return nil
+	case poolcapacityalertevent.FieldRemainingBalanceUsd:
+		m.ResetRemainingBalanceUsd()
+		return nil
 	case poolcapacityalertevent.FieldThresholdRequests:
 		m.ResetThresholdRequests()
+		return nil
+	case poolcapacityalertevent.FieldThresholdUsd:
+		m.ResetThresholdUsd()
 		return nil
 	case poolcapacityalertevent.FieldAccountRequests:
 		m.ResetAccountRequests()
@@ -42537,47 +43093,54 @@ func (m *PoolCapacityAlertEventMutation) ResetEdge(name string) error {
 // PoolCapacityAlertStateMutation represents an operation that mutates the PoolCapacityAlertState nodes in the graph.
 type PoolCapacityAlertStateMutation struct {
 	config
-	op                    Op
-	typ                   string
-	id                    *int64
-	group_id              *int64
-	addgroup_id           *int64
-	group_generation      *int64
-	addgroup_generation   *int64
-	account_id            *int64
-	addaccount_id         *int64
-	api_key_id            *int64
-	addapi_key_id         *int64
-	user_id               *int64
-	adduser_id            *int64
-	billing_type          *int8
-	addbilling_type       *int8
-	status                *string
-	episode               *int64
-	addepisode            *int64
-	predicted_requests    *int64
-	addpredicted_requests *int64
-	account_requests      *int64
-	addaccount_requests   *int64
-	api_key_requests      *int64
-	addapi_key_requests   *int64
-	wallet_requests       *int64
-	addwallet_requests    *int64
-	avg_account_cost      *float64
-	addavg_account_cost   *float64
-	avg_actual_cost       *float64
-	addavg_actual_cost    *float64
-	sample_count          *int
-	addsample_count       *int
-	bottleneck            *string
-	last_evaluated_at     *time.Time
-	last_alerted_at       *time.Time
-	created_at            *time.Time
-	updated_at            *time.Time
-	clearedFields         map[string]struct{}
-	done                  bool
-	oldValue              func(context.Context) (*PoolCapacityAlertState, error)
-	predicates            []predicate.PoolCapacityAlertState
+	op                       Op
+	typ                      string
+	id                       *int64
+	group_id                 *int64
+	addgroup_id              *int64
+	group_generation         *int64
+	addgroup_generation      *int64
+	account_id               *int64
+	addaccount_id            *int64
+	api_key_id               *int64
+	addapi_key_id            *int64
+	user_id                  *int64
+	adduser_id               *int64
+	billing_type             *int8
+	addbilling_type          *int8
+	status                   *string
+	episode                  *int64
+	addepisode               *int64
+	alert_metric             *string
+	predicted_requests       *int64
+	addpredicted_requests    *int64
+	remaining_balance_usd    *float64
+	addremaining_balance_usd *float64
+	threshold_requests       *int64
+	addthreshold_requests    *int64
+	threshold_usd            *float64
+	addthreshold_usd         *float64
+	account_requests         *int64
+	addaccount_requests      *int64
+	api_key_requests         *int64
+	addapi_key_requests      *int64
+	wallet_requests          *int64
+	addwallet_requests       *int64
+	avg_account_cost         *float64
+	addavg_account_cost      *float64
+	avg_actual_cost          *float64
+	addavg_actual_cost       *float64
+	sample_count             *int
+	addsample_count          *int
+	bottleneck               *string
+	last_evaluated_at        *time.Time
+	last_alerted_at          *time.Time
+	created_at               *time.Time
+	updated_at               *time.Time
+	clearedFields            map[string]struct{}
+	done                     bool
+	oldValue                 func(context.Context) (*PoolCapacityAlertState, error)
+	predicates               []predicate.PoolCapacityAlertState
 }
 
 var _ ent.Mutation = (*PoolCapacityAlertStateMutation)(nil)
@@ -43106,6 +43669,42 @@ func (m *PoolCapacityAlertStateMutation) ResetEpisode() {
 	m.addepisode = nil
 }
 
+// SetAlertMetric sets the "alert_metric" field.
+func (m *PoolCapacityAlertStateMutation) SetAlertMetric(s string) {
+	m.alert_metric = &s
+}
+
+// AlertMetric returns the value of the "alert_metric" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) AlertMetric() (r string, exists bool) {
+	v := m.alert_metric
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAlertMetric returns the old "alert_metric" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldAlertMetric(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAlertMetric is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAlertMetric requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAlertMetric: %w", err)
+	}
+	return oldValue.AlertMetric, nil
+}
+
+// ResetAlertMetric resets all changes to the "alert_metric" field.
+func (m *PoolCapacityAlertStateMutation) ResetAlertMetric() {
+	m.alert_metric = nil
+}
+
 // SetPredictedRequests sets the "predicted_requests" field.
 func (m *PoolCapacityAlertStateMutation) SetPredictedRequests(i int64) {
 	m.predicted_requests = &i
@@ -43174,6 +43773,202 @@ func (m *PoolCapacityAlertStateMutation) ResetPredictedRequests() {
 	m.predicted_requests = nil
 	m.addpredicted_requests = nil
 	delete(m.clearedFields, poolcapacityalertstate.FieldPredictedRequests)
+}
+
+// SetRemainingBalanceUsd sets the "remaining_balance_usd" field.
+func (m *PoolCapacityAlertStateMutation) SetRemainingBalanceUsd(f float64) {
+	m.remaining_balance_usd = &f
+	m.addremaining_balance_usd = nil
+}
+
+// RemainingBalanceUsd returns the value of the "remaining_balance_usd" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) RemainingBalanceUsd() (r float64, exists bool) {
+	v := m.remaining_balance_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRemainingBalanceUsd returns the old "remaining_balance_usd" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldRemainingBalanceUsd(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRemainingBalanceUsd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRemainingBalanceUsd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRemainingBalanceUsd: %w", err)
+	}
+	return oldValue.RemainingBalanceUsd, nil
+}
+
+// AddRemainingBalanceUsd adds f to the "remaining_balance_usd" field.
+func (m *PoolCapacityAlertStateMutation) AddRemainingBalanceUsd(f float64) {
+	if m.addremaining_balance_usd != nil {
+		*m.addremaining_balance_usd += f
+	} else {
+		m.addremaining_balance_usd = &f
+	}
+}
+
+// AddedRemainingBalanceUsd returns the value that was added to the "remaining_balance_usd" field in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedRemainingBalanceUsd() (r float64, exists bool) {
+	v := m.addremaining_balance_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearRemainingBalanceUsd clears the value of the "remaining_balance_usd" field.
+func (m *PoolCapacityAlertStateMutation) ClearRemainingBalanceUsd() {
+	m.remaining_balance_usd = nil
+	m.addremaining_balance_usd = nil
+	m.clearedFields[poolcapacityalertstate.FieldRemainingBalanceUsd] = struct{}{}
+}
+
+// RemainingBalanceUsdCleared returns if the "remaining_balance_usd" field was cleared in this mutation.
+func (m *PoolCapacityAlertStateMutation) RemainingBalanceUsdCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertstate.FieldRemainingBalanceUsd]
+	return ok
+}
+
+// ResetRemainingBalanceUsd resets all changes to the "remaining_balance_usd" field.
+func (m *PoolCapacityAlertStateMutation) ResetRemainingBalanceUsd() {
+	m.remaining_balance_usd = nil
+	m.addremaining_balance_usd = nil
+	delete(m.clearedFields, poolcapacityalertstate.FieldRemainingBalanceUsd)
+}
+
+// SetThresholdRequests sets the "threshold_requests" field.
+func (m *PoolCapacityAlertStateMutation) SetThresholdRequests(i int64) {
+	m.threshold_requests = &i
+	m.addthreshold_requests = nil
+}
+
+// ThresholdRequests returns the value of the "threshold_requests" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) ThresholdRequests() (r int64, exists bool) {
+	v := m.threshold_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldThresholdRequests returns the old "threshold_requests" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldThresholdRequests(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldThresholdRequests is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldThresholdRequests requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldThresholdRequests: %w", err)
+	}
+	return oldValue.ThresholdRequests, nil
+}
+
+// AddThresholdRequests adds i to the "threshold_requests" field.
+func (m *PoolCapacityAlertStateMutation) AddThresholdRequests(i int64) {
+	if m.addthreshold_requests != nil {
+		*m.addthreshold_requests += i
+	} else {
+		m.addthreshold_requests = &i
+	}
+}
+
+// AddedThresholdRequests returns the value that was added to the "threshold_requests" field in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedThresholdRequests() (r int64, exists bool) {
+	v := m.addthreshold_requests
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetThresholdRequests resets all changes to the "threshold_requests" field.
+func (m *PoolCapacityAlertStateMutation) ResetThresholdRequests() {
+	m.threshold_requests = nil
+	m.addthreshold_requests = nil
+}
+
+// SetThresholdUsd sets the "threshold_usd" field.
+func (m *PoolCapacityAlertStateMutation) SetThresholdUsd(f float64) {
+	m.threshold_usd = &f
+	m.addthreshold_usd = nil
+}
+
+// ThresholdUsd returns the value of the "threshold_usd" field in the mutation.
+func (m *PoolCapacityAlertStateMutation) ThresholdUsd() (r float64, exists bool) {
+	v := m.threshold_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldThresholdUsd returns the old "threshold_usd" field's value of the PoolCapacityAlertState entity.
+// If the PoolCapacityAlertState object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PoolCapacityAlertStateMutation) OldThresholdUsd(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldThresholdUsd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldThresholdUsd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldThresholdUsd: %w", err)
+	}
+	return oldValue.ThresholdUsd, nil
+}
+
+// AddThresholdUsd adds f to the "threshold_usd" field.
+func (m *PoolCapacityAlertStateMutation) AddThresholdUsd(f float64) {
+	if m.addthreshold_usd != nil {
+		*m.addthreshold_usd += f
+	} else {
+		m.addthreshold_usd = &f
+	}
+}
+
+// AddedThresholdUsd returns the value that was added to the "threshold_usd" field in this mutation.
+func (m *PoolCapacityAlertStateMutation) AddedThresholdUsd() (r float64, exists bool) {
+	v := m.addthreshold_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearThresholdUsd clears the value of the "threshold_usd" field.
+func (m *PoolCapacityAlertStateMutation) ClearThresholdUsd() {
+	m.threshold_usd = nil
+	m.addthreshold_usd = nil
+	m.clearedFields[poolcapacityalertstate.FieldThresholdUsd] = struct{}{}
+}
+
+// ThresholdUsdCleared returns if the "threshold_usd" field was cleared in this mutation.
+func (m *PoolCapacityAlertStateMutation) ThresholdUsdCleared() bool {
+	_, ok := m.clearedFields[poolcapacityalertstate.FieldThresholdUsd]
+	return ok
+}
+
+// ResetThresholdUsd resets all changes to the "threshold_usd" field.
+func (m *PoolCapacityAlertStateMutation) ResetThresholdUsd() {
+	m.threshold_usd = nil
+	m.addthreshold_usd = nil
+	delete(m.clearedFields, poolcapacityalertstate.FieldThresholdUsd)
 }
 
 // SetAccountRequests sets the "account_requests" field.
@@ -43781,7 +44576,7 @@ func (m *PoolCapacityAlertStateMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PoolCapacityAlertStateMutation) Fields() []string {
-	fields := make([]string, 0, 20)
+	fields := make([]string, 0, 24)
 	if m.group_id != nil {
 		fields = append(fields, poolcapacityalertstate.FieldGroupID)
 	}
@@ -43806,8 +44601,20 @@ func (m *PoolCapacityAlertStateMutation) Fields() []string {
 	if m.episode != nil {
 		fields = append(fields, poolcapacityalertstate.FieldEpisode)
 	}
+	if m.alert_metric != nil {
+		fields = append(fields, poolcapacityalertstate.FieldAlertMetric)
+	}
 	if m.predicted_requests != nil {
 		fields = append(fields, poolcapacityalertstate.FieldPredictedRequests)
+	}
+	if m.remaining_balance_usd != nil {
+		fields = append(fields, poolcapacityalertstate.FieldRemainingBalanceUsd)
+	}
+	if m.threshold_requests != nil {
+		fields = append(fields, poolcapacityalertstate.FieldThresholdRequests)
+	}
+	if m.threshold_usd != nil {
+		fields = append(fields, poolcapacityalertstate.FieldThresholdUsd)
 	}
 	if m.account_requests != nil {
 		fields = append(fields, poolcapacityalertstate.FieldAccountRequests)
@@ -43866,8 +44673,16 @@ func (m *PoolCapacityAlertStateMutation) Field(name string) (ent.Value, bool) {
 		return m.Status()
 	case poolcapacityalertstate.FieldEpisode:
 		return m.Episode()
+	case poolcapacityalertstate.FieldAlertMetric:
+		return m.AlertMetric()
 	case poolcapacityalertstate.FieldPredictedRequests:
 		return m.PredictedRequests()
+	case poolcapacityalertstate.FieldRemainingBalanceUsd:
+		return m.RemainingBalanceUsd()
+	case poolcapacityalertstate.FieldThresholdRequests:
+		return m.ThresholdRequests()
+	case poolcapacityalertstate.FieldThresholdUsd:
+		return m.ThresholdUsd()
 	case poolcapacityalertstate.FieldAccountRequests:
 		return m.AccountRequests()
 	case poolcapacityalertstate.FieldAPIKeyRequests:
@@ -43915,8 +44730,16 @@ func (m *PoolCapacityAlertStateMutation) OldField(ctx context.Context, name stri
 		return m.OldStatus(ctx)
 	case poolcapacityalertstate.FieldEpisode:
 		return m.OldEpisode(ctx)
+	case poolcapacityalertstate.FieldAlertMetric:
+		return m.OldAlertMetric(ctx)
 	case poolcapacityalertstate.FieldPredictedRequests:
 		return m.OldPredictedRequests(ctx)
+	case poolcapacityalertstate.FieldRemainingBalanceUsd:
+		return m.OldRemainingBalanceUsd(ctx)
+	case poolcapacityalertstate.FieldThresholdRequests:
+		return m.OldThresholdRequests(ctx)
+	case poolcapacityalertstate.FieldThresholdUsd:
+		return m.OldThresholdUsd(ctx)
 	case poolcapacityalertstate.FieldAccountRequests:
 		return m.OldAccountRequests(ctx)
 	case poolcapacityalertstate.FieldAPIKeyRequests:
@@ -44004,12 +44827,40 @@ func (m *PoolCapacityAlertStateMutation) SetField(name string, value ent.Value) 
 		}
 		m.SetEpisode(v)
 		return nil
+	case poolcapacityalertstate.FieldAlertMetric:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAlertMetric(v)
+		return nil
 	case poolcapacityalertstate.FieldPredictedRequests:
 		v, ok := value.(int64)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPredictedRequests(v)
+		return nil
+	case poolcapacityalertstate.FieldRemainingBalanceUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRemainingBalanceUsd(v)
+		return nil
+	case poolcapacityalertstate.FieldThresholdRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetThresholdRequests(v)
+		return nil
+	case poolcapacityalertstate.FieldThresholdUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetThresholdUsd(v)
 		return nil
 	case poolcapacityalertstate.FieldAccountRequests:
 		v, ok := value.(int64)
@@ -44120,6 +44971,15 @@ func (m *PoolCapacityAlertStateMutation) AddedFields() []string {
 	if m.addpredicted_requests != nil {
 		fields = append(fields, poolcapacityalertstate.FieldPredictedRequests)
 	}
+	if m.addremaining_balance_usd != nil {
+		fields = append(fields, poolcapacityalertstate.FieldRemainingBalanceUsd)
+	}
+	if m.addthreshold_requests != nil {
+		fields = append(fields, poolcapacityalertstate.FieldThresholdRequests)
+	}
+	if m.addthreshold_usd != nil {
+		fields = append(fields, poolcapacityalertstate.FieldThresholdUsd)
+	}
 	if m.addaccount_requests != nil {
 		fields = append(fields, poolcapacityalertstate.FieldAccountRequests)
 	}
@@ -44162,6 +45022,12 @@ func (m *PoolCapacityAlertStateMutation) AddedField(name string) (ent.Value, boo
 		return m.AddedEpisode()
 	case poolcapacityalertstate.FieldPredictedRequests:
 		return m.AddedPredictedRequests()
+	case poolcapacityalertstate.FieldRemainingBalanceUsd:
+		return m.AddedRemainingBalanceUsd()
+	case poolcapacityalertstate.FieldThresholdRequests:
+		return m.AddedThresholdRequests()
+	case poolcapacityalertstate.FieldThresholdUsd:
+		return m.AddedThresholdUsd()
 	case poolcapacityalertstate.FieldAccountRequests:
 		return m.AddedAccountRequests()
 	case poolcapacityalertstate.FieldAPIKeyRequests:
@@ -44239,6 +45105,27 @@ func (m *PoolCapacityAlertStateMutation) AddField(name string, value ent.Value) 
 		}
 		m.AddPredictedRequests(v)
 		return nil
+	case poolcapacityalertstate.FieldRemainingBalanceUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRemainingBalanceUsd(v)
+		return nil
+	case poolcapacityalertstate.FieldThresholdRequests:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddThresholdRequests(v)
+		return nil
+	case poolcapacityalertstate.FieldThresholdUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddThresholdUsd(v)
+		return nil
 	case poolcapacityalertstate.FieldAccountRequests:
 		v, ok := value.(int64)
 		if !ok {
@@ -44292,6 +45179,12 @@ func (m *PoolCapacityAlertStateMutation) ClearedFields() []string {
 	if m.FieldCleared(poolcapacityalertstate.FieldPredictedRequests) {
 		fields = append(fields, poolcapacityalertstate.FieldPredictedRequests)
 	}
+	if m.FieldCleared(poolcapacityalertstate.FieldRemainingBalanceUsd) {
+		fields = append(fields, poolcapacityalertstate.FieldRemainingBalanceUsd)
+	}
+	if m.FieldCleared(poolcapacityalertstate.FieldThresholdUsd) {
+		fields = append(fields, poolcapacityalertstate.FieldThresholdUsd)
+	}
 	if m.FieldCleared(poolcapacityalertstate.FieldAccountRequests) {
 		fields = append(fields, poolcapacityalertstate.FieldAccountRequests)
 	}
@@ -44320,6 +45213,12 @@ func (m *PoolCapacityAlertStateMutation) ClearField(name string) error {
 	switch name {
 	case poolcapacityalertstate.FieldPredictedRequests:
 		m.ClearPredictedRequests()
+		return nil
+	case poolcapacityalertstate.FieldRemainingBalanceUsd:
+		m.ClearRemainingBalanceUsd()
+		return nil
+	case poolcapacityalertstate.FieldThresholdUsd:
+		m.ClearThresholdUsd()
 		return nil
 	case poolcapacityalertstate.FieldAccountRequests:
 		m.ClearAccountRequests()
@@ -44365,8 +45264,20 @@ func (m *PoolCapacityAlertStateMutation) ResetField(name string) error {
 	case poolcapacityalertstate.FieldEpisode:
 		m.ResetEpisode()
 		return nil
+	case poolcapacityalertstate.FieldAlertMetric:
+		m.ResetAlertMetric()
+		return nil
 	case poolcapacityalertstate.FieldPredictedRequests:
 		m.ResetPredictedRequests()
+		return nil
+	case poolcapacityalertstate.FieldRemainingBalanceUsd:
+		m.ResetRemainingBalanceUsd()
+		return nil
+	case poolcapacityalertstate.FieldThresholdRequests:
+		m.ResetThresholdRequests()
+		return nil
+	case poolcapacityalertstate.FieldThresholdUsd:
+		m.ResetThresholdUsd()
 		return nil
 	case poolcapacityalertstate.FieldAccountRequests:
 		m.ResetAccountRequests()

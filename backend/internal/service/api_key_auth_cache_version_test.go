@@ -42,12 +42,12 @@ func TestAPIKeyService_RejectsV10AuthSnapshotWithoutModelsListConfig(t *testing.
 	}
 }
 
-func TestAPIKeyService_RejectsV19AuthSnapshotWithoutPoolCapacityAlertGeneration(t *testing.T) {
+func TestAPIKeyService_RejectsV20AuthSnapshotWithoutPoolCapacityAlertPolicy(t *testing.T) {
 	svc := &APIKeyService{}
 
 	apiKey, ok, err := svc.applyAuthCacheEntry("k-legacy-pool-capacity-alert", &APIKeyAuthCacheEntry{
 		Snapshot: &APIKeyAuthSnapshot{
-			Version:  19,
+			Version:  20,
 			APIKeyID: 1,
 			UserID:   2,
 			Status:   StatusActive,
@@ -63,7 +63,7 @@ func TestAPIKeyService_RejectsV19AuthSnapshotWithoutPoolCapacityAlertGeneration(
 		t.Fatalf("expected stale snapshot to be ignored without error, got %v", err)
 	}
 	if ok {
-		t.Fatal("expected v19 auth snapshot to be rejected after pool capacity alert fields were added")
+		t.Fatal("expected v20 auth snapshot to be rejected after pool capacity alert policy fields were added")
 	}
 	if apiKey != nil {
 		t.Fatalf("expected no API key from stale snapshot, got %#v", apiKey)
@@ -71,22 +71,26 @@ func TestAPIKeyService_RejectsV19AuthSnapshotWithoutPoolCapacityAlertGeneration(
 }
 
 func TestGroupPoolCapacityAlertAuthSnapshotRoundTrip(t *testing.T) {
+	thresholdUSD := 12.5
 	group := &Group{
-		ID:                          26,
-		Name:                        "pool-alert",
-		Platform:                    PlatformAnthropic,
-		Status:                      StatusActive,
-		SubscriptionType:            SubscriptionTypeStandard,
-		RateMultiplier:              1,
-		PoolCapacityAlertEnabled:    true,
-		PoolCapacityAlertGeneration: 42,
+		ID:                                 26,
+		Name:                               "pool-alert",
+		Platform:                           PlatformAnthropic,
+		Status:                             StatusActive,
+		SubscriptionType:                   SubscriptionTypeStandard,
+		RateMultiplier:                     1,
+		PoolCapacityAlertEnabled:           true,
+		PoolCapacityAlertMetric:            PoolCapacityAlertMetricRemainingBalanceUSD,
+		PoolCapacityAlertThresholdRequests: 123,
+		PoolCapacityAlertThresholdUSD:      &thresholdUSD,
+		PoolCapacityAlertGeneration:        42,
 	}
 
 	snapshot := groupToAuthSnapshot(group)
 	if snapshot == nil {
 		t.Fatal("expected group snapshot")
 	}
-	if !snapshot.PoolCapacityAlertEnabled || snapshot.PoolCapacityAlertGeneration != 42 {
+	if !snapshot.PoolCapacityAlertEnabled || snapshot.PoolCapacityAlertMetric != PoolCapacityAlertMetricRemainingBalanceUSD || snapshot.PoolCapacityAlertThresholdRequests != 123 || snapshot.PoolCapacityAlertThresholdUSD == nil || *snapshot.PoolCapacityAlertThresholdUSD != thresholdUSD || snapshot.PoolCapacityAlertGeneration != 42 {
 		t.Fatalf("pool capacity alert fields not copied to snapshot: %#v", snapshot)
 	}
 
@@ -94,7 +98,7 @@ func TestGroupPoolCapacityAlertAuthSnapshotRoundTrip(t *testing.T) {
 	if restored == nil {
 		t.Fatal("expected restored group")
 	}
-	if !restored.PoolCapacityAlertEnabled || restored.PoolCapacityAlertGeneration != 42 {
+	if !restored.PoolCapacityAlertEnabled || restored.PoolCapacityAlertMetric != PoolCapacityAlertMetricRemainingBalanceUSD || restored.PoolCapacityAlertThresholdRequests != 123 || restored.PoolCapacityAlertThresholdUSD == nil || *restored.PoolCapacityAlertThresholdUSD != thresholdUSD || restored.PoolCapacityAlertGeneration != 42 {
 		t.Fatalf("pool capacity alert fields not restored from snapshot: %#v", restored)
 	}
 }

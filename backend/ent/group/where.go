@@ -285,6 +285,21 @@ func PoolCapacityAlertEnabled(v bool) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldPoolCapacityAlertEnabled, v))
 }
 
+// PoolCapacityAlertMetric applies equality check predicate on the "pool_capacity_alert_metric" field. It's identical to PoolCapacityAlertMetricEQ.
+func PoolCapacityAlertMetric(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldPoolCapacityAlertMetric, v))
+}
+
+// PoolCapacityAlertThresholdRequests applies equality check predicate on the "pool_capacity_alert_threshold_requests" field. It's identical to PoolCapacityAlertThresholdRequestsEQ.
+func PoolCapacityAlertThresholdRequests(v int64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldPoolCapacityAlertThresholdRequests, v))
+}
+
+// PoolCapacityAlertThresholdUsd applies equality check predicate on the "pool_capacity_alert_threshold_usd" field. It's identical to PoolCapacityAlertThresholdUsdEQ.
+func PoolCapacityAlertThresholdUsd(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldPoolCapacityAlertThresholdUsd, v))
+}
+
 // PoolCapacityAlertGeneration applies equality check predicate on the "pool_capacity_alert_generation" field. It's identical to PoolCapacityAlertGenerationEQ.
 func PoolCapacityAlertGeneration(v int64) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldPoolCapacityAlertGeneration, v))
@@ -2123,6 +2138,161 @@ func PoolCapacityAlertEnabledEQ(v bool) predicate.Group {
 // PoolCapacityAlertEnabledNEQ applies the NEQ predicate on the "pool_capacity_alert_enabled" field.
 func PoolCapacityAlertEnabledNEQ(v bool) predicate.Group {
 	return predicate.Group(sql.FieldNEQ(FieldPoolCapacityAlertEnabled, v))
+}
+
+// PoolCapacityAlertMetricEQ applies the EQ predicate on the "pool_capacity_alert_metric" field.
+func PoolCapacityAlertMetricEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldPoolCapacityAlertMetric, v))
+}
+
+// PoolCapacityAlertMetricNEQ applies the NEQ predicate on the "pool_capacity_alert_metric" field.
+func PoolCapacityAlertMetricNEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldPoolCapacityAlertMetric, v))
+}
+
+// PoolCapacityAlertMetricIn applies the In predicate on the "pool_capacity_alert_metric" field.
+func PoolCapacityAlertMetricIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldPoolCapacityAlertMetric, vs...))
+}
+
+// PoolCapacityAlertMetricNotIn applies the NotIn predicate on the "pool_capacity_alert_metric" field.
+func PoolCapacityAlertMetricNotIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldPoolCapacityAlertMetric, vs...))
+}
+
+// PoolCapacityAlertMetricGT applies the GT predicate on the "pool_capacity_alert_metric" field.
+func PoolCapacityAlertMetricGT(v string) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldPoolCapacityAlertMetric, v))
+}
+
+// PoolCapacityAlertMetricGTE applies the GTE predicate on the "pool_capacity_alert_metric" field.
+func PoolCapacityAlertMetricGTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldPoolCapacityAlertMetric, v))
+}
+
+// PoolCapacityAlertMetricLT applies the LT predicate on the "pool_capacity_alert_metric" field.
+func PoolCapacityAlertMetricLT(v string) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldPoolCapacityAlertMetric, v))
+}
+
+// PoolCapacityAlertMetricLTE applies the LTE predicate on the "pool_capacity_alert_metric" field.
+func PoolCapacityAlertMetricLTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldPoolCapacityAlertMetric, v))
+}
+
+// PoolCapacityAlertMetricContains applies the Contains predicate on the "pool_capacity_alert_metric" field.
+func PoolCapacityAlertMetricContains(v string) predicate.Group {
+	return predicate.Group(sql.FieldContains(FieldPoolCapacityAlertMetric, v))
+}
+
+// PoolCapacityAlertMetricHasPrefix applies the HasPrefix predicate on the "pool_capacity_alert_metric" field.
+func PoolCapacityAlertMetricHasPrefix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasPrefix(FieldPoolCapacityAlertMetric, v))
+}
+
+// PoolCapacityAlertMetricHasSuffix applies the HasSuffix predicate on the "pool_capacity_alert_metric" field.
+func PoolCapacityAlertMetricHasSuffix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasSuffix(FieldPoolCapacityAlertMetric, v))
+}
+
+// PoolCapacityAlertMetricEqualFold applies the EqualFold predicate on the "pool_capacity_alert_metric" field.
+func PoolCapacityAlertMetricEqualFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldEqualFold(FieldPoolCapacityAlertMetric, v))
+}
+
+// PoolCapacityAlertMetricContainsFold applies the ContainsFold predicate on the "pool_capacity_alert_metric" field.
+func PoolCapacityAlertMetricContainsFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldContainsFold(FieldPoolCapacityAlertMetric, v))
+}
+
+// PoolCapacityAlertThresholdRequestsEQ applies the EQ predicate on the "pool_capacity_alert_threshold_requests" field.
+func PoolCapacityAlertThresholdRequestsEQ(v int64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldPoolCapacityAlertThresholdRequests, v))
+}
+
+// PoolCapacityAlertThresholdRequestsNEQ applies the NEQ predicate on the "pool_capacity_alert_threshold_requests" field.
+func PoolCapacityAlertThresholdRequestsNEQ(v int64) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldPoolCapacityAlertThresholdRequests, v))
+}
+
+// PoolCapacityAlertThresholdRequestsIn applies the In predicate on the "pool_capacity_alert_threshold_requests" field.
+func PoolCapacityAlertThresholdRequestsIn(vs ...int64) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldPoolCapacityAlertThresholdRequests, vs...))
+}
+
+// PoolCapacityAlertThresholdRequestsNotIn applies the NotIn predicate on the "pool_capacity_alert_threshold_requests" field.
+func PoolCapacityAlertThresholdRequestsNotIn(vs ...int64) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldPoolCapacityAlertThresholdRequests, vs...))
+}
+
+// PoolCapacityAlertThresholdRequestsGT applies the GT predicate on the "pool_capacity_alert_threshold_requests" field.
+func PoolCapacityAlertThresholdRequestsGT(v int64) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldPoolCapacityAlertThresholdRequests, v))
+}
+
+// PoolCapacityAlertThresholdRequestsGTE applies the GTE predicate on the "pool_capacity_alert_threshold_requests" field.
+func PoolCapacityAlertThresholdRequestsGTE(v int64) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldPoolCapacityAlertThresholdRequests, v))
+}
+
+// PoolCapacityAlertThresholdRequestsLT applies the LT predicate on the "pool_capacity_alert_threshold_requests" field.
+func PoolCapacityAlertThresholdRequestsLT(v int64) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldPoolCapacityAlertThresholdRequests, v))
+}
+
+// PoolCapacityAlertThresholdRequestsLTE applies the LTE predicate on the "pool_capacity_alert_threshold_requests" field.
+func PoolCapacityAlertThresholdRequestsLTE(v int64) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldPoolCapacityAlertThresholdRequests, v))
+}
+
+// PoolCapacityAlertThresholdUsdEQ applies the EQ predicate on the "pool_capacity_alert_threshold_usd" field.
+func PoolCapacityAlertThresholdUsdEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldPoolCapacityAlertThresholdUsd, v))
+}
+
+// PoolCapacityAlertThresholdUsdNEQ applies the NEQ predicate on the "pool_capacity_alert_threshold_usd" field.
+func PoolCapacityAlertThresholdUsdNEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldPoolCapacityAlertThresholdUsd, v))
+}
+
+// PoolCapacityAlertThresholdUsdIn applies the In predicate on the "pool_capacity_alert_threshold_usd" field.
+func PoolCapacityAlertThresholdUsdIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldPoolCapacityAlertThresholdUsd, vs...))
+}
+
+// PoolCapacityAlertThresholdUsdNotIn applies the NotIn predicate on the "pool_capacity_alert_threshold_usd" field.
+func PoolCapacityAlertThresholdUsdNotIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldPoolCapacityAlertThresholdUsd, vs...))
+}
+
+// PoolCapacityAlertThresholdUsdGT applies the GT predicate on the "pool_capacity_alert_threshold_usd" field.
+func PoolCapacityAlertThresholdUsdGT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldPoolCapacityAlertThresholdUsd, v))
+}
+
+// PoolCapacityAlertThresholdUsdGTE applies the GTE predicate on the "pool_capacity_alert_threshold_usd" field.
+func PoolCapacityAlertThresholdUsdGTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldPoolCapacityAlertThresholdUsd, v))
+}
+
+// PoolCapacityAlertThresholdUsdLT applies the LT predicate on the "pool_capacity_alert_threshold_usd" field.
+func PoolCapacityAlertThresholdUsdLT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldPoolCapacityAlertThresholdUsd, v))
+}
+
+// PoolCapacityAlertThresholdUsdLTE applies the LTE predicate on the "pool_capacity_alert_threshold_usd" field.
+func PoolCapacityAlertThresholdUsdLTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldPoolCapacityAlertThresholdUsd, v))
+}
+
+// PoolCapacityAlertThresholdUsdIsNil applies the IsNil predicate on the "pool_capacity_alert_threshold_usd" field.
+func PoolCapacityAlertThresholdUsdIsNil() predicate.Group {
+	return predicate.Group(sql.FieldIsNull(FieldPoolCapacityAlertThresholdUsd))
+}
+
+// PoolCapacityAlertThresholdUsdNotNil applies the NotNil predicate on the "pool_capacity_alert_threshold_usd" field.
+func PoolCapacityAlertThresholdUsdNotNil() predicate.Group {
+	return predicate.Group(sql.FieldNotNull(FieldPoolCapacityAlertThresholdUsd))
 }
 
 // PoolCapacityAlertGenerationEQ applies the EQ predicate on the "pool_capacity_alert_generation" field.

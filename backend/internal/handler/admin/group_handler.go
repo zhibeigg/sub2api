@@ -76,6 +76,33 @@ func (f optionalLimitField) ToServiceInput() *float64 {
 	return &unlimited
 }
 
+type optionalNullableFloatField struct {
+	set   bool
+	value *float64
+}
+
+func (f *optionalNullableFloatField) UnmarshalJSON(data []byte) error {
+	f.set = true
+	trimmed := bytes.TrimSpace(data)
+	if bytes.Equal(trimmed, []byte("null")) {
+		f.value = nil
+		return nil
+	}
+	var number float64
+	if err := json.Unmarshal(trimmed, &number); err != nil {
+		return fmt.Errorf("invalid nullable numeric value: %w", err)
+	}
+	f.value = &number
+	return nil
+}
+
+func (f optionalNullableFloatField) ToServicePatch() **float64 {
+	if !f.set {
+		return nil
+	}
+	return &f.value
+}
+
 // NewGroupHandler creates a new admin group handler
 func NewGroupHandler(adminService service.AdminService, dashboardService *service.DashboardService, groupCapacityService *service.GroupCapacityService) *GroupHandler {
 	return &GroupHandler{
@@ -135,8 +162,11 @@ type CreateGroupRequest struct {
 	ModelsListConfig            service.GroupModelsListConfig             `json:"models_list_config"`
 	// 分组 RPM 上限（0 = 不限制）
 	RPMLimit int `json:"rpm_limit"`
-	// 是否启用分组池容量告警；未提供时默认 false
-	PoolCapacityAlertEnabled bool `json:"pool_capacity_alert_enabled"`
+	// 分组池容量告警策略；新字段缺省时使用 predicted_requests + 50 + null。
+	PoolCapacityAlertEnabled           bool     `json:"pool_capacity_alert_enabled"`
+	PoolCapacityAlertMetric            *string  `json:"pool_capacity_alert_metric"`
+	PoolCapacityAlertThresholdRequests *int64   `json:"pool_capacity_alert_threshold_requests"`
+	PoolCapacityAlertThresholdUSD      *float64 `json:"pool_capacity_alert_threshold_usd"`
 	// 从指定分组复制账号（创建后自动绑定）
 	CopyAccountsFromGroupIDs []int64 `json:"copy_accounts_from_group_ids"`
 }
@@ -192,8 +222,11 @@ type UpdateGroupRequest struct {
 	ModelsListConfig            *service.GroupModelsListConfig             `json:"models_list_config"`
 	// 分组 RPM 上限（0 = 不限制）；nil 表示未提供不改动
 	RPMLimit *int `json:"rpm_limit"`
-	// nil 表示未提供不改动；显式改变开关会递增内部 generation
-	PoolCapacityAlertEnabled *bool `json:"pool_capacity_alert_enabled"`
+	// 分组池容量告警策略字段均为 patch；USD 字段支持显式 null 清空。
+	PoolCapacityAlertEnabled           *bool                      `json:"pool_capacity_alert_enabled"`
+	PoolCapacityAlertMetric            *string                    `json:"pool_capacity_alert_metric"`
+	PoolCapacityAlertThresholdRequests *int64                     `json:"pool_capacity_alert_threshold_requests"`
+	PoolCapacityAlertThresholdUSD      optionalNullableFloatField `json:"pool_capacity_alert_threshold_usd"`
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64 `json:"copy_accounts_from_group_ids"`
 }
@@ -326,51 +359,54 @@ func (h *GroupHandler) Create(c *gin.Context) {
 	}
 
 	group, err := h.adminService.CreateGroup(c.Request.Context(), &service.CreateGroupInput{
-		Name:                            req.Name,
-		Description:                     req.Description,
-		Platform:                        req.Platform,
-		RateMultiplier:                  req.RateMultiplier,
-		ModelRateMultipliers:            req.ModelRateMultipliers,
-		IsExclusive:                     req.IsExclusive,
-		SubscriptionType:                req.SubscriptionType,
-		DailyLimitUSD:                   req.DailyLimitUSD.ToServiceInput(),
-		WeeklyLimitUSD:                  req.WeeklyLimitUSD.ToServiceInput(),
-		MonthlyLimitUSD:                 req.MonthlyLimitUSD.ToServiceInput(),
-		AllowImageGeneration:            req.AllowImageGeneration,
-		AllowBatchImageGeneration:       req.AllowBatchImageGeneration,
-		ImageRateIndependent:            req.ImageRateIndependent,
-		ImageRateMultiplier:             req.ImageRateMultiplier,
-		BatchImageDiscountMultiplier:    req.BatchImageDiscountMultiplier,
-		BatchImageHoldMultiplier:        req.BatchImageHoldMultiplier,
-		VideoRateIndependent:            req.VideoRateIndependent,
-		VideoRateMultiplier:             req.VideoRateMultiplier,
-		PeakRateEnabled:                 req.PeakRateEnabled,
-		PeakStart:                       req.PeakStart,
-		PeakEnd:                         req.PeakEnd,
-		PeakRateMultiplier:              req.PeakRateMultiplier,
-		ImagePrice1K:                    req.ImagePrice1K,
-		ImagePrice2K:                    req.ImagePrice2K,
-		ImagePrice4K:                    req.ImagePrice4K,
-		VideoPrice480P:                  req.VideoPrice480P,
-		VideoPrice720P:                  req.VideoPrice720P,
-		VideoPrice1080P:                 req.VideoPrice1080P,
-		WebSearchPricePerCall:           req.WebSearchPricePerCall,
-		ClaudeCodeOnly:                  req.ClaudeCodeOnly,
-		FallbackGroupID:                 req.FallbackGroupID,
-		FallbackGroupIDOnInvalidRequest: req.FallbackGroupIDOnInvalidRequest,
-		ModelRouting:                    req.ModelRouting,
-		ModelRoutingEnabled:             req.ModelRoutingEnabled,
-		MCPXMLInject:                    req.MCPXMLInject,
-		SupportedModelScopes:            req.SupportedModelScopes,
-		AllowMessagesDispatch:           req.AllowMessagesDispatch,
-		RequireOAuthOnly:                req.RequireOAuthOnly,
-		RequirePrivacySet:               req.RequirePrivacySet,
-		DefaultMappedModel:              req.DefaultMappedModel,
-		MessagesDispatchModelConfig:     req.MessagesDispatchModelConfig,
-		ModelsListConfig:                req.ModelsListConfig,
-		RPMLimit:                        req.RPMLimit,
-		PoolCapacityAlertEnabled:        req.PoolCapacityAlertEnabled,
-		CopyAccountsFromGroupIDs:        req.CopyAccountsFromGroupIDs,
+		Name:                               req.Name,
+		Description:                        req.Description,
+		Platform:                           req.Platform,
+		RateMultiplier:                     req.RateMultiplier,
+		ModelRateMultipliers:               req.ModelRateMultipliers,
+		IsExclusive:                        req.IsExclusive,
+		SubscriptionType:                   req.SubscriptionType,
+		DailyLimitUSD:                      req.DailyLimitUSD.ToServiceInput(),
+		WeeklyLimitUSD:                     req.WeeklyLimitUSD.ToServiceInput(),
+		MonthlyLimitUSD:                    req.MonthlyLimitUSD.ToServiceInput(),
+		AllowImageGeneration:               req.AllowImageGeneration,
+		AllowBatchImageGeneration:          req.AllowBatchImageGeneration,
+		ImageRateIndependent:               req.ImageRateIndependent,
+		ImageRateMultiplier:                req.ImageRateMultiplier,
+		BatchImageDiscountMultiplier:       req.BatchImageDiscountMultiplier,
+		BatchImageHoldMultiplier:           req.BatchImageHoldMultiplier,
+		VideoRateIndependent:               req.VideoRateIndependent,
+		VideoRateMultiplier:                req.VideoRateMultiplier,
+		PeakRateEnabled:                    req.PeakRateEnabled,
+		PeakStart:                          req.PeakStart,
+		PeakEnd:                            req.PeakEnd,
+		PeakRateMultiplier:                 req.PeakRateMultiplier,
+		ImagePrice1K:                       req.ImagePrice1K,
+		ImagePrice2K:                       req.ImagePrice2K,
+		ImagePrice4K:                       req.ImagePrice4K,
+		VideoPrice480P:                     req.VideoPrice480P,
+		VideoPrice720P:                     req.VideoPrice720P,
+		VideoPrice1080P:                    req.VideoPrice1080P,
+		WebSearchPricePerCall:              req.WebSearchPricePerCall,
+		ClaudeCodeOnly:                     req.ClaudeCodeOnly,
+		FallbackGroupID:                    req.FallbackGroupID,
+		FallbackGroupIDOnInvalidRequest:    req.FallbackGroupIDOnInvalidRequest,
+		ModelRouting:                       req.ModelRouting,
+		ModelRoutingEnabled:                req.ModelRoutingEnabled,
+		MCPXMLInject:                       req.MCPXMLInject,
+		SupportedModelScopes:               req.SupportedModelScopes,
+		AllowMessagesDispatch:              req.AllowMessagesDispatch,
+		RequireOAuthOnly:                   req.RequireOAuthOnly,
+		RequirePrivacySet:                  req.RequirePrivacySet,
+		DefaultMappedModel:                 req.DefaultMappedModel,
+		MessagesDispatchModelConfig:        req.MessagesDispatchModelConfig,
+		ModelsListConfig:                   req.ModelsListConfig,
+		RPMLimit:                           req.RPMLimit,
+		PoolCapacityAlertEnabled:           req.PoolCapacityAlertEnabled,
+		PoolCapacityAlertMetric:            req.PoolCapacityAlertMetric,
+		PoolCapacityAlertThresholdRequests: req.PoolCapacityAlertThresholdRequests,
+		PoolCapacityAlertThresholdUSD:      req.PoolCapacityAlertThresholdUSD,
+		CopyAccountsFromGroupIDs:           req.CopyAccountsFromGroupIDs,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -450,52 +486,55 @@ func (h *GroupHandler) Update(c *gin.Context) {
 	}
 
 	group, err := h.adminService.UpdateGroup(c.Request.Context(), groupID, &service.UpdateGroupInput{
-		Name:                            req.Name,
-		Description:                     req.Description,
-		Platform:                        req.Platform,
-		RateMultiplier:                  req.RateMultiplier,
-		ModelRateMultipliers:            req.ModelRateMultipliers,
-		IsExclusive:                     req.IsExclusive,
-		Status:                          req.Status,
-		SubscriptionType:                req.SubscriptionType,
-		DailyLimitUSD:                   req.DailyLimitUSD.ToServiceInput(),
-		WeeklyLimitUSD:                  req.WeeklyLimitUSD.ToServiceInput(),
-		MonthlyLimitUSD:                 req.MonthlyLimitUSD.ToServiceInput(),
-		AllowImageGeneration:            req.AllowImageGeneration,
-		AllowBatchImageGeneration:       req.AllowBatchImageGeneration,
-		ImageRateIndependent:            req.ImageRateIndependent,
-		ImageRateMultiplier:             req.ImageRateMultiplier,
-		BatchImageDiscountMultiplier:    req.BatchImageDiscountMultiplier,
-		BatchImageHoldMultiplier:        req.BatchImageHoldMultiplier,
-		VideoRateIndependent:            req.VideoRateIndependent,
-		VideoRateMultiplier:             req.VideoRateMultiplier,
-		PeakRateEnabled:                 req.PeakRateEnabled,
-		PeakStart:                       req.PeakStart,
-		PeakEnd:                         req.PeakEnd,
-		PeakRateMultiplier:              req.PeakRateMultiplier,
-		ImagePrice1K:                    req.ImagePrice1K,
-		ImagePrice2K:                    req.ImagePrice2K,
-		ImagePrice4K:                    req.ImagePrice4K,
-		VideoPrice480P:                  req.VideoPrice480P,
-		VideoPrice720P:                  req.VideoPrice720P,
-		VideoPrice1080P:                 req.VideoPrice1080P,
-		WebSearchPricePerCall:           req.WebSearchPricePerCall,
-		ClaudeCodeOnly:                  req.ClaudeCodeOnly,
-		FallbackGroupID:                 req.FallbackGroupID,
-		FallbackGroupIDOnInvalidRequest: req.FallbackGroupIDOnInvalidRequest,
-		ModelRouting:                    req.ModelRouting,
-		ModelRoutingEnabled:             req.ModelRoutingEnabled,
-		MCPXMLInject:                    req.MCPXMLInject,
-		SupportedModelScopes:            req.SupportedModelScopes,
-		AllowMessagesDispatch:           req.AllowMessagesDispatch,
-		RequireOAuthOnly:                req.RequireOAuthOnly,
-		RequirePrivacySet:               req.RequirePrivacySet,
-		DefaultMappedModel:              req.DefaultMappedModel,
-		MessagesDispatchModelConfig:     req.MessagesDispatchModelConfig,
-		ModelsListConfig:                req.ModelsListConfig,
-		RPMLimit:                        req.RPMLimit,
-		PoolCapacityAlertEnabled:        req.PoolCapacityAlertEnabled,
-		CopyAccountsFromGroupIDs:        req.CopyAccountsFromGroupIDs,
+		Name:                               req.Name,
+		Description:                        req.Description,
+		Platform:                           req.Platform,
+		RateMultiplier:                     req.RateMultiplier,
+		ModelRateMultipliers:               req.ModelRateMultipliers,
+		IsExclusive:                        req.IsExclusive,
+		Status:                             req.Status,
+		SubscriptionType:                   req.SubscriptionType,
+		DailyLimitUSD:                      req.DailyLimitUSD.ToServiceInput(),
+		WeeklyLimitUSD:                     req.WeeklyLimitUSD.ToServiceInput(),
+		MonthlyLimitUSD:                    req.MonthlyLimitUSD.ToServiceInput(),
+		AllowImageGeneration:               req.AllowImageGeneration,
+		AllowBatchImageGeneration:          req.AllowBatchImageGeneration,
+		ImageRateIndependent:               req.ImageRateIndependent,
+		ImageRateMultiplier:                req.ImageRateMultiplier,
+		BatchImageDiscountMultiplier:       req.BatchImageDiscountMultiplier,
+		BatchImageHoldMultiplier:           req.BatchImageHoldMultiplier,
+		VideoRateIndependent:               req.VideoRateIndependent,
+		VideoRateMultiplier:                req.VideoRateMultiplier,
+		PeakRateEnabled:                    req.PeakRateEnabled,
+		PeakStart:                          req.PeakStart,
+		PeakEnd:                            req.PeakEnd,
+		PeakRateMultiplier:                 req.PeakRateMultiplier,
+		ImagePrice1K:                       req.ImagePrice1K,
+		ImagePrice2K:                       req.ImagePrice2K,
+		ImagePrice4K:                       req.ImagePrice4K,
+		VideoPrice480P:                     req.VideoPrice480P,
+		VideoPrice720P:                     req.VideoPrice720P,
+		VideoPrice1080P:                    req.VideoPrice1080P,
+		WebSearchPricePerCall:              req.WebSearchPricePerCall,
+		ClaudeCodeOnly:                     req.ClaudeCodeOnly,
+		FallbackGroupID:                    req.FallbackGroupID,
+		FallbackGroupIDOnInvalidRequest:    req.FallbackGroupIDOnInvalidRequest,
+		ModelRouting:                       req.ModelRouting,
+		ModelRoutingEnabled:                req.ModelRoutingEnabled,
+		MCPXMLInject:                       req.MCPXMLInject,
+		SupportedModelScopes:               req.SupportedModelScopes,
+		AllowMessagesDispatch:              req.AllowMessagesDispatch,
+		RequireOAuthOnly:                   req.RequireOAuthOnly,
+		RequirePrivacySet:                  req.RequirePrivacySet,
+		DefaultMappedModel:                 req.DefaultMappedModel,
+		MessagesDispatchModelConfig:        req.MessagesDispatchModelConfig,
+		ModelsListConfig:                   req.ModelsListConfig,
+		RPMLimit:                           req.RPMLimit,
+		PoolCapacityAlertEnabled:           req.PoolCapacityAlertEnabled,
+		PoolCapacityAlertMetric:            req.PoolCapacityAlertMetric,
+		PoolCapacityAlertThresholdRequests: req.PoolCapacityAlertThresholdRequests,
+		PoolCapacityAlertThresholdUSD:      req.PoolCapacityAlertThresholdUSD.ToServicePatch(),
+		CopyAccountsFromGroupIDs:           req.CopyAccountsFromGroupIDs,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)

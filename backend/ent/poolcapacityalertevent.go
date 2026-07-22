@@ -41,10 +41,16 @@ type PoolCapacityAlertEvent struct {
 	APIKeyName string `json:"api_key_name,omitempty"`
 	// UserEmail holds the value of the "user_email" field.
 	UserEmail string `json:"user_email,omitempty"`
+	// AlertMetric holds the value of the "alert_metric" field.
+	AlertMetric string `json:"alert_metric,omitempty"`
 	// PredictedRequests holds the value of the "predicted_requests" field.
-	PredictedRequests int64 `json:"predicted_requests,omitempty"`
+	PredictedRequests *int64 `json:"predicted_requests,omitempty"`
+	// RemainingBalanceUsd holds the value of the "remaining_balance_usd" field.
+	RemainingBalanceUsd *float64 `json:"remaining_balance_usd,omitempty"`
 	// ThresholdRequests holds the value of the "threshold_requests" field.
-	ThresholdRequests int64 `json:"threshold_requests,omitempty"`
+	ThresholdRequests *int64 `json:"threshold_requests,omitempty"`
+	// ThresholdUsd holds the value of the "threshold_usd" field.
+	ThresholdUsd *float64 `json:"threshold_usd,omitempty"`
 	// AccountRequests holds the value of the "account_requests" field.
 	AccountRequests *int64 `json:"account_requests,omitempty"`
 	// APIKeyRequests holds the value of the "api_key_requests" field.
@@ -77,11 +83,11 @@ func (*PoolCapacityAlertEvent) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case poolcapacityalertevent.FieldAvgAccountCost, poolcapacityalertevent.FieldAvgActualCost, poolcapacityalertevent.FieldAccountRemaining, poolcapacityalertevent.FieldAPIKeyRemaining, poolcapacityalertevent.FieldWalletRemaining:
+		case poolcapacityalertevent.FieldRemainingBalanceUsd, poolcapacityalertevent.FieldThresholdUsd, poolcapacityalertevent.FieldAvgAccountCost, poolcapacityalertevent.FieldAvgActualCost, poolcapacityalertevent.FieldAccountRemaining, poolcapacityalertevent.FieldAPIKeyRemaining, poolcapacityalertevent.FieldWalletRemaining:
 			values[i] = new(sql.NullFloat64)
 		case poolcapacityalertevent.FieldID, poolcapacityalertevent.FieldStateID, poolcapacityalertevent.FieldEpisode, poolcapacityalertevent.FieldGroupID, poolcapacityalertevent.FieldGroupGeneration, poolcapacityalertevent.FieldAccountID, poolcapacityalertevent.FieldAPIKeyID, poolcapacityalertevent.FieldUserID, poolcapacityalertevent.FieldBillingType, poolcapacityalertevent.FieldPredictedRequests, poolcapacityalertevent.FieldThresholdRequests, poolcapacityalertevent.FieldAccountRequests, poolcapacityalertevent.FieldAPIKeyRequests, poolcapacityalertevent.FieldWalletRequests, poolcapacityalertevent.FieldSampleCount:
 			values[i] = new(sql.NullInt64)
-		case poolcapacityalertevent.FieldGroupName, poolcapacityalertevent.FieldAccountName, poolcapacityalertevent.FieldAPIKeyName, poolcapacityalertevent.FieldUserEmail, poolcapacityalertevent.FieldBottleneck, poolcapacityalertevent.FieldQqbotAppID:
+		case poolcapacityalertevent.FieldGroupName, poolcapacityalertevent.FieldAccountName, poolcapacityalertevent.FieldAPIKeyName, poolcapacityalertevent.FieldUserEmail, poolcapacityalertevent.FieldAlertMetric, poolcapacityalertevent.FieldBottleneck, poolcapacityalertevent.FieldQqbotAppID:
 			values[i] = new(sql.NullString)
 		case poolcapacityalertevent.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
@@ -178,17 +184,39 @@ func (_m *PoolCapacityAlertEvent) assignValues(columns []string, values []any) e
 			} else if value.Valid {
 				_m.UserEmail = value.String
 			}
+		case poolcapacityalertevent.FieldAlertMetric:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field alert_metric", values[i])
+			} else if value.Valid {
+				_m.AlertMetric = value.String
+			}
 		case poolcapacityalertevent.FieldPredictedRequests:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field predicted_requests", values[i])
 			} else if value.Valid {
-				_m.PredictedRequests = value.Int64
+				_m.PredictedRequests = new(int64)
+				*_m.PredictedRequests = value.Int64
+			}
+		case poolcapacityalertevent.FieldRemainingBalanceUsd:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field remaining_balance_usd", values[i])
+			} else if value.Valid {
+				_m.RemainingBalanceUsd = new(float64)
+				*_m.RemainingBalanceUsd = value.Float64
 			}
 		case poolcapacityalertevent.FieldThresholdRequests:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field threshold_requests", values[i])
 			} else if value.Valid {
-				_m.ThresholdRequests = value.Int64
+				_m.ThresholdRequests = new(int64)
+				*_m.ThresholdRequests = value.Int64
+			}
+		case poolcapacityalertevent.FieldThresholdUsd:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field threshold_usd", values[i])
+			} else if value.Valid {
+				_m.ThresholdUsd = new(float64)
+				*_m.ThresholdUsd = value.Float64
 			}
 		case poolcapacityalertevent.FieldAccountRequests:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -340,11 +368,28 @@ func (_m *PoolCapacityAlertEvent) String() string {
 	builder.WriteString("user_email=")
 	builder.WriteString(_m.UserEmail)
 	builder.WriteString(", ")
-	builder.WriteString("predicted_requests=")
-	builder.WriteString(fmt.Sprintf("%v", _m.PredictedRequests))
+	builder.WriteString("alert_metric=")
+	builder.WriteString(_m.AlertMetric)
 	builder.WriteString(", ")
-	builder.WriteString("threshold_requests=")
-	builder.WriteString(fmt.Sprintf("%v", _m.ThresholdRequests))
+	if v := _m.PredictedRequests; v != nil {
+		builder.WriteString("predicted_requests=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.RemainingBalanceUsd; v != nil {
+		builder.WriteString("remaining_balance_usd=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.ThresholdRequests; v != nil {
+		builder.WriteString("threshold_requests=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.ThresholdUsd; v != nil {
+		builder.WriteString("threshold_usd=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	if v := _m.AccountRequests; v != nil {
 		builder.WriteString("account_requests=")

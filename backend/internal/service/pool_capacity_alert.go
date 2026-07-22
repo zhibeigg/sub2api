@@ -18,7 +18,7 @@ import (
 
 const (
 	PoolCapacityAlertSampleSize        = 50
-	PoolCapacityAlertThresholdRequests = int64(50)
+	PoolCapacityAlertThresholdRequests = DefaultPoolCapacityAlertThresholdRequests
 
 	PoolCapacityAlertStatusHealthy = "healthy"
 	PoolCapacityAlertStatusLow     = "low"
@@ -61,7 +61,11 @@ type PoolCapacityEvaluation struct {
 	AccountName         string
 	APIKeyName          string
 	UserEmail           string
+	AlertMetric         string
 	PredictedRequests   *int64
+	RemainingBalanceUSD *float64
+	ThresholdRequests   *int64
+	ThresholdUSD        *float64
 	AccountRequests     *int64
 	APIKeyRequests      *int64
 	WalletRequests      *int64
@@ -73,39 +77,41 @@ type PoolCapacityEvaluation struct {
 	SampleCount         int
 	Bottleneck          string
 	QQBotAppID          string
-	ThresholdRequests   int64
 	ReminderCooldown    time.Duration
 	DeliveryMaxAttempts int
 }
 
 type PoolCapacityAlertEvent struct {
-	ID                 int64
-	StateID            int64
-	Episode            int64
-	GroupID            int64
-	GroupGeneration    int64
-	AccountID          int64
-	APIKeyID           int64
-	UserID             int64
-	BillingType        int8
-	GroupName          string
-	AccountName        string
-	APIKeyName         string
-	UserEmail          string
-	PredictedRequests  int64
-	ThresholdRequests  int64
-	AccountRequests    *int64
-	APIKeyRequests     *int64
-	WalletRequests     *int64
-	AverageAccountCost float64
-	AverageActualCost  float64
-	AccountRemaining   *float64
-	APIKeyRemaining    *float64
-	WalletRemaining    *float64
-	SampleCount        int
-	Bottleneck         string
-	QQBotAppID         string
-	CreatedAt          time.Time
+	ID                  int64
+	StateID             int64
+	Episode             int64
+	GroupID             int64
+	GroupGeneration     int64
+	AccountID           int64
+	APIKeyID            int64
+	UserID              int64
+	BillingType         int8
+	GroupName           string
+	AccountName         string
+	APIKeyName          string
+	UserEmail           string
+	AlertMetric         string
+	PredictedRequests   *int64
+	RemainingBalanceUSD *float64
+	ThresholdRequests   *int64
+	ThresholdUSD        *float64
+	AccountRequests     *int64
+	APIKeyRequests      *int64
+	WalletRequests      *int64
+	AverageAccountCost  float64
+	AverageActualCost   float64
+	AccountRemaining    *float64
+	APIKeyRemaining     *float64
+	WalletRemaining     *float64
+	SampleCount         int
+	Bottleneck          string
+	QQBotAppID          string
+	CreatedAt           time.Time
 }
 
 type PoolCapacityAlertDelivery struct {
@@ -412,22 +418,10 @@ func (s *PoolCapacityAlertService) evaluate(ctx context.Context, task poolCapaci
 	if err != nil {
 		return err
 	}
-	if !account.IsPoolMode() {
+	if !account.IsPoolMode() || s.capacityReader == nil {
 		return nil
 	}
 
-	history, err := s.usageReader.GetRecentPoolCapacityCostSummary(ctx, task.GroupID, task.RequestID, task.APIKeyID, PoolCapacityAlertSampleSize-1)
-	if err != nil {
-		return err
-	}
-	avgAccount, avgActual, ready := averagePoolCapacityCosts(history, task.CurrentAccountCost, task.CurrentActualCost)
-	if !ready {
-		return nil
-	}
-
-	if s.capacityReader == nil {
-		return nil
-	}
 	upstreamCapacity, capacityErr := s.capacityReader.GetPoolBalance(ctx, account, false)
 	if capacityErr != nil {
 		if errors.Is(capacityErr, context.Canceled) || errors.Is(capacityErr, context.DeadlineExceeded) {
@@ -435,31 +429,10 @@ func (s *PoolCapacityAlertService) evaluate(ctx context.Context, task poolCapaci
 		}
 		return nil
 	}
-	upstreamRequests, upstreamRemaining, upstreamKnown := calculatePoolUpstreamCapacity(upstreamCapacity, avgAccount)
-	if !upstreamKnown {
-		return nil
-	}
-	localRequests, localRemaining, localKnown := calculatePoolAccountCapacity(account, task.AccountQuotaState, avgAccount)
-	if account.HasAnyQuotaLimit() && !localKnown {
-		return nil
-	}
-	accountRequests, accountRemaining := minimumAccountCapacity(upstreamRequests, upstreamRemaining, localRequests, localRemaining)
-	apiKeyRequests, apiKeyRemaining, apiKeyKnown := calculatePoolAPIKeyCapacity(task, avgActual)
-	if task.APIKeyQuota > 0 && !apiKeyKnown {
-		return nil
-	}
-	walletRequests, walletRemaining, walletKnown := s.calculatePoolWalletCapacity(task, avgActual)
-	if !task.IsSubscriptionBill && !walletKnown {
-		return nil
-	}
 
-	predicted, bottleneck := minimumFiniteCapacity(accountRequests, apiKeyRequests, walletRequests)
-	qqBotAppID := ""
-	if s.qqNotifier != nil {
-		if appID, ok := s.qqNotifier.ActiveQQBotAppID(); ok {
-			qqBotAppID = strings.TrimSpace(appID)
-		}
-	}
+	policy := group.PoolCapacityAlertPolicy()
+	metric := policy.Metric
+	thresholdRequests := policy.ThresholdRequests
 	evaluation := PoolCapacityEvaluation{
 		GroupID:             task.GroupID,
 		GroupGeneration:     task.GroupGeneration,
@@ -471,24 +444,102 @@ func (s *PoolCapacityAlertService) evaluate(ctx context.Context, task poolCapaci
 		AccountName:         firstNonEmpty(account.Name, task.AccountName),
 		APIKeyName:          task.APIKeyName,
 		UserEmail:           task.UserEmail,
-		PredictedRequests:   predicted,
-		AccountRequests:     accountRequests,
-		APIKeyRequests:      apiKeyRequests,
-		WalletRequests:      walletRequests,
-		AverageAccountCost:  avgAccount.InexactFloat64(),
-		AverageActualCost:   avgActual.InexactFloat64(),
-		AccountRemaining:    accountRemaining,
-		APIKeyRemaining:     apiKeyRemaining,
-		WalletRemaining:     walletRemaining,
-		SampleCount:         PoolCapacityAlertSampleSize,
-		Bottleneck:          bottleneck,
-		QQBotAppID:          qqBotAppID,
-		ThresholdRequests:   PoolCapacityAlertThresholdRequests,
+		AlertMetric:         metric,
+		ThresholdRequests:   &thresholdRequests,
+		ThresholdUSD:        cloneFloat64Ptr(policy.ThresholdUSD),
+		QQBotAppID:          s.activeQQBotAppID(),
 		ReminderCooldown:    s.reminderCooldown(),
 		DeliveryMaxAttempts: s.deliveryMaxAttempts(),
 	}
+
+	switch metric {
+	case PoolCapacityAlertMetricRemainingBalanceUSD:
+		if policy.ThresholdUSD == nil {
+			return nil
+		}
+		upstreamRemaining, upstreamKnown := calculatePoolUpstreamBalanceUSD(upstreamCapacity)
+		if !upstreamKnown {
+			return nil
+		}
+		localRemaining, localKnown := calculatePoolAccountRemainingUSD(account, task.AccountQuotaState)
+		if account.HasAnyQuotaLimit() && !localKnown {
+			return nil
+		}
+		accountRemaining := minimumFiniteAmountValue(upstreamRemaining, localRemaining)
+		apiKeyRemaining, apiKeyKnown := calculatePoolAPIKeyRemainingUSD(task)
+		if task.APIKeyQuota > 0 && !apiKeyKnown {
+			return nil
+		}
+		walletRemaining, walletKnown := s.calculatePoolWalletRemainingUSD(task)
+		if !task.IsSubscriptionBill && !walletKnown {
+			return nil
+		}
+		remaining, bottleneck := minimumFiniteAmount(accountRemaining, apiKeyRemaining, walletRemaining)
+		evaluation.RemainingBalanceUSD = remaining
+		evaluation.AccountRemaining = accountRemaining
+		evaluation.APIKeyRemaining = apiKeyRemaining
+		evaluation.WalletRemaining = walletRemaining
+		evaluation.Bottleneck = bottleneck
+
+	case PoolCapacityAlertMetricPredictedRequests:
+		if s.usageReader == nil {
+			return nil
+		}
+		history, historyErr := s.usageReader.GetRecentPoolCapacityCostSummary(ctx, task.GroupID, task.RequestID, task.APIKeyID, PoolCapacityAlertSampleSize-1)
+		if historyErr != nil {
+			return historyErr
+		}
+		avgAccount, avgActual, ready := averagePoolCapacityCosts(history, task.CurrentAccountCost, task.CurrentActualCost)
+		if !ready {
+			return nil
+		}
+		upstreamRequests, upstreamRemaining, upstreamKnown := calculatePoolUpstreamCapacity(upstreamCapacity, avgAccount)
+		if !upstreamKnown {
+			return nil
+		}
+		localRequests, localRemaining, localKnown := calculatePoolAccountCapacity(account, task.AccountQuotaState, avgAccount)
+		if account.HasAnyQuotaLimit() && !localKnown {
+			return nil
+		}
+		accountRequests, accountRemaining := minimumAccountCapacity(upstreamRequests, upstreamRemaining, localRequests, localRemaining)
+		apiKeyRequests, apiKeyRemaining, apiKeyKnown := calculatePoolAPIKeyCapacity(task, avgActual)
+		if task.APIKeyQuota > 0 && !apiKeyKnown {
+			return nil
+		}
+		walletRequests, walletRemaining, walletKnown := s.calculatePoolWalletCapacity(task, avgActual)
+		if !task.IsSubscriptionBill && !walletKnown {
+			return nil
+		}
+		predicted, bottleneck := minimumFiniteCapacity(accountRequests, apiKeyRequests, walletRequests)
+		evaluation.PredictedRequests = predicted
+		evaluation.AccountRequests = accountRequests
+		evaluation.APIKeyRequests = apiKeyRequests
+		evaluation.WalletRequests = walletRequests
+		evaluation.AverageAccountCost = avgAccount.InexactFloat64()
+		evaluation.AverageActualCost = avgActual.InexactFloat64()
+		evaluation.AccountRemaining = accountRemaining
+		evaluation.APIKeyRemaining = apiKeyRemaining
+		evaluation.WalletRemaining = walletRemaining
+		evaluation.SampleCount = PoolCapacityAlertSampleSize
+		evaluation.Bottleneck = bottleneck
+
+	default:
+		return nil
+	}
+
 	_, err = s.repo.EvaluateAndMaybeCreateEvent(ctx, evaluation, time.Now().UTC())
 	return err
+}
+
+func (s *PoolCapacityAlertService) activeQQBotAppID() string {
+	if s.qqNotifier == nil {
+		return ""
+	}
+	appID, ok := s.qqNotifier.ActiveQQBotAppID()
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(appID)
 }
 
 func averagePoolCapacityCosts(history *PoolCapacityCostSummary, currentAccountCost, currentActualCost float64) (decimal.Decimal, decimal.Decimal, bool) {
@@ -530,6 +581,24 @@ func calculatePoolUpstreamCapacity(snapshot *AccountCapacitySnapshot, average de
 	}
 }
 
+func calculatePoolUpstreamBalanceUSD(snapshot *AccountCapacitySnapshot) (*float64, bool) {
+	if snapshot == nil || snapshot.Mode != AccountCapacityModeUpstreamBalance || !snapshot.Authoritative {
+		return nil, false
+	}
+	if snapshot.State == AccountCapacityStateUnlimited {
+		return nil, true
+	}
+	if snapshot.State != AccountCapacityStateVerified || snapshot.Remaining == nil || *snapshot.Remaining < 0 || math.IsNaN(*snapshot.Remaining) || math.IsInf(*snapshot.Remaining, 0) {
+		return nil, false
+	}
+	switch strings.ToLower(strings.TrimSpace(snapshot.Unit)) {
+	case "usd", "$":
+		return cloneFloat64Ptr(snapshot.Remaining), true
+	default:
+		return nil, false
+	}
+}
+
 func minimumAccountCapacity(upstreamRequests *int64, upstreamRemaining *float64, localRequests *int64, localRemaining *float64) (*int64, *float64) {
 	if upstreamRequests == nil {
 		return cloneCapacityInt64Ptr(localRequests), cloneFloat64Ptr(localRemaining)
@@ -541,8 +610,20 @@ func minimumAccountCapacity(upstreamRequests *int64, upstreamRemaining *float64,
 }
 
 func calculatePoolAccountCapacity(account *Account, state *AccountQuotaState, average decimal.Decimal) (*int64, *float64, bool) {
-	if account == nil || !average.IsPositive() {
+	remaining, known := calculatePoolAccountRemainingUSD(account, state)
+	if !known || !average.IsPositive() {
 		return nil, nil, false
+	}
+	if remaining == nil {
+		return nil, nil, true
+	}
+	requests := decimal.NewFromFloat(*remaining).Div(average).Floor().IntPart()
+	return &requests, remaining, true
+}
+
+func calculatePoolAccountRemainingUSD(account *Account, state *AccountQuotaState) (*float64, bool) {
+	if account == nil {
+		return nil, false
 	}
 	type dimension struct {
 		limit float64
@@ -570,53 +651,86 @@ func calculatePoolAccountCapacity(account *Account, state *AccountQuotaState, av
 			dimension{limit: account.GetQuotaWeeklyLimit(), used: weeklyUsed},
 		)
 	}
-	var minimumRequests *int64
 	var minimumRemaining *float64
 	for _, dim := range dimensions {
+		if math.IsNaN(dim.limit) || math.IsInf(dim.limit, 0) {
+			return nil, false
+		}
 		if dim.limit <= 0 {
 			continue
 		}
+		if dim.used < 0 || math.IsNaN(dim.used) || math.IsInf(dim.used, 0) {
+			return nil, false
+		}
 		remaining := math.Max(dim.limit-dim.used, 0)
-		requests := decimal.NewFromFloat(remaining).Div(average).Floor().IntPart()
-		if minimumRequests == nil || requests < *minimumRequests {
-			value := requests
+		if minimumRemaining == nil || remaining < *minimumRemaining {
 			remainingValue := remaining
-			minimumRequests = &value
 			minimumRemaining = &remainingValue
 		}
 	}
-	return minimumRequests, minimumRemaining, true
+	return minimumRemaining, true
 }
 
 func calculatePoolAPIKeyCapacity(task poolCapacityAlertTask, average decimal.Decimal) (*int64, *float64, bool) {
-	if task.APIKeyQuota <= 0 {
+	remaining, known := calculatePoolAPIKeyRemainingUSD(task)
+	if !known || !average.IsPositive() {
+		return nil, nil, false
+	}
+	if remaining == nil {
 		return nil, nil, true
 	}
-	if task.APIKeyQuotaState == nil || !average.IsPositive() {
-		return nil, nil, false
+	requests := decimal.NewFromFloat(*remaining).Div(average).Floor().IntPart()
+	return &requests, remaining, true
+}
+
+func calculatePoolAPIKeyRemainingUSD(task poolCapacityAlertTask) (*float64, bool) {
+	if math.IsNaN(task.APIKeyQuota) || math.IsInf(task.APIKeyQuota, 0) {
+		return nil, false
+	}
+	if task.APIKeyQuota <= 0 {
+		return nil, true
+	}
+	if task.APIKeyQuotaState == nil || task.APIKeyQuotaState.Quota < 0 || task.APIKeyQuotaState.QuotaUsed < 0 ||
+		math.IsNaN(task.APIKeyQuotaState.Quota) || math.IsInf(task.APIKeyQuotaState.Quota, 0) ||
+		math.IsNaN(task.APIKeyQuotaState.QuotaUsed) || math.IsInf(task.APIKeyQuotaState.QuotaUsed, 0) {
+		return nil, false
 	}
 	remaining := math.Max(task.APIKeyQuotaState.Quota-task.APIKeyQuotaState.QuotaUsed, 0)
 	if task.APIKeyQuotaState.Status == StatusAPIKeyQuotaExhausted || task.APIKeyQuotaState.Status == StatusDisabled {
 		remaining = 0
 	}
-	requests := decimal.NewFromFloat(remaining).Div(average).Floor().IntPart()
-	return &requests, &remaining, true
+	return &remaining, true
 }
 
 func (s *PoolCapacityAlertService) calculatePoolWalletCapacity(task poolCapacityAlertTask, average decimal.Decimal) (*int64, *float64, bool) {
 	if task.IsSubscriptionBill {
 		return nil, nil, true
 	}
-	if task.NewBalance == nil || !average.IsPositive() {
+	if task.NewBalance == nil || !average.IsPositive() || math.IsNaN(*task.NewBalance) || math.IsInf(*task.NewBalance, 0) {
 		return nil, nil, false
+	}
+	remainingValue := math.Max(*task.NewBalance, 0)
+	remaining := &remainingValue
+	requests := decimal.NewFromFloat(remainingValue).Div(average).Floor().IntPart()
+	return &requests, remaining, true
+}
+
+func (s *PoolCapacityAlertService) calculatePoolWalletRemainingUSD(task poolCapacityAlertTask) (*float64, bool) {
+	if task.IsSubscriptionBill {
+		return nil, true
+	}
+	if task.NewBalance == nil || math.IsNaN(*task.NewBalance) || math.IsInf(*task.NewBalance, 0) {
+		return nil, false
 	}
 	reserve := 0.0
 	if s.cfg != nil && s.cfg.Billing.MinimumBalanceReserve > 0 {
 		reserve = s.cfg.Billing.MinimumBalanceReserve
 	}
+	if math.IsNaN(reserve) || math.IsInf(reserve, 0) {
+		return nil, false
+	}
 	remaining := math.Max(*task.NewBalance-reserve, 0)
-	requests := decimal.NewFromFloat(remaining).Div(average).Floor().IntPart()
-	return &requests, &remaining, true
+	return &remaining, true
 }
 
 func minimumFiniteCapacity(named ...*int64) (*int64, string) {
@@ -631,6 +745,30 @@ func minimumFiniteCapacity(named ...*int64) (*int64, string) {
 			copyValue := *value
 			minimum = &copyValue
 			bottleneck = labels[index]
+		}
+	}
+	return minimum, bottleneck
+}
+
+func minimumFiniteAmountValue(values ...*float64) *float64 {
+	minimum, _ := minimumFiniteAmount(values...)
+	return minimum
+}
+
+func minimumFiniteAmount(named ...*float64) (*float64, string) {
+	labels := []string{"account", "api_key", "wallet"}
+	var minimum *float64
+	bottleneck := ""
+	for index, value := range named {
+		if value == nil {
+			continue
+		}
+		if minimum == nil || *value < *minimum {
+			copyValue := *value
+			minimum = &copyValue
+			if index < len(labels) {
+				bottleneck = labels[index]
+			}
 		}
 	}
 	return minimum, bottleneck
@@ -823,6 +961,59 @@ func (s *PoolCapacityAlertService) retryDelay(attempt int) time.Duration {
 }
 
 func poolCapacityAlertEmailVariables(event PoolCapacityAlertEvent) map[string]string {
+	metric := strings.TrimSpace(event.AlertMetric)
+	if metric == "" {
+		metric = PoolCapacityAlertMetricPredictedRequests
+	}
+	alertValue := "N/A"
+	alertThreshold := "N/A"
+	alertUnit := ""
+	alertLabel := "Capacity"
+	alertLabelZH := "容量"
+	alertSummary := "The selected pool-mode capacity is below its configured threshold."
+	alertSummaryZH := "本次实际命中的池模式容量已低于配置阈值。"
+	disclaimer := "Only complete, authoritative capacity evaluations can change the alert state."
+	disclaimerZH := "只有完整且可信的容量评估才会改变告警状态。"
+
+	switch metric {
+	case PoolCapacityAlertMetricRemainingBalanceUSD:
+		alertValue = formatOptionalMetricAmount(event.RemainingBalanceUSD)
+		alertThreshold = formatOptionalMetricAmount(event.ThresholdUSD)
+		alertUnit = "USD"
+		alertLabel = "Remaining balance"
+		alertLabelZH = "剩余可用金额"
+		alertSummary = fmt.Sprintf("The remaining comparable balance is $%s, below the configured $%s threshold.", alertValue, alertThreshold)
+		alertSummaryZH = fmt.Sprintf("可比较的剩余金额为 $%s，已低于配置的 $%s 阈值。", alertValue, alertThreshold)
+		disclaimer = "Uses only authoritative USD balances and post-billing local USD limits; unavailable or incompatible units are not treated as zero."
+		disclaimerZH = "仅使用权威 USD 余额与扣费后本地 USD 限额；不可用或单位不兼容的数据不会按 0 处理。"
+	case PoolCapacityAlertMetricPredictedRequests:
+		alertValue = formatOptionalMetricCapacity(event.PredictedRequests)
+		alertThreshold = formatOptionalMetricCapacity(event.ThresholdRequests)
+		alertUnit = "requests"
+		alertLabel = "Estimated remaining requests"
+		alertLabelZH = "预计剩余请求数"
+		alertSummary = fmt.Sprintf("The estimated remaining request capacity is %s, below the configured %s-request threshold.", alertValue, alertThreshold)
+		alertSummaryZH = fmt.Sprintf("预计剩余请求数为 %s，已低于配置的 %s 次阈值。", alertValue, alertThreshold)
+		disclaimer = "Estimate based on the latest 50 successfully billed requests; actual capacity may vary."
+		disclaimerZH = "基于最近 50 次成功计费请求的历史均值估算，实际可用请求数可能变化。"
+	}
+
+	requestMetric := metric == PoolCapacityAlertMetricPredictedRequests
+	accountRequests := "N/A"
+	apiKeyRequests := "N/A"
+	walletRequests := "N/A"
+	if requestMetric {
+		accountRequests = formatOptionalCapacity(event.AccountRequests)
+		apiKeyRequests = formatOptionalCapacity(event.APIKeyRequests)
+		walletRequests = formatOptionalCapacity(event.WalletRequests)
+	}
+	averageAccountCost := "N/A"
+	averageActualCost := "N/A"
+	if event.SampleCount > 0 {
+		averageAccountCost = fmt.Sprintf("%.6f", event.AverageAccountCost)
+		averageActualCost = fmt.Sprintf("%.6f", event.AverageActualCost)
+	}
+
 	return map[string]string{
 		"group_name":               event.GroupName,
 		"group_id":                 strconv.FormatInt(event.GroupID, 10),
@@ -831,30 +1022,50 @@ func poolCapacityAlertEmailVariables(event PoolCapacityAlertEvent) map[string]st
 		"api_key_name":             event.APIKeyName,
 		"api_key_id":               strconv.FormatInt(event.APIKeyID, 10),
 		"user_id":                  strconv.FormatInt(event.UserID, 10),
-		"predicted_requests":       strconv.FormatInt(event.PredictedRequests, 10),
-		"threshold_requests":       strconv.FormatInt(event.ThresholdRequests, 10),
-		"avg_account_cost":         fmt.Sprintf("%.6f", event.AverageAccountCost),
-		"avg_actual_cost":          fmt.Sprintf("%.6f", event.AverageActualCost),
-		"account_requests":         formatOptionalCapacity(event.AccountRequests),
-		"api_key_requests":         formatOptionalCapacity(event.APIKeyRequests),
-		"wallet_requests":          formatOptionalCapacity(event.WalletRequests),
+		"alert_metric":             metric,
+		"alert_metric_label":       alertLabel,
+		"alert_metric_label_zh":    alertLabelZH,
+		"alert_metric_value":       alertValue,
+		"alert_metric_threshold":   alertThreshold,
+		"alert_metric_unit":        alertUnit,
+		"alert_summary":            alertSummary,
+		"alert_summary_zh":         alertSummaryZH,
+		"predicted_requests":       formatOptionalMetricCapacity(event.PredictedRequests),
+		"remaining_balance_usd":    formatOptionalMetricAmount(event.RemainingBalanceUSD),
+		"threshold_requests":       formatOptionalMetricCapacity(event.ThresholdRequests),
+		"threshold_usd":            formatOptionalMetricAmount(event.ThresholdUSD),
+		"avg_account_cost":         averageAccountCost,
+		"avg_actual_cost":          averageActualCost,
+		"account_requests":         accountRequests,
+		"api_key_requests":         apiKeyRequests,
+		"wallet_requests":          walletRequests,
 		"account_remaining":        formatOptionalAmount(event.AccountRemaining),
 		"api_key_remaining":        formatOptionalAmount(event.APIKeyRemaining),
 		"wallet_remaining":         formatOptionalAmount(event.WalletRemaining),
 		"bottleneck":               event.Bottleneck,
 		"sample_count":             strconv.Itoa(event.SampleCount),
 		"triggered_at":             event.CreatedAt.UTC().Format(time.RFC3339),
-		"prediction_disclaimer":    "Estimate based on recent billed requests; actual capacity may vary.",
-		"prediction_disclaimer_zh": "基于近期成功计费请求的历史均值估算，实际可用请求数可能变化。",
+		"prediction_disclaimer":    disclaimer,
+		"prediction_disclaimer_zh": disclaimerZH,
 	}
 }
 
 func renderPoolCapacityQQMessage(event PoolCapacityAlertEvent) string {
-	return fmt.Sprintf("【池账户容量提醒】\n分组：%s (#%d)\n账户：%s (#%d)\nAPI Key：%s (#%d)\n预计剩余：%d 次（阈值 %d）\n账户/Key/用户容量：%s / %s / %s\n最近 %d 次均值：账户 $%.6f，用户 $%.6f\n瓶颈：%s\n时间：%s\n该结果基于历史均值估算，实际容量可能变化。",
+	if event.AlertMetric == PoolCapacityAlertMetricRemainingBalanceUSD {
+		return fmt.Sprintf("【池账户容量提醒】\n分组：%s (#%d)\n账户：%s (#%d)\nAPI Key：%s (#%d)\n剩余可用金额：$%s（阈值 $%s）\n账户/Key/用户余额：%s / %s / %s USD\n瓶颈：%s\n时间：%s\n仅使用权威 USD 余额与扣费后本地 USD 限额；未知或单位不兼容的数据不会按 0 处理。",
+			event.GroupName, event.GroupID,
+			event.AccountName, event.AccountID,
+			event.APIKeyName, event.APIKeyID,
+			formatOptionalMetricAmount(event.RemainingBalanceUSD), formatOptionalMetricAmount(event.ThresholdUSD),
+			formatOptionalAmount(event.AccountRemaining), formatOptionalAmount(event.APIKeyRemaining), formatOptionalAmount(event.WalletRemaining),
+			event.Bottleneck, event.CreatedAt.UTC().Format(time.RFC3339),
+		)
+	}
+	return fmt.Sprintf("【池账户容量提醒】\n分组：%s (#%d)\n账户：%s (#%d)\nAPI Key：%s (#%d)\n预计剩余：%s 次（阈值 %s）\n账户/Key/用户容量：%s / %s / %s\n最近 %d 次均值：账户 $%.6f，用户 $%.6f\n瓶颈：%s\n时间：%s\n该结果基于最近 50 次成功计费请求的历史均值估算，实际容量可能变化。",
 		event.GroupName, event.GroupID,
 		event.AccountName, event.AccountID,
 		event.APIKeyName, event.APIKeyID,
-		event.PredictedRequests, event.ThresholdRequests,
+		formatOptionalMetricCapacity(event.PredictedRequests), formatOptionalMetricCapacity(event.ThresholdRequests),
 		formatOptionalCapacity(event.AccountRequests), formatOptionalCapacity(event.APIKeyRequests), formatOptionalCapacity(event.WalletRequests),
 		event.SampleCount, event.AverageAccountCost, event.AverageActualCost,
 		event.Bottleneck, event.CreatedAt.UTC().Format(time.RFC3339),
@@ -866,6 +1077,20 @@ func formatOptionalCapacity(value *int64) string {
 		return "unlimited"
 	}
 	return strconv.FormatInt(*value, 10)
+}
+
+func formatOptionalMetricCapacity(value *int64) string {
+	if value == nil {
+		return "N/A"
+	}
+	return strconv.FormatInt(*value, 10)
+}
+
+func formatOptionalMetricAmount(value *float64) string {
+	if value == nil {
+		return "N/A"
+	}
+	return fmt.Sprintf("%.6f", *value)
 }
 
 func formatOptionalAmount(value *float64) string {

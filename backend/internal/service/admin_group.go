@@ -143,6 +143,19 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	if err != nil {
 		return nil, err
 	}
+	poolCapacityAlertPolicy := DefaultPoolCapacityAlertPolicy()
+	poolCapacityAlertPolicy.Enabled = input.PoolCapacityAlertEnabled
+	if input.PoolCapacityAlertMetric != nil {
+		poolCapacityAlertPolicy.Metric = *input.PoolCapacityAlertMetric
+	}
+	if input.PoolCapacityAlertThresholdRequests != nil {
+		poolCapacityAlertPolicy.ThresholdRequests = *input.PoolCapacityAlertThresholdRequests
+	}
+	poolCapacityAlertPolicy.ThresholdUSD = input.PoolCapacityAlertThresholdUSD
+	poolCapacityAlertPolicy = NormalizePoolCapacityAlertPolicy(poolCapacityAlertPolicy)
+	if err := ValidatePoolCapacityAlertPolicy(poolCapacityAlertPolicy); err != nil {
+		return nil, err
+	}
 
 	platform := NormalizePlatform(input.Platform)
 	if platform == "" {
@@ -273,51 +286,54 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	}
 
 	group := &Group{
-		Name:                            input.Name,
-		Description:                     input.Description,
-		Platform:                        platform,
-		RateMultiplier:                  input.RateMultiplier,
-		ModelRateMultipliers:            modelRateMultipliers,
-		IsExclusive:                     input.IsExclusive,
-		Status:                          StatusActive,
-		SubscriptionType:                subscriptionType,
-		DailyLimitUSD:                   dailyLimit,
-		WeeklyLimitUSD:                  weeklyLimit,
-		MonthlyLimitUSD:                 monthlyLimit,
-		AllowImageGeneration:            allowImageGeneration,
-		AllowBatchImageGeneration:       allowBatchImageGeneration,
-		ImageRateIndependent:            input.ImageRateIndependent,
-		ImageRateMultiplier:             imageRateMultiplier,
-		BatchImageDiscountMultiplier:    batchImageDiscountMultiplier,
-		BatchImageHoldMultiplier:        batchImageHoldMultiplier,
-		VideoRateIndependent:            input.VideoRateIndependent,
-		VideoRateMultiplier:             videoRateMultiplier,
-		PeakRateEnabled:                 peakRateEnabled,
-		PeakStart:                       peakStart,
-		PeakEnd:                         peakEnd,
-		PeakRateMultiplier:              peakRateMultiplier,
-		ImagePrice1K:                    imagePrice1K,
-		ImagePrice2K:                    imagePrice2K,
-		ImagePrice4K:                    imagePrice4K,
-		VideoPrice480P:                  videoPrice480P,
-		VideoPrice720P:                  videoPrice720P,
-		VideoPrice1080P:                 videoPrice1080P,
-		WebSearchPricePerCall:           webSearchPricePerCall,
-		ClaudeCodeOnly:                  input.ClaudeCodeOnly,
-		FallbackGroupID:                 input.FallbackGroupID,
-		FallbackGroupIDOnInvalidRequest: fallbackOnInvalidRequest,
-		ModelRouting:                    input.ModelRouting,
-		MCPXMLInject:                    mcpXMLInject,
-		SupportedModelScopes:            input.SupportedModelScopes,
-		AllowMessagesDispatch:           input.AllowMessagesDispatch,
-		RequireOAuthOnly:                input.RequireOAuthOnly,
-		RequirePrivacySet:               input.RequirePrivacySet,
-		DefaultMappedModel:              input.DefaultMappedModel,
-		MessagesDispatchModelConfig:     normalizeOpenAIMessagesDispatchModelConfig(input.MessagesDispatchModelConfig),
-		ModelsListConfig:                normalizeGroupModelsListConfig(input.ModelsListConfig),
-		RPMLimit:                        input.RPMLimit,
-		PoolCapacityAlertEnabled:        input.PoolCapacityAlertEnabled,
-		PoolCapacityAlertGeneration:     0,
+		Name:                               input.Name,
+		Description:                        input.Description,
+		Platform:                           platform,
+		RateMultiplier:                     input.RateMultiplier,
+		ModelRateMultipliers:               modelRateMultipliers,
+		IsExclusive:                        input.IsExclusive,
+		Status:                             StatusActive,
+		SubscriptionType:                   subscriptionType,
+		DailyLimitUSD:                      dailyLimit,
+		WeeklyLimitUSD:                     weeklyLimit,
+		MonthlyLimitUSD:                    monthlyLimit,
+		AllowImageGeneration:               allowImageGeneration,
+		AllowBatchImageGeneration:          allowBatchImageGeneration,
+		ImageRateIndependent:               input.ImageRateIndependent,
+		ImageRateMultiplier:                imageRateMultiplier,
+		BatchImageDiscountMultiplier:       batchImageDiscountMultiplier,
+		BatchImageHoldMultiplier:           batchImageHoldMultiplier,
+		VideoRateIndependent:               input.VideoRateIndependent,
+		VideoRateMultiplier:                videoRateMultiplier,
+		PeakRateEnabled:                    peakRateEnabled,
+		PeakStart:                          peakStart,
+		PeakEnd:                            peakEnd,
+		PeakRateMultiplier:                 peakRateMultiplier,
+		ImagePrice1K:                       imagePrice1K,
+		ImagePrice2K:                       imagePrice2K,
+		ImagePrice4K:                       imagePrice4K,
+		VideoPrice480P:                     videoPrice480P,
+		VideoPrice720P:                     videoPrice720P,
+		VideoPrice1080P:                    videoPrice1080P,
+		WebSearchPricePerCall:              webSearchPricePerCall,
+		ClaudeCodeOnly:                     input.ClaudeCodeOnly,
+		FallbackGroupID:                    input.FallbackGroupID,
+		FallbackGroupIDOnInvalidRequest:    fallbackOnInvalidRequest,
+		ModelRouting:                       input.ModelRouting,
+		MCPXMLInject:                       mcpXMLInject,
+		SupportedModelScopes:               input.SupportedModelScopes,
+		AllowMessagesDispatch:              input.AllowMessagesDispatch,
+		RequireOAuthOnly:                   input.RequireOAuthOnly,
+		RequirePrivacySet:                  input.RequirePrivacySet,
+		DefaultMappedModel:                 input.DefaultMappedModel,
+		MessagesDispatchModelConfig:        normalizeOpenAIMessagesDispatchModelConfig(input.MessagesDispatchModelConfig),
+		ModelsListConfig:                   normalizeGroupModelsListConfig(input.ModelsListConfig),
+		RPMLimit:                           input.RPMLimit,
+		PoolCapacityAlertEnabled:           poolCapacityAlertPolicy.Enabled,
+		PoolCapacityAlertMetric:            poolCapacityAlertPolicy.Metric,
+		PoolCapacityAlertThresholdRequests: poolCapacityAlertPolicy.ThresholdRequests,
+		PoolCapacityAlertThresholdUSD:      poolCapacityAlertPolicy.ThresholdUSD,
+		PoolCapacityAlertGeneration:        0,
 	}
 	sanitizeGroupMessagesDispatchFields(group)
 	if err := s.groupRepo.Create(ctx, group); err != nil {
@@ -662,19 +678,34 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 	sanitizeGroupMessagesDispatchFields(group)
 
+	poolAlertPatch := PoolCapacityAlertPolicyPatch{
+		Enabled:           input.PoolCapacityAlertEnabled,
+		Metric:            input.PoolCapacityAlertMetric,
+		ThresholdRequests: input.PoolCapacityAlertThresholdRequests,
+		ThresholdUSD:      input.PoolCapacityAlertThresholdUSD,
+	}
+	mergedPoolAlertPolicy := ApplyPoolCapacityAlertPolicyPatch(group.PoolCapacityAlertPolicy(), poolAlertPatch)
+	if err := ValidatePoolCapacityAlertPolicy(mergedPoolAlertPolicy); err != nil {
+		return nil, err
+	}
+
 	poolAlertRepo := s.groupPoolCapacityAlertRepo
 	if poolAlertRepo == nil {
 		poolAlertRepo, _ = s.groupRepo.(GroupPoolCapacityAlertRepository)
 	}
 	if poolAlertRepo != nil {
-		if err := poolAlertRepo.UpdateWithPoolCapacityAlert(ctx, group, input.PoolCapacityAlertEnabled); err != nil {
+		if err := poolAlertRepo.UpdateWithPoolCapacityAlert(ctx, group, poolAlertPatch); err != nil {
 			return nil, err
 		}
 	} else {
 		// Test doubles and legacy embedders may only provide GroupRepository.
 		// Production wiring always supplies the atomic admin repository above.
-		if input.PoolCapacityAlertEnabled != nil && group.PoolCapacityAlertEnabled != *input.PoolCapacityAlertEnabled {
-			group.PoolCapacityAlertEnabled = *input.PoolCapacityAlertEnabled
+		currentPoolAlertPolicy := group.PoolCapacityAlertPolicy()
+		group.PoolCapacityAlertEnabled = mergedPoolAlertPolicy.Enabled
+		group.PoolCapacityAlertMetric = mergedPoolAlertPolicy.Metric
+		group.PoolCapacityAlertThresholdRequests = mergedPoolAlertPolicy.ThresholdRequests
+		group.PoolCapacityAlertThresholdUSD = mergedPoolAlertPolicy.ThresholdUSD
+		if !PoolCapacityAlertPoliciesEqual(currentPoolAlertPolicy, mergedPoolAlertPolicy) {
 			group.PoolCapacityAlertGeneration++
 		}
 		if err := s.groupRepo.Update(ctx, group); err != nil {

@@ -11,6 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestGroupPoolCapacityAlertPolicyFallsBackToLegacyDefaults(t *testing.T) {
+	policy := (&Group{PoolCapacityAlertMetric: "invalid", PoolCapacityAlertThresholdRequests: 0}).PoolCapacityAlertPolicy()
+	require.Equal(t, PoolCapacityAlertMetricPredictedRequests, policy.Metric)
+	require.Equal(t, DefaultPoolCapacityAlertThresholdRequests, policy.ThresholdRequests)
+}
+
 func TestPoolCapacityAlertSubmitAfterBillingUsesFinalSelection(t *testing.T) {
 	groupID := int64(17)
 	accountRate := 0.5
@@ -191,6 +197,15 @@ func TestPoolCapacityCalculationsUsePostBillingStateAndFloorRequests(t *testing.
 	require.True(t, known)
 	require.Equal(t, int64(49), *walletRequests)
 	require.InDelta(t, wallet, *walletRemaining, 1e-12)
+
+	reserveSvc := &PoolCapacityAlertService{cfg: &config.Config{Billing: config.BillingConfig{MinimumBalanceReserve: 10}}}
+	walletRequests, walletRemaining, known = reserveSvc.calculatePoolWalletCapacity(poolCapacityAlertTask{NewBalance: &wallet}, average)
+	require.True(t, known)
+	require.Equal(t, int64(49), *walletRequests, "request prediction keeps the legacy post-billing wallet balance")
+	require.InDelta(t, wallet, *walletRemaining, 1e-12)
+	amountRemaining, known := reserveSvc.calculatePoolWalletRemainingUSD(poolCapacityAlertTask{NewBalance: &wallet})
+	require.True(t, known)
+	require.InDelta(t, 39.99, *amountRemaining, 1e-12, "USD mode subtracts the configured minimum reserve")
 }
 
 func TestCalculatePoolUpstreamCapacityRequiresVerifiedSupportedUnits(t *testing.T) {
@@ -225,6 +240,37 @@ func TestCalculatePoolUpstreamCapacityRequiresVerifiedSupportedUnits(t *testing.
 	} {
 		_, _, known = calculatePoolUpstreamCapacity(snapshot, average)
 		require.False(t, known)
+	}
+}
+
+func TestCalculatePoolUpstreamBalanceUSDRequiresAuthoritativeUSD(t *testing.T) {
+	remaining := 12.5
+	amount, known := calculatePoolUpstreamBalanceUSD(&AccountCapacitySnapshot{
+		Mode:          AccountCapacityModeUpstreamBalance,
+		State:         AccountCapacityStateVerified,
+		Authoritative: true,
+		Remaining:     &remaining,
+		Unit:          "USD",
+	})
+	require.True(t, known)
+	require.InDelta(t, remaining, *amount, 1e-12)
+
+	amount, known = calculatePoolUpstreamBalanceUSD(&AccountCapacitySnapshot{
+		Mode:          AccountCapacityModeUpstreamBalance,
+		State:         AccountCapacityStateUnlimited,
+		Authoritative: true,
+	})
+	require.True(t, known)
+	require.Nil(t, amount)
+
+	for _, snapshot := range []*AccountCapacitySnapshot{
+		{Mode: AccountCapacityModeUpstreamBalance, State: AccountCapacityStateVerified, Authoritative: true, Remaining: &remaining, Unit: "requests"},
+		{Mode: AccountCapacityModeUpstreamBalance, State: AccountCapacityStateVerified, Authoritative: true, Remaining: &remaining, Unit: "EUR"},
+		{Mode: AccountCapacityModeUpstreamBalance, State: AccountCapacityStateStale, Authoritative: false, Remaining: &remaining, Unit: "USD"},
+	} {
+		amount, known = calculatePoolUpstreamBalanceUSD(snapshot)
+		require.False(t, known)
+		require.Nil(t, amount)
 	}
 }
 
@@ -276,6 +322,107 @@ func TestPoolCapacityAlertEvaluateUsesVerifiedUpstreamWithLocalSafetyLimit(t *te
 	require.Equal(t, "account", evaluation.Bottleneck)
 }
 
+func TestPoolCapacityAlertEvaluateRemainingBalanceUSDDoesNotRequireHistory(t *testing.T) {
+	threshold := 8.0
+	group := &Group{
+		ID:                                 17,
+		Name:                               "production",
+		PoolCapacityAlertEnabled:           true,
+		PoolCapacityAlertGeneration:        4,
+		PoolCapacityAlertMetric:            PoolCapacityAlertMetricRemainingBalanceUSD,
+		PoolCapacityAlertThresholdRequests: DefaultPoolCapacityAlertThresholdRequests,
+		PoolCapacityAlertThresholdUSD:      &threshold,
+	}
+	account := &Account{
+		ID:          21,
+		Name:        "pool-account",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeAPIKey,
+		Credentials: map[string]any{"pool_mode": true},
+	}
+	upstreamRemaining := 12.0
+	wallet := 9.0
+	repo := &poolCapacityDispatchRepo{}
+	svc := &PoolCapacityAlertService{
+		repo:        repo,
+		groupRepo:   poolCapacityGroupRepoStub{group: group},
+		accountRepo: &stubOpenAIAccountRepo{accounts: []Account{*account}},
+		capacityReader: &poolCapacityBalanceReaderStub{snapshot: &AccountCapacitySnapshot{
+			Mode:          AccountCapacityModeUpstreamBalance,
+			State:         AccountCapacityStateVerified,
+			Authoritative: true,
+			Remaining:     &upstreamRemaining,
+			Unit:          "USD",
+		}},
+		cfg: &config.Config{Billing: config.BillingConfig{MinimumBalanceReserve: 1}},
+	}
+	err := svc.evaluate(context.Background(), poolCapacityAlertTask{
+		RequestID:          "request-first",
+		GroupID:            group.ID,
+		GroupGeneration:    group.PoolCapacityAlertGeneration,
+		AccountID:          account.ID,
+		APIKeyID:           31,
+		UserID:             41,
+		CurrentAccountCost: 1,
+		CurrentActualCost:  1,
+		APIKeyQuota:        20,
+		APIKeyQuotaState:   &APIKeyQuotaUsageState{Quota: 20, QuotaUsed: 13},
+		NewBalance:         &wallet,
+		AccountQuotaState:  &AccountQuotaState{TotalLimit: 100, TotalUsed: 90},
+	})
+	require.NoError(t, err)
+	require.Len(t, repo.evaluations, 1)
+	evaluation := repo.evaluations[0]
+	require.Equal(t, PoolCapacityAlertMetricRemainingBalanceUSD, evaluation.AlertMetric)
+	require.Nil(t, evaluation.PredictedRequests)
+	require.Zero(t, evaluation.SampleCount)
+	require.InDelta(t, 7, *evaluation.RemainingBalanceUSD, 1e-12)
+	require.InDelta(t, 10, *evaluation.AccountRemaining, 1e-12)
+	require.InDelta(t, 7, *evaluation.APIKeyRemaining, 1e-12)
+	require.InDelta(t, 8, *evaluation.WalletRemaining, 1e-12)
+	require.Equal(t, DefaultPoolCapacityAlertThresholdRequests, *evaluation.ThresholdRequests, "state snapshots retain the complete group policy")
+	require.InDelta(t, threshold, *evaluation.ThresholdUSD, 1e-12)
+	require.Equal(t, "api_key", evaluation.Bottleneck)
+}
+
+func TestPoolCapacityAlertEvaluateRemainingBalanceUSDSkipsIncompatibleUpstreamUnit(t *testing.T) {
+	threshold := 10.0
+	group := &Group{
+		ID:                            17,
+		PoolCapacityAlertEnabled:      true,
+		PoolCapacityAlertGeneration:   4,
+		PoolCapacityAlertMetric:       PoolCapacityAlertMetricRemainingBalanceUSD,
+		PoolCapacityAlertThresholdUSD: &threshold,
+	}
+	account := Account{ID: 21, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"pool_mode": true}}
+	remaining := 2.0
+	repo := &poolCapacityDispatchRepo{}
+	svc := &PoolCapacityAlertService{
+		repo:        repo,
+		groupRepo:   poolCapacityGroupRepoStub{group: group},
+		accountRepo: &stubOpenAIAccountRepo{accounts: []Account{account}},
+		capacityReader: &poolCapacityBalanceReaderStub{snapshot: &AccountCapacitySnapshot{
+			Mode:          AccountCapacityModeUpstreamBalance,
+			State:         AccountCapacityStateVerified,
+			Authoritative: true,
+			Remaining:     &remaining,
+			Unit:          "requests",
+		}},
+	}
+	err := svc.evaluate(context.Background(), poolCapacityAlertTask{
+		GroupID:            group.ID,
+		GroupGeneration:    group.PoolCapacityAlertGeneration,
+		AccountID:          account.ID,
+		APIKeyID:           31,
+		UserID:             41,
+		IsSubscriptionBill: true,
+		CurrentAccountCost: 1,
+		CurrentActualCost:  1,
+	})
+	require.NoError(t, err)
+	require.Empty(t, repo.evaluations)
+}
+
 func TestPoolCapacityAlertEvaluateSkipsStaleBalanceWithoutStateTransition(t *testing.T) {
 	group := &Group{ID: 17, PoolCapacityAlertEnabled: true, PoolCapacityAlertGeneration: 4}
 	account := Account{ID: 21, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"pool_mode": true}}
@@ -307,6 +454,33 @@ func TestPoolCapacityAlertEvaluateSkipsStaleBalanceWithoutStateTransition(t *tes
 	})
 	require.NoError(t, err)
 	require.Empty(t, repo.evaluations, "stale balance must not recover or create an alert episode")
+}
+
+func TestPoolCapacityAlertAmountNotificationsKeepLegacyRequestFieldsAsNA(t *testing.T) {
+	remaining := 9.25
+	threshold := 10.0
+	event := PoolCapacityAlertEvent{
+		AlertMetric:         PoolCapacityAlertMetricRemainingBalanceUSD,
+		RemainingBalanceUSD: &remaining,
+		ThresholdUSD:        &threshold,
+		GroupName:           "production",
+		AccountName:         "pool-account",
+		APIKeyName:          "gateway-key",
+		CreatedAt:           time.Date(2026, time.July, 22, 1, 0, 0, 0, time.UTC),
+	}
+
+	variables := poolCapacityAlertEmailVariables(event)
+	require.Equal(t, "9.250000", variables["alert_metric_value"])
+	require.Equal(t, "10.000000", variables["alert_metric_threshold"])
+	require.Equal(t, "USD", variables["alert_metric_unit"])
+	require.Equal(t, "N/A", variables["predicted_requests"])
+	require.Equal(t, "N/A", variables["threshold_requests"])
+	require.Equal(t, "N/A", variables["avg_account_cost"])
+	require.Equal(t, "N/A", variables["account_requests"])
+
+	message := renderPoolCapacityQQMessage(event)
+	require.Contains(t, message, "剩余可用金额：$9.250000（阈值 $10.000000）")
+	require.NotContains(t, message, "最近 50 次均值")
 }
 
 func TestPoolCapacityAlertDispatchClaimsOnlyImmediatelySendableWave(t *testing.T) {

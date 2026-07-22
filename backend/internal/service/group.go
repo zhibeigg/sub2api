@@ -94,9 +94,12 @@ type Group struct {
 	RPMLimit int
 
 	// PoolCapacityAlertEnabled 控制该分组是否参与池容量告警。
-	// PoolCapacityAlertGeneration 是内部配置代际，开关变化时递增，用于认证缓存传播与一致性判断。
-	PoolCapacityAlertEnabled    bool
-	PoolCapacityAlertGeneration int64
+	// PoolCapacityAlertGeneration 是内部配置代际，策略实际变化时递增，用于认证缓存传播与一致性判断。
+	PoolCapacityAlertEnabled           bool
+	PoolCapacityAlertMetric            string
+	PoolCapacityAlertThresholdRequests int64
+	PoolCapacityAlertThresholdUSD      *float64
+	PoolCapacityAlertGeneration        int64
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -110,7 +113,115 @@ type Group struct {
 const (
 	maxGroupModelRateMultiplierRules = 100
 	maxGroupModelRatePatternLength   = 200
+
+	PoolCapacityAlertMetricPredictedRequests   = "predicted_requests"
+	PoolCapacityAlertMetricRemainingBalanceUSD = "remaining_balance_usd"
+	DefaultPoolCapacityAlertMetric             = PoolCapacityAlertMetricPredictedRequests
+	DefaultPoolCapacityAlertThresholdRequests  = int64(50)
+	MinPoolCapacityAlertThresholdRequests      = int64(1)
+	MaxPoolCapacityAlertThresholdRequests      = int64(1_000_000_000)
+	MinPoolCapacityAlertThresholdUSD           = 0.01
+	MaxPoolCapacityAlertThresholdUSD           = 1e15
 )
+
+type PoolCapacityAlertPolicy struct {
+	Enabled           bool
+	Metric            string
+	ThresholdRequests int64
+	ThresholdUSD      *float64
+}
+
+type PoolCapacityAlertPolicyPatch struct {
+	Enabled           *bool
+	Metric            *string
+	ThresholdRequests *int64
+	// ThresholdUSD uses a pointer-to-pointer so nil means omitted while a
+	// non-nil pointer containing nil explicitly clears the nullable threshold.
+	ThresholdUSD **float64
+}
+
+func DefaultPoolCapacityAlertPolicy() PoolCapacityAlertPolicy {
+	return PoolCapacityAlertPolicy{
+		Metric:            DefaultPoolCapacityAlertMetric,
+		ThresholdRequests: DefaultPoolCapacityAlertThresholdRequests,
+	}
+}
+
+func NormalizePoolCapacityAlertPolicy(policy PoolCapacityAlertPolicy) PoolCapacityAlertPolicy {
+	policy.Metric = strings.ToLower(strings.TrimSpace(policy.Metric))
+	return policy
+}
+
+func ValidatePoolCapacityAlertPolicy(policy PoolCapacityAlertPolicy) error {
+	switch policy.Metric {
+	case PoolCapacityAlertMetricPredictedRequests, PoolCapacityAlertMetricRemainingBalanceUSD:
+	default:
+		return fmt.Errorf("pool_capacity_alert_metric must be one of %q or %q", PoolCapacityAlertMetricPredictedRequests, PoolCapacityAlertMetricRemainingBalanceUSD)
+	}
+	if policy.ThresholdRequests < MinPoolCapacityAlertThresholdRequests || policy.ThresholdRequests > MaxPoolCapacityAlertThresholdRequests {
+		return fmt.Errorf("pool_capacity_alert_threshold_requests must be between %d and %d", MinPoolCapacityAlertThresholdRequests, MaxPoolCapacityAlertThresholdRequests)
+	}
+	if policy.ThresholdUSD != nil {
+		threshold := *policy.ThresholdUSD
+		if math.IsNaN(threshold) || math.IsInf(threshold, 0) || threshold < MinPoolCapacityAlertThresholdUSD || threshold > MaxPoolCapacityAlertThresholdUSD {
+			return fmt.Errorf("pool_capacity_alert_threshold_usd must be a finite number between %.2f and %.0f", MinPoolCapacityAlertThresholdUSD, MaxPoolCapacityAlertThresholdUSD)
+		}
+	}
+	if policy.Metric == PoolCapacityAlertMetricRemainingBalanceUSD && policy.ThresholdUSD == nil {
+		return errors.New("pool_capacity_alert_threshold_usd is required when pool_capacity_alert_metric is remaining_balance_usd")
+	}
+	return nil
+}
+
+func (g *Group) PoolCapacityAlertPolicy() PoolCapacityAlertPolicy {
+	if g == nil {
+		return DefaultPoolCapacityAlertPolicy()
+	}
+	policy := PoolCapacityAlertPolicy{
+		Enabled:           g.PoolCapacityAlertEnabled,
+		Metric:            g.PoolCapacityAlertMetric,
+		ThresholdRequests: g.PoolCapacityAlertThresholdRequests,
+		ThresholdUSD:      g.PoolCapacityAlertThresholdUSD,
+	}
+	// Legacy/test snapshots that predate migration 193 may not carry the new
+	// fields. Treat their zero values as the historical default policy.
+	policy = NormalizePoolCapacityAlertPolicy(policy)
+	switch policy.Metric {
+	case PoolCapacityAlertMetricPredictedRequests, PoolCapacityAlertMetricRemainingBalanceUSD:
+	default:
+		policy.Metric = DefaultPoolCapacityAlertMetric
+	}
+	if policy.ThresholdRequests == 0 {
+		policy.ThresholdRequests = DefaultPoolCapacityAlertThresholdRequests
+	}
+	return policy
+}
+
+func ApplyPoolCapacityAlertPolicyPatch(current PoolCapacityAlertPolicy, patch PoolCapacityAlertPolicyPatch) PoolCapacityAlertPolicy {
+	if patch.Enabled != nil {
+		current.Enabled = *patch.Enabled
+	}
+	if patch.Metric != nil {
+		current.Metric = *patch.Metric
+	}
+	if patch.ThresholdRequests != nil {
+		current.ThresholdRequests = *patch.ThresholdRequests
+	}
+	if patch.ThresholdUSD != nil {
+		current.ThresholdUSD = *patch.ThresholdUSD
+	}
+	return NormalizePoolCapacityAlertPolicy(current)
+}
+
+func PoolCapacityAlertPoliciesEqual(left, right PoolCapacityAlertPolicy) bool {
+	if left.Enabled != right.Enabled || left.Metric != right.Metric || left.ThresholdRequests != right.ThresholdRequests {
+		return false
+	}
+	if left.ThresholdUSD == nil || right.ThresholdUSD == nil {
+		return left.ThresholdUSD == nil && right.ThresholdUSD == nil
+	}
+	return *left.ThresholdUSD == *right.ThresholdUSD
+}
 
 // NormalizeModelRateMultipliers 校验并归一化分组模型倍率配置。
 // 模型模式大小写不敏感，保存时统一转为小写；仅支持 * 作为通配符。

@@ -50,4 +50,34 @@ describe('groups locale key completeness', () => {
       expect(flattenKeys(zh)).toContain(key)
     })
   }
+
+  const poolCapacityAlertKeys = [
+    'admin.groups.poolCapacityAlert.title',
+    'admin.groups.poolCapacityAlert.description',
+    'admin.groups.poolCapacityAlert.basisLegend',
+    'admin.groups.poolCapacityAlert.predictedRequests.label',
+    'admin.groups.poolCapacityAlert.predictedRequests.description',
+    'admin.groups.poolCapacityAlert.remainingBalanceUsd.label',
+    'admin.groups.poolCapacityAlert.remainingBalanceUsd.description',
+    'admin.groups.poolCapacityAlert.requestsThreshold.label',
+    'admin.groups.poolCapacityAlert.requestsThreshold.hint',
+    'admin.groups.poolCapacityAlert.requestsThreshold.unit',
+    'admin.groups.poolCapacityAlert.usdThreshold.label',
+    'admin.groups.poolCapacityAlert.usdThreshold.hint',
+    'admin.groups.poolCapacityAlert.usdThreshold.unit',
+    'admin.groups.poolCapacityAlert.validation.requestsRequired',
+    'admin.groups.poolCapacityAlert.validation.requestsFinite',
+    'admin.groups.poolCapacityAlert.validation.requestsInteger',
+    'admin.groups.poolCapacityAlert.validation.requestsRange',
+    'admin.groups.poolCapacityAlert.validation.usdRequired',
+    'admin.groups.poolCapacityAlert.validation.usdFinite',
+    'admin.groups.poolCapacityAlert.validation.usdRange',
+  ]
+
+  for (const key of poolCapacityAlertKeys) {
+    it(`en and zh locales both have ${key}`, () => {
+      expect(flattenKeys(en)).toContain(key)
+      expect(flattenKeys(zh)).toContain(key)
+    })
+  }
 })

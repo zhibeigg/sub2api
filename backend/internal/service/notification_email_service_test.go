@@ -157,6 +157,49 @@ func TestNotificationEmailAdditionalEventsAreListedAndPreviewable(t *testing.T) 
 		require.NotEmpty(t, preview.Subject)
 		require.NotEmpty(t, preview.HTML)
 	}
+
+	poolInfo := events[NotificationEmailEventPoolCapacityLow]
+	for _, placeholder := range []string{"alert_metric", "alert_metric_label", "alert_metric_value", "alert_metric_threshold", "alert_metric_unit", "remaining_balance_usd", "threshold_usd"} {
+		require.Contains(t, poolInfo.Placeholders, placeholder)
+	}
+}
+
+func TestPoolCapacityLowPreviewSupportsRemainingBalanceUSD(t *testing.T) {
+	ctx := context.Background()
+	svc := NewNotificationEmailService(newNotificationEmailMemorySettingRepo(), nil)
+
+	preview, err := svc.PreviewTemplate(ctx, NotificationEmailPreviewInput{
+		Event:  NotificationEmailEventPoolCapacityLow,
+		Locale: "en",
+		Variables: map[string]string{
+			"group_name":             "production",
+			"account_name":           "pool-account",
+			"api_key_name":           "gateway-key",
+			"alert_metric":           PoolCapacityAlertMetricRemainingBalanceUSD,
+			"alert_metric_label":     "Remaining upstream balance",
+			"alert_metric_value":     "9.25",
+			"alert_metric_threshold": "10.00",
+			"alert_metric_unit":      "USD",
+			"alert_summary":          "The remaining comparable balance is $9.25, below the configured $10.00 threshold.",
+			"remaining_balance_usd":  "9.25",
+			"threshold_usd":          "10.00",
+			"account_remaining":      "12.00",
+			"api_key_remaining":      "9.25",
+			"wallet_remaining":       "11.00",
+			"bottleneck":             "API key quota",
+			"sample_count":           "0",
+			"predicted_requests":     "N/A",
+			"threshold_requests":     "N/A",
+			"avg_account_cost":       "N/A",
+			"avg_actual_cost":        "N/A",
+		},
+	})
+	require.NoError(t, err)
+	require.Contains(t, preview.Subject, "pool-account")
+	require.Contains(t, preview.HTML, "9.25 / 10.00 USD")
+	require.Contains(t, preview.HTML, "$9.25")
+	require.Contains(t, preview.HTML, "$10.00")
+	require.NotContains(t, preview.HTML, "{{remaining_balance_usd}}")
 }
 
 func TestCyberPolicyNoticeTemplateWrapsLongUpstreamMessages(t *testing.T) {
