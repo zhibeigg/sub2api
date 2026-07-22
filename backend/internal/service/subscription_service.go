@@ -1372,6 +1372,9 @@ func (s *SubscriptionService) GetSubscriptionProgress(ctx context.Context, subsc
 // calculateProgress 根据已加载的订阅和分组数据计算使用进度（纯内存计算，无 DB 查询）
 func (s *SubscriptionService) calculateProgress(sub *UserSubscription, group *Group) *SubscriptionProgress {
 	now := time.Now()
+	if normalized := sub.NormalizedWindowSnapshotAt(now); normalized != nil {
+		sub = normalized
+	}
 	progress := &SubscriptionProgress{
 		ID:            sub.ID,
 		GroupName:     group.Name,

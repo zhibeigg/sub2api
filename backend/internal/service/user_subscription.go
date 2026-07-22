@@ -141,6 +141,9 @@ func (s *UserSubscription) NormalizedWindowSnapshotAt(now time.Time) *UserSubscr
 	if normalized.DailyWindowStart == nil && !normalized.StartsAt.IsZero() {
 		windowStart := normalized.CurrentDailyWindowStartAt(now)
 		normalized.DailyWindowStart = &windowStart
+	} else if normalized.shouldAlignInitialWindowAt(now, subscriptionDayDuration, normalized.DailyWindowStart) {
+		windowStart := normalized.StartsAt
+		normalized.DailyWindowStart = &windowStart
 	} else if normalized.NeedsDailyResetAt(now) {
 		windowStart := normalized.CurrentDailyWindowStartAt(now)
 		normalized.DailyWindowStart = &windowStart
@@ -148,6 +151,9 @@ func (s *UserSubscription) NormalizedWindowSnapshotAt(now time.Time) *UserSubscr
 	}
 	if normalized.WeeklyWindowStart == nil && !normalized.StartsAt.IsZero() {
 		windowStart := normalized.CurrentWeeklyWindowStartAt(now)
+		normalized.WeeklyWindowStart = &windowStart
+	} else if normalized.shouldAlignInitialWindowAt(now, subscriptionWeekDuration, normalized.WeeklyWindowStart) {
+		windowStart := normalized.StartsAt
 		normalized.WeeklyWindowStart = &windowStart
 	} else if normalized.NeedsWeeklyResetAt(now) {
 		windowStart := normalized.CurrentWeeklyWindowStartAt(now)
@@ -157,6 +163,9 @@ func (s *UserSubscription) NormalizedWindowSnapshotAt(now time.Time) *UserSubscr
 	if normalized.MonthlyWindowStart == nil && !normalized.StartsAt.IsZero() {
 		windowStart := normalized.CurrentMonthlyWindowStartAt(now)
 		normalized.MonthlyWindowStart = &windowStart
+	} else if normalized.shouldAlignInitialWindowAt(now, subscriptionMonthDuration, normalized.MonthlyWindowStart) {
+		windowStart := normalized.StartsAt
+		normalized.MonthlyWindowStart = &windowStart
 	} else if normalized.NeedsMonthlyResetAt(now) {
 		windowStart := normalized.CurrentMonthlyWindowStartAt(now)
 		normalized.MonthlyWindowStart = &windowStart
@@ -165,11 +174,22 @@ func (s *UserSubscription) NormalizedWindowSnapshotAt(now time.Time) *UserSubscr
 	return &normalized
 }
 
+func (s *UserSubscription) shouldAlignInitialWindowAt(now time.Time, period time.Duration, windowStart *time.Time) bool {
+	if s == nil || s.StartsAt.IsZero() || windowStart == nil || !windowStart.Before(s.StartsAt) {
+		return false
+	}
+	return s.currentWindowStartAt(now, period, windowStart).Equal(s.StartsAt)
+}
+
 func (s *UserSubscription) needsWindowResetAt(now time.Time, period time.Duration, windowStart *time.Time) bool {
 	if windowStart == nil {
 		return false
 	}
-	return s.currentWindowStartAt(now, period, windowStart).After(*windowStart)
+	currentWindowStart := s.currentWindowStartAt(now, period, windowStart)
+	if !currentWindowStart.After(*windowStart) {
+		return false
+	}
+	return s.StartsAt.IsZero() || currentWindowStart.After(s.StartsAt)
 }
 
 func (s *UserSubscription) NeedsDailyReset() bool {

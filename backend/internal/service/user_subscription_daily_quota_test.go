@@ -136,7 +136,8 @@ func TestUserSubscriptionNeedsDailyReset_MultiDaySubscriptionStillRefreshes(t *t
 	}
 
 	require.False(t, sub.HasOneTimeDailyQuota())
-	require.True(t, sub.NeedsDailyResetAt(dailyWindowStart.Add(24*time.Hour)), "多日订阅仍应按 24 小时日窗口刷新")
+	require.False(t, sub.NeedsDailyResetAt(dailyWindowStart.Add(24*time.Hour)), "首个日窗口不应在购买后不足 24 小时提前刷新")
+	require.True(t, sub.NeedsDailyResetAt(start.Add(24*time.Hour)), "多日订阅应在购买满 24 小时后刷新")
 }
 
 func TestUserSubscriptionDailyResetTime_DailyCardReturnsExpiry(t *testing.T) {
@@ -260,6 +261,50 @@ func TestUserSubscriptionLegacyMidnightWindowWaitsForPurchaseTimeBoundary(t *tes
 
 	require.False(t, sub.NeedsDailyResetAt(time.Date(2026, 7, 22, 9, 0, 0, 0, time.UTC)))
 	require.True(t, sub.NeedsDailyResetAt(time.Date(2026, 7, 22, 10, 30, 0, 0, time.UTC)))
+}
+
+func TestUserSubscriptionLegacyInitialWindowPreservesUsageUntilFirstFullPeriod(t *testing.T) {
+	startsAt := time.Date(2026, 7, 22, 20, 57, 39, 0, time.UTC)
+	legacyMidnightStart := time.Date(2026, 7, 22, 0, 0, 0, 0, time.UTC)
+	now := startsAt.Add(2 * time.Hour)
+	sub := &UserSubscription{
+		StartsAt:           startsAt,
+		ExpiresAt:          startsAt.Add(60 * subscriptionDayDuration),
+		DailyWindowStart:   &legacyMidnightStart,
+		WeeklyWindowStart:  &legacyMidnightStart,
+		MonthlyWindowStart: &legacyMidnightStart,
+		DailyUsageUSD:      11,
+		WeeklyUsageUSD:     22,
+		MonthlyUsageUSD:    33,
+	}
+
+	require.False(t, sub.NeedsDailyResetAt(now))
+	require.False(t, sub.NeedsWeeklyResetAt(now))
+	require.False(t, sub.NeedsMonthlyResetAt(now))
+	require.True(t, sub.NeedsDailyResetAt(startsAt.Add(subscriptionDayDuration)))
+	require.True(t, sub.NeedsWeeklyResetAt(startsAt.Add(subscriptionWeekDuration)))
+	require.True(t, sub.NeedsMonthlyResetAt(startsAt.Add(subscriptionMonthDuration)))
+
+	normalized := sub.NormalizedWindowSnapshotAt(now)
+	require.Equal(t, startsAt, *normalized.DailyWindowStart)
+	require.Equal(t, startsAt, *normalized.WeeklyWindowStart)
+	require.Equal(t, startsAt, *normalized.MonthlyWindowStart)
+	require.Equal(t, float64(11), normalized.DailyUsageUSD)
+	require.Equal(t, float64(22), normalized.WeeklyUsageUSD)
+	require.Equal(t, float64(33), normalized.MonthlyUsageUSD)
+	require.Equal(t, startsAt.Add(subscriptionDayDuration), *normalized.DailyResetTimeAt(now))
+	require.Equal(t, startsAt.Add(subscriptionWeekDuration), *normalized.WeeklyResetTimeAt(now))
+	require.Equal(t, startsAt.Add(subscriptionMonthDuration), *normalized.MonthlyResetTimeAt(now))
+
+	repo := &dailyResetTrackingUserSubRepo{}
+	svc := NewSubscriptionService(groupRepoNoop{}, repo, nil, nil, nil)
+	require.NoError(t, svc.checkAndResetWindowsAt(context.Background(), sub, now))
+	require.False(t, repo.resetDailyCalled)
+	require.False(t, repo.resetWeeklyCalled)
+	require.False(t, repo.resetMonthlyCalled)
+	require.Equal(t, float64(11), sub.DailyUsageUSD)
+	require.Equal(t, float64(22), sub.WeeklyUsageUSD)
+	require.Equal(t, float64(33), sub.MonthlyUsageUSD)
 }
 
 func TestCheckAndResetWindowsAdvancesEachPeriodToAnchoredBoundary(t *testing.T) {
