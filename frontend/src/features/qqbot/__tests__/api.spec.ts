@@ -12,10 +12,24 @@ describe('QQBot API', () => {
     client.get.mockResolvedValue({ data: {} })
     await qqbotAPI.getConfig()
     await qqbotAPI.getRuntime()
+    await qqbotAPI.getOneBotConfig()
+    await qqbotAPI.getOneBotRuntime()
     await qqbotAPI.getStats()
     expect(client.get).toHaveBeenCalledWith('/admin/qqbot/config')
     expect(client.get).toHaveBeenCalledWith('/admin/qqbot/runtime')
+    expect(client.get).toHaveBeenCalledWith('/admin/qqbot/onebot/config')
+    expect(client.get).toHaveBeenCalledWith('/admin/qqbot/onebot/runtime')
     expect(client.get).toHaveBeenCalledWith('/admin/qqbot/stats')
+  })
+
+  it('uses the dedicated OneBot management endpoints', async () => {
+    client.put.mockResolvedValue({ data: {} })
+    client.post.mockResolvedValue({ data: { ok: true } })
+    const payload = { expected_config_version: 1, enabled: false, self_id: '123456789', worker_count: 2, queue_capacity: 1024, action_timeout_ms: 10000 }
+    await qqbotAPI.updateOneBotConfig(payload)
+    expect(client.put).toHaveBeenCalledWith('/admin/qqbot/onebot/config', payload)
+    await qqbotAPI.probeOneBot({ self_id: '123456789', action_timeout_ms: 10000 })
+    expect(client.post).toHaveBeenCalledWith('/admin/qqbot/onebot/probe', { self_id: '123456789', action_timeout_ms: 10000 })
   })
 
   it('uses the planned public binding endpoints', async () => {

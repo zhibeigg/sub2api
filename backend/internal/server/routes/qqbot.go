@@ -10,6 +10,7 @@ import (
 // retains the legacy HMAC bridge during the rollback window.
 func RegisterQQBotRoutes(root *gin.Engine, v1 *gin.RouterGroup, h *handler.QQBotHandler, hmacMiddleware gin.HandlerFunc) {
 	root.POST("/webhooks/qq", h.Webhook)
+	root.GET("/webhooks/qq/onebot", h.OneBotWebhook)
 	root.GET(qqbot.ChannelCheckImagePath, h.ChannelStatusImage)
 
 	public := v1.Group("/public/bindings")

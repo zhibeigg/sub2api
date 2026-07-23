@@ -14,6 +14,7 @@ export interface QQBotConfig {
   first_bind_bonus: number
   link_ttl_minutes: number
   welcome_enabled: boolean
+  welcome_message: string
   first_interaction_enabled: boolean
   channel_check_enabled: boolean
   help_message: string
@@ -49,6 +50,7 @@ export interface QQBotUpdateRequest {
   first_bind_bonus: number
   link_ttl_minutes: number
   welcome_enabled: boolean
+  welcome_message: string
   first_interaction_enabled: boolean
   channel_check_enabled: boolean
   help_message: string
@@ -91,6 +93,50 @@ export interface QQBotRuntime {
   last_error_code?: string
   last_error_message?: string
   last_error_at?: string
+}
+
+export interface QQBotOneBotConfig {
+  enabled: boolean
+  self_id: string
+  access_token_configured: boolean
+  worker_count: number
+  queue_capacity: number
+  action_timeout_ms: number
+  reverse_ws_url: string
+  config_version: number
+  updated_at?: string
+  updated_by?: number
+  change_summary?: string
+}
+
+export interface QQBotOneBotDraft extends QQBotOneBotConfig {
+  access_token: string
+}
+
+export interface QQBotOneBotUpdateRequest {
+  expected_config_version: number
+  enabled: boolean
+  self_id: string
+  access_token?: string
+  worker_count: number
+  queue_capacity: number
+  action_timeout_ms: number
+}
+
+export interface QQBotOneBotProbeRequest {
+  self_id: string
+  access_token?: string
+  action_timeout_ms: number
+}
+
+export interface QQBotOneBotRuntime extends QQBotRuntime {
+  connected: boolean
+  connection_id?: number
+  self_id_fingerprint?: string
+  pending_actions: number
+  connected_at?: string
+  last_action_at?: string
+  last_disconnect_at?: string
 }
 
 export interface QQBotStats {

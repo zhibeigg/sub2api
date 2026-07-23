@@ -19,8 +19,12 @@ func (testEncryptor) Decrypt(value string) (string, error) {
 
 type memorySettingRepo struct{ values map[string]string }
 
-func (r *memorySettingRepo) Get(context.Context, string) (*service.Setting, error) {
-	return nil, service.ErrSettingNotFound
+func (r *memorySettingRepo) Get(_ context.Context, key string) (*service.Setting, error) {
+	value, ok := r.values[key]
+	if !ok {
+		return nil, service.ErrSettingNotFound
+	}
+	return &service.Setting{Key: key, Value: value}, nil
 }
 func (r *memorySettingRepo) GetValue(_ context.Context, key string) (string, error) {
 	value, ok := r.values[key]

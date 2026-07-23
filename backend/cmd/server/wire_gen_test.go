@@ -97,6 +97,7 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 		nil, // auditLog
 		nil, // promptAudit
 		nil, // qqBotRuntime
+		nil, // oneBotRuntime
 	)
 
 	require.NotPanics(t, func() {

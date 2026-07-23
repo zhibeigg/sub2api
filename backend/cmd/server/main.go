@@ -170,6 +170,11 @@ func runMainServer() {
 			log.Printf("QQBot runtime started in disabled/degraded state: %v", err)
 		}
 	}
+	if app.QQBotOneBot != nil {
+		if err := app.QQBotOneBot.Start(context.Background()); err != nil {
+			log.Printf("QQBot OneBot runtime started in disabled/degraded state: %v", err)
+		}
+	}
 
 	// 启动服务器
 	go func() {

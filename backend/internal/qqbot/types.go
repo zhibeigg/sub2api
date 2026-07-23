@@ -98,6 +98,7 @@ type PublicConfig struct {
 	FirstBindBonus          float64           `json:"first_bind_bonus"`
 	LinkTTLMinutes          int               `json:"link_ttl_minutes"`
 	WelcomeEnabled          bool              `json:"welcome_enabled"`
+	WelcomeMessage          string            `json:"welcome_message"`
 	FirstInteractionEnabled bool              `json:"first_interaction_enabled"`
 	ChannelCheckEnabled     bool              `json:"channel_check_enabled"`
 	HelpMessage             string            `json:"help_message"`
@@ -125,6 +126,7 @@ type UpdateConfigRequest struct {
 	FirstBindBonus          float64           `json:"first_bind_bonus"`
 	LinkTTLMinutes          int               `json:"link_ttl_minutes"`
 	WelcomeEnabled          bool              `json:"welcome_enabled"`
+	WelcomeMessage          string            `json:"welcome_message"`
 	FirstInteractionEnabled bool              `json:"first_interaction_enabled"`
 	ChannelCheckEnabled     bool              `json:"channel_check_enabled"`
 	HelpMessage             string            `json:"help_message"`
@@ -139,6 +141,7 @@ func (r UpdateConfigRequest) businessUpdate() service.QQBotSettingsUpdate {
 		FirstBindBonus:          &r.FirstBindBonus,
 		LinkTTLMinutes:          &r.LinkTTLMinutes,
 		WelcomeEnabled:          &r.WelcomeEnabled,
+		WelcomeMessage:          &r.WelcomeMessage,
 		FirstInteractionEnabled: &r.FirstInteractionEnabled,
 		ChannelCheckEnabled:     &r.ChannelCheckEnabled,
 		HelpMessage:             &r.HelpMessage,
@@ -283,6 +286,7 @@ func publicFromStorage(cfg storageConfig, settings service.QQBotSettings) Public
 		FirstBindBonus:          settings.FirstBindBonus,
 		LinkTTLMinutes:          settings.LinkTTLMinutes,
 		WelcomeEnabled:          settings.WelcomeEnabled,
+		WelcomeMessage:          settings.WelcomeMessage,
 		FirstInteractionEnabled: settings.FirstInteractionEnabled,
 		ChannelCheckEnabled:     settings.ChannelCheckEnabled,
 		HelpMessage:             settings.HelpMessage,

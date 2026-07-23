@@ -28,6 +28,7 @@
         <main class="card p-4 sm:p-6 lg:p-8">
           <OverviewTab v-show="activeTab === 'overview'" :config="serverConfig" :runtime="runtime" :stats="stats" :loading="loading.runtime || loading.stats" :error="loadErrors.runtime || loadErrors.stats" @refresh="refreshOverview" />
           <BotConfigTab v-if="draft" v-show="activeTab === 'config'" :draft="draft" :probing="loading.probing" @update:draft="replaceDraft" @probe="runProbe" />
+          <OneBotTab v-if="oneBotDraft" v-show="activeTab === 'onebot'" :draft="oneBotDraft" :runtime="oneBotRuntime" :probe-result="oneBotProbeResult" :dirty="oneBotDirty" :saving="loading.oneBotSaving" :probing="loading.oneBotProbing" :error="loadErrors.oneBotConfig || loadErrors.oneBotRuntime" @update:draft="replaceOneBotDraft" @set-enabled="setOneBotEnabled" @save="saveOneBotConfig" @reset="resetOneBotDraft" @probe="runOneBotProbe" />
           <MessagesTab v-if="draft" v-show="activeTab === 'messages'" :draft="draft" @update:draft="replaceDraft" />
           <BindingsTab ref="bindingsTabRef" v-show="activeTab === 'bindings'" :page="bindings" :filters="bindingFilters" :loading="loading.bindings" :error="loadErrors.bindings" :unbinding="loading.unbinding" @update:filters="bindingFilters = $event" @search="searchBindings" @reset="resetBindings" @refresh="loadBindings" @page="changeBindingPage" @unbind="unbindRecord" />
           <DiagnosticsTab v-if="serverConfig" v-show="activeTab === 'diagnostics'" :config="serverConfig" :runtime="runtime" :probe-result="probeResult" :probing="loading.probing" @probe="runProbe" />
@@ -65,17 +66,23 @@ import BindingsTab from './components/BindingsTab.vue'
 import BotConfigTab from './components/BotConfigTab.vue'
 import DiagnosticsTab from './components/DiagnosticsTab.vue'
 import MessagesTab from './components/MessagesTab.vue'
+import OneBotTab from './components/OneBotTab.vue'
 import OverviewTab from './components/OverviewTab.vue'
 import type {
   QQBotBindingFilters,
   QQBotBindingPage,
   QQBotConfig,
   QQBotDraft,
+  QQBotOneBotConfig,
+  QQBotOneBotDraft,
+  QQBotOneBotRuntime,
   QQBotProbeResult,
   QQBotRuntime,
   QQBotStats,
 } from './types'
 import {
+  buildOneBotProbeRequest,
+  buildOneBotUpdateRequest,
   buildProbeRequest,
   buildUpdateRequest,
   cloneData,
@@ -83,10 +90,15 @@ import {
   credentialFingerprint,
   credentialsReady,
   draftFingerprint,
+  oneBotConfigToDraft,
+  oneBotCredentialFingerprint,
+  oneBotCredentialsReady,
+  oneBotDraftFingerprint,
   validateDraft,
+  validateOneBotDraft,
 } from './viewModel'
 
-type QQBotTab = 'overview' | 'config' | 'messages' | 'bindings' | 'diagnostics'
+type QQBotTab = 'overview' | 'config' | 'onebot' | 'messages' | 'bindings' | 'diagnostics'
 type BindingsTabExpose = { closeUnbind: () => void }
 
 const { t, locale } = useI18n()
@@ -95,24 +107,32 @@ const activeTab = ref<QQBotTab>('overview')
 const serverConfig = ref<QQBotConfig | null>(null)
 const serverDraft = ref<QQBotDraft | null>(null)
 const draft = ref<QQBotDraft | null>(null)
+const oneBotConfig = ref<QQBotOneBotConfig | null>(null)
+const oneBotServerDraft = ref<QQBotOneBotDraft | null>(null)
+const oneBotDraft = ref<QQBotOneBotDraft | null>(null)
 const runtime = ref<QQBotRuntime | null>(null)
+const oneBotRuntime = ref<QQBotOneBotRuntime | null>(null)
 const stats = ref<QQBotStats | null>(null)
 const probeResult = ref<QQBotProbeResult | null>(null)
 const probeFingerprint = ref('')
+const oneBotProbeResult = ref<QQBotProbeResult | null>(null)
+const oneBotProbeFingerprint = ref('')
 const bindings = reactive<QQBotBindingPage>({ items: [], total: 0, page: 1, page_size: 20, pages: 1 })
 const bindingFilters = ref<QQBotBindingFilters>({ status: '', scene: '', search: '', from: '', to: '' })
 const bindingsTabRef = ref<BindingsTabExpose | null>(null)
-const loading = reactive({ config: false, runtime: false, stats: false, bindings: false, saving: false, probing: false, unbinding: false })
-const loadErrors = reactive({ config: '', runtime: '', stats: '', bindings: '' })
+const loading = reactive({ config: false, runtime: false, oneBotConfig: false, oneBotRuntime: false, stats: false, bindings: false, saving: false, probing: false, oneBotSaving: false, oneBotProbing: false, unbinding: false })
+const loadErrors = reactive({ config: '', runtime: '', oneBotConfig: '', oneBotRuntime: '', stats: '', bindings: '' })
 
 const tabs = computed(() => [
   { id: 'overview' as const, label: t('admin.qqbot.tabs.overview') },
   { id: 'config' as const, label: t('admin.qqbot.tabs.config') },
+  { id: 'onebot' as const, label: t('admin.qqbot.tabs.onebot') },
   { id: 'messages' as const, label: t('admin.qqbot.tabs.messages') },
   { id: 'bindings' as const, label: t('admin.qqbot.tabs.bindings') },
   { id: 'diagnostics' as const, label: t('admin.qqbot.tabs.diagnostics') },
 ])
 const dirty = computed(() => draftFingerprint(draft.value) !== draftFingerprint(serverDraft.value))
+const oneBotDirty = computed(() => oneBotDraftFingerprint(oneBotDraft.value) !== oneBotDraftFingerprint(oneBotServerDraft.value))
 
 function errorMessage(error: unknown, fallbackKey: string): string {
   const code = extractApiErrorCode(error)
@@ -126,6 +146,8 @@ function errorMessage(error: unknown, fallbackKey: string): string {
 function date(value: string) { return formatDateTime(value, undefined, locale.value) }
 function replaceDraft(value: QQBotDraft) { draft.value = cloneData(value) }
 function resetDraft() { if (serverDraft.value) draft.value = cloneData(serverDraft.value) }
+function replaceOneBotDraft(value: QQBotOneBotDraft) { oneBotDraft.value = cloneData(value) }
+function resetOneBotDraft() { if (oneBotServerDraft.value) oneBotDraft.value = cloneData(oneBotServerDraft.value) }
 
 async function loadConfig() {
   loading.config = true
@@ -139,11 +161,29 @@ async function loadConfig() {
     loadErrors.config = errorMessage(error, 'admin.qqbot.errors.loadConfig')
   } finally { loading.config = false }
 }
+async function loadOneBotConfig() {
+  loading.oneBotConfig = true
+  loadErrors.oneBotConfig = ''
+  try {
+    const config = await qqbotAPI.getOneBotConfig()
+    oneBotConfig.value = config
+    oneBotServerDraft.value = oneBotConfigToDraft(config)
+    oneBotDraft.value = oneBotConfigToDraft(config)
+  } catch (error) {
+    loadErrors.oneBotConfig = errorMessage(error, 'admin.qqbot.errors.loadOneBotConfig')
+  } finally { loading.oneBotConfig = false }
+}
 async function loadRuntime() {
   loading.runtime = true; loadErrors.runtime = ''
   try { runtime.value = await qqbotAPI.getRuntime() }
   catch (error) { loadErrors.runtime = errorMessage(error, 'admin.qqbot.errors.loadRuntime') }
   finally { loading.runtime = false }
+}
+async function loadOneBotRuntime() {
+  loading.oneBotRuntime = true; loadErrors.oneBotRuntime = ''
+  try { oneBotRuntime.value = await qqbotAPI.getOneBotRuntime() }
+  catch (error) { loadErrors.oneBotRuntime = errorMessage(error, 'admin.qqbot.errors.loadOneBotRuntime') }
+  finally { loading.oneBotRuntime = false }
 }
 async function loadStats() {
   loading.stats = true; loadErrors.stats = ''
@@ -157,7 +197,7 @@ async function loadBindings() {
   catch (error) { loadErrors.bindings = errorMessage(error, 'admin.qqbot.errors.loadBindings') }
   finally { loading.bindings = false }
 }
-async function refreshOverview() { await Promise.allSettled([loadRuntime(), loadStats()]) }
+async function refreshOverview() { await Promise.allSettled([loadRuntime(), loadOneBotRuntime(), loadStats()]) }
 function searchBindings() { bindings.page = 1; void loadBindings() }
 function resetBindings() { bindingFilters.value = { status: '', scene: '', search: '', from: '', to: '' }; bindings.page = 1; void loadBindings() }
 function changeBindingPage(page: number) { bindings.page = page; void loadBindings() }
@@ -178,6 +218,17 @@ function setEnabled(value: boolean) {
   replaceDraft({ ...draft.value, enabled: true })
 }
 
+function hasCurrentSuccessfulOneBotProbe(value: QQBotOneBotDraft): boolean {
+  return Boolean(oneBotProbeResult.value?.ok && oneBotProbeFingerprint.value === oneBotCredentialFingerprint(value))
+}
+function setOneBotEnabled(value: boolean) {
+  if (!oneBotDraft.value) return
+  if (!value) { replaceOneBotDraft({ ...oneBotDraft.value, enabled: false }); return }
+  if (!oneBotCredentialsReady(oneBotDraft.value)) { appStore.showError(t('admin.qqbot.errors.oneBotCredentialsRequired')); return }
+  if (!hasCurrentSuccessfulOneBotProbe(oneBotDraft.value)) { appStore.showError(t('admin.qqbot.errors.oneBotProbeRequired')); return }
+  replaceOneBotDraft({ ...oneBotDraft.value, enabled: true })
+}
+
 async function runProbe() {
   if (!draft.value || loading.probing) return
   if (!credentialsReady(draft.value)) { appStore.showError(t('admin.qqbot.errors.credentialsRequired')); return }
@@ -193,6 +244,25 @@ async function runProbe() {
     probeFingerprint.value = ''
     appStore.showError(errorMessage(error, 'admin.qqbot.errors.probe'))
   } finally { loading.probing = false }
+}
+
+async function runOneBotProbe() {
+  if (!oneBotDraft.value || loading.oneBotProbing) return
+  if (oneBotDirty.value) { appStore.showError(t('admin.qqbot.errors.oneBotSaveBeforeProbe')); return }
+  if (!oneBotCredentialsReady(oneBotDraft.value)) { appStore.showError(t('admin.qqbot.errors.oneBotCredentialsRequired')); return }
+  loading.oneBotProbing = true
+  try {
+    const fingerprint = oneBotCredentialFingerprint(oneBotDraft.value)
+    oneBotProbeResult.value = await qqbotAPI.probeOneBot(buildOneBotProbeRequest(oneBotDraft.value))
+    oneBotProbeFingerprint.value = fingerprint
+    if (oneBotProbeResult.value.ok) appStore.showSuccess(t('admin.qqbot.notices.oneBotProbeSucceeded'))
+    else appStore.showError(`${oneBotProbeResult.value.error_code || oneBotProbeResult.value.status}: ${oneBotProbeResult.value.message}`)
+    await loadOneBotRuntime()
+  } catch (error) {
+    oneBotProbeResult.value = null
+    oneBotProbeFingerprint.value = ''
+    appStore.showError(errorMessage(error, 'admin.qqbot.errors.oneBotProbe'))
+  } finally { loading.oneBotProbing = false }
 }
 
 async function saveConfig() {
@@ -215,6 +285,27 @@ async function saveConfig() {
   } finally { loading.saving = false }
 }
 
+async function saveOneBotConfig() {
+  if (!oneBotDraft.value || !oneBotDirty.value) return
+  const invalid = validateOneBotDraft(oneBotDraft.value)
+  if (invalid.length) { appStore.showError(t(`admin.qqbot.validation.${invalid[0]}`)); return }
+  if (oneBotDraft.value.enabled && !oneBotCredentialsReady(oneBotDraft.value)) { appStore.showError(t('admin.qqbot.errors.oneBotCredentialsRequired')); return }
+  if (oneBotDraft.value.enabled && !hasCurrentSuccessfulOneBotProbe(oneBotDraft.value)) { appStore.showError(t('admin.qqbot.errors.oneBotProbeRequired')); return }
+  loading.oneBotSaving = true
+  try {
+    const saved = await qqbotAPI.updateOneBotConfig(buildOneBotUpdateRequest(oneBotDraft.value))
+    oneBotConfig.value = saved
+    oneBotServerDraft.value = oneBotConfigToDraft(saved)
+    oneBotDraft.value = oneBotConfigToDraft(saved)
+    oneBotProbeResult.value = null
+    oneBotProbeFingerprint.value = ''
+    appStore.showSuccess(t('admin.qqbot.notices.oneBotSaved'))
+    await loadOneBotRuntime()
+  } catch (error) {
+    appStore.showError(errorMessage(error, 'admin.qqbot.errors.saveOneBotConfig'))
+  } finally { loading.oneBotSaving = false }
+}
+
 async function unbindRecord(id: string, reason: string) {
   if (loading.unbinding) return
   loading.unbinding = true
@@ -228,7 +319,7 @@ async function unbindRecord(id: string, reason: string) {
 }
 
 async function loadInitial() {
-  await Promise.allSettled([loadConfig(), loadRuntime(), loadStats(), loadBindings()])
+  await Promise.allSettled([loadConfig(), loadOneBotConfig(), loadRuntime(), loadOneBotRuntime(), loadStats(), loadBindings()])
 }
 onMounted(loadInitial)
 </script>

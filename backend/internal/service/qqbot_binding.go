@@ -42,6 +42,7 @@ const (
 	SettingKeyQQBotFirstBindBonus          = "qqbot_first_bind_bonus"
 	SettingKeyQQBotLinkTTLMinutes          = "qqbot_link_ttl_minutes"
 	SettingKeyQQBotWelcomeEnabled          = "qqbot_welcome_enabled"
+	SettingKeyQQBotWelcomeMessage          = "qqbot_welcome_message"
 	SettingKeyQQBotFirstInteractionEnabled = "qqbot_first_interaction_enabled"
 	SettingKeyQQBotChannelCheckEnabled     = "qqbot_channel_check_enabled"
 	SettingKeyQQBotHelpMessage             = "qqbot_help_message"
@@ -60,6 +61,7 @@ type QQBotSettings struct {
 	FirstBindBonus          float64           `json:"first_bind_bonus"`
 	LinkTTLMinutes          int               `json:"link_ttl_minutes"`
 	WelcomeEnabled          bool              `json:"welcome_enabled"`
+	WelcomeMessage          string            `json:"welcome_message"`
 	FirstInteractionEnabled bool              `json:"first_interaction_enabled"`
 	ChannelCheckEnabled     bool              `json:"channel_check_enabled"`
 	HelpMessage             string            `json:"help_message"`
@@ -74,6 +76,7 @@ type QQBotSettingsUpdate struct {
 	FirstBindBonus          *float64           `json:"first_bind_bonus,omitempty"`
 	LinkTTLMinutes          *int               `json:"link_ttl_minutes,omitempty"`
 	WelcomeEnabled          *bool              `json:"welcome_enabled,omitempty"`
+	WelcomeMessage          *string            `json:"welcome_message,omitempty"`
 	FirstInteractionEnabled *bool              `json:"first_interaction_enabled,omitempty"`
 	ChannelCheckEnabled     *bool              `json:"channel_check_enabled,omitempty"`
 	HelpMessage             *string            `json:"help_message,omitempty"`

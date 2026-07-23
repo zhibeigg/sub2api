@@ -16,7 +16,7 @@ func TestLegacyUpdateSettingsRejectsChannelCheckField(t *testing.T) {
 	context.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/integrations/qqbot/settings", bytes.NewBufferString(`{"channel_check_enabled":true}`))
 	context.Request.Header.Set("Content-Type", "application/json")
 
-	NewQQBotHandler(nil, nil, nil, nil, nil).UpdateSettings(context)
+	NewQQBotHandler(nil, nil, nil, nil, nil, nil, nil).UpdateSettings(context)
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
 	}

@@ -19,15 +19,17 @@ import (
 )
 
 type QQBotHandler struct {
-	service      *service.QQBotService
-	config       *qqbot.ConfigManager
-	runtime      *qqbot.Runtime
-	queue        *qqbot.ReliableQueue
-	channelCheck *qqbot.ChannelCheckService
+	service       *service.QQBotService
+	config        *qqbot.ConfigManager
+	runtime       *qqbot.Runtime
+	oneBotConfig  *qqbot.OneBotConfigManager
+	oneBotRuntime *qqbot.OneBotRuntime
+	queue         *qqbot.ReliableQueue
+	channelCheck  *qqbot.ChannelCheckService
 }
 
-func NewQQBotHandler(qqBotService *service.QQBotService, configManager *qqbot.ConfigManager, runtime *qqbot.Runtime, queue *qqbot.ReliableQueue, channelCheck *qqbot.ChannelCheckService) *QQBotHandler {
-	return &QQBotHandler{service: qqBotService, config: configManager, runtime: runtime, queue: queue, channelCheck: channelCheck}
+func NewQQBotHandler(qqBotService *service.QQBotService, configManager *qqbot.ConfigManager, runtime *qqbot.Runtime, oneBotConfig *qqbot.OneBotConfigManager, oneBotRuntime *qqbot.OneBotRuntime, queue *qqbot.ReliableQueue, channelCheck *qqbot.ChannelCheckService) *QQBotHandler {
+	return &QQBotHandler{service: qqBotService, config: configManager, runtime: runtime, oneBotConfig: oneBotConfig, oneBotRuntime: oneBotRuntime, queue: queue, channelCheck: channelCheck}
 }
 
 func (h *QQBotHandler) PrepareBinding(c *gin.Context) {
@@ -169,6 +171,14 @@ func (h *QQBotHandler) Webhook(c *gin.Context) {
 	h.runtime.ServeWebhook(c.Writer, c.Request)
 }
 
+func (h *QQBotHandler) OneBotWebhook(c *gin.Context) {
+	if h.oneBotRuntime == nil {
+		response.ErrorFrom(c, qqbot.ErrRuntimeUnavailable)
+		return
+	}
+	h.oneBotRuntime.ServeReverseWebSocket(c.Writer, c.Request)
+}
+
 func (h *QQBotHandler) ChannelStatusImage(c *gin.Context) {
 	c.Header("Cache-Control", "private, no-store, max-age=0")
 	c.Header("X-Content-Type-Options", "nosniff")
@@ -303,6 +313,7 @@ func (h *QQBotHandler) UpdateConfig(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
+	middleware2.SetAuditExtra(c, map[string]any{"enabled": result.Enabled, "config_version": result.ConfigVersion})
 	response.Success(c, result)
 }
 
@@ -343,6 +354,70 @@ func (h *QQBotHandler) GetRuntime(c *gin.Context) {
 		return
 	}
 	response.Success(c, h.runtime.State(c.Request.Context()))
+}
+
+func (h *QQBotHandler) GetOneBotConfig(c *gin.Context) {
+	if h.oneBotConfig == nil {
+		response.ErrorFrom(c, qqbot.ErrRuntimeUnavailable)
+		return
+	}
+	response.Success(c, h.oneBotConfig.Public())
+}
+
+func (h *QQBotHandler) UpdateOneBotConfig(c *gin.Context) {
+	if h.oneBotConfig == nil {
+		response.ErrorFrom(c, qqbot.ErrRuntimeUnavailable)
+		return
+	}
+	var input qqbot.OneBotUpdateConfigRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.ErrorFrom(c, qqbot.ErrInvalidConfig)
+		return
+	}
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok || subject.UserID <= 0 {
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	result, err := h.oneBotConfig.Save(c.Request.Context(), input, subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	middleware2.SetAuditExtra(c, map[string]any{"enabled": result.Enabled, "config_version": result.ConfigVersion})
+	response.Success(c, result)
+}
+
+func (h *QQBotHandler) ProbeOneBot(c *gin.Context) {
+	if h.oneBotRuntime == nil || h.oneBotConfig == nil {
+		response.ErrorFrom(c, qqbot.ErrRuntimeUnavailable)
+		return
+	}
+	var input qqbot.OneBotProbeRequest
+	if err := c.ShouldBindJSON(&input); err != nil && !errors.Is(err, io.EOF) {
+		response.ErrorFrom(c, qqbot.ErrInvalidConfig)
+		return
+	}
+	candidate, err := h.oneBotConfig.ResolveProbeConfig(input)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	timeout := time.Duration(candidate.ActionTimeoutMS) * time.Millisecond
+	if timeout <= 0 {
+		timeout = qqbot.DefaultOneBotActionTimeout
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeout)
+	defer cancel()
+	response.Success(c, h.oneBotRuntime.ProbeConfig(ctx, candidate))
+}
+
+func (h *QQBotHandler) GetOneBotRuntime(c *gin.Context) {
+	if h.oneBotRuntime == nil {
+		response.ErrorFrom(c, qqbot.ErrRuntimeUnavailable)
+		return
+	}
+	response.Success(c, h.oneBotRuntime.State(c.Request.Context()))
 }
 
 func (h *QQBotHandler) AdminUnbind(c *gin.Context) {

@@ -29,6 +29,7 @@ type Application struct {
 	Server      *http.Server
 	PromptAudit *securityaudit.PromptService
 	QQBot       *qqbot.Runtime
+	QQBotOneBot *qqbot.OneBotRuntime
 	Cleanup     func()
 }
 
@@ -59,7 +60,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 		provideCleanup,
 
 		// Application struct
-		wire.Struct(new(Application), "Server", "PromptAudit", "QQBot", "Cleanup"),
+		wire.Struct(new(Application), "Server", "PromptAudit", "QQBot", "QQBotOneBot", "Cleanup"),
 	)
 	return nil, nil
 }
@@ -123,6 +124,7 @@ func provideCleanup(
 	auditLog *service.AuditLogService,
 	promptAudit *securityaudit.PromptService,
 	qqBotRuntime *qqbot.Runtime,
+	oneBotRuntime *qqbot.OneBotRuntime,
 ) func() {
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -135,6 +137,12 @@ func provideCleanup(
 
 		// 应用层清理步骤可并行执行，基础设施资源（Redis/Ent）最后按顺序关闭。
 		parallelSteps := []cleanupStep{
+			{"QQBotOneBotRuntime", func() error {
+				if oneBotRuntime != nil {
+					return oneBotRuntime.Shutdown(ctx)
+				}
+				return nil
+			}},
 			{"QQBotRuntime", func() error {
 				if qqBotRuntime != nil {
 					return qqBotRuntime.Shutdown(ctx)

@@ -70,10 +70,28 @@ type ReliableQueue struct {
 	redis     *redis.Client
 	encryptor service.SecretEncryptor
 	prefix    string
+	group     string
 }
 
+type OneBotQueue struct{ *ReliableQueue }
+
 func NewReliableQueue(redisClient *redis.Client, encryptor service.SecretEncryptor) *ReliableQueue {
-	return &ReliableQueue{redis: redisClient, encryptor: encryptor, prefix: "sub2api:qqbot"}
+	return newReliableQueue(redisClient, encryptor, "sub2api:qqbot", queueGroup)
+}
+
+func NewOneBotQueue(redisClient *redis.Client, encryptor service.SecretEncryptor) *OneBotQueue {
+	return &OneBotQueue{ReliableQueue: newReliableQueue(redisClient, encryptor, "sub2api:qqbot:onebot", queueGroup+"-onebot")}
+}
+
+func newReliableQueue(redisClient *redis.Client, encryptor service.SecretEncryptor, prefix, group string) *ReliableQueue {
+	return &ReliableQueue{redis: redisClient, encryptor: encryptor, prefix: strings.TrimRight(prefix, ":"), group: group}
+}
+
+func (q *ReliableQueue) consumerGroup() string {
+	if q != nil && strings.TrimSpace(q.group) != "" {
+		return q.group
+	}
+	return queueGroup
 }
 
 func (q *ReliableQueue) stream() string { return q.prefix + ":events" }
@@ -83,7 +101,7 @@ func (q *ReliableQueue) EnsureGroup(ctx context.Context) error {
 	if q == nil || q.redis == nil {
 		return errors.New("qqbot redis queue unavailable")
 	}
-	err := q.redis.XGroupCreateMkStream(ctx, q.stream(), queueGroup, "0").Err()
+	err := q.redis.XGroupCreateMkStream(ctx, q.stream(), q.consumerGroup(), "0").Err()
 	if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
 		return err
 	}
@@ -113,7 +131,7 @@ func (q *ReliableQueue) Enqueue(ctx context.Context, event InboundEvent, capacit
 }
 
 func (q *ReliableQueue) Read(ctx context.Context, consumer string, count int64, block time.Duration) ([]QueuedEvent, error) {
-	streams, err := q.redis.XReadGroup(ctx, &redis.XReadGroupArgs{Group: queueGroup, Consumer: consumer, Streams: []string{q.stream(), ">"}, Count: count, Block: block}).Result()
+	streams, err := q.redis.XReadGroup(ctx, &redis.XReadGroupArgs{Group: q.consumerGroup(), Consumer: consumer, Streams: []string{q.stream(), ">"}, Count: count, Block: block}).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +139,7 @@ func (q *ReliableQueue) Read(ctx context.Context, consumer string, count int64, 
 }
 
 func (q *ReliableQueue) Claim(ctx context.Context, consumer string, minIdle time.Duration, count int64) ([]QueuedEvent, error) {
-	messages, _, err := q.redis.XAutoClaim(ctx, &redis.XAutoClaimArgs{Stream: q.stream(), Group: queueGroup, Consumer: consumer, MinIdle: minIdle, Start: "0-0", Count: count}).Result()
+	messages, _, err := q.redis.XAutoClaim(ctx, &redis.XAutoClaimArgs{Stream: q.stream(), Group: q.consumerGroup(), Consumer: consumer, MinIdle: minIdle, Start: "0-0", Count: count}).Result()
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +179,7 @@ func (q *ReliableQueue) decodeMessages(messages []redis.XMessage) ([]QueuedEvent
 
 func (q *ReliableQueue) Ack(ctx context.Context, id string) error {
 	pipe := q.redis.TxPipeline()
-	pipe.XAck(ctx, q.stream(), queueGroup, id)
+	pipe.XAck(ctx, q.stream(), q.consumerGroup(), id)
 	pipe.XDel(ctx, q.stream(), id)
 	pipe.Del(ctx, q.prefix+":retry:"+id)
 	_, err := pipe.Exec(ctx)
@@ -188,7 +206,7 @@ func (q *ReliableQueue) DeadLetter(ctx context.Context, item QueuedEvent, errorC
 func (q *ReliableQueue) moveToDeadLetter(ctx context.Context, item QueuedEvent, errorCode string, attempts int64) error {
 	pipe := q.redis.TxPipeline()
 	pipe.XAdd(ctx, &redis.XAddArgs{Stream: q.dead(), MaxLen: 10000, Approx: true, Values: map[string]any{"payload": item.Payload, "source_id": item.ID, "error_code": errorCode, "attempts": attempts, "failed_at": time.Now().UTC().Format(time.RFC3339Nano)}})
-	pipe.XAck(ctx, q.stream(), queueGroup, item.ID)
+	pipe.XAck(ctx, q.stream(), q.consumerGroup(), item.ID)
 	pipe.XDel(ctx, q.stream(), item.ID)
 	pipe.Del(ctx, q.prefix+":retry:"+item.ID)
 	_, err := pipe.Exec(ctx)
@@ -293,7 +311,7 @@ func (q *ReliableQueue) Stats(ctx context.Context) (int64, int64, int64) {
 	}
 	backlog, _ := q.redis.XLen(ctx, q.stream()).Result()
 	pending := int64(0)
-	if value, err := q.redis.XPending(ctx, q.stream(), queueGroup).Result(); err == nil && value != nil {
+	if value, err := q.redis.XPending(ctx, q.stream(), q.consumerGroup()).Result(); err == nil && value != nil {
 		pending = value.Count
 	}
 	dead, _ := q.redis.XLen(ctx, q.dead()).Result()

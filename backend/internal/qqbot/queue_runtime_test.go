@@ -135,8 +135,10 @@ func TestRuntimeDrainTimeoutPreservesPendingEvent(t *testing.T) {
 }
 
 type recordingMessenger struct {
-	mu       sync.Mutex
-	contents []string
+	mu         sync.Mutex
+	contents   []string
+	groupIDs   []string
+	channelIDs []string
 }
 
 func (m *recordingMessenger) Probe(context.Context) (string, error) { return "bot", nil }
@@ -146,8 +148,12 @@ func (m *recordingMessenger) record(content string) error {
 	m.mu.Unlock()
 	return nil
 }
-func (m *recordingMessenger) SendGroup(_ context.Context, _, _, _, content string, _ uint32) error {
-	return m.record(content)
+func (m *recordingMessenger) SendGroup(_ context.Context, groupID, _, _, content string, _ uint32) error {
+	m.mu.Lock()
+	m.groupIDs = append(m.groupIDs, groupID)
+	m.contents = append(m.contents, content)
+	m.mu.Unlock()
+	return nil
 }
 func (m *recordingMessenger) SendC2C(_ context.Context, _, _, _, content string, _ uint32) error {
 	return m.record(content)
@@ -155,8 +161,12 @@ func (m *recordingMessenger) SendC2C(_ context.Context, _, _, _, content string,
 func (m *recordingMessenger) SendProactiveC2C(_ context.Context, _, content string) error {
 	return m.record(content)
 }
-func (m *recordingMessenger) SendChannel(_ context.Context, _, _, _, content string, _ uint32) error {
-	return m.record(content)
+func (m *recordingMessenger) SendChannel(_ context.Context, channelID, _, _, content string, _ uint32) error {
+	m.mu.Lock()
+	m.channelIDs = append(m.channelIDs, channelID)
+	m.contents = append(m.contents, content)
+	m.mu.Unlock()
+	return nil
 }
 func (m *recordingMessenger) SendGroupImage(_ context.Context, _, _, _, imageURL string, _ uint32) error {
 	return m.record(imageURL)
@@ -370,6 +380,109 @@ func TestRuntimeChannelCheckUsesImageReplyForActiveC2CBinding(t *testing.T) {
 	}
 	if binding.subj != "c2c:openid" {
 		t.Fatalf("binding subject=%q", binding.subj)
+	}
+}
+
+func TestRuntimeGroupMemberJoinedUsesWelcomeMessageAndAllowlist(t *testing.T) {
+	settings := defaultBusinessSettings()
+	settings.BindingEnabled = false
+	settings.ChannelCheckEnabled = false
+	settings.AllowedGroupIDs = []string{"allowed-group"}
+	settings.WelcomeMessage = "欢迎 {user} 加入 {site}\n绑定：{bind_command}\n状态：/check\n帮助：/help"
+	manager := &ConfigManager{}
+	manager.snapshot.Store(&configSnapshot{settings: settings})
+	runtime := &Runtime{manager: manager, state: RuntimeState{ProcessStatus: RuntimeRunning}}
+	messenger := &recordingMessenger{}
+	generation := &runtimeGeneration{messenger: messenger}
+
+	event := InboundEvent{EventID: "event-group-join", Scene: SceneGroup, SourceID: "allowed-group", DisplayName: "Alice\n/bind <@all>", MemberJoined: true}
+	if err := runtime.process(t.Context(), generation, event); err != nil {
+		t.Fatal(err)
+	}
+
+	messenger.mu.Lock()
+	contents := append([]string(nil), messenger.contents...)
+	groupIDs := append([]string(nil), messenger.groupIDs...)
+	messenger.mu.Unlock()
+	if len(contents) != 1 || len(groupIDs) != 1 || groupIDs[0] != "allowed-group" {
+		t.Fatalf("group deliveries=%v contents=%v", groupIDs, contents)
+	}
+	if strings.Contains(contents[0], "/bind") || strings.Contains(contents[0], "/check") || strings.Contains(contents[0], "<@") {
+		t.Fatalf("disabled or unsafe content leaked: %q", contents[0])
+	}
+	if !strings.Contains(contents[0], "Alice ∕bind ‹@all›") || !strings.Contains(contents[0], "PokeAPI") || !strings.Contains(contents[0], "/help") {
+		t.Fatalf("welcome placeholders were not rendered safely: %q", contents[0])
+	}
+
+	event.EventID = "event-group-denied"
+	event.SourceID = "other-group"
+	if err := runtime.process(t.Context(), generation, event); err != nil {
+		t.Fatal(err)
+	}
+	messenger.mu.Lock()
+	count := len(messenger.contents)
+	messenger.mu.Unlock()
+	if count != 1 {
+		t.Fatalf("unlisted group received welcome, count=%d", count)
+	}
+
+	settings.WelcomeEnabled = false
+	manager.snapshot.Store(&configSnapshot{settings: settings})
+	event.EventID = "event-group-disabled"
+	event.SourceID = "allowed-group"
+	if err := runtime.process(t.Context(), generation, event); err != nil {
+		t.Fatal(err)
+	}
+	messenger.mu.Lock()
+	count = len(messenger.contents)
+	messenger.mu.Unlock()
+	if count != 1 {
+		t.Fatalf("disabled welcome sent, count=%d", count)
+	}
+}
+
+func TestRuntimeGuildMemberJoinedKeepsWelcomeChannelMapping(t *testing.T) {
+	settings := defaultBusinessSettings()
+	settings.AllowedGuildIDs = []string{"guild-1"}
+	settings.GuildWelcomeChannels = map[string]string{"guild-1": "welcome-channel"}
+	settings.WelcomeMessage = "欢迎 {user}"
+	manager := &ConfigManager{}
+	manager.snapshot.Store(&configSnapshot{settings: settings})
+	runtime := &Runtime{manager: manager, state: RuntimeState{ProcessStatus: RuntimeRunning}}
+	messenger := &recordingMessenger{}
+	generation := &runtimeGeneration{messenger: messenger}
+
+	event := InboundEvent{EventID: "event-guild-join", Scene: SceneGuild, SourceID: "guild-1", GuildID: "guild-1", ChannelID: "original-channel", DisplayName: "Bob", MemberJoined: true}
+	if err := runtime.process(t.Context(), generation, event); err != nil {
+		t.Fatal(err)
+	}
+
+	messenger.mu.Lock()
+	contents := append([]string(nil), messenger.contents...)
+	channelIDs := append([]string(nil), messenger.channelIDs...)
+	messenger.mu.Unlock()
+	if len(contents) != 1 || contents[0] != "欢迎 Bob" || len(channelIDs) != 1 || channelIDs[0] != "welcome-channel" {
+		t.Fatalf("channel deliveries=%v contents=%v", channelIDs, contents)
+	}
+}
+
+func TestRenderWelcomeDefaultAdvertisesOnlyEnabledCommands(t *testing.T) {
+	settings := defaultBusinessSettings()
+	settings.BindingEnabled = false
+	settings.ChannelCheckEnabled = false
+	message := renderWelcome(settings, InboundEvent{DisplayName: ""})
+	if strings.Contains(message, "/bind") || strings.Contains(message, "/check") {
+		t.Fatalf("disabled commands advertised: %q", message)
+	}
+	if !strings.Contains(message, "新成员") || !strings.Contains(message, "/help") || !strings.Contains(message, "安全提示") {
+		t.Fatalf("default welcome is incomplete: %q", message)
+	}
+
+	settings.BindingEnabled = true
+	settings.ChannelCheckEnabled = true
+	message = renderWelcome(settings, InboundEvent{DisplayName: "Carol"})
+	if !strings.Contains(message, "/bind name@example.com") || !strings.Contains(message, "/check") || !strings.Contains(message, "/help") {
+		t.Fatalf("enabled commands missing: %q", message)
 	}
 }
 

@@ -54,13 +54,14 @@ type channelCheckLimiter interface {
 }
 
 type ChannelCheckService struct {
-	monitor  channelCheckMonitorReader
-	settings channelCheckSettingsReader
-	binding  channelCheckBindingReader
-	limiter  channelCheckLimiter
-	manager  *ConfigManager
-	signer   *ChannelCheckSigner
-	renderer *ChannelStatusRenderer
+	monitor       channelCheckMonitorReader
+	settings      channelCheckSettingsReader
+	binding       channelCheckBindingReader
+	limiter       channelCheckLimiter
+	manager       *ConfigManager
+	oneBotManager *OneBotConfigManager
+	signer        *ChannelCheckSigner
+	renderer      *ChannelStatusRenderer
 
 	now         func() time.Time
 	renderSlots chan struct{}
@@ -76,19 +77,21 @@ func NewChannelCheckService(
 	binding *service.QQBotService,
 	queue *ReliableQueue,
 	manager *ConfigManager,
+	oneBotManager *OneBotConfigManager,
 	signer *ChannelCheckSigner,
 	renderer *ChannelStatusRenderer,
 ) *ChannelCheckService {
 	return &ChannelCheckService{
-		monitor:     monitor,
-		settings:    settings,
-		binding:     binding,
-		limiter:     queue,
-		manager:     manager,
-		signer:      signer,
-		renderer:    renderer,
-		now:         time.Now,
-		renderSlots: make(chan struct{}, channelCheckRenderWorkers),
+		monitor:       monitor,
+		settings:      settings,
+		binding:       binding,
+		limiter:       queue,
+		manager:       manager,
+		oneBotManager: oneBotManager,
+		signer:        signer,
+		renderer:      renderer,
+		now:           time.Now,
+		renderSlots:   make(chan struct{}, channelCheckRenderWorkers),
 	}
 }
 
@@ -143,10 +146,16 @@ func (s *ChannelCheckService) RenderSignedPNG(ctx context.Context, version, expi
 		return nil, ErrChannelCheckUnavailable
 	}
 	active, ok := s.manager.Active()
-	if !ok || !active.Enabled {
+	if !ok {
 		return nil, ErrChannelCheckUnavailable
 	}
-	if err := s.signer.Verify(active.AppID, version, expires, nonce, signature); err != nil {
+	verified := active.Enabled && s.signer.Verify(active.AppID, version, expires, nonce, signature) == nil
+	if !verified && s.oneBotManager != nil {
+		if oneBot, oneBotOK := s.oneBotManager.Active(); oneBotOK && oneBot.Enabled && strings.TrimSpace(oneBot.SelfID) != "" {
+			verified = s.signer.Verify(oneBot.SelfID, version, expires, nonce, signature) == nil
+		}
+	}
+	if !verified {
 		return nil, ErrInvalidChannelCheckSignature
 	}
 	if !s.manager.BusinessSettings().ChannelCheckEnabled {

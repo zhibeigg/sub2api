@@ -2,6 +2,10 @@ import type {
   QQBotBindingFilters,
   QQBotConfig,
   QQBotDraft,
+  QQBotOneBotConfig,
+  QQBotOneBotDraft,
+  QQBotOneBotProbeRequest,
+  QQBotOneBotUpdateRequest,
   QQBotProbeRequest,
   QQBotUpdateRequest,
 } from './types'
@@ -53,6 +57,7 @@ export function buildUpdateRequest(draft: QQBotDraft): QQBotUpdateRequest {
     first_bind_bonus: Number(draft.first_bind_bonus),
     link_ttl_minutes: Number(draft.link_ttl_minutes),
     welcome_enabled: draft.welcome_enabled,
+    welcome_message: draft.welcome_message.trim(),
     first_interaction_enabled: draft.first_interaction_enabled,
     channel_check_enabled: draft.channel_check_enabled,
     help_message: draft.help_message.trim(),
@@ -76,6 +81,55 @@ export function buildProbeRequest(draft: QQBotDraft): QQBotProbeRequest {
   if (draft.app_secret.trim()) payload.app_secret = draft.app_secret.trim()
   if (draft.webhook_secret.trim()) payload.webhook_secret = draft.webhook_secret.trim()
   return payload
+}
+
+export function oneBotConfigToDraft(config: QQBotOneBotConfig): QQBotOneBotDraft {
+  return { ...cloneData(config), access_token: '' }
+}
+
+export function buildOneBotUpdateRequest(draft: QQBotOneBotDraft): QQBotOneBotUpdateRequest {
+  const payload: QQBotOneBotUpdateRequest = {
+    expected_config_version: draft.config_version,
+    enabled: draft.enabled,
+    self_id: draft.self_id.trim(),
+    worker_count: Number(draft.worker_count),
+    queue_capacity: Number(draft.queue_capacity),
+    action_timeout_ms: Number(draft.action_timeout_ms),
+  }
+  if (draft.access_token.trim()) payload.access_token = draft.access_token.trim()
+  return payload
+}
+
+export function buildOneBotProbeRequest(draft: QQBotOneBotDraft): QQBotOneBotProbeRequest {
+  const payload: QQBotOneBotProbeRequest = {
+    self_id: draft.self_id.trim(),
+    action_timeout_ms: Number(draft.action_timeout_ms),
+  }
+  if (draft.access_token.trim()) payload.access_token = draft.access_token.trim()
+  return payload
+}
+
+export function oneBotCredentialsReady(draft: QQBotOneBotDraft): boolean {
+  return Boolean(/^\d{5,20}$/.test(draft.self_id.trim()) && (draft.access_token_configured || draft.access_token.trim().length >= 32))
+}
+
+export function validateOneBotDraft(draft: QQBotOneBotDraft): string[] {
+  const errors: string[] = []
+  if (!/^\d{5,20}$/.test(draft.self_id.trim())) errors.push('oneBotSelfId')
+  if (draft.access_token.trim() && draft.access_token.trim().length < 32) errors.push('oneBotToken')
+  if (!Number.isInteger(Number(draft.worker_count)) || Number(draft.worker_count) < 1 || Number(draft.worker_count) > 64) errors.push('workers')
+  if (!Number.isInteger(Number(draft.queue_capacity)) || Number(draft.queue_capacity) < 16 || Number(draft.queue_capacity) > 100_000) errors.push('oneBotQueue')
+  if (!Number.isInteger(Number(draft.action_timeout_ms)) || Number(draft.action_timeout_ms) < 500 || Number(draft.action_timeout_ms) > 30_000) errors.push('timeout')
+  return errors
+}
+
+export function oneBotCredentialFingerprint(draft: QQBotOneBotDraft): string {
+  return JSON.stringify(buildOneBotProbeRequest(draft))
+}
+
+export function oneBotDraftFingerprint(draft: QQBotOneBotDraft | null): string {
+  if (!draft) return ''
+  return JSON.stringify(buildOneBotUpdateRequest(draft))
 }
 
 export function credentialsReady(draft: QQBotDraft): boolean {
@@ -125,6 +179,7 @@ export function validateDraft(draft: QQBotDraft): string[] {
   if (!Number.isInteger(Number(draft.api_timeout_ms)) || Number(draft.api_timeout_ms) < 500 || Number(draft.api_timeout_ms) > 30_000) errors.push('timeout')
   if (!Number.isFinite(Number(draft.first_bind_bonus)) || Number(draft.first_bind_bonus) < 0) errors.push('bonus')
   if (!Number.isInteger(Number(draft.link_ttl_minutes)) || Number(draft.link_ttl_minutes) < 5 || Number(draft.link_ttl_minutes) > 1440) errors.push('ttl')
+  if (draft.welcome_message.length > 4000) errors.push('welcome')
   if (draft.help_message.length > 4000) errors.push('help')
   if (parseChannelMapping(draft.guild_welcome_channels_text) === null) errors.push('mapping')
   return errors

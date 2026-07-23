@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { QQBotConfig } from '../types'
+import type { QQBotConfig, QQBotOneBotConfig } from '../types'
 import {
   buildProbeRequest,
   buildUpdateRequest,
@@ -7,8 +7,14 @@ import {
   credentialFingerprint,
   credentialsReady,
   draftFingerprint,
+  oneBotConfigToDraft,
+  oneBotCredentialFingerprint,
+  oneBotCredentialsReady,
+  buildOneBotProbeRequest,
+  buildOneBotUpdateRequest,
   parseChannelMapping,
   validateDraft,
+  validateOneBotDraft,
 } from '../viewModel'
 
 const config = (): QQBotConfig => ({
@@ -25,6 +31,7 @@ const config = (): QQBotConfig => ({
   first_bind_bonus: 5,
   link_ttl_minutes: 15,
   welcome_enabled: true,
+  welcome_message: 'welcome {user}',
   first_interaction_enabled: true,
   channel_check_enabled: false,
   help_message: 'help',
@@ -32,6 +39,17 @@ const config = (): QQBotConfig => ({
   allowed_guild_ids: ['g1'],
   guild_welcome_channels: { g1: 'c1' },
   config_version: 7,
+})
+
+const oneBotConfig = (): QQBotOneBotConfig => ({
+  enabled: false,
+  self_id: '123456789',
+  access_token_configured: true,
+  worker_count: 2,
+  queue_capacity: 1024,
+  action_timeout_ms: 10000,
+  reverse_ws_url: 'ws://127.0.0.1:8080/webhooks/qq/onebot',
+  config_version: 3,
 })
 
 describe('QQBot view model', () => {
@@ -69,6 +87,17 @@ describe('QQBot view model', () => {
 
     expect(buildUpdateRequest(draft).channel_check_enabled).toBe(true)
     expect(draftFingerprint(draft)).not.toBe(before)
+  })
+
+  it('round-trips and validates the member welcome message', () => {
+    const draft = configToDraft(config())
+    expect(draft.welcome_message).toBe('welcome {user}')
+
+    draft.welcome_message = '  hello {site} {user}  '
+    expect(buildUpdateRequest(draft).welcome_message).toBe('hello {site} {user}')
+
+    draft.welcome_message = 'x'.repeat(4001)
+    expect(validateDraft(draft)).toContain('welcome')
   })
 
   it('requires configured or newly entered credentials before enablement', () => {
@@ -110,5 +139,27 @@ describe('QQBot view model', () => {
     const before = credentialFingerprint(draft)
     draft.app_secret = 'rotated'
     expect(credentialFingerprint(draft)).not.toBe(before)
+  })
+
+  it('keeps the encrypted OneBot token out of drafts and update requests', () => {
+    const draft = oneBotConfigToDraft(oneBotConfig())
+    expect(draft.access_token).toBe('')
+    expect(oneBotCredentialsReady(draft)).toBe(true)
+    expect(buildOneBotUpdateRequest(draft)).not.toHaveProperty('access_token')
+    expect(buildOneBotProbeRequest(draft)).not.toHaveProperty('access_token')
+  })
+
+  it('validates OneBot credentials and fingerprints token rotations', () => {
+    const draft = oneBotConfigToDraft({ ...oneBotConfig(), access_token_configured: false })
+    expect(oneBotCredentialsReady(draft)).toBe(false)
+    draft.self_id = 'invalid'
+    draft.access_token = 'short'
+    expect(validateOneBotDraft(draft)).toEqual(expect.arrayContaining(['oneBotSelfId', 'oneBotToken']))
+    draft.self_id = '123456789'
+    draft.access_token = 'x'.repeat(32)
+    const before = oneBotCredentialFingerprint(draft)
+    draft.access_token = 'y'.repeat(32)
+    expect(oneBotCredentialsReady(draft)).toBe(true)
+    expect(oneBotCredentialFingerprint(draft)).not.toBe(before)
   })
 })

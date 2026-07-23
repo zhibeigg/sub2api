@@ -5,6 +5,10 @@ import type {
   QQBotBindingFilters,
   QQBotBindingPage,
   QQBotConfig,
+  QQBotOneBotConfig,
+  QQBotOneBotProbeRequest,
+  QQBotOneBotRuntime,
+  QQBotOneBotUpdateRequest,
   QQBotProbeRequest,
   QQBotProbeResult,
   QQBotRuntime,
@@ -32,6 +36,26 @@ export async function probe(payload: QQBotProbeRequest): Promise<QQBotProbeResul
 
 export async function getRuntime(): Promise<QQBotRuntime> {
   const { data } = await apiClient.get<QQBotRuntime>(`${adminBasePath}/runtime`)
+  return data
+}
+
+export async function getOneBotConfig(): Promise<QQBotOneBotConfig> {
+  const { data } = await apiClient.get<QQBotOneBotConfig>(`${adminBasePath}/onebot/config`)
+  return data
+}
+
+export async function updateOneBotConfig(payload: QQBotOneBotUpdateRequest): Promise<QQBotOneBotConfig> {
+  const { data } = await apiClient.put<QQBotOneBotConfig>(`${adminBasePath}/onebot/config`, payload)
+  return data
+}
+
+export async function probeOneBot(payload: QQBotOneBotProbeRequest): Promise<QQBotProbeResult> {
+  const { data } = await apiClient.post<QQBotProbeResult>(`${adminBasePath}/onebot/probe`, payload)
+  return data
+}
+
+export async function getOneBotRuntime(): Promise<QQBotOneBotRuntime> {
+  const { data } = await apiClient.get<QQBotOneBotRuntime>(`${adminBasePath}/onebot/runtime`)
   return data
 }
 
@@ -77,6 +101,10 @@ export const qqbotAPI = {
   updateConfig,
   probe,
   getRuntime,
+  getOneBotConfig,
+  updateOneBotConfig,
+  probeOneBot,
+  getOneBotRuntime,
   getStats,
   listBindings,
   unbind,

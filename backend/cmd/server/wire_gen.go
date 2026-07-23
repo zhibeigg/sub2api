@@ -326,14 +326,17 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	qqBotService := service.NewQQBotService(qqBotBindingRepository, qqBotUserLookup, settingRepository, emailQueueService, billingCache, notificationEmailService, configConfig)
 	qqbotConfigManager := qqbot.NewConfigManager(db, settingRepository, redisClient, secretEncryptor, configConfig)
 	reliableQueue := qqbot.NewReliableQueue(redisClient, secretEncryptor)
+	oneBotConfigManager := qqbot.NewOneBotConfigManager(db, settingRepository, redisClient, secretEncryptor)
 	channelCheckSigner, err := qqbot.NewChannelCheckSigner(configConfig)
 	if err != nil {
 		return nil, err
 	}
 	channelStatusRenderer := qqbot.NewChannelStatusRenderer()
-	channelCheckService := qqbot.NewChannelCheckService(channelMonitorService, settingService, qqBotService, reliableQueue, qqbotConfigManager, channelCheckSigner, channelStatusRenderer)
+	channelCheckService := qqbot.NewChannelCheckService(channelMonitorService, settingService, qqBotService, reliableQueue, qqbotConfigManager, oneBotConfigManager, channelCheckSigner, channelStatusRenderer)
 	runtime := qqbot.NewRuntime(qqbotConfigManager, reliableQueue, qqBotService, channelCheckService)
-	qqBotHandler := handler.NewQQBotHandler(qqBotService, qqbotConfigManager, runtime, reliableQueue, channelCheckService)
+	oneBotQueue := qqbot.NewOneBotQueue(redisClient, secretEncryptor)
+	oneBotRuntime := qqbot.NewOneBotRuntime(oneBotConfigManager, oneBotQueue, runtime)
+	qqBotHandler := handler.NewQQBotHandler(qqBotService, qqbotConfigManager, runtime, oneBotConfigManager, oneBotRuntime, reliableQueue, channelCheckService)
 	idempotencyCoordinator := service.ProvideIdempotencyCoordinator(idempotencyRepository, configConfig)
 	idempotencyCleanupService := service.ProvideIdempotencyCleanupService(idempotencyRepository, configConfig)
 	handlers := handler.ProvideHandlers(authHandler, userHandler, apiKeyHandler, playgroundHandler, usageHandler, redeemHandler, subscriptionHandler, announcementHandler, channelMonitorUserHandler, adminHandlers, gatewayHandler, openAIGatewayHandler, adobeMediaHandler, handlerSettingHandler, totpHandler, handlerPaymentHandler, paymentWebhookHandler, availableChannelHandler, asyncImageHandler, batchImageHandler, qqBotHandler, idempotencyCoordinator, idempotencyCleanupService)
@@ -363,11 +366,12 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	paymentOrderExpiryService := service.ProvidePaymentOrderExpiryService(paymentService, leaderLockCache, db)
 	channelMonitorRunner := service.ProvideChannelMonitorRunner(channelMonitorService, settingService)
 	userPlatformQuotaUsageFlusher := service.ProvideUserPlatformQuotaUsageFlusher(configConfig, billingCache, serviceUserPlatformQuotaRepository, timingWheelService)
-	v := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, opsService, opsIngressRejectAggregator, apiKeyService, authCacheInvalidationWorker, schedulerSnapshotService, tokenRefreshService, cursorDashboardMaintenanceService, accountExpiryService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, batchImageCleanupService, openAIImageUploadTempService, batchImageWorkerRuntime, announcementEmailDispatchRuntime, poolCapacityAlertService, poolCapacityAlertGatewayBinding, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, userPlatformQuotaUsageFlusher, upstreamBillingProbeService, ollamaCloudUsageService, auditLogService, promptService, runtime)
+	v := provideCleanup(client, redisClient, opsMetricsCollector, opsAggregationService, opsAlertEvaluatorService, opsCleanupService, opsScheduledReportService, opsSystemLogSink, opsService, opsIngressRejectAggregator, apiKeyService, authCacheInvalidationWorker, schedulerSnapshotService, tokenRefreshService, cursorDashboardMaintenanceService, accountExpiryService, proxyExpiryService, subscriptionExpiryService, usageCleanupService, idempotencyCleanupService, batchImageCleanupService, openAIImageUploadTempService, batchImageWorkerRuntime, announcementEmailDispatchRuntime, poolCapacityAlertService, poolCapacityAlertGatewayBinding, pricingService, emailQueueService, billingCacheService, usageRecordWorkerPool, subscriptionService, oAuthService, openAIOAuthService, geminiOAuthService, antigravityOAuthService, grokOAuthService, openAIGatewayService, scheduledTestRunnerService, backupService, paymentOrderExpiryService, channelMonitorRunner, userPlatformQuotaUsageFlusher, upstreamBillingProbeService, ollamaCloudUsageService, auditLogService, promptService, runtime, oneBotRuntime)
 	application := &Application{
 		Server:      httpServer,
 		PromptAudit: promptService,
 		QQBot:       runtime,
+		QQBotOneBot: oneBotRuntime,
 		Cleanup:     v,
 	}
 	return application, nil
@@ -379,6 +383,7 @@ type Application struct {
 	Server      *http.Server
 	PromptAudit *securityaudit.PromptService
 	QQBot       *qqbot.Runtime
+	QQBotOneBot *qqbot.OneBotRuntime
 	Cleanup     func()
 }
 
@@ -441,6 +446,7 @@ func provideCleanup(
 	auditLog *service.AuditLogService,
 	promptAudit *securityaudit.PromptService,
 	qqBotRuntime *qqbot.Runtime,
+	oneBotRuntime *qqbot.OneBotRuntime,
 ) func() {
 	return func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -452,6 +458,12 @@ func provideCleanup(
 		}
 
 		parallelSteps := []cleanupStep{
+			{"QQBotOneBotRuntime", func() error {
+				if oneBotRuntime != nil {
+					return oneBotRuntime.Shutdown(ctx)
+				}
+				return nil
+			}},
 			{"QQBotRuntime", func() error {
 				if qqBotRuntime != nil {
 					return qqBotRuntime.Shutdown(ctx)

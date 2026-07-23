@@ -10,13 +10,18 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/redis/go-redis/v9"
 )
 
-const defaultHelpMessage = "欢迎使用 PokeAPI 账户助手。\n\n绑定账户：请私聊发送 /bind 你的邮箱\n查看渠道状态：发送 /check\n查看帮助：发送 /help\n\n验证链接只会发送到 Sub2API 账户邮箱。数字 QQ 仅作为展示信息，实际身份以机器人 OpenID 为准。"
+const (
+	defaultHelpMessage    = "欢迎使用 PokeAPI 账户助手。\n\n绑定账户：请私聊发送 /bind 你的邮箱\n查看渠道状态：发送 /check\n查看帮助：发送 /help\n\n验证链接只会发送到 Sub2API 账户邮箱。数字 QQ 仅作为展示信息，实际身份以机器人 OpenID 为准。"
+	defaultWelcomeMessage = "欢迎 {user} 加入 {site}！\n\n可用指令：\n绑定账户（请私聊机器人）：{bind_command}\n查看渠道状态：/check\n查看帮助：/help\n\n安全提示：请勿向任何人提供密码、验证码或 API 密钥；账户绑定链接只会发送到你的站点账户邮箱。"
+	qqBotSiteName         = "PokeAPI"
+)
 
 type runtimeGeneration struct {
 	config    ActiveConfig
@@ -396,31 +401,61 @@ func (r *Runtime) processItems(generation *runtimeGeneration, items []QueuedEven
 }
 
 func (r *Runtime) process(ctx context.Context, generation *runtimeGeneration, incoming InboundEvent) error {
+	return r.processWith(ctx, generation.config, generation.messenger, r.queue, incoming, r.markSent)
+}
+
+func (r *Runtime) processWith(ctx context.Context, cfg ActiveConfig, messenger Messenger, queue *ReliableQueue, incoming InboundEvent, markSent func()) error {
+	if r == nil || r.manager == nil || messenger == nil {
+		return ErrRuntimeUnavailable
+	}
 	settings := r.manager.BusinessSettings()
 	if !allowed(settings, incoming) {
 		return nil
+	}
+	send := func(content string) error {
+		return sendQQBotMessage(ctx, messenger, incoming, content, 1, markSent)
 	}
 	if incoming.MemberJoined {
 		if !settings.WelcomeEnabled {
 			return nil
 		}
-		channelID := strings.TrimSpace(settings.GuildWelcomeChannels[incoming.GuildID])
-		if channelID == "" {
+		content := renderWelcome(settings, incoming)
+		switch incoming.Scene {
+		case SceneGroup:
+			if welcomeMessenger, ok := messenger.(GroupWelcomeMessenger); ok {
+				if err := welcomeMessenger.SendGroupWelcome(ctx, incoming.SourceID, incoming.ProviderSubject, content); err != nil {
+					return err
+				}
+				if markSent != nil {
+					markSent()
+				}
+				return nil
+			}
+			return send(content)
+		case SceneGuild:
+			channelID := strings.TrimSpace(settings.GuildWelcomeChannels[incoming.GuildID])
+			if channelID == "" {
+				return nil
+			}
+			incoming.ChannelID = channelID
+			return sendQQBotMessage(ctx, messenger, incoming, content, 1, markSent)
+		default:
 			return nil
 		}
-		incoming.ChannelID = channelID
-		return r.send(ctx, generation.messenger, incoming, renderHelp(settings.HelpMessage))
 	}
 	parsed := ParseCommand(incoming.Content)
 	if parsed.Kind == CommandNone {
 		if (incoming.Scene == SceneGroup || incoming.Scene == SceneC2C) && settings.FirstInteractionEnabled {
-			key := fmt.Sprintf("%s:%s:%s", incoming.Scene, incoming.SourceID, incoming.ProviderSubject)
-			first, err := r.queue.BeginWelcome(ctx, key)
+			if queue == nil {
+				return ErrRuntimeUnavailable
+			}
+			key := fmt.Sprintf("%s:%s:%s:%s", cfg.AppID, incoming.Scene, incoming.SourceID, incoming.ProviderSubject)
+			first, err := queue.BeginWelcome(ctx, key)
 			if err != nil || !first {
 				return err
 			}
-			sendErr := r.send(ctx, generation.messenger, incoming, renderHelp(settings.HelpMessage))
-			finishErr := r.queue.FinishWelcome(ctx, key, sendErr == nil)
+			sendErr := send(renderHelp(settings.HelpMessage))
+			finishErr := queue.FinishWelcome(ctx, key, sendErr == nil)
 			if sendErr != nil {
 				return sendErr
 			}
@@ -429,21 +464,24 @@ func (r *Runtime) process(ctx context.Context, generation *runtimeGeneration, in
 		return nil
 	}
 	if parsed.Kind == CommandHelp {
-		return r.send(ctx, generation.messenger, incoming, renderHelp(settings.HelpMessage))
+		return send(renderHelp(settings.HelpMessage))
 	}
 	if parsed.Kind == CommandCheck {
-		return r.handleChannelCheck(ctx, generation, incoming)
+		return r.handleChannelCheckWith(ctx, cfg, messenger, incoming, markSent)
 	}
 	if parsed.Kind != CommandBind {
 		return nil
 	}
 	if !settings.BindingEnabled {
-		return r.send(ctx, generation.messenger, incoming, "账户绑定暂未开放。请稍后再试，或联系站点管理员。")
+		return send("账户绑定暂未开放。请稍后再试，或联系站点管理员。")
 	}
 	if !ValidEmail(parsed.Email) {
-		return r.send(ctx, generation.messenger, incoming, "邮箱格式不正确。请使用：/bind name@example.com")
+		return send("邮箱格式不正确。请使用：/bind name@example.com")
 	}
-	allowedRequest, retryAfter, err := r.queue.Allow(ctx, "bind:"+string(incoming.Scene)+":"+incoming.ProviderSubject, 3, 5*time.Minute)
+	if queue == nil {
+		return ErrRuntimeUnavailable
+	}
+	allowedRequest, retryAfter, err := queue.Allow(ctx, "bind:"+cfg.AppID+":"+string(incoming.Scene)+":"+incoming.ProviderSubject, 3, 5*time.Minute)
 	if err != nil {
 		return err
 	}
@@ -452,45 +490,49 @@ func (r *Runtime) process(ctx context.Context, generation *runtimeGeneration, in
 		if minutes < 1 {
 			minutes = 1
 		}
-		return r.send(ctx, generation.messenger, incoming, fmt.Sprintf("绑定请求过于频繁。请在约 %d 分钟后重试。", minutes))
+		return send(fmt.Sprintf("绑定请求过于频繁。请在约 %d 分钟后重试。", minutes))
 	}
 	if r.binding == nil {
 		return ErrRuntimeUnavailable
 	}
-	result, err := r.binding.PrepareBinding(ctx, service.QQBotPrepareBindingRequest{EventID: incoming.EventID, MessageID: incoming.MessageID, BotAppID: generation.config.AppID, Scene: string(incoming.Scene), ProviderSubject: string(incoming.Scene) + ":" + incoming.ProviderSubject, SourceID: incoming.SourceID, ChannelID: incoming.ChannelID, Email: parsed.Email, DisplayName: incoming.DisplayName})
+	result, err := r.binding.PrepareBinding(ctx, service.QQBotPrepareBindingRequest{EventID: incoming.EventID, MessageID: incoming.MessageID, BotAppID: cfg.AppID, Scene: string(incoming.Scene), ProviderSubject: string(incoming.Scene) + ":" + incoming.ProviderSubject, SourceID: incoming.SourceID, ChannelID: incoming.ChannelID, Email: parsed.Email, DisplayName: incoming.DisplayName})
 	if err != nil {
-		return r.send(ctx, generation.messenger, incoming, "暂时无法创建绑定请求。请稍后重新发送 /bind。")
+		return send("暂时无法创建绑定请求。请稍后重新发送 /bind。")
 	}
 	masked := strings.TrimSpace(result.MaskedEmail)
 	if masked == "" {
 		masked = MaskEmail(parsed.Email)
 	}
 	if result.AlreadyBound {
-		return r.send(ctx, generation.messenger, incoming, "账户已经绑定邮箱 "+masked+"。")
+		return send("账户已经绑定邮箱 " + masked + "。")
 	}
-	return r.send(ctx, generation.messenger, incoming, "若该账户存在，验证邮件已发送至 "+masked+"。链接仅在短时间内有效。")
+	return send("若该账户存在，验证邮件已发送至 " + masked + "。链接仅在短时间内有效。")
 }
 
 func (r *Runtime) handleChannelCheck(ctx context.Context, generation *runtimeGeneration, incoming InboundEvent) error {
+	return r.handleChannelCheckWith(ctx, generation.config, generation.messenger, incoming, r.markSent)
+}
+
+func (r *Runtime) handleChannelCheckWith(ctx context.Context, cfg ActiveConfig, messenger Messenger, incoming InboundEvent, markSent func()) error {
 	if r.channelCheck == nil {
-		return r.send(ctx, generation.messenger, incoming, "渠道状态图暂时不可用，请稍后再试。")
+		return sendQQBotMessage(ctx, messenger, incoming, "渠道状态图暂时不可用，请稍后再试。", 1, markSent)
 	}
-	imageURL, err := r.channelCheck.PrepareImageURL(ctx, generation.config, incoming)
+	imageURL, err := r.channelCheck.PrepareImageURL(ctx, cfg, incoming)
 	if err != nil {
 		message := channelCheckErrorMessage(err)
 		if message == "" {
 			slog.Warn("qqbot channel check preparation failed", "event_id", shortID(incoming.EventID), "scene", incoming.Scene, "error_code", infraerrors.Reason(err))
 			message = "渠道状态图暂时不可用，请稍后再试。"
 		}
-		return r.send(ctx, generation.messenger, incoming, message)
+		return sendQQBotMessage(ctx, messenger, incoming, message, 1, markSent)
 	}
-	if err := r.sendImage(ctx, generation.messenger, incoming, imageURL); err != nil {
+	if err := sendQQBotImage(ctx, messenger, incoming, imageURL, markSent); err != nil {
 		slog.Warn("qqbot channel check image reply failed", "event_id", shortID(incoming.EventID), "scene", incoming.Scene, "error_code", infraerrors.Reason(err))
 		var definitive interface{ Definitive() bool }
 		if !errors.As(err, &definitive) || !definitive.Definitive() {
 			return err
 		}
-		fallbackErr := r.sendWithSequence(ctx, generation.messenger, incoming, "渠道状态图发送失败，请稍后重新发送 /check。", 2)
+		fallbackErr := sendQQBotMessage(ctx, messenger, incoming, "渠道状态图发送失败，请稍后重新发送 /check。", 2, markSent)
 		if fallbackErr != nil {
 			return errors.Join(err, fallbackErr)
 		}
@@ -517,6 +559,10 @@ func channelCheckErrorMessage(err error) string {
 }
 
 func (r *Runtime) sendImage(ctx context.Context, messenger Messenger, incoming InboundEvent, imageURL string) error {
+	return sendQQBotImage(ctx, messenger, incoming, imageURL, r.markSent)
+}
+
+func sendQQBotImage(ctx context.Context, messenger Messenger, incoming InboundEvent, imageURL string, markSent func()) error {
 	var lastErr error
 	const sequence uint32 = 1
 	for attempt := 0; attempt < 3; attempt++ {
@@ -531,7 +577,9 @@ func (r *Runtime) sendImage(ctx context.Context, messenger Messenger, incoming I
 			return errors.New("unsupported qqbot scene")
 		}
 		if lastErr == nil {
-			r.markSent()
+			if markSent != nil {
+				markSent()
+			}
 			return nil
 		}
 		var definitive interface{ Definitive() bool }
@@ -556,6 +604,10 @@ func (r *Runtime) send(ctx context.Context, messenger Messenger, incoming Inboun
 }
 
 func (r *Runtime) sendWithSequence(ctx context.Context, messenger Messenger, incoming InboundEvent, content string, firstSequence uint32) error {
+	return sendQQBotMessage(ctx, messenger, incoming, content, firstSequence, r.markSent)
+}
+
+func sendQQBotMessage(ctx context.Context, messenger Messenger, incoming InboundEvent, content string, firstSequence uint32, markSent func()) error {
 	var lastErr error
 	for attempt := 0; attempt < 3; attempt++ {
 		sequence := firstSequence
@@ -570,8 +622,14 @@ func (r *Runtime) sendWithSequence(ctx context.Context, messenger Messenger, inc
 			return errors.New("unsupported qqbot scene")
 		}
 		if lastErr == nil {
-			r.markSent()
+			if markSent != nil {
+				markSent()
+			}
 			return nil
+		}
+		var definitive interface{ Definitive() bool }
+		if errors.As(lastErr, &definitive) && definitive.Definitive() {
+			return lastErr
 		}
 		if attempt < 2 {
 			timer := time.NewTimer(time.Duration(attempt+1) * 250 * time.Millisecond)
@@ -697,5 +755,75 @@ func renderHelp(template string) string {
 	if strings.TrimSpace(template) == "" {
 		return defaultHelpMessage
 	}
-	return strings.NewReplacer("{bind_command}", "/bind name@example.com", "{site}", "PokeAPI").Replace(strings.TrimSpace(template))
+	return strings.NewReplacer("{bind_command}", "/bind name@example.com", "{site}", qqBotSiteName).Replace(strings.TrimSpace(template))
+}
+
+func renderWelcome(settings service.QQBotSettings, incoming InboundEvent) string {
+	template := strings.TrimSpace(settings.WelcomeMessage)
+	if template == "" {
+		template = defaultWelcomeMessage
+	}
+	result := renderWelcomeTemplate(template, settings, incoming)
+	if result == "" && template != defaultWelcomeMessage {
+		return renderWelcomeTemplate(defaultWelcomeMessage, settings, incoming)
+	}
+	return result
+}
+
+func renderWelcomeTemplate(template string, settings service.QQBotSettings, incoming InboundEvent) string {
+	lines := strings.Split(strings.ReplaceAll(template, "\r\n", "\n"), "\n")
+	filtered := make([]string, 0, len(lines))
+	lastBlank := false
+	for _, line := range lines {
+		lower := strings.ToLower(line)
+		if !settings.BindingEnabled && (strings.Contains(lower, "{bind_command}") || strings.Contains(lower, "/bind")) {
+			continue
+		}
+		if !settings.ChannelCheckEnabled && strings.Contains(lower, "/check") {
+			continue
+		}
+		blank := strings.TrimSpace(line) == ""
+		if blank && (lastBlank || len(filtered) == 0) {
+			continue
+		}
+		filtered = append(filtered, line)
+		lastBlank = blank
+	}
+	for len(filtered) > 0 && strings.TrimSpace(filtered[len(filtered)-1]) == "" {
+		filtered = filtered[:len(filtered)-1]
+	}
+	return strings.TrimSpace(strings.NewReplacer(
+		"{site}", qqBotSiteName,
+		"{user}", safeWelcomePlaceholder(incoming.DisplayName, "新成员"),
+		"{bind_command}", "/bind name@example.com",
+	).Replace(strings.Join(filtered, "\n")))
+}
+
+func safeWelcomePlaceholder(value, fallback string) string {
+	var builder strings.Builder
+	for _, char := range strings.TrimSpace(value) {
+		switch {
+		case char == '\r' || char == '\n' || char == '\t':
+			builder.WriteByte(' ')
+		case unicode.IsControl(char) || unicode.In(char, unicode.Cf):
+			continue
+		case char == '<':
+			builder.WriteRune('‹')
+		case char == '>':
+			builder.WriteRune('›')
+		case char == '/':
+			builder.WriteRune('∕')
+		default:
+			builder.WriteRune(char)
+		}
+	}
+	result := strings.Join(strings.Fields(builder.String()), " ")
+	if result == "" {
+		result = fallback
+	}
+	runes := []rune(result)
+	if len(runes) > 80 {
+		result = string(runes[:80])
+	}
+	return result
 }

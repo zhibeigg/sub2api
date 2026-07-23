@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -115,8 +116,28 @@ func TestPublicConfigJSONUsesFlatBusinessFields(t *testing.T) {
 	if _, nested := payload["settings"]; nested {
 		t.Fatalf("unexpected nested settings: %s", raw)
 	}
-	if payload["binding_enabled"] != true || payload["link_ttl_minutes"] != float64(15) || payload["channel_check_enabled"] != false {
+	if payload["binding_enabled"] != true || payload["link_ttl_minutes"] != float64(15) || payload["channel_check_enabled"] != false || payload["welcome_message"] != defaultWelcomeMessage {
 		t.Fatalf("missing flat business fields: %s", raw)
+	}
+}
+
+func TestBusinessSettingsWelcomeMessageRoundTripAndValidation(t *testing.T) {
+	parsed := parseBusinessSettings(map[string]string{service.SettingKeyQQBotWelcomeMessage: "  欢迎 {user}  "})
+	if parsed.WelcomeMessage != "欢迎 {user}" {
+		t.Fatalf("parsed welcome message=%q", parsed.WelcomeMessage)
+	}
+	cloned := cloneBusinessSettings(parsed)
+	if cloned.WelcomeMessage != "欢迎 {user}" {
+		t.Fatalf("cloned welcome message=%q", cloned.WelcomeMessage)
+	}
+	values := businessSettingsValues(parsed)
+	if values[service.SettingKeyQQBotWelcomeMessage] != "欢迎 {user}" {
+		t.Fatalf("stored welcome message=%q", values[service.SettingKeyQQBotWelcomeMessage])
+	}
+
+	tooLong := strings.Repeat("欢", 4001)
+	if _, err := applyBusinessUpdate(parsed, service.QQBotSettingsUpdate{WelcomeMessage: &tooLong}); !errors.Is(err, ErrInvalidConfig) {
+		t.Fatalf("oversized welcome message err=%v", err)
 	}
 }
 
@@ -222,7 +243,7 @@ func TestConfigManagerSaveRetainsEmptySecrets(t *testing.T) {
 	mock.ExpectCommit()
 	manager := NewConfigManager(db, &memorySettingRepo{}, nil, testEncryptor{}, nil)
 	manager.stableChannelCheckKey = true
-	result, err := manager.Save(context.Background(), UpdateConfigRequest{ExpectedConfigVersion: 3, Enabled: true, AppID: "123456", PublicBaseURL: "https://qq.example.com", WorkerCount: 4, QueueCapacity: 256, APITimeoutMS: 10000, BindingEnabled: true, FirstBindBonus: 5, LinkTTLMinutes: 15, WelcomeEnabled: true, FirstInteractionEnabled: true, ChannelCheckEnabled: true, HelpMessage: defaultHelpMessage, AllowedGroupIDs: []string{}, AllowedGuildIDs: []string{}, GuildWelcomeChannels: map[string]string{}}, 99)
+	result, err := manager.Save(context.Background(), UpdateConfigRequest{ExpectedConfigVersion: 3, Enabled: true, AppID: "123456", PublicBaseURL: "https://qq.example.com", WorkerCount: 4, QueueCapacity: 256, APITimeoutMS: 10000, BindingEnabled: true, FirstBindBonus: 5, LinkTTLMinutes: 15, WelcomeEnabled: true, WelcomeMessage: defaultWelcomeMessage, FirstInteractionEnabled: true, ChannelCheckEnabled: true, HelpMessage: defaultHelpMessage, AllowedGroupIDs: []string{}, AllowedGuildIDs: []string{}, GuildWelcomeChannels: map[string]string{}}, 99)
 	if err != nil {
 		t.Fatal(err)
 	}

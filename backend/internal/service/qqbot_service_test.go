@@ -283,11 +283,13 @@ func TestQQBotUpdateSettingsNormalizesIDsAndAudits(t *testing.T) {
 	bonus := 8.5
 	ttl := 30
 	channelCheckEnabled := false
+	welcomeMessage := "  欢迎 {user}  "
 
 	result, err := svc.UpdateSettings(context.Background(), QQBotSettingsUpdate{
 		FirstBindBonus:       &bonus,
 		LinkTTLMinutes:       &ttl,
 		ChannelCheckEnabled:  &channelCheckEnabled,
+		WelcomeMessage:       &welcomeMessage,
 		AllowedGroupIDs:      &groups,
 		AllowedGuildIDs:      &guilds,
 		GuildWelcomeChannels: &channels,
@@ -299,9 +301,25 @@ func TestQQBotUpdateSettingsNormalizesIDsAndAudits(t *testing.T) {
 	require.Equal(t, &now, result.UpdatedAt)
 	require.Equal(t, "8.5", settings.updates[SettingKeyQQBotFirstBindBonus])
 	require.Equal(t, "false", settings.updates[SettingKeyQQBotChannelCheckEnabled])
+	require.Equal(t, "欢迎 {user}", settings.updates[SettingKeyQQBotWelcomeMessage])
+	require.Equal(t, "欢迎 {user}", result.WelcomeMessage)
 	require.False(t, result.ChannelCheckEnabled)
 	require.Equal(t, float64(8.5), repo.settingsAudit["first_bind_bonus"])
 	require.Equal(t, false, repo.settingsAudit["channel_check_enabled"])
+}
+
+func TestQQBotSettingsWelcomeMessageDefaultsAndValidation(t *testing.T) {
+	settings := &qqBotSettingRepoStub{values: map[string]string{}}
+	svc := NewQQBotService(&qqBotRepoStub{}, qqBotUserLookupStub{}, settings, nil, nil, nil, &config.Config{})
+
+	current, err := svc.GetSettings(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, qqBotDefaultWelcomeMessage, current.WelcomeMessage)
+
+	tooLong := strings.Repeat("欢", 4001)
+	_, err = svc.UpdateSettings(t.Context(), QQBotSettingsUpdate{WelcomeMessage: &tooLong})
+	require.ErrorIs(t, err, ErrQQBotInvalidInput)
+	require.Nil(t, settings.updates)
 }
 
 func TestQQBotListProactiveAdminRecipientsUsesActiveAppAndHidesOpenID(t *testing.T) {

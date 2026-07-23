@@ -1,3 +1,4 @@
+import { baseCompile } from '@intlify/message-compiler'
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import en from '../../../i18n/locales/en/admin/qqbot'
@@ -24,6 +25,7 @@ const config = (): QQBotConfig => ({
   first_bind_bonus: 5,
   link_ttl_minutes: 15,
   welcome_enabled: true,
+  welcome_message: 'welcome {user}',
   first_interaction_enabled: true,
   channel_check_enabled: false,
   help_message: 'help',
@@ -55,10 +57,26 @@ describe('QQBot MessagesTab', () => {
     expect(updates?.at(-1)?.[0]).toMatchObject({ channel_check_enabled: true })
   })
 
+  it('renders and updates the standalone member welcome message', async () => {
+    const wrapper = mount(MessagesTab, { props: { draft: configToDraft(config()) } })
+    const textarea = wrapper.get('#qqbot-welcome-message')
+
+    expect((textarea.element as HTMLTextAreaElement).value).toBe('welcome {user}')
+    expect(wrapper.text()).toContain('admin.qqbot.messages.welcomeMessageHint')
+
+    await textarea.setValue('hello {site} {user}')
+    const updates = wrapper.emitted('update:draft')
+    expect(updates?.at(-1)?.[0]).toMatchObject({ welcome_message: 'hello {site} {user}' })
+  })
+
   it('keeps Chinese and English QQBot keys symmetric and describes allowlists as fail-closed', () => {
     expect(localeKeys(zh).sort()).toEqual(localeKeys(en).sort())
     expect(zh.qqbot.messages.channelCheckEnabled).toBe('允许 /check 渠道状态图')
     expect(en.qqbot.messages.channelCheckEnabled).toBe('Allow /check Channel Status Image')
+    expect(zh.qqbot.messages.welcomeMessageHint).toContain('bind_command')
+    expect(en.qqbot.messages.welcomeMessageHint).toContain('bind_command')
+    expect(() => baseCompile(zh.qqbot.messages.welcomeMessageHint)).not.toThrow()
+    expect(() => baseCompile(en.qqbot.messages.welcomeMessageHint)).not.toThrow()
     expect(zh.qqbot.messages.allowlistHint).toContain('fail-closed')
     expect(zh.qqbot.messages.allowlistHint).toContain('并非不限制')
     expect(en.qqbot.messages.allowlistHint).toContain('fail-closed')
