@@ -60,6 +60,9 @@ func applyErrorPassthroughRule(
 	if !rule.PassthroughBody && rule.CustomMessage != nil {
 		errMsg = *rule.CustomMessage
 	}
+	// 规则始终先用原始 body 完成匹配；命中后才把提取消息或 CustomMessage
+	// 作为自定义展示文本，统一执行脱敏与品牌处理，不做机器翻译。
+	errMsg = presentUpstreamCustomServiceModelError(c, upstreamStatus, responseBody, errMsg, "").Message
 
 	// 命中 skip_monitoring 时在 context 中标记，供 ops_error_logger 跳过记录。
 	if rule.SkipMonitoring {

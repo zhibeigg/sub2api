@@ -1038,7 +1038,7 @@ func TestOpenAIGatewayService_APIKeyPassthrough_RebuildsUpstreamErrors(t *testin
 			responseBody:   `<!DOCTYPE html><title>secret-upstream.example denied the request</title>`,
 			retryAfter:     "17",
 			wantStatus:     http.StatusBadGateway,
-			wantMessage:    "Upstream access denied",
+			wantMessage:    "[PokeAPI] The upstream model account does not have permission for this request. Contact the administrator or use another model/channel.",
 			wantRetryAfter: "17",
 		},
 		{
@@ -1047,7 +1047,7 @@ func TestOpenAIGatewayService_APIKeyPassthrough_RebuildsUpstreamErrors(t *testin
 			contentType:  "application/json",
 			responseBody: `{"error":{"message":"invalid secret-upstream.example token","type":"authentication_error","code":"invalid_api_key","param":"api_key"},"rate_limit":{"remaining":0}}`,
 			wantStatus:   http.StatusBadGateway,
-			wantMessage:  "Upstream authentication failed",
+			wantMessage:  "[PokeAPI] The upstream model account failed authentication. Contact the administrator to check the channel credentials.",
 		},
 		// 瞬时 5xx（500/502/503/504/520-524）对 API-key 账号已改走多账号
 		// failover（见 APIKeyPassthrough_Transient5xxTriggersFailover），此处
@@ -1058,7 +1058,7 @@ func TestOpenAIGatewayService_APIKeyPassthrough_RebuildsUpstreamErrors(t *testin
 			contentType:  "text/html; charset=UTF-8",
 			responseBody: `<!DOCTYPE html><title>secret-upstream.example | 530: Origin DNS error</title>`,
 			wantStatus:   530,
-			wantMessage:  "Upstream service temporarily unavailable",
+			wantMessage:  "[PokeAPI] The upstream model service is temporarily unavailable. Retry later or use another available channel.",
 		},
 		{
 			name:         "structured 5xx",
@@ -1066,7 +1066,7 @@ func TestOpenAIGatewayService_APIKeyPassthrough_RebuildsUpstreamErrors(t *testin
 			contentType:  "application/json",
 			responseBody: `{"error":{"message":"secret-upstream.example internal failure"}}`,
 			wantStatus:   http.StatusNotImplemented,
-			wantMessage:  "Upstream service temporarily unavailable",
+			wantMessage:  "[PokeAPI] The upstream model service is temporarily unavailable. Retry later or use another available channel.",
 		},
 		{
 			name:         "unstructured 4xx",
@@ -1074,7 +1074,7 @@ func TestOpenAIGatewayService_APIKeyPassthrough_RebuildsUpstreamErrors(t *testin
 			contentType:  "text/plain",
 			responseBody: `proxy secret-upstream.example rejected the request`,
 			wantStatus:   http.StatusBadRequest,
-			wantMessage:  "Upstream request failed",
+			wantMessage:  "[PokeAPI] The upstream model service returned an invalid response. Retry later; if it continues, contact the administrator.",
 		},
 		{
 			name:         "malicious valid json 4xx",
@@ -1083,7 +1083,7 @@ func TestOpenAIGatewayService_APIKeyPassthrough_RebuildsUpstreamErrors(t *testin
 			responseBody: `{"error":{"message":"secret-upstream.example invalid parameter","type":"invalid_request_error","code":"upstream_secret_code","param":"private_field","internal_token":"sk-upstream-secret"},"rate_limit":{"remaining":0,"reset":"internal-window"},"debug":{"admin":"root"},"redirect":"https://secret-upstream.example/admin"}`,
 			retryAfter:   "not-a-valid-delay",
 			wantStatus:   http.StatusBadRequest,
-			wantMessage:  "Upstream request failed",
+			wantMessage:  "[PokeAPI] The upstream model service returned an invalid response. Retry later; if it continues, contact the administrator.",
 		},
 	}
 
@@ -1263,7 +1263,7 @@ func TestOpenAIGatewayService_APIKeyPassthrough_CompactErrorAfterKeepaliveIsFail
 	require.Equal(t, "response.failed", events[0][0])
 	require.Equal(t, "failed", gjson.Get(events[0][1], "response.status").String())
 	require.Equal(t, "upstream_error", gjson.Get(events[0][1], "response.error.code").String())
-	require.Equal(t, "Upstream request failed", gjson.Get(events[0][1], "response.error.message").String())
+	require.Equal(t, "[PokeAPI] The upstream model service returned an invalid response. Retry later; if it continues, contact the administrator.", gjson.Get(events[0][1], "response.error.message").String())
 	require.NotContains(t, rec.Body.String(), "secret-upstream.example")
 }
 
@@ -1552,7 +1552,8 @@ func TestOpenAIGatewayService_APIKeyPassthrough_ContextWindow502DoesNotFailover(
 	require.False(t, errors.As(err, &failoverErr), "context-window errors are deterministic request failures")
 	require.True(t, c.Writer.Written())
 	require.Equal(t, http.StatusBadGateway, rec.Code)
-	require.Contains(t, rec.Body.String(), "exceeds the context window")
+	require.Contains(t, rec.Body.String(), "[PokeAPI]")
+	require.Contains(t, rec.Body.String(), "model context limit")
 	require.True(t, body.closed)
 }
 

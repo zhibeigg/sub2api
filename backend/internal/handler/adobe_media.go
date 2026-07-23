@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/modelerror"
 	"github.com/Wei-Shaw/sub2api/internal/provider/adobe/firefly"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -1060,5 +1061,5 @@ func writeAdobeProviderError(c *gin.Context, err error) {
 }
 
 func writeAdobeGatewayError(c *gin.Context, status int, typ, message string) {
-	c.JSON(status, gin.H{"error": gin.H{"type": typ, "message": message}})
+	modelerror.WriteOpenAI(c, status, typ, message)
 }

@@ -543,10 +543,11 @@ func writeOpenAIPassthroughErrorEnvelope(c *gin.Context, downstreamStatus int, u
 	if c == nil {
 		return
 	}
+	presentation := presentLegacyServiceModelError(c, downstreamStatus, "upstream_error", message)
 	body, _ := json.Marshal(gin.H{
 		"error": gin.H{
 			"type":    "upstream_error",
-			"message": message,
+			"message": presentation.Message,
 		},
 	})
 	if writeOpenAICompactSSEBridge(c, downstreamStatus, body) {

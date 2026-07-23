@@ -3,10 +3,11 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
-	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/modelerror"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 )
@@ -77,15 +78,25 @@ func NewErrorResponse(code, message string) ErrorResponse {
 
 // AbortWithError 中断请求并返回JSON错误
 func AbortWithError(c *gin.Context, statusCode int, code, message string) {
+	if c != nil && c.Request != nil {
+		if protocol, ok := service.EndpointProtocolFromContext(c.Request.Context()); ok {
+			if modelerror.WriteGatewayProtocol(c, string(protocol), statusCode, code, message) {
+				c.Abort()
+				return
+			}
+		}
+	}
 	c.JSON(statusCode, NewErrorResponse(code, message))
 	c.Abort()
 }
 
 // abortWithOpenAIQuotaError writes the OpenAI-compatible insufficient quota response.
-func abortWithOpenAIQuotaError(c *gin.Context, statusCode int, message string) {
+func abortWithOpenAIQuotaError(c *gin.Context, statusCode int, _ string) {
+	presentation := modelerror.PresentForGin(c, modelerror.Descriptor{Code: modelerror.CodeQuotaExhausted})
+	modelerror.ApplyGinErrorHeaders(c, presentation)
 	c.JSON(statusCode, gin.H{
 		"error": gin.H{
-			"message": message,
+			"message": presentation.Message,
 			"type":    "insufficient_quota",
 			"param":   nil,
 			"code":    "insufficient_quota",
@@ -103,21 +114,25 @@ type GatewayErrorWriter func(c *gin.Context, status int, message string)
 
 // AnthropicErrorWriter 按 Anthropic API 规范输出错误
 func AnthropicErrorWriter(c *gin.Context, status int, message string) {
-	c.JSON(status, gin.H{
-		"type":  "error",
-		"error": gin.H{"type": "permission_error", "message": message},
-	})
+	descriptor := gatewayPolicyDescriptor(status, message)
+	modelerror.WriteAnthropicDescriptor(c, status, "permission_error", descriptor)
 }
 
 // GoogleErrorWriter 按 Google API 规范输出错误
 func GoogleErrorWriter(c *gin.Context, status int, message string) {
-	c.JSON(status, gin.H{
-		"error": gin.H{
-			"code":    status,
-			"message": message,
-			"status":  googleapi.HTTPStatusToGoogleStatus(status),
-		},
-	})
+	modelerror.WriteGoogleDescriptor(c, status, gatewayPolicyDescriptor(status, message))
+}
+
+func gatewayPolicyDescriptor(status int, message string) modelerror.Descriptor {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	switch {
+	case strings.Contains(normalized, "not assigned to any group"):
+		return modelerror.Descriptor{Code: modelerror.CodeGroupUnavailable}
+	case strings.Contains(normalized, "endpoint protocol"):
+		return modelerror.Descriptor{Code: modelerror.CodeEndpointNotAllowed}
+	default:
+		return modelerror.FromLegacy(status, "permission_error", message)
+	}
 }
 
 // RequireGroupAssignment 检查 API Key 是否已分配到分组，

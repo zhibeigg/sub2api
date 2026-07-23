@@ -16,6 +16,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/modelerror"
 	"github.com/Wei-Shaw/sub2api/internal/securityaudit"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -1241,18 +1242,13 @@ func resolveOpenAIMessagesMetadataSession(sessionHash, promptCacheKey, reqModel 
 
 // anthropicErrorResponse writes an error in Anthropic Messages API format.
 func (h *OpenAIGatewayHandler) anthropicErrorResponse(c *gin.Context, status int, errType, message string) {
-	c.JSON(status, gin.H{
-		"type": "error",
-		"error": gin.H{
-			"type":    errType,
-			"message": message,
-		},
-	})
+	modelerror.WriteAnthropic(c, status, errType, message)
 }
 
 // anthropicStreamingAwareError handles errors that may occur during streaming,
 // using Anthropic SSE error format.
 func (h *OpenAIGatewayHandler) anthropicStreamingAwareError(c *gin.Context, status int, errType, message string, streamStarted bool) {
+	clientMessage := modelerror.PresentForGin(c, modelerror.LegacyDescriptor(status, errType, message)).Message
 	if streamStarted {
 		flusher, ok := c.Writer.(http.Flusher)
 		if ok {
@@ -1260,7 +1256,7 @@ func (h *OpenAIGatewayHandler) anthropicStreamingAwareError(c *gin.Context, stat
 				"type": "error",
 				"error": gin.H{
 					"type":    errType,
-					"message": message,
+					"message": clientMessage,
 				},
 			})
 			fmt.Fprintf(c.Writer, "event: error\ndata: %s\n\n", errPayload) //nolint:errcheck
@@ -1514,7 +1510,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	defer func() {
 		_ = wsConn.CloseNow()
 	}()
-	connectionLifecycle := newOpenAIWSConnectionLifecycle(cancelConnection, wsConn)
+	connectionLifecycle := newOpenAIWSConnectionLifecycle(ctx, cancelConnection, wsConn)
 	onTurnLeaseLost := connectionLifecycle.OnTurnLeaseLost
 	isTurnLeaseLost := connectionLifecycle.TurnLeaseLost
 	wsConn.SetReadLimit(service.ResolveOpenAIWSClientReadLimitBytes(h.cfg))
@@ -1530,7 +1526,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	if err != nil {
 		if errors.Is(context.Cause(ctx), service.ErrOpenAIWSIngressLeaseLost) {
 			reqLog.Warn("openai.websocket_ingress_lease_lost_before_first_message", zap.Error(err))
-			closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "websocket ingress capacity lease lost; please reconnect")
+			closeOpenAIClientWS(ctx, wsConn, coderws.StatusTryAgainLater, "websocket ingress capacity lease lost; please reconnect")
 			return
 		}
 		closeStatus, closeReason := summarizeWSCloseErrorForLog(err)
@@ -1541,33 +1537,33 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			zap.String("close_reason", closeReason),
 			zap.Duration("read_timeout", firstMessageTimeout),
 		)
-		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "missing first response.create message")
+		closeOpenAIClientWS(ctx, wsConn, coderws.StatusPolicyViolation, "missing first response.create message")
 		return
 	}
 	if msgType != coderws.MessageText && msgType != coderws.MessageBinary {
-		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "unsupported websocket message type")
+		closeOpenAIClientWS(ctx, wsConn, coderws.StatusPolicyViolation, "unsupported websocket message type")
 		return
 	}
 	if !gjson.ValidBytes(firstMessage) {
-		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "invalid JSON payload")
+		closeOpenAIClientWS(ctx, wsConn, coderws.StatusPolicyViolation, "invalid JSON payload")
 		return
 	}
 	reqModel := strings.TrimSpace(gjson.GetBytes(firstMessage, "model").String())
 	if reqModel == "" {
-		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "model is required in first response.create payload")
+		closeOpenAIClientWS(ctx, wsConn, coderws.StatusPolicyViolation, "model is required in first response.create payload")
 		return
 	}
 	apiKey, err = h.resolveMultiGroupAPIKey(c, apiKey, reqModel)
 	if err != nil {
 		if errors.Is(err, service.ErrSubscriptionNotFound) {
-			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "no active subscription found for selected group")
+			closeOpenAIClientWS(ctx, wsConn, coderws.StatusPolicyViolation, "no active subscription found for selected group")
 		} else {
-			closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "failed to resolve subscription for selected group")
+			closeOpenAIClientWS(ctx, wsConn, coderws.StatusInternalError, "failed to resolve subscription for selected group")
 		}
 		return
 	}
 	if apiKey == nil {
-		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "no allowed group available for this API key")
+		closeOpenAIClientWS(ctx, wsConn, coderws.StatusPolicyViolation, "no allowed group available for this API key")
 		return
 	}
 	ensureCompositeTargetPlatform(c, apiKey, reqModel)
@@ -1575,14 +1571,14 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	if apiKey.Group != nil && apiKey.Group.Platform == service.PlatformComposite {
 		platform, ok := service.ResolvedTargetPlatformFromContext(ctx)
 		if !ok || (platform != service.PlatformOpenAI && platform != service.PlatformGrok) {
-			closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "Responses WebSocket API only supports OpenAI-compatible models for composite groups")
+			closeOpenAIClientWS(ctx, wsConn, coderws.StatusPolicyViolation, "Responses WebSocket API only supports OpenAI-compatible models for composite groups")
 			return
 		}
 	}
 	previousResponseID := strings.TrimSpace(gjson.GetBytes(firstMessage, "previous_response_id").String())
 	previousResponseIDKind := service.ClassifyOpenAIPreviousResponseIDKind(previousResponseID)
 	if previousResponseID != "" && previousResponseIDKind == service.OpenAIPreviousResponseIDKindMessageID {
-		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "previous_response_id must be a response.id (resp_*), not a message id")
+		closeOpenAIClientWS(ctx, wsConn, coderws.StatusPolicyViolation, "previous_response_id must be a response.id (resp_*), not a message id")
 		return
 	}
 	firstMessageToolCoverage := service.AnalyzeToolCallOutputContextCoverageBytes(firstMessage)
@@ -1598,13 +1594,13 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 
 	if decision := h.checkSecurityAuditStage(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIResponses, reqModel, firstMessage, "first_turn"); decision != nil && !decision.AllowNextStage {
 		writeSecurityAuditWSError(ctx, wsConn, decision)
-		closeOpenAIClientWS(wsConn, securityAuditWSCloseStatus(decision), securityAuditWSCloseReason(decision))
+		closeOpenAIClientWS(ctx, wsConn, securityAuditWSCloseStatus(decision), securityAuditWSCloseReason(decision))
 		return
 	}
 
 	imageIntent := service.IsExplicitImageGenerationIntent("/v1/responses", reqModel, firstMessage)
 	if imageIntent && !service.GroupAllowsImageGeneration(apiKey.Group) {
-		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, service.ImageGenerationPermissionMessage())
+		closeOpenAIClientWS(ctx, wsConn, coderws.StatusPolicyViolation, service.ImageGenerationPermissionMessage())
 		return
 	}
 
@@ -1613,7 +1609,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	cyberBlockKey := service.CyberSessionBlockKey(apiKey.ID, c, nil)
 	if cyberBlockKey != "" && h.gatewayService.IsCyberSessionBlocked(c.Request.Context(), cyberBlockKey) {
 		writeCyberSessionBlockedWSError(c.Request.Context(), wsConn)
-		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "session blocked by cyber-security policy")
+		closeOpenAIClientWS(ctx, wsConn, coderws.StatusPolicyViolation, "session blocked by cyber-security policy")
 		h.enqueueCyberSessionBlockedOpsEntry(c, apiKey, reqModel, cyberBlockKey)
 		return
 	}
@@ -1708,22 +1704,22 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	subscription, err := reloadTurnSubscription()
 	if err != nil {
 		reqLog.Warn("openai.websocket_subscription_reload_failed", zap.Error(err))
-		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "failed to resolve active subscription")
+		closeOpenAIClientWS(ctx, wsConn, coderws.StatusPolicyViolation, "failed to resolve active subscription")
 		return
 	}
 	if err := h.billingCacheService.CheckBillingEligibility(ctx, apiKey.User, apiKey, apiKey.Group, subscription, service.QuotaPlatform(c.Request.Context(), apiKey)); err != nil {
 		reqLog.Info("openai.websocket_billing_eligibility_check_failed", zap.Error(err))
-		closeOpenAIClientWS(wsConn, coderws.StatusPolicyViolation, "billing check failed")
+		closeOpenAIClientWS(ctx, wsConn, coderws.StatusPolicyViolation, "billing check failed")
 		return
 	}
 	userReleaseFunc, userAcquired, err := tryAcquireTurnRequestSlots(subscription)
 	if err != nil {
 		reqLog.Warn("openai.websocket_user_slot_acquire_failed", zap.Error(err))
-		closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "failed to acquire user concurrency slot")
+		closeOpenAIClientWS(ctx, wsConn, coderws.StatusInternalError, "failed to acquire user concurrency slot")
 		return
 	}
 	if !userAcquired {
-		closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "too many concurrent requests, please retry later")
+		closeOpenAIClientWS(ctx, wsConn, coderws.StatusTryAgainLater, "too many concurrent requests, please retry later")
 		return
 	}
 	setCurrentUserRelease(userReleaseFunc)
@@ -1737,11 +1733,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		userReleaseFunc, userAcquired, acquireErr := tryAcquireTurnRequestSlots(getCurrentSubscription())
 		if acquireErr != nil {
 			reqLog.Warn("openai.websocket_user_slot_reacquire_failed", zap.Error(acquireErr))
-			closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "failed to acquire user concurrency slot")
+			closeOpenAIClientWS(ctx, wsConn, coderws.StatusInternalError, "failed to acquire user concurrency slot")
 			return false
 		}
 		if !userAcquired {
-			closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "too many concurrent requests, please retry later")
+			closeOpenAIClientWS(ctx, wsConn, coderws.StatusTryAgainLater, "too many concurrent requests, please retry later")
 			return false
 		}
 		setCurrentUserRelease(userReleaseFunc)
@@ -1773,7 +1769,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		}
 		releaseAccountSlot()
 		if !failoverErr.ShouldRetryNextAccount() {
-			closeOpenAIWSFailoverExhausted(wsConn, failoverErr)
+			closeOpenAIWSFailoverExhausted(ctx, wsConn, failoverErr)
 			return false
 		}
 		if ctx.Err() != nil {
@@ -1783,12 +1779,12 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		failedAccountIDs[account.ID] = struct{}{}
 		lastFailoverErr = failoverErr
 		if switchCount >= maxAccountSwitches {
-			closeOpenAIWSFailoverExhausted(wsConn, failoverErr)
+			closeOpenAIWSFailoverExhausted(ctx, wsConn, failoverErr)
 			return false
 		}
 		switchCount++
 		if h.gatewayService.ShouldStopOpenAIOAuth429Failover(account, failoverErr.StatusCode, switchCount, &oauth429FailoverState) {
-			closeOpenAIWSFailoverExhausted(wsConn, failoverErr)
+			closeOpenAIWSFailoverExhausted(ctx, wsConn, failoverErr)
 			return false
 		}
 		reqLog.Warn("openai.websocket_upstream_failover_switching",
@@ -1836,17 +1832,17 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				zap.Int("excluded_account_count", len(failedAccountIDs)),
 			)
 			if lastFailoverErr != nil {
-				closeOpenAIWSFailoverExhausted(wsConn, lastFailoverErr)
+				closeOpenAIWSFailoverExhausted(ctx, wsConn, lastFailoverErr)
 			} else {
-				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "no available account")
+				closeOpenAIClientWS(ctx, wsConn, coderws.StatusTryAgainLater, "no available account")
 			}
 			return
 		}
 		if selection == nil || selection.Account == nil {
 			if lastFailoverErr != nil {
-				closeOpenAIWSFailoverExhausted(wsConn, lastFailoverErr)
+				closeOpenAIWSFailoverExhausted(ctx, wsConn, lastFailoverErr)
 			} else {
-				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "no available account")
+				closeOpenAIClientWS(ctx, wsConn, coderws.StatusTryAgainLater, "no available account")
 			}
 			return
 		}
@@ -1859,7 +1855,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 		accountReleaseFunc := selection.ReleaseFunc
 		if !selection.Acquired {
 			if selection.WaitPlan == nil {
-				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "account is busy, please retry later")
+				closeOpenAIClientWS(ctx, wsConn, coderws.StatusTryAgainLater, "account is busy, please retry later")
 				return
 			}
 			fastReleaseFunc, fastAcquired, err := h.concurrencyHelper.TryAcquireAccountSlot(
@@ -1869,11 +1865,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			)
 			if err != nil {
 				reqLog.Warn("openai.websocket_account_slot_acquire_failed", zap.Int64("account_id", account.ID), zap.Error(err))
-				closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "failed to acquire account concurrency slot")
+				closeOpenAIClientWS(ctx, wsConn, coderws.StatusInternalError, "failed to acquire account concurrency slot")
 				return
 			}
 			if !fastAcquired {
-				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "account is busy, please retry later")
+				closeOpenAIClientWS(ctx, wsConn, coderws.StatusTryAgainLater, "account is busy, please retry later")
 				return
 			}
 			accountReleaseFunc = fastReleaseFunc
@@ -1896,7 +1892,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 				}
 				return
 			}
-			closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "failed to get access token")
+			closeOpenAIClientWS(ctx, wsConn, coderws.StatusInternalError, "failed to get access token")
 			return
 		}
 
@@ -2075,7 +2071,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					zap.Int64("account_id", account.ID),
 					zap.Error(err),
 				)
-				closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "websocket ingress capacity lease lost; please reconnect")
+				closeOpenAIClientWS(ctx, wsConn, coderws.StatusTryAgainLater, "websocket ingress capacity lease lost; please reconnect")
 				return
 			}
 			if isTurnLeaseLost() {
@@ -2107,7 +2103,7 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					zap.Int64("account_id", account.ID),
 					zap.String("reason", closeErr.Reason()),
 				)
-				closeOpenAIClientWS(wsConn, closeErr.StatusCode(), closeErr.Reason())
+				closeOpenAIClientWS(ctx, wsConn, closeErr.StatusCode(), closeErr.Reason())
 				return
 			}
 
@@ -2131,10 +2127,10 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			}
 			reqLog.Warn("openai.websocket_proxy_failed", proxyFailedFields...)
 			if errors.As(err, &closeErr) {
-				closeOpenAIClientWS(wsConn, closeErr.StatusCode(), closeErr.Reason())
+				closeOpenAIClientWS(ctx, wsConn, closeErr.StatusCode(), closeErr.Reason())
 				return
 			}
-			closeOpenAIClientWS(wsConn, coderws.StatusInternalError, "upstream websocket proxy failed")
+			closeOpenAIClientWS(ctx, wsConn, coderws.StatusInternalError, "upstream websocket proxy failed")
 			return
 		}
 		reqLog.Info("openai.websocket_ingress_closed", zap.Int64("account_id", account.ID))
@@ -2194,12 +2190,7 @@ func (h *OpenAIGatewayHandler) ensureResponsesDependencies(c *gin.Context, reqLo
 	reqLog.Error("openai.handler_dependencies_missing", zap.Strings("missing_dependencies", missing))
 
 	if c != nil && c.Writer != nil && !c.Writer.Written() {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"error": gin.H{
-				"type":    "api_error",
-				"message": "Service temporarily unavailable",
-			},
-		})
+		h.errorResponse(c, http.StatusServiceUnavailable, "api_error", "Service temporarily unavailable")
 	}
 	return false
 }
@@ -2471,6 +2462,11 @@ func (h *OpenAIGatewayHandler) handleStreamingAwareErrorWithCode(
 	if service.StopOpenAICompactSSEKeepaliveCommitted(c) {
 		streamStarted = true
 	}
+	legacyCode := code
+	if legacyCode == "" {
+		legacyCode = errType
+	}
+	clientMessage := modelerror.PresentForGin(c, modelerror.LegacyDescriptor(status, legacyCode, message)).Message
 	if streamStarted {
 		if countTowardsSLA {
 			service.MarkOpsStreamFailure(c, errType, code, message, status)
@@ -2482,14 +2478,14 @@ func (h *OpenAIGatewayHandler) handleStreamingAwareErrorWithCode(
 		// 通用 `event: error` 帧不被识别为终止事件，会导致
 		// "stream closed before response.completed"。
 		if inboundIsResponses(c) {
-			if writeResponsesFailedSSE(c, errType, message) {
+			if writeResponsesFailedSSE(c, errType, clientMessage) {
 				return
 			}
 		}
 		// Stream already started, send error as SSE event then close
 		flusher, ok := c.Writer.(http.Flusher)
 		if ok {
-			errorObject := gin.H{"type": errType, "message": message}
+			errorObject := gin.H{"type": errType, "message": clientMessage}
 			if code != "" {
 				errorObject["code"] = code
 			}
@@ -2511,9 +2507,7 @@ func (h *OpenAIGatewayHandler) handleStreamingAwareErrorWithCode(
 		h.errorResponse(c, status, errType, message)
 		return
 	}
-	c.JSON(status, gin.H{"error": gin.H{
-		"type": errType, "code": code, "message": message,
-	}})
+	modelerror.WriteOpenAIWithCode(c, status, errType, code, message)
 }
 
 func (h *OpenAIGatewayHandler) ensureOpenAIStreamReadErrorResponse(c *gin.Context, err error, streamStarted bool) bool {
@@ -2645,16 +2639,12 @@ func (h *OpenAIGatewayHandler) errorResponse(c *gin.Context, status int, errType
 	// 提交的 SSE 流交错，必须降级为 response.failed 终止事件（#3887）。
 	if service.StopOpenAICompactSSEKeepaliveCommitted(c) {
 		service.MarkOpsStreamError(c, errType, message, status)
-		if writeResponsesFailedSSE(c, errType, message) {
+		clientMessage := modelerror.PresentForGin(c, modelerror.LegacyDescriptor(status, errType, message)).Message
+		if writeResponsesFailedSSE(c, errType, clientMessage) {
 			return
 		}
 	}
-	c.JSON(status, gin.H{
-		"error": gin.H{
-			"type":    errType,
-			"message": message,
-		},
-	})
+	modelerror.WriteOpenAI(c, status, errType, message)
 }
 
 // openAICompactKeepaliveInterval 复用流式 keepalive 配置作为 compact 下游
@@ -2741,6 +2731,7 @@ func setOpenAIWSTurnSubscriptionContext(c *gin.Context, subscription *service.Us
 }
 
 type openAIWSConnectionLifecycle struct {
+	ctx    context.Context
 	cancel context.CancelCauseFunc
 	conn   *coderws.Conn
 
@@ -2749,8 +2740,11 @@ type openAIWSConnectionLifecycle struct {
 	leaseLost   bool
 }
 
-func newOpenAIWSConnectionLifecycle(cancel context.CancelCauseFunc, conn *coderws.Conn) *openAIWSConnectionLifecycle {
-	return &openAIWSConnectionLifecycle{cancel: cancel, conn: conn}
+func newOpenAIWSConnectionLifecycle(ctx context.Context, cancel context.CancelCauseFunc, conn *coderws.Conn) *openAIWSConnectionLifecycle {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return &openAIWSConnectionLifecycle{ctx: ctx, cancel: cancel, conn: conn}
 }
 
 func (l *openAIWSConnectionLifecycle) CancelWithClose(cause error, reason string) {
@@ -2764,7 +2758,7 @@ func (l *openAIWSConnectionLifecycle) CancelWithClose(cause error, reason string
 		if l.cancel != nil {
 			l.cancel(cause)
 		}
-		closeOpenAIClientWS(l.conn, coderws.StatusTryAgainLater, reason)
+		closeOpenAIClientWS(l.ctx, l.conn, coderws.StatusTryAgainLater, reason)
 	})
 }
 
@@ -2797,36 +2791,44 @@ func isOpenAIWSUpgradeRequest(r *http.Request) bool {
 	return strings.Contains(strings.ToLower(strings.TrimSpace(r.Header.Get("Connection"))), "upgrade")
 }
 
-func closeOpenAIClientWS(conn *coderws.Conn, status coderws.StatusCode, reason string) {
+func closeOpenAIClientWS(ctx context.Context, conn *coderws.Conn, status coderws.StatusCode, reason string) {
 	if conn == nil {
 		return
 	}
-	reason = strings.TrimSpace(reason)
-	if len(reason) > 120 {
-		reason = reason[:120]
+	if ctx == nil {
+		ctx = context.Background()
 	}
+	httpStatus := http.StatusBadRequest
+	switch status {
+	case coderws.StatusInternalError:
+		httpStatus = http.StatusInternalServerError
+	case coderws.StatusTryAgainLater:
+		httpStatus = http.StatusServiceUnavailable
+	}
+	reason = modelerror.Present(ctx, modelerror.LegacyDescriptor(httpStatus, "", reason)).Message
+	reason = modelerror.TruncateUTF8Bytes(reason, 120)
 	_ = conn.Close(status, reason)
 	_ = conn.CloseNow()
 }
 
-func closeOpenAIWSFailoverExhausted(conn *coderws.Conn, failoverErr *service.UpstreamFailoverError) {
+func closeOpenAIWSFailoverExhausted(ctx context.Context, conn *coderws.Conn, failoverErr *service.UpstreamFailoverError) {
 	if failoverErr == nil {
-		closeOpenAIClientWS(conn, coderws.StatusInternalError, "upstream websocket proxy failed")
+		closeOpenAIClientWS(ctx, conn, coderws.StatusInternalError, "upstream websocket proxy failed")
 		return
 	}
 	if failoverErr.Stage == service.GatewayFailureStageAccountAuth {
-		closeOpenAIClientWS(conn, coderws.StatusTryAgainLater, service.GrokCredentialUnavailableClientMessage)
+		closeOpenAIClientWS(ctx, conn, coderws.StatusTryAgainLater, service.GrokCredentialUnavailableClientMessage)
 		return
 	}
 	switch failoverErr.StatusCode {
 	case http.StatusTooManyRequests:
-		closeOpenAIClientWS(conn, coderws.StatusTryAgainLater, "upstream rate limit exceeded, please retry later")
+		closeOpenAIClientWS(ctx, conn, coderws.StatusTryAgainLater, "upstream rate limit exceeded, please retry later")
 	case 529, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
-		closeOpenAIClientWS(conn, coderws.StatusTryAgainLater, "upstream service temporarily unavailable")
+		closeOpenAIClientWS(ctx, conn, coderws.StatusTryAgainLater, "upstream service temporarily unavailable")
 	case http.StatusUnauthorized, http.StatusForbidden:
-		closeOpenAIClientWS(conn, coderws.StatusPolicyViolation, "upstream websocket authentication failed")
+		closeOpenAIClientWS(ctx, conn, coderws.StatusPolicyViolation, "upstream websocket authentication failed")
 	default:
-		closeOpenAIClientWS(conn, coderws.StatusInternalError, "upstream websocket proxy failed")
+		closeOpenAIClientWS(ctx, conn, coderws.StatusInternalError, "upstream websocket proxy failed")
 	}
 }
 
@@ -2837,21 +2839,22 @@ func writeContentModerationWSError(ctx context.Context, conn *coderws.Conn, deci
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	message := strings.TrimSpace(decision.Message)
-	if message == "" {
-		message = "content moderation blocked this request"
+	descriptor := modelerror.Descriptor{Code: modelerror.CodeContentPolicy}
+	if message := strings.TrimSpace(decision.Message); message != "" {
+		descriptor = modelerror.WithCustomMessage(descriptor, message)
 	}
+	clientMessage := modelerror.Present(ctx, descriptor).Message
 	payload, err := json.Marshal(gin.H{
 		"event_id": "evt_content_moderation_blocked",
 		"type":     "error",
 		"error": gin.H{
 			"type":    "invalid_request_error",
 			"code":    contentModerationErrorCode(decision),
-			"message": message,
+			"message": clientMessage,
 		},
 	})
 	if err != nil {
-		payload = []byte(`{"event_id":"evt_content_moderation_blocked","type":"error","error":{"type":"invalid_request_error","code":"content_policy_violation","message":"content moderation blocked this request"}}`)
+		payload = []byte(`{"event_id":"evt_content_moderation_blocked","type":"error","error":{"type":"invalid_request_error","code":"content_policy_violation","message":"[PokeAPI] The request was blocked by a content or security policy."}}`)
 	}
 	writeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
@@ -2867,17 +2870,18 @@ func writeCyberSessionBlockedWSError(ctx context.Context, conn *coderws.Conn) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	clientMessage := modelerror.Present(ctx, modelerror.Descriptor{Code: modelerror.CodeContentPolicy}).Message
 	payload, err := json.Marshal(gin.H{
 		"event_id": "evt_cyber_session_blocked",
 		"type":     "error",
 		"error": gin.H{
 			"type":    "permission_error",
 			"code":    "session_blocked_by_cyber_policy",
-			"message": cyberSessionBlockedClientMsg,
+			"message": clientMessage,
 		},
 	})
 	if err != nil {
-		payload = []byte(`{"event_id":"evt_cyber_session_blocked","type":"error","error":{"type":"permission_error","code":"session_blocked_by_cyber_policy","message":"This session is blocked by cyber-security policy, please start a new session"}}`)
+		payload = []byte(`{"event_id":"evt_cyber_session_blocked","type":"error","error":{"type":"permission_error","code":"session_blocked_by_cyber_policy","message":"[PokeAPI] The request was blocked by a content or security policy."}}`)
 	}
 	writeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
@@ -3032,25 +3036,20 @@ func (h *OpenAIGatewayHandler) rejectIfCyberSessionBlocked(c *gin.Context, apiKe
 	// body-signal compact 心跳可能已把响应头提交为 200（cyber 检查在用户槽位
 	// 长等待之后执行）：以 response.failed 终止事件回传；未提交时停拍后照常
 	// 写 JSON（#3887）。
+	descriptor := modelerror.Descriptor{Code: modelerror.CodeContentPolicy}
 	if service.StopOpenAICompactSSEKeepaliveCommitted(c) {
 		service.MarkOpsStreamError(c, "permission_error", cyberSessionBlockedClientMsg, http.StatusForbidden)
-		if writeResponsesFailedSSE(c, "permission_error", cyberSessionBlockedClientMsg) {
+		clientMessage := modelerror.PresentForGin(c, descriptor).Message
+		if writeResponsesFailedSSE(c, "permission_error", clientMessage) {
 			h.enqueueCyberSessionBlockedOpsEntry(c, apiKey, model, key)
 			return true
 		}
 	}
 	switch format {
 	case cyberBlockFormatAnthropic:
-		c.JSON(http.StatusForbidden, gin.H{"type": "error", "error": gin.H{
-			"type":    "permission_error",
-			"message": cyberSessionBlockedClientMsg,
-		}})
+		modelerror.WriteAnthropicDescriptor(c, http.StatusForbidden, "permission_error", descriptor)
 	default: // cyberBlockFormatResponses 与 cyberBlockFormatChat：同构的 OpenAI error envelope
-		c.JSON(http.StatusForbidden, gin.H{"error": gin.H{
-			"type":    "permission_error",
-			"code":    "session_blocked_by_cyber_policy",
-			"message": cyberSessionBlockedClientMsg,
-		}})
+		modelerror.WriteOpenAIDescriptor(c, http.StatusForbidden, "permission_error", "session_blocked_by_cyber_policy", descriptor)
 	}
 	h.enqueueCyberSessionBlockedOpsEntry(c, apiKey, model, key)
 	return true

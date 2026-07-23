@@ -79,7 +79,9 @@ func TestOpenAICompatibleHandlersRejectInvalidStreamFieldType(t *testing.T) {
 			tt.run(c)
 
 			require.Equal(t, http.StatusBadRequest, rec.Code)
-			require.Equal(t, invalidStreamFieldTypeMessage, gjson.GetBytes(rec.Body.Bytes(), "error.message").String())
+			message := gjson.GetBytes(rec.Body.Bytes(), "error.message").String()
+			require.Contains(t, message, "[PokeAPI]")
+			require.Contains(t, message, "model request is invalid")
 			require.Contains(t, rec.Body.String(), "invalid_request_error")
 		})
 	}
@@ -119,7 +121,8 @@ func TestGatewayOpenAICompatibleHandlersAllowBooleanStreamToContinue(t *testing.
 			tt.run(c)
 
 			require.Equal(t, http.StatusForbidden, rec.Code)
-			require.Contains(t, rec.Body.String(), "This group is restricted to Claude Code clients")
+			require.Contains(t, rec.Body.String(), "[PokeAPI]")
+			require.Contains(t, rec.Body.String(), "request is not allowed")
 		})
 	}
 }

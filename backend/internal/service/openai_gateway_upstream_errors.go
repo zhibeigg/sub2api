@@ -11,6 +11,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/modelerror"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
@@ -335,11 +336,11 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		})
 		setOpsUpstreamError(c, resp.StatusCode, cyberMsg, truncateString(string(body), 2048))
 		writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
-		contentType := resp.Header.Get("Content-Type")
-		if contentType == "" {
-			contentType = "application/json"
+		MarkResponseCommitted(c)
+		if strings.TrimSpace(code) == "" {
+			code = "cyber_policy"
 		}
-		c.Data(resp.StatusCode, contentType, body)
+		modelerror.WriteOpenAIDescriptor(c, resp.StatusCode, "invalid_request_error", code, modelerror.Descriptor{Code: modelerror.CodeContentPolicy})
 		if cyberMsg == "" {
 			return nil, fmt.Errorf("openai cyber_policy: %d", resp.StatusCode)
 		}
@@ -350,12 +351,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		setOpsUpstreamError(c, resp.StatusCode, clientMsg, truncateString(string(body), 2048))
 		writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 		MarkResponseCommitted(c)
-		c.JSON(http.StatusForbidden, gin.H{
-			"error": gin.H{
-				"type":    "invalid_request_error",
-				"message": clientMsg,
-			},
-		})
+		modelerror.WriteOpenAIDescriptor(c, http.StatusForbidden, "invalid_request_error", "content_policy_violation", modelerror.Descriptor{Code: modelerror.CodeContentPolicy})
 		return nil, fmt.Errorf("grok content policy rejection: %s", clientMsg)
 	}
 
@@ -442,10 +438,11 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 			Detail:             upstreamDetail,
 		})
 		MarkResponseCommitted(c)
+		presentation := presentServiceModelError(c, modelerror.Descriptor{Code: modelerror.CodeUpstreamBadResponse})
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": gin.H{
 				"type":    "upstream_error",
-				"message": "Upstream gateway error",
+				"message": presentation.Message,
 			},
 		})
 		if upstreamMsg == "" {
@@ -518,10 +515,11 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		errMsg = upstreamMsg
 	}
 
+	presentation := presentUpstreamServiceModelError(c, resp.StatusCode, body, errMsg, nil, reqModel)
 	c.JSON(statusCode, gin.H{
 		"error": gin.H{
 			"type":    errType,
-			"message": errMsg,
+			"message": presentation.Message,
 		},
 	})
 

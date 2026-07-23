@@ -106,7 +106,8 @@ func TestAsyncImageEnablesWithoutRestart(t *testing.T) {
 
 	rec := submit()
 	require.Equal(t, http.StatusNotFound, rec.Code, "disabled until an admin configures object storage")
-	require.Contains(t, rec.Body.String(), "async image tasks are not enabled")
+	require.Contains(t, rec.Body.String(), "[PokeAPI]")
+	require.Contains(t, rec.Body.String(), "does not allow this API protocol")
 
 	// The admin saves the setting — no restart, same process.
 	_, err := settings.Update(context.Background(), service.ImageStorageSettings{

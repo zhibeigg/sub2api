@@ -133,7 +133,8 @@ func TestAsyncImageHandlerDisabledReturns404(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusNotFound, w.Code)
-	require.Contains(t, w.Body.String(), "not enabled")
+	require.Contains(t, w.Body.String(), "[PokeAPI]")
+	require.Contains(t, w.Body.String(), "does not allow this API protocol")
 
 	pollReq := httptest.NewRequest(http.MethodGet, "/v1/images/tasks/imgtask_missing", nil)
 	pollWriter := httptest.NewRecorder()

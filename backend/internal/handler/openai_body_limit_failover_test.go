@@ -27,7 +27,8 @@ func TestOpenAIBodyLimitFailoverExhausted_ReturnsRedactedJSON413(t *testing.T) {
 	errBody, ok := envelope["error"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, "invalid_request_error", errBody["type"])
-	require.Equal(t, "Request payload is too large", errBody["message"])
+	require.Contains(t, errBody["message"], "[PokeAPI]")
+	require.Contains(t, errBody["message"], "request payload is too large")
 	require.NotContains(t, rec.Body.String(), "must-not-leak")
 }
 
@@ -42,7 +43,8 @@ func TestOpenAIBodyLimitFailoverExhausted_ReturnsRedactedResponsesSSE(t *testing
 	body := rec.Body.String()
 	require.True(t, strings.HasPrefix(body, "event: response.failed\n"))
 	require.Contains(t, body, `"code":"invalid_request"`)
-	require.Contains(t, body, `"message":"Request payload is too large"`)
+	require.Contains(t, body, `[PokeAPI]`)
+	require.Contains(t, body, `request payload is too large`)
 	require.NotContains(t, body, "must-not-leak")
 }
 

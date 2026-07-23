@@ -626,6 +626,12 @@ default:
   rate_multiplier: 1.0
 ```
 
+### 模型错误语言与稳定错误码
+
+模型网关错误支持中文和英文安全展示。客户端可通过 `Accept-Language` 选择语言；缺失或不支持时使用 `gateway.model_error_default_locale`（`en` 或 `zh`，默认 `en`）。所有模型客户端可见错误消息均带 `[PokeAPI]`，并返回稳定的 `X-PokeAPI-Error-Code`、`X-PokeAPI-Request-ID` 和 `Content-Language` 响应头。
+
+Anthropic Messages、OpenAI Chat Completions、OpenAI Responses、Gemini、SSE 与 WebSocket 均保持原有 HTTP 状态、JSON envelope、协议字段、SSE 终止事件和 WebSocket 关闭码。上游原始正文、凭据和内部诊断不会直接返回客户端；普通 REST、管理、OAuth 和账单接口不受模型错误本地化影响。完整契约见 [模型错误响应契约](docs/MODEL_ERROR_CONTRACT.md)。
+
 ### Sora 功能状态（暂不可用）
 
 > ⚠️ 当前 Sora 相关功能因上游接入与媒体链路存在技术问题，暂时不可用。

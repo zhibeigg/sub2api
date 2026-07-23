@@ -111,7 +111,8 @@ func TestGatewayRoutesAlphaSearchRejectsNonOpenAIGroup(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNotFound, w.Code)
-	require.Contains(t, w.Body.String(), "only available for OpenAI groups")
+	require.Contains(t, w.Body.String(), "[PokeAPI]")
+	require.Contains(t, w.Body.String(), "does not allow this API protocol")
 }
 
 func TestGatewayRoutesOpenAIImagesPathsAreRegistered(t *testing.T) {
@@ -174,7 +175,8 @@ func TestGatewayRoutesExplicitNonImageGroupDoesNotAutoSwitchForImages(t *testing
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNotFound, w.Code)
-	require.Contains(t, w.Body.String(), "Images API is not supported for this platform")
+	require.Contains(t, w.Body.String(), "[PokeAPI]")
+	require.Contains(t, w.Body.String(), "does not allow this API protocol")
 }
 
 func TestGatewayRoutesAsyncImagesPathsAreRegistered(t *testing.T) {
@@ -310,7 +312,8 @@ func TestGatewayRoutesUnsupportedVideosAreRejectedAtPlatformGate(t *testing.T) {
 
 		router.ServeHTTP(w, req)
 		require.Equal(t, http.StatusNotFound, w.Code, "method=%s path=%s", tc.method, tc.path)
-		require.Contains(t, w.Body.String(), "Videos API is not supported for this platform")
+		require.Contains(t, w.Body.String(), "[PokeAPI]")
+		require.Contains(t, w.Body.String(), "does not allow this API protocol")
 	}
 }
 

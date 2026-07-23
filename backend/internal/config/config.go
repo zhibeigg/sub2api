@@ -1023,6 +1023,8 @@ const (
 
 // GatewayConfig API网关相关配置
 type GatewayConfig struct {
+	// ModelErrorDefaultLocale: 模型错误语言协商失败时的回退语言（en/zh）。
+	ModelErrorDefaultLocale string `mapstructure:"model_error_default_locale"`
 	// 等待上游响应头的超时时间（秒），0表示无超时
 	// 注意：这不影响流式数据传输，只控制等待响应头的时间
 	ResponseHeaderTimeout int `mapstructure:"response_header_timeout"`
@@ -2457,6 +2459,7 @@ func setDefaults() {
 	viper.SetDefault("idempotency.cleanup_batch_size", 500)
 
 	// Gateway
+	viper.SetDefault("gateway.model_error_default_locale", "en")
 	viper.SetDefault("gateway.response_header_timeout", 600) // 600秒(10分钟)等待上游响应头，LLM高负载时可能排队较久
 	viper.SetDefault("gateway.openai_response_header_timeout", 0)
 	viper.SetDefault("gateway.openai_first_output_timeout_seconds", 0)
@@ -3431,6 +3434,13 @@ func (c *Config) Validate() error {
 	}
 	if c.Gateway.ConcurrencySlotTTLMinutes <= 0 {
 		return fmt.Errorf("gateway.concurrency_slot_ttl_minutes must be positive")
+	}
+	c.Gateway.ModelErrorDefaultLocale = strings.ToLower(strings.TrimSpace(c.Gateway.ModelErrorDefaultLocale))
+	if c.Gateway.ModelErrorDefaultLocale == "" {
+		c.Gateway.ModelErrorDefaultLocale = "en"
+	}
+	if c.Gateway.ModelErrorDefaultLocale != "en" && c.Gateway.ModelErrorDefaultLocale != "zh" {
+		return fmt.Errorf("gateway.model_error_default_locale must be either en or zh")
 	}
 	if c.Gateway.StreamDataIntervalTimeout < 0 {
 		return fmt.Errorf("gateway.stream_data_interval_timeout must be non-negative")

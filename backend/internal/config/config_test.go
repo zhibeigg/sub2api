@@ -1783,6 +1783,11 @@ func TestValidateConfigErrors(t *testing.T) {
 			wantErr: "gateway.openai_high_effort_first_output_timeout_seconds",
 		},
 		{
+			name:    "gateway model error default locale",
+			mutate:  func(c *Config) { c.Gateway.ModelErrorDefaultLocale = "fr" },
+			wantErr: "gateway.model_error_default_locale",
+		},
+		{
 			name:    "gateway max idle conns",
 			mutate:  func(c *Config) { c.Gateway.MaxIdleConns = 0 },
 			wantErr: "gateway.max_idle_conns",

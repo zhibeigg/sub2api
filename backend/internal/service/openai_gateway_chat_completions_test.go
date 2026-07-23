@@ -439,7 +439,8 @@ func TestForwardAsChatCompletions_BufferedContextWindowResponseFailedReturnsErro
 	require.False(t, errors.As(err, &failoverErr))
 	require.True(t, c.Writer.Written())
 	require.Equal(t, http.StatusBadGateway, rec.Code)
-	require.Contains(t, rec.Body.String(), "input exceeds the context window")
+	require.Contains(t, rec.Body.String(), "[PokeAPI]")
+	require.Contains(t, rec.Body.String(), "model context limit")
 }
 
 func TestForwardAsChatCompletions_StreamContextWindowResponseFailedReturnsErrorWithoutFailover(t *testing.T) {
@@ -485,7 +486,8 @@ func TestForwardAsChatCompletions_StreamContextWindowResponseFailedReturnsErrorW
 	require.True(t, c.Writer.Written())
 	require.Equal(t, http.StatusBadGateway, rec.Code)
 	require.Contains(t, rec.Header().Get("Content-Type"), "application/json")
-	require.Contains(t, rec.Body.String(), "input exceeds the context window")
+	require.Contains(t, rec.Body.String(), "[PokeAPI]")
+	require.Contains(t, rec.Body.String(), "model context limit")
 	require.NotContains(t, rec.Body.String(), "[DONE]")
 }
 
@@ -995,10 +997,10 @@ func TestForwardAsChatCompletions_UpstreamRequestIgnoresClientCancel(t *testing.
 // TestBuildChatStreamErrorSSE verifies F4: the error chunk payload follows the
 // OpenAI chat streaming error convention so third-party clients stop retrying.
 func TestBuildChatStreamErrorSSE(t *testing.T) {
-	got := buildChatStreamErrorSSE("cyber_policy", "blocked by policy")
+	got := buildChatStreamErrorSSE(nil, http.StatusBadRequest, "cyber_policy", "blocked by policy")
 	require.True(t, strings.HasPrefix(got, "data: "), "must be an SSE data frame")
 	payload := strings.TrimSuffix(strings.TrimPrefix(got, "data: "), "\n\n")
 	require.Equal(t, "invalid_request_error", gjson.Get(payload, "error.type").String())
 	require.Equal(t, "cyber_policy", gjson.Get(payload, "error.code").String())
-	require.Equal(t, "blocked by policy", gjson.Get(payload, "error.message").String())
+	require.Equal(t, "[PokeAPI] The request was blocked by a content or security policy. Revise the input and try again.", gjson.Get(payload, "error.message").String())
 }

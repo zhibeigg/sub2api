@@ -942,10 +942,12 @@ func writeGrokMediaErrorResponse(c *gin.Context, statusCode int, errType, messag
 	if c == nil || c.Writer == nil || c.Writer.Written() {
 		return
 	}
+	errType = strings.TrimSpace(errType)
+	presentation := presentLegacyServiceModelError(c, statusCode, errType, strings.TrimSpace(message))
 	c.JSON(statusCode, gin.H{
 		"error": gin.H{
-			"type":    strings.TrimSpace(errType),
-			"message": strings.TrimSpace(message),
+			"type":    errType,
+			"message": presentation.Message,
 		},
 	})
 }

@@ -160,7 +160,8 @@ func TestCursorInvalidArgumentStreamsSingleSanitizedErrorFrame(t *testing.T) {
 	body := recorder.Body.String()
 	require.Equal(t, 1, strings.Count(body, `"type":"error"`))
 	require.Contains(t, body, `"type":"invalid_request_error"`)
-	require.Contains(t, body, "Cursor rejected the request payload")
+	require.Contains(t, body, "[PokeAPI]")
+	require.Contains(t, body, "model request is invalid")
 	require.NotContains(t, body, "SECRET-DATA")
 }
 
@@ -188,6 +189,9 @@ func TestOpenCodeRequestErrorPreservedAcrossCompatibilityEndpoints(t *testing.T)
 			recorder := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(recorder)
 			c.Request = httptest.NewRequest(http.MethodPost, test.path, nil)
+			protocol, ok := service.EndpointProtocolForRequestPath(test.path)
+			require.True(t, ok)
+			c.Request = c.Request.WithContext(service.WithEndpointProtocol(c.Request.Context(), protocol))
 			c.Set(service.OpsUpstreamErrorDetailKey, `{"response_body":"full diagnostic"}`)
 			failure := &service.UpstreamFailoverError{
 				StatusCode:        http.StatusBadRequest,
@@ -202,7 +206,8 @@ func TestOpenCodeRequestErrorPreservedAcrossCompatibilityEndpoints(t *testing.T)
 			test.invoke(c, failure)
 
 			require.Equal(t, http.StatusBadRequest, recorder.Code)
-			require.Contains(t, recorder.Body.String(), "request body is too large for kimi-k3")
+			require.Contains(t, recorder.Body.String(), "[PokeAPI]")
+			require.Contains(t, recorder.Body.String(), "model request is invalid")
 			require.NotContains(t, recorder.Body.String(), "All available accounts exhausted")
 			require.Equal(t, http.StatusBadRequest, c.GetInt(service.OpsUpstreamStatusCodeKey))
 			require.Equal(t, "request body is too large for kimi-k3", c.GetString(service.OpsUpstreamErrorMessageKey))
@@ -224,7 +229,8 @@ func TestRateLimitedFailoverDoesNotExposeRawBodyWithoutClientMessage(t *testing.
 	}, false)
 
 	require.Equal(t, http.StatusTooManyRequests, recorder.Code)
-	require.Contains(t, recorder.Body.String(), "Upstream rate limit exceeded")
+	require.Contains(t, recorder.Body.String(), "[PokeAPI]")
+	require.Contains(t, recorder.Body.String(), "upstream model service is rate-limited")
 	require.NotContains(t, recorder.Body.String(), "must-not-leak")
 }
 

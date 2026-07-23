@@ -14,6 +14,7 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/modelerror"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
@@ -327,5 +328,5 @@ func imageTaskError(c *gin.Context, err error) {
 
 func imageTaskJSONError(c *gin.Context, status int, code, message string) {
 	c.Header("Cache-Control", "no-store")
-	c.JSON(status, gin.H{"error": gin.H{"type": code, "code": code, "message": message}})
+	modelerror.WriteOpenAIDescriptor(c, status, code, code, modelerror.LegacyDescriptor(status, code, message))
 }

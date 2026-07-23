@@ -919,7 +919,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 						if clientMsg == "" {
 							clientMsg = "Request blocked by upstream cyber-security policy"
 						}
-						if _, err := fmt.Fprint(c.Writer, buildAnthropicStreamErrorSSE("invalid_request_error", clientMsg)); err == nil {
+						if _, err := fmt.Fprint(c.Writer, buildAnthropicStreamErrorSSE(c, http.StatusBadRequest, "invalid_request_error", clientMsg)); err == nil {
 							c.Writer.Flush()
 						}
 						clientDisconnected = true
@@ -953,7 +953,7 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 						clientOutputStarted = true
 					} else {
 						writeStreamHeaders()
-						if _, err := fmt.Fprint(c.Writer, buildAnthropicStreamErrorSSE(errType, errMsg)); err == nil {
+						if _, err := fmt.Fprint(c.Writer, buildAnthropicStreamErrorSSE(c, errStatus, errType, errMsg)); err == nil {
 							c.Writer.Flush()
 						}
 					}
@@ -1201,11 +1201,12 @@ func (s *OpenAIGatewayService) handleAnthropicStreamingResponse(
 
 // writeAnthropicError writes an error response in Anthropic Messages API format.
 func writeAnthropicError(c *gin.Context, statusCode int, errType, message string) {
+	presentation := presentLegacyServiceModelError(c, statusCode, errType, message)
 	c.JSON(statusCode, gin.H{
 		"type": "error",
 		"error": gin.H{
 			"type":    errType,
-			"message": message,
+			"message": presentation.Message,
 		},
 	})
 }
@@ -1214,16 +1215,17 @@ func writeAnthropicError(c *gin.Context, statusCode int, errType, message string
 // streaming response can terminate with a visible error (e.g. upstream
 // cyber_policy) and programmatic clients stop retrying.
 // Marshal 失败的兜底仅保留固定提示。
-func buildAnthropicStreamErrorSSE(errType, message string) string {
+func buildAnthropicStreamErrorSSE(c *gin.Context, status int, errType, message string) string {
+	presentation := presentLegacyServiceModelError(c, status, errType, message)
 	payload, err := json.Marshal(gin.H{
 		"type": "error",
 		"error": gin.H{
 			"type":    errType,
-			"message": message,
+			"message": presentation.Message,
 		},
 	})
 	if err != nil {
-		return "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"" + errType + "\",\"message\":\"upstream error\"}}\n\n"
+		return "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"" + errType + "\",\"message\":\"[PokeAPI] The upstream model service returned an invalid response.\"}}\n\n"
 	}
 	return "event: error\ndata: " + string(payload) + "\n\n"
 }

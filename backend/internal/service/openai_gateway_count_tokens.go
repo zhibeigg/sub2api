@@ -288,11 +288,12 @@ func (s *OpenAIGatewayService) buildInputTokensUpstreamRequest(
 }
 
 func writeAnthropicCountTokensError(c *gin.Context, status int, errType, message string) {
+	presentation := presentLegacyServiceModelError(c, status, errType, message)
 	c.JSON(status, gin.H{
 		"type": "error",
 		"error": gin.H{
 			"type":    errType,
-			"message": message,
+			"message": presentation.Message,
 		},
 	})
 }

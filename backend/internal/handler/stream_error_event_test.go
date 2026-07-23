@@ -74,7 +74,8 @@ func TestOpenAIHandleStreamingAwareError_ResponsesStreamingEmitsResponseFailed(t
 	id, _ := resp["id"].(string)
 	assert.True(t, strings.HasPrefix(id, "resp_"), "id should start with resp_, got %q", id)
 	assert.Equal(t, "rate_limit_exceeded", errObj["code"])
-	assert.Equal(t, "Concurrency limit exceeded for user, please retry later", errObj["message"])
+	assert.Contains(t, errObj["message"], "[PokeAPI]")
+	assert.Contains(t, errObj["message"], "concurrency limit has been reached")
 }
 
 // 当 setOpsRequestContext 写过 model，合成事件应回填该字段（与 codebase 已有 makeResponsesCompletedEvent 对齐）。
@@ -137,7 +138,9 @@ func TestOpenAIHandleStreamingAwareError_ResponsesStreamingJSONEscaping(t *testi
 			h.handleStreamingAwareError(c, http.StatusBadGateway, tc.errType, tc.message, true)
 
 			_, errObj := parseResponsesFailedSSE(t, w.Body.String())
-			assert.Equal(t, tc.message, errObj["message"], "message 必须被原样还原")
+			clientMessage, _ := errObj["message"].(string)
+			assert.Contains(t, clientMessage, "[PokeAPI]")
+			assert.NotEqual(t, tc.message, clientMessage, "内部或上游原文不应直接回显")
 		})
 	}
 }
@@ -161,7 +164,8 @@ func TestGatewayHandleStreamingAwareError_ResponsesStreamingEmitsResponseFailed(
 
 	_, errObj := parseResponsesFailedSSE(t, w.Body.String())
 	assert.Equal(t, "upstream_error", errObj["code"])
-	assert.Equal(t, "upstream gone", errObj["message"])
+	assert.Contains(t, errObj["message"], "[PokeAPI]")
+	assert.Contains(t, errObj["message"], "upstream model service returned an invalid response")
 }
 
 // Gateway handler: /v1/messages preserves the legacy data:{type:error,...} format

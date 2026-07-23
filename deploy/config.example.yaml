@@ -224,6 +224,12 @@ security:
 # 网关配置
 # =============================================================================
 gateway:
+  # Default language for client-visible model errors when Accept-Language is
+  # missing or unsupported. Supported values: en, zh. Successful responses and
+  # ordinary REST/admin/OAuth/billing APIs are not localized by this setting.
+  # 模型错误在 Accept-Language 缺失或不支持时的默认语言，可选 en、zh。
+  # 成功响应以及普通 REST、管理、OAuth、账单接口不受此配置影响。
+  model_error_default_locale: "en"
   # Multi-group API keys use the fixed X-Sub2API-Group-ID request header to
   # select one of their bound groups before routing, subscription, and billing.
   # This security-sensitive header name is intentionally not configurable.

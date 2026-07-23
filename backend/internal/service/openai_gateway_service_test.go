@@ -1690,7 +1690,7 @@ func TestOpenAIStreamingContextWindowResponseFailedBeforeOutputAppliesPassthroug
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	body := rec.Body.String()
 	require.Equal(t, "upstream_error", gjson.Get(body, "error.type").String())
-	require.Equal(t, upstreamMessage, gjson.Get(body, "error.message").String())
+	require.Equal(t, "[PokeAPI] "+upstreamMessage, gjson.Get(body, "error.message").String())
 	require.NotContains(t, body, "response.failed")
 	require.NotContains(t, body, "Upstream request failed")
 	// 命中透传规则也应记录 ops 上游错误事件（对齐 CC/Messages 与 antigravity 先例）。
@@ -2110,7 +2110,7 @@ func TestOpenAIStreamingPassthroughContextWindowResponseFailedBeforeOutputApplie
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	body := rec.Body.String()
 	require.Equal(t, "upstream_error", gjson.Get(body, "error.type").String())
-	require.Equal(t, upstreamMessage, gjson.Get(body, "error.message").String())
+	require.Equal(t, "[PokeAPI] "+upstreamMessage, gjson.Get(body, "error.message").String())
 	require.NotContains(t, body, "response.failed")
 	require.NotContains(t, body, "Upstream request failed")
 	// 命中透传规则也应记录 ops 上游错误事件（对齐 CC/Messages 与 antigravity 先例）。
@@ -3367,7 +3367,9 @@ func TestHandleErrorResponseCyberPolicyPassthrough(t *testing.T) {
 	_, err := svc.handleErrorResponse(context.Background(), resp, c, &Account{ID: 1, Platform: PlatformOpenAI, Name: "a"}, nil)
 	require.Error(t, err)
 	require.Equal(t, http.StatusBadRequest, rec.Code, "passthrough upstream 400, not rewrapped 502")
-	require.Contains(t, rec.Body.String(), "cyber_policy", "client sees original cyber body")
+	require.Equal(t, "cyber_policy", gjson.Get(rec.Body.String(), "error.code").String())
+	require.Contains(t, rec.Body.String(), "[PokeAPI]")
+	require.NotContains(t, rec.Body.String(), "flagged for cyber policy", "client must not see the raw upstream message")
 	require.NotContains(t, rec.Body.String(), "Upstream request failed", "must not 502-rewrap")
 	mark := GetOpsCyberPolicy(c)
 	require.NotNil(t, mark)

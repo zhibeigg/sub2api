@@ -635,7 +635,7 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 					if clientMsg == "" {
 						clientMsg = "Request blocked by upstream cyber-security policy"
 					}
-					if _, err := fmt.Fprint(c.Writer, buildChatStreamErrorSSE(code, clientMsg)); err == nil {
+					if _, err := fmt.Fprint(c.Writer, buildChatStreamErrorSSE(c, http.StatusBadRequest, code, clientMsg)); err == nil {
 						_, _ = fmt.Fprint(c.Writer, "data: [DONE]\n\n")
 						if fl, ok := c.Writer.(http.Flusher); ok {
 							fl.Flush()
@@ -997,10 +997,11 @@ func (s *OpenAIGatewayService) handleChatStreamingResponse(
 // writeChatCompletionsError writes an error response in OpenAI Chat Completions format.
 func writeChatCompletionsError(c *gin.Context, statusCode int, errType, message string) {
 	MarkResponseCommitted(c)
+	presentation := presentLegacyServiceModelError(c, statusCode, errType, message)
 	c.JSON(statusCode, gin.H{
 		"error": gin.H{
 			"type":    errType,
-			"message": message,
+			"message": presentation.Message,
 		},
 	})
 }
@@ -1009,16 +1010,17 @@ func writeChatCompletionsError(c *gin.Context, statusCode int, errType, message 
 // streaming error object. Used when the stream must terminate with a visible
 // error (e.g. upstream cyber_policy), so programmatic clients stop retrying.
 // Marshal 失败的兜底会丢弃 message 原文，仅保留 code 与固定提示。
-func buildChatStreamErrorSSE(code, message string) string {
+func buildChatStreamErrorSSE(c *gin.Context, status int, code, message string) string {
+	presentation := presentLegacyServiceModelError(c, status, code, message)
 	payload, err := json.Marshal(gin.H{
 		"error": gin.H{
 			"type":    "invalid_request_error",
 			"code":    code,
-			"message": message,
+			"message": presentation.Message,
 		},
 	})
 	if err != nil {
-		return "data: {\"error\":{\"type\":\"invalid_request_error\",\"code\":\"" + code + "\",\"message\":\"upstream error\"}}\n\n"
+		return "data: {\"error\":{\"type\":\"invalid_request_error\",\"code\":\"" + code + "\",\"message\":\"[PokeAPI] The upstream model service returned an invalid response.\"}}\n\n"
 	}
 	return "data: " + string(payload) + "\n\n"
 }

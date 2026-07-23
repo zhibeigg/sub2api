@@ -62,7 +62,8 @@ func TestOpenAIGatewayHandlerResponses_ImagePermissionHardSignalsStillRejected(t
 			rec := runOpenAIResponsesImagePermissionGateTest(t, tt.platform, tt.body)
 
 			require.Equal(t, http.StatusForbidden, rec.Code)
-			require.Contains(t, rec.Body.String(), service.ImageGenerationPermissionMessage())
+			require.Contains(t, rec.Body.String(), "[PokeAPI]")
+			require.Contains(t, rec.Body.String(), "does not allow this API protocol")
 		})
 	}
 }

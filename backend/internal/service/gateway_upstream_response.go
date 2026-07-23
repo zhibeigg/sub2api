@@ -493,7 +493,22 @@ func (s *GatewayService) handleErrorResponse(ctx context.Context, resp *http.Res
 
 	switch resp.StatusCode {
 	case 400:
-		c.Data(http.StatusBadRequest, "application/json", body)
+		clientErrType := strings.TrimSpace(gjson.GetBytes(body, "error.type").String())
+		if clientErrType == "" {
+			clientErrType = "invalid_request_error"
+		}
+		model := ""
+		if len(requestedModel) > 0 {
+			model = requestedModel[0]
+		}
+		presentation := presentUpstreamServiceModelError(c, resp.StatusCode, body, upstreamMsg, nil, model)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"type": "error",
+			"error": gin.H{
+				"type":    clientErrType,
+				"message": presentation.Message,
+			},
+		})
 		summary := upstreamMsg
 		if summary == "" {
 			summary = truncateForLog(body, 512)
@@ -529,11 +544,16 @@ func (s *GatewayService) handleErrorResponse(ctx context.Context, resp *http.Res
 	}
 
 	// 返回自定义错误响应
+	model := ""
+	if len(requestedModel) > 0 {
+		model = requestedModel[0]
+	}
+	presentation := presentUpstreamServiceModelError(c, resp.StatusCode, body, errMsg, nil, model)
 	c.JSON(statusCode, gin.H{
 		"type": "error",
 		"error": gin.H{
 			"type":    errType,
-			"message": errMsg,
+			"message": presentation.Message,
 		},
 	})
 

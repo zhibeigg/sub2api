@@ -92,7 +92,9 @@ func TestOpenAIHandleStreamingAwareError_JSONEscaping(t *testing.T) {
 			errorObj, ok := parsed["error"].(map[string]any)
 			require.True(t, ok, "应包含 error 对象")
 			assert.Equal(t, tt.errType, errorObj["type"])
-			assert.Equal(t, tt.message, errorObj["message"])
+			clientMessage, _ := errorObj["message"].(string)
+			assert.Contains(t, clientMessage, "[PokeAPI]")
+			assert.NotEqual(t, tt.message, clientMessage)
 		})
 	}
 }
@@ -208,7 +210,8 @@ func TestOpenAIHandleStreamingAwareError_NonStreaming(t *testing.T) {
 	errorObj, ok := parsed["error"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "upstream_error", errorObj["type"])
-	assert.Equal(t, "test error", errorObj["message"])
+	assert.Contains(t, errorObj["message"], "[PokeAPI]")
+	assert.Contains(t, errorObj["message"], "upstream model service returned an invalid response")
 }
 
 func TestReadRequestBodyWithPrealloc(t *testing.T) {
@@ -250,7 +253,8 @@ func TestOpenAIEnsureForwardErrorResponse_WritesFallbackWhenNotWritten(t *testin
 	errorObj, ok := parsed["error"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "upstream_error", errorObj["type"])
-	assert.Equal(t, "Upstream request failed", errorObj["message"])
+	assert.Contains(t, errorObj["message"], "[PokeAPI]")
+	assert.Contains(t, errorObj["message"], "upstream model service returned an invalid response")
 }
 
 // Writer 已写后 ensureForwardErrorResponse 必须仍然把错误信息以 SSE
@@ -294,7 +298,8 @@ func TestOpenAIEnsureForwardErrorResponse_ResponsesRouteAfterWrittenEmitsRespons
 	assert.Contains(t, body, "event: response.failed\n", "appended a Responses terminal event")
 	assert.Contains(t, body, `"type":"response.failed"`)
 	assert.Contains(t, body, `"code":"upstream_error"`)
-	assert.Contains(t, body, "Upstream request failed")
+	assert.Contains(t, body, "[PokeAPI]")
+	assert.Contains(t, body, "upstream model service returned an invalid response")
 }
 
 func TestOpenAIEnsureForwardErrorResponse_AfterDeltaAppendsSingleValidResponseFailed(t *testing.T) {
@@ -361,7 +366,8 @@ func TestOpenAIEnsureForwardErrorResponse_ImageJSONKeepaliveWritesSingleJSONFall
 	require.NoError(t, decoder.Decode(&payload))
 	require.ErrorIs(t, decoder.Decode(&payload), io.EOF)
 	require.Equal(t, "upstream_error", gjson.Get(w.Body.String(), "error.type").String())
-	require.Equal(t, "Upstream request failed", gjson.Get(w.Body.String(), "error.message").String())
+	require.Contains(t, gjson.Get(w.Body.String(), "error.message").String(), "[PokeAPI]")
+	require.Contains(t, gjson.Get(w.Body.String(), "error.message").String(), "upstream model service returned an invalid response")
 }
 
 func TestOpenAIEnsureForwardErrorResponse_ImageJSONKeepalivePreservesCompletedJSON(t *testing.T) {
@@ -480,7 +486,8 @@ func TestOpenAIRecoverResponsesPanic_WritesFallbackResponse(t *testing.T) {
 	errorObj, ok := parsed["error"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "upstream_error", errorObj["type"])
-	assert.Equal(t, "Upstream request failed", errorObj["message"])
+	assert.Contains(t, errorObj["message"], "[PokeAPI]")
+	assert.Contains(t, errorObj["message"], "upstream model service returned an invalid response")
 }
 
 func TestOpenAIRecoverResponsesPanic_NoPanicNoWrite(t *testing.T) {
@@ -572,7 +579,8 @@ func TestOpenAIEnsureResponsesDependencies(t *testing.T) {
 		errorObj, exists := parsed["error"].(map[string]any)
 		require.True(t, exists)
 		assert.Equal(t, "api_error", errorObj["type"])
-		assert.Equal(t, "Service temporarily unavailable", errorObj["message"])
+		assert.Contains(t, errorObj["message"], "[PokeAPI]")
+		assert.Contains(t, errorObj["message"], "model service is temporarily unavailable")
 	})
 
 	t.Run("already_written_response_not_overridden", func(t *testing.T) {
@@ -688,7 +696,8 @@ func TestOpenAIGatewayMessagesDispatchGateAllowsGrokGroups(t *testing.T) {
 
 		require.Equal(t, http.StatusForbidden, rec.Code)
 		require.Equal(t, "permission_error", gjson.GetBytes(rec.Body.Bytes(), "error.type").String())
-		require.Contains(t, rec.Body.String(), "This group does not allow /v1/messages dispatch")
+		require.Contains(t, rec.Body.String(), "[PokeAPI]")
+		require.Contains(t, rec.Body.String(), "request is not allowed")
 	})
 
 	t.Run("grok_group_without_dispatch_flag_reaches_gateway_dependencies", func(t *testing.T) {
@@ -785,7 +794,8 @@ func TestOpenAIResponses_MissingDependencies_ReturnsServiceUnavailable(t *testin
 	errorObj, ok := parsed["error"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "api_error", errorObj["type"])
-	assert.Equal(t, "Service temporarily unavailable", errorObj["message"])
+	assert.Contains(t, errorObj["message"], "[PokeAPI]")
+	assert.Contains(t, errorObj["message"], "model service is temporarily unavailable")
 }
 
 func TestOpenAIResponses_SetsClientTransportHTTP(t *testing.T) {
@@ -821,7 +831,8 @@ func TestHandleAnthropicFailoverExhaustedReturnsRequestScopedError(t *testing.T)
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	require.Equal(t, "error", gjson.Get(w.Body.String(), "type").String())
 	require.Equal(t, "invalid_request_error", gjson.Get(w.Body.String(), "error.type").String())
-	require.Equal(t, "unsupported remote image source; use base64 image data", gjson.Get(w.Body.String(), "error.message").String())
+	require.Contains(t, gjson.Get(w.Body.String(), "error.message").String(), "[PokeAPI]")
+	require.Contains(t, gjson.Get(w.Body.String(), "error.message").String(), "model request is invalid")
 	require.Equal(t, http.StatusBadRequest, c.GetInt(service.OpsUpstreamStatusCodeKey))
 }
 
@@ -850,7 +861,8 @@ func TestOpenAIResponses_RejectsMessageIDAsPreviousResponseID(t *testing.T) {
 	h.Responses(c)
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
-	require.Contains(t, w.Body.String(), "previous_response_id must be a response.id")
+	require.Contains(t, w.Body.String(), "[PokeAPI]")
+	require.Contains(t, w.Body.String(), "model request is invalid")
 }
 
 func TestOpenAIResponses_RejectsHTTPContinuationPreviousResponseID(t *testing.T) {
@@ -878,8 +890,8 @@ func TestOpenAIResponses_RejectsHTTPContinuationPreviousResponseID(t *testing.T)
 	h.Responses(c)
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
-	require.Contains(t, w.Body.String(), "Responses WebSocket v2")
-	require.Contains(t, w.Body.String(), "previous_response_id")
+	require.Contains(t, w.Body.String(), "[PokeAPI]")
+	require.Contains(t, w.Body.String(), "model request is invalid")
 }
 
 func TestOpenAIResponses_FunctionCallOutputHTTPGuidanceDoesNotSuggestPreviousResponseReuse(t *testing.T) {
@@ -907,7 +919,8 @@ func TestOpenAIResponses_FunctionCallOutputHTTPGuidanceDoesNotSuggestPreviousRes
 	h.Responses(c)
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
-	require.Contains(t, w.Body.String(), "Responses WebSocket v2")
+	require.Contains(t, w.Body.String(), "[PokeAPI]")
+	require.Contains(t, w.Body.String(), "model request is invalid")
 	require.NotContains(t, w.Body.String(), "reuse previous_response_id")
 }
 
@@ -975,7 +988,7 @@ func TestOpenAIWSConnectionLifecycle_LeaseLossCancelsConnectionContext(t *testin
 	t.Parallel()
 
 	ctx, cancel := context.WithCancelCause(context.Background())
-	lifecycle := newOpenAIWSConnectionLifecycle(cancel, nil)
+	lifecycle := newOpenAIWSConnectionLifecycle(ctx, cancel, nil)
 	leaseErr := errors.New("subscription concurrency lease lost")
 	lifecycle.OnTurnLeaseLost(leaseErr)
 
@@ -1188,7 +1201,8 @@ func TestOpenAIResponsesWebSocket_RejectsMessageIDAsPreviousResponseID(t *testin
 	var closeErr coderws.CloseError
 	require.ErrorAs(t, err, &closeErr)
 	require.Equal(t, coderws.StatusPolicyViolation, closeErr.Code)
-	require.Contains(t, strings.ToLower(closeErr.Reason), "previous_response_id")
+	require.Contains(t, closeErr.Reason, "[PokeAPI]")
+	require.Contains(t, strings.ToLower(closeErr.Reason), "model request is invalid")
 }
 
 func TestOpenAIResponsesWebSocket_PreviousResponseIDKindLoggedBeforeAcquireFailure(t *testing.T) {
@@ -1225,7 +1239,8 @@ func TestOpenAIResponsesWebSocket_PreviousResponseIDKindLoggedBeforeAcquireFailu
 	var closeErr coderws.CloseError
 	require.ErrorAs(t, err, &closeErr)
 	require.Equal(t, coderws.StatusInternalError, closeErr.Code)
-	require.Contains(t, strings.ToLower(closeErr.Reason), "failed to acquire user concurrency slot")
+	require.Contains(t, closeErr.Reason, "[PokeAPI]")
+	require.Contains(t, strings.ToLower(closeErr.Reason), "concurrency limit")
 }
 
 type contentModerationHandlerSettingRepo struct {
@@ -1849,7 +1864,8 @@ func TestOpenAIResponses_APIKeyPassthroughPool5xxRetriesThenExhaustsMaxSwitches(
 	require.Equal(t, []int64{9910, 9910, 9911}, upstream.calls())
 	require.Equal(t, http.StatusBadGateway, rec.Code)
 	require.Equal(t, "upstream_error", gjson.GetBytes(rec.Body.Bytes(), "error.type").String())
-	require.Equal(t, "Upstream service temporarily unavailable", gjson.GetBytes(rec.Body.Bytes(), "error.message").String())
+	require.Contains(t, gjson.GetBytes(rec.Body.Bytes(), "error.message").String(), "[PokeAPI]")
+	require.Contains(t, gjson.GetBytes(rec.Body.Bytes(), "error.message").String(), "upstream model service is temporarily unavailable")
 }
 
 func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T) {

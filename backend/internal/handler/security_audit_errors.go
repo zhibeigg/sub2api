@@ -7,119 +7,98 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/modelerror"
 	"github.com/Wei-Shaw/sub2api/internal/securityaudit"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	coderws "github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
 )
 
+func securityAuditDescriptor(decision *securityaudit.Decision) modelerror.Descriptor {
+	if decision == nil {
+		return modelerror.Descriptor{Code: modelerror.CodeServiceUnavailable}
+	}
+	blocked := decision.Kind == securityaudit.DecisionBlock || decision.Legacy != nil && decision.Legacy.Blocked
+	if !blocked {
+		return modelerror.Descriptor{Code: modelerror.CodeServiceUnavailable}
+	}
+	descriptor := modelerror.Descriptor{Code: modelerror.CodeContentPolicy}
+	if message := strings.TrimSpace(securityAuditMessage(decision)); message != "" {
+		descriptor = modelerror.WithCustomMessage(descriptor, message)
+	}
+	return descriptor
+}
+
 func (h *OpenAIGatewayHandler) openAISecurityAuditError(c *gin.Context, decision *securityaudit.Decision) {
 	if decision == nil {
 		return
 	}
-	if decision.Legacy != nil && decision.Legacy.Blocked {
-		h.errorResponse(c, securityAuditStatus(decision), securityAuditErrorCode(decision), securityAuditMessage(decision))
-		return
-	}
 	errType := "api_error"
-	if decision.Kind == securityaudit.DecisionBlock {
+	if decision.Kind == securityaudit.DecisionBlock || decision.Legacy != nil && decision.Legacy.Blocked {
 		errType = "permission_error"
 	}
-	c.JSON(securityAuditStatus(decision), gin.H{"error": gin.H{
-		"type": errType, "code": securityAuditErrorCode(decision), "message": securityAuditMessage(decision),
-	}})
+	modelerror.WriteOpenAIDescriptor(c, securityAuditStatus(decision), errType, securityAuditErrorCode(decision), securityAuditDescriptor(decision))
 }
 
 func (h *GatewayHandler) openAISecurityAuditError(c *gin.Context, decision *securityaudit.Decision) {
 	if decision == nil {
 		return
 	}
-	if decision.Legacy != nil && decision.Legacy.Blocked {
-		h.chatCompletionsErrorResponse(c, securityAuditStatus(decision), securityAuditErrorCode(decision), securityAuditMessage(decision))
-		return
-	}
 	errType := "api_error"
-	if decision.Kind == securityaudit.DecisionBlock {
+	if decision.Kind == securityaudit.DecisionBlock || decision.Legacy != nil && decision.Legacy.Blocked {
 		errType = "permission_error"
 	}
-	c.JSON(securityAuditStatus(decision), gin.H{"error": gin.H{
-		"type": errType, "code": securityAuditErrorCode(decision), "message": securityAuditMessage(decision),
-	}})
+	modelerror.WriteOpenAIDescriptor(c, securityAuditStatus(decision), errType, securityAuditErrorCode(decision), securityAuditDescriptor(decision))
 }
 
 func (h *GatewayHandler) responsesSecurityAuditError(c *gin.Context, decision *securityaudit.Decision) {
 	if decision == nil {
 		return
 	}
-	if decision.Legacy != nil && decision.Legacy.Blocked {
-		h.responsesErrorResponse(c, securityAuditStatus(decision), securityAuditErrorCode(decision), securityAuditMessage(decision))
-		return
-	}
-	c.JSON(securityAuditStatus(decision), gin.H{"error": gin.H{
-		"type": "api_error", "code": securityAuditErrorCode(decision), "message": securityAuditMessage(decision),
-	}})
+	modelerror.WriteResponsesDescriptorWithType(c, securityAuditStatus(decision), "api_error", securityAuditErrorCode(decision), securityAuditDescriptor(decision))
 }
 
 func (h *GatewayHandler) anthropicSecurityAuditError(c *gin.Context, decision *securityaudit.Decision) {
 	if decision == nil {
 		return
 	}
-	if decision.Legacy != nil && decision.Legacy.Blocked {
-		h.errorResponse(c, securityAuditStatus(decision), securityAuditErrorCode(decision), securityAuditMessage(decision))
-		return
-	}
 	errType := "api_error"
-	if decision.Kind == securityaudit.DecisionBlock {
+	if decision.Kind == securityaudit.DecisionBlock || decision.Legacy != nil && decision.Legacy.Blocked {
 		errType = "permission_error"
 	}
-	c.JSON(securityAuditStatus(decision), gin.H{"type": "error", "error": gin.H{
-		"type": errType, "code": securityAuditErrorCode(decision), "message": securityAuditMessage(decision),
-	}})
+	modelerror.WriteAnthropicDescriptorWithCode(c, securityAuditStatus(decision), errType, securityAuditErrorCode(decision), securityAuditDescriptor(decision))
 }
 
 func (h *OpenAIGatewayHandler) anthropicSecurityAuditError(c *gin.Context, decision *securityaudit.Decision) {
 	if decision == nil {
 		return
 	}
-	if decision.Legacy != nil && decision.Legacy.Blocked {
-		h.anthropicErrorResponse(c, securityAuditStatus(decision), securityAuditErrorCode(decision), securityAuditMessage(decision))
-		return
-	}
 	errType := "api_error"
-	if decision.Kind == securityaudit.DecisionBlock {
+	if decision.Kind == securityaudit.DecisionBlock || decision.Legacy != nil && decision.Legacy.Blocked {
 		errType = "permission_error"
 	}
-	c.JSON(securityAuditStatus(decision), gin.H{"type": "error", "error": gin.H{
-		"type": errType, "code": securityAuditErrorCode(decision), "message": securityAuditMessage(decision),
-	}})
+	modelerror.WriteAnthropicDescriptorWithCode(c, securityAuditStatus(decision), errType, securityAuditErrorCode(decision), securityAuditDescriptor(decision))
 }
 
 func googleSecurityAuditError(c *gin.Context, decision *securityaudit.Decision) {
 	if decision == nil {
 		return
 	}
-	if decision.Legacy != nil && decision.Legacy.Blocked {
-		googleError(c, securityAuditStatus(decision), securityAuditMessage(decision))
-		return
-	}
 	status := securityAuditStatus(decision)
-	googleStatus := googleapi.HTTPStatusToGoogleStatus(status)
-	if status == http.StatusServiceUnavailable {
-		googleStatus = "UNAVAILABLE"
-	}
 	requestID := ""
 	if c != nil && c.Request != nil {
 		requestID = contentModerationRequestID(c.Request.Context())
 	}
-	c.JSON(status, gin.H{"error": gin.H{
-		"code": status, "message": securityAuditMessage(decision), "status": googleStatus,
-		"details": []gin.H{{
-			"@type":  "type.googleapis.com/google.rpc.ErrorInfo",
-			"reason": securityAuditErrorCode(decision), "domain": "sub2api.securityaudit",
-			"metadata": gin.H{"request_id": requestID},
-		}},
-	}})
+	details := []gin.H{{
+		"@type":  "type.googleapis.com/google.rpc.ErrorInfo",
+		"reason": securityAuditErrorCode(decision), "domain": "sub2api.securityaudit",
+		"metadata": gin.H{"request_id": requestID},
+	}}
+	googleStatus := ""
+	if status == http.StatusServiceUnavailable {
+		googleStatus = "UNAVAILABLE"
+	}
+	modelerror.WriteGoogleDescriptorWithDetails(c, status, googleStatus, details, securityAuditDescriptor(decision))
 }
 
 func writeSecurityAuditWSError(ctx context.Context, conn *coderws.Conn, decision *securityaudit.Decision) {
@@ -134,9 +113,10 @@ func writeSecurityAuditWSError(ctx context.Context, conn *coderws.Conn, decision
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	clientMessage := modelerror.Present(ctx, securityAuditDescriptor(decision)).Message
 	payload, err := json.Marshal(gin.H{
 		"event_id": "evt_prompt_guard_rejected", "type": "error",
-		"error": gin.H{"type": "invalid_request_error", "code": securityAuditErrorCode(decision), "message": securityAuditMessage(decision)},
+		"error": gin.H{"type": "invalid_request_error", "code": securityAuditErrorCode(decision), "message": clientMessage},
 	})
 	if err != nil {
 		return

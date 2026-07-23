@@ -684,6 +684,12 @@ If you disable URL validation or response header filtering, harden your network 
 - Enforce TLS-only outbound traffic
 - Strip sensitive upstream response headers at the proxy
 
+#### Localized model errors and stable error codes
+
+Model gateway errors support safe English and Chinese presentation. Clients select a language with `Accept-Language`; missing or unsupported values fall back to `gateway.model_error_default_locale` (`en` or `zh`, default `en`). Every client-visible model error is branded with `[PokeAPI]` and includes stable `X-PokeAPI-Error-Code`, `X-PokeAPI-Request-ID`, and `Content-Language` response headers.
+
+Anthropic Messages, OpenAI Chat Completions, OpenAI Responses, Gemini, SSE, and WebSocket paths retain their existing HTTP status, JSON envelope, protocol fields, terminal SSE event, and WebSocket close-code semantics. Raw upstream bodies, credentials, and internal diagnostics are not exposed. Ordinary REST, admin, OAuth, and billing APIs are outside this localization boundary. See the [model error response contract](docs/MODEL_ERROR_CONTRACT.md).
+
 #### OpenAI Responses WebSocket ingress limits
 
 `gateway.openai_ws` bounds the lifetime and aggregate count of client-facing

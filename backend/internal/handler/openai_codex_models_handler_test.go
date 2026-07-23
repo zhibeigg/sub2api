@@ -16,6 +16,7 @@ import (
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 )
 
 type codexModelsFailoverAccountRepo struct {
@@ -225,9 +226,10 @@ func TestCodexModelsReturnsLastUpstreamErrorWhenAccountsAreExhausted(t *testing.
 	if recorder.Code != http.StatusBadGateway {
 		t.Fatalf("status: got %d, want %d; body=%s", recorder.Code, http.StatusBadGateway, recorder.Body.String())
 	}
-	if body := recorder.Body.String(); !strings.Contains(body, "upstream error 504") {
-		t.Fatalf("body does not preserve the last upstream error: %s", body)
-	}
+	body := recorder.Body.String()
+	require.Contains(t, body, "[PokeAPI]")
+	require.Contains(t, body, "upstream model service")
+	require.NotContains(t, body, "upstream error 504")
 }
 
 func TestCodexModelsHonorsAccountSwitchLimit(t *testing.T) {
@@ -246,9 +248,11 @@ func TestCodexModelsHonorsAccountSwitchLimit(t *testing.T) {
 	if recorder.Code != http.StatusBadGateway {
 		t.Fatalf("status: got %d, want %d; body=%s", recorder.Code, http.StatusBadGateway, recorder.Body.String())
 	}
-	if body := recorder.Body.String(); !strings.Contains(body, "upstream error 504") {
-		t.Fatalf("body does not preserve the limit-ending upstream error: %s", body)
-	}
+	body := recorder.Body.String()
+	require.Contains(t, body, "[PokeAPI]")
+	require.Contains(t, body, "upstream model service")
+	require.NotContains(t, body, "upstream error 504")
+	require.NotEmpty(t, recorder.Header().Get("X-PokeAPI-Error-Code"))
 }
 
 func newCodexModelsFailoverTestHandler(firstStatus int) (*OpenAIGatewayHandler, *codexModelsFailoverHTTPUpstream, int64) {
