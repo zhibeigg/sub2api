@@ -250,7 +250,7 @@ func (h *AsyncImageHandler) run(taskID, platform string, taskCtx *gin.Context, r
 		}
 		return
 	}
-	h.failTask(taskID, statusCode, extractImageTaskError(body))
+	h.failTask(taskID, statusCode, extractImageTaskError(taskCtx, statusCode, body))
 }
 
 func (h *AsyncImageHandler) failTask(taskID string, statusCode int, taskErr json.RawMessage) {
@@ -295,17 +295,21 @@ func imageTaskPollURL(submitPath, taskID string) string {
 	return "/images/tasks/" + taskID
 }
 
-func extractImageTaskError(body []byte) json.RawMessage {
-	if json.Valid(body) {
-		var envelope struct {
-			Error json.RawMessage `json:"error"`
-		}
-		if json.Unmarshal(body, &envelope) == nil && len(envelope.Error) > 0 && json.Valid(envelope.Error) {
-			return envelope.Error
-		}
-		return json.RawMessage(body)
+func extractImageTaskError(c *gin.Context, statusCode int, body []byte) json.RawMessage {
+	descriptor := modelerror.ClassifyUpstream(modelerror.UpstreamInput{Status: statusCode, Body: body})
+	presentation := modelerror.PresentForGin(c, descriptor)
+	errorType := "api_error"
+	switch statusCode {
+	case http.StatusBadRequest, http.StatusUnprocessableEntity:
+		errorType = "invalid_request_error"
+	case http.StatusUnauthorized:
+		errorType = "authentication_error"
+	case http.StatusForbidden:
+		errorType = "permission_error"
+	case http.StatusTooManyRequests:
+		errorType = "rate_limit_error"
 	}
-	return imageTaskErrorPayload("api_error", "image generation failed")
+	return imageTaskErrorPayload(errorType, presentation.Message)
 }
 
 func imageTaskErrorPayload(errorType, message string) json.RawMessage {

@@ -9,7 +9,7 @@ import (
 const (
 	UnknownCode    = http.StatusInternalServerError
 	UnknownReason  = ""
-	UnknownMessage = "internal error"
+	UnknownMessage = "服务器内部错误，请稍后重试"
 )
 
 type Status struct {

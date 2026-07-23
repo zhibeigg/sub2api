@@ -108,6 +108,19 @@ func TestAsyncImageHandlerSubmitAndPoll(t *testing.T) {
 
 // When object storage is not configured the feature is fully disabled: the
 // endpoints must return 404 without creating a task or writing to Redis.
+func TestExtractImageTaskErrorRemovesUpstreamDetails(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations/async", nil)
+	c.Request.Header.Set("Accept-Language", "zh-CN")
+
+	taskErr := extractImageTaskError(c, http.StatusBadGateway, []byte(`{"error":{"type":"api_error","message":"dial tcp 10.0.0.8:443: secret-token"}}`))
+	require.True(t, json.Valid(taskErr))
+	require.Contains(t, string(taskErr), "[PokeAPI]")
+	require.NotContains(t, string(taskErr), "10.0.0.8")
+	require.NotContains(t, string(taskErr), "secret-token")
+}
+
 func TestAsyncImageHandlerDisabledReturns404(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	store := &asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}

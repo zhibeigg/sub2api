@@ -169,6 +169,43 @@ func TestForwardAlphaSearchPATUsesResponsesWebSearchFallback(t *testing.T) {
 	require.Contains(t, gjson.GetBytes(upstream.lastBody, "input.0.content.0.text").String(), `"search_query"`)
 }
 
+func TestForwardAlphaSearchPATResponsesFallbackReturnsSafeError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{"id":"search-session","model":"gpt-5.6-sol","commands":{"search_query":[{"q":"news"}]}}`)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/alpha/search", bytes.NewReader(body))
+	c.Request.Header.Set("Accept-Language", "zh-CN")
+
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"dial tcp 10.0.0.8:443 credential=must-not-leak"}}`)),
+	}}
+	service := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	account := &Account{
+		ID:          47,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"access_token":       "at-test-token",
+			"auth_mode":          OpenAIAuthModePersonalAccessToken,
+			"chatgpt_account_id": "chatgpt-account",
+		},
+	}
+
+	result, err := service.ForwardAlphaSearch(context.Background(), c, account, body)
+
+	require.NoError(t, err)
+	require.Nil(t, result)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Equal(t, "invalid_request_error", gjson.Get(recorder.Body.String(), "error.type").String())
+	require.Contains(t, gjson.Get(recorder.Body.String(), "error.message").String(), "[PokeAPI]")
+	require.NotContains(t, recorder.Body.String(), "10.0.0.8")
+	require.NotContains(t, recorder.Body.String(), "must-not-leak")
+}
+
 func TestForwardAlphaSearchPATBackfillsMissingChatGPTAccountMetadata(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := []byte(`{"id":"search-session","model":"gpt-5.6-sol","commands":{"search_query":[{"q":"OpenAI news"}]}}`)
@@ -230,7 +267,7 @@ func TestForwardAlphaSearchPATBackfillsMissingChatGPTAccountMetadata(t *testing.
 	require.Equal(t, OpenAIAuthModePersonalAccessToken, account.Credentials["auth_mode"])
 }
 
-func TestForwardAlphaSearchAPIKeyMapsModelAndPassesThroughError(t *testing.T) {
+func TestForwardAlphaSearchAPIKeyMapsModelAndReturnsSafeError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := []byte(`{"id":"search-session","model":"gpt-5.6-sol","commands":{"search_query":[{"q":"news"}]}}`)
 	recorder := httptest.NewRecorder()
@@ -261,10 +298,12 @@ func TestForwardAlphaSearchAPIKeyMapsModelAndPassesThroughError(t *testing.T) {
 	result, err := service.ForwardAlphaSearch(context.Background(), c, account, body)
 
 	require.NoError(t, err)
-	// 上游错误透传不是一次成功的搜索：不返回 result、不产生按次计费。
+	// 上游错误不是一次成功的搜索：不返回 result、不产生按次计费；原始详情不暴露给客户端。
 	require.Nil(t, result)
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
-	require.JSONEq(t, upstreamBody, recorder.Body.String())
+	require.Equal(t, "invalid_request_error", gjson.Get(recorder.Body.String(), "error.type").String())
+	require.Contains(t, gjson.Get(recorder.Body.String(), "error.message").String(), "[PokeAPI]")
+	require.NotContains(t, recorder.Body.String(), "bad search")
 	require.Equal(t, "https://compat.example/v4/alpha/search", upstream.lastReq.URL.String())
 	require.Equal(t, "Bearer sk-test", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, "upstream-5.6", gjson.GetBytes(upstream.lastBody, "model").String())
@@ -439,8 +478,8 @@ func TestForwardAlphaSearchAPIKeyEndpointNotFoundFailsOver(t *testing.T) {
 	require.Empty(t, recorder.Body.String())
 }
 
-// OAuth 账号的 chatgpt.com 端点固定存在，404 保持原有透传行为不变。
-func TestForwardAlphaSearchOAuthNotFoundPassesThrough(t *testing.T) {
+// OAuth 账号的 chatgpt.com 端点固定存在，404 不触发账号副作用，但客户端仅收到安全错误。
+func TestForwardAlphaSearchOAuthNotFoundReturnsSafeError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := []byte(`{"id":"search-session","model":"gpt-5.6-sol","commands":{"search_query":[{"q":"news"}]}}`)
 	recorder := httptest.NewRecorder()
@@ -470,7 +509,9 @@ func TestForwardAlphaSearchOAuthNotFoundPassesThrough(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, result)
 	require.Equal(t, http.StatusNotFound, recorder.Code)
-	require.JSONEq(t, upstreamBody, recorder.Body.String())
+	require.Equal(t, "not_found_error", gjson.Get(recorder.Body.String(), "error.type").String())
+	require.Contains(t, gjson.Get(recorder.Body.String(), "error.message").String(), "[PokeAPI]")
+	require.NotContains(t, recorder.Body.String(), "Not Found")
 }
 
 func TestShouldApplyOpenAIAlphaSearchAccountErrorSideEffects(t *testing.T) {

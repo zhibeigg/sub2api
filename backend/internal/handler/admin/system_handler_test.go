@@ -170,7 +170,7 @@ func TestSystemHandlerPerformUpdateFailureStillReturnsInternalError(t *testing.T
 	var body systemUpdateErrorEnvelope
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	require.Equal(t, http.StatusInternalServerError, body.Code)
-	require.Equal(t, "internal error", body.Message)
+	require.Equal(t, "服务器内部错误，请稍后重试", body.Message)
 }
 
 // TestSystemHandlerPerformUpdateSurvivesClientDisconnect reproduces #4504:

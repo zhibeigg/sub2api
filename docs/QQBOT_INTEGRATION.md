@@ -1,6 +1,6 @@
 # QQBot BotGo + SnowLuma OneBot v11 双链路集成指南
 
-Sub2API `0.82.90` 保留腾讯官方 BotGo Webhook、消息 Runtime、绑定页面和运营管理，并新增 SnowLuma OneBot v11 并行接入。BotGo 继续处理官方群、C2C 与 QQ 频道能力；SnowLuma 通过本机反向 WebSocket 提供普通 QQ 群消息和 `group_increase` 真实进群事件。两条链路互不替换，管理员统一从 Sub2API 后台的 **QQBot** 页面配置、启停和诊断。
+Sub2API `0.83.90` 保留腾讯官方 BotGo Webhook、消息 Runtime、绑定页面和运营管理，并新增 SnowLuma OneBot v11 并行接入。BotGo 继续处理官方群、C2C 与 QQ 频道能力；SnowLuma 通过本机反向 WebSocket 提供普通 QQ 群消息和 `group_increase` 真实进群事件。两条链路互不替换，管理员统一从 Sub2API 后台的 **QQBot** 页面配置、启停和诊断。
 
 已有 QQBot 绑定数据、身份、首次赠送、余额流水和审计继续保存在 Sub2API PostgreSQL 中。OneBot 使用独立机器人标识和 Redis 事件流，不会与 BotGo OpenID、队列或活动配置混淆。
 

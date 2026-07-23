@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterView, useRouter, useRoute } from 'vue-router'
-import { onMounted, onBeforeUnmount, watch } from 'vue'
+import { computed, onErrorCaptured, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Toast from '@/components/common/Toast.vue'
 import NavigationProgress from '@/components/common/NavigationProgress.vue'
@@ -21,6 +21,50 @@ const subscriptionStore = useSubscriptionStore()
 const announcementStore = useAnnouncementStore()
 const adminComplianceStore = useAdminComplianceStore()
 const adminSettingsStore = useAdminSettingsStore()
+const renderError = ref(false)
+const renderVersion = ref(0)
+const errorBoundaryCopy = computed(() => {
+  const language = String(locale.value).toLowerCase()
+  if (language.startsWith('en')) {
+    return {
+      title: 'This page encountered an error',
+      message: 'The failure was contained and no internal details were exposed.',
+      retry: 'Retry this page',
+      home: 'Return home'
+    }
+  }
+  if (language.startsWith('ja')) {
+    return {
+      title: 'このページでエラーが発生しました',
+      message: '障害は隔離され、内部情報は表示されていません。',
+      retry: 'このページを再試行',
+      home: 'ホームへ戻る'
+    }
+  }
+  return {
+    title: '当前页面发生异常',
+    message: '异常已被隔离，内部错误详情不会暴露。',
+    retry: '重试当前页面',
+    home: '返回首页'
+  }
+})
+
+onErrorCaptured((error, _instance, info) => {
+  const errorName = error instanceof Error ? error.name : 'UnknownError'
+  console.error('Component render error contained', { errorName, info })
+  renderError.value = true
+  return false
+})
+
+function retryCurrentPage() {
+  renderError.value = false
+  renderVersion.value += 1
+}
+
+function returnHome() {
+  renderError.value = false
+  router.push('/')
+}
 
 function updateRouteSEO() {
   const customMenuItems = [
@@ -148,8 +192,82 @@ onMounted(async () => {
 <template>
   <NavigationProgress />
   <ChatwootSupport />
-  <RouterView />
+  <main v-if="renderError" class="app-error-boundary" role="alert">
+    <div class="app-error-boundary__panel">
+      <p class="app-error-boundary__eyebrow">PokeAPI</p>
+      <h1>{{ errorBoundaryCopy.title }}</h1>
+      <p>{{ errorBoundaryCopy.message }}</p>
+      <div class="app-error-boundary__actions">
+        <button type="button" @click="retryCurrentPage">{{ errorBoundaryCopy.retry }}</button>
+        <button type="button" class="app-error-boundary__secondary" @click="returnHome">
+          {{ errorBoundaryCopy.home }}
+        </button>
+      </div>
+    </div>
+  </main>
+  <RouterView v-else :key="`${route.fullPath}:${renderVersion}`" />
   <Toast />
   <AnnouncementPopup />
   <AdminComplianceDialog />
 </template>
+
+<style scoped>
+.app-error-boundary {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background: var(--color-bg-primary, #f5f5f3);
+  color: var(--color-text-primary, #161616);
+}
+
+.app-error-boundary__panel {
+  width: min(34rem, 100%);
+  padding: 2rem;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 1rem;
+  background: var(--color-bg-secondary, #ffffff);
+  box-shadow: 0 1.25rem 4rem rgb(0 0 0 / 10%);
+}
+
+.app-error-boundary__eyebrow {
+  margin: 0 0 0.75rem;
+  font: 600 0.75rem/1.2 monospace;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.app-error-boundary h1 {
+  margin: 0;
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+}
+
+.app-error-boundary p {
+  margin: 1rem 0 0;
+  line-height: 1.7;
+  opacity: 0.78;
+}
+
+.app-error-boundary__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.app-error-boundary button {
+  min-height: 2.75rem;
+  padding: 0.65rem 1rem;
+  border: 1px solid currentColor;
+  border-radius: 0.6rem;
+  background: currentColor;
+  color: var(--color-bg-secondary, #ffffff);
+  cursor: pointer;
+}
+
+.app-error-boundary__secondary {
+  background: transparent !important;
+  color: inherit !important;
+}
+</style>

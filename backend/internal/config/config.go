@@ -2459,7 +2459,7 @@ func setDefaults() {
 	viper.SetDefault("idempotency.cleanup_batch_size", 500)
 
 	// Gateway
-	viper.SetDefault("gateway.model_error_default_locale", "en")
+	viper.SetDefault("gateway.model_error_default_locale", "zh")
 	viper.SetDefault("gateway.response_header_timeout", 600) // 600秒(10分钟)等待上游响应头，LLM高负载时可能排队较久
 	viper.SetDefault("gateway.openai_response_header_timeout", 0)
 	viper.SetDefault("gateway.openai_first_output_timeout_seconds", 0)
@@ -3437,7 +3437,7 @@ func (c *Config) Validate() error {
 	}
 	c.Gateway.ModelErrorDefaultLocale = strings.ToLower(strings.TrimSpace(c.Gateway.ModelErrorDefaultLocale))
 	if c.Gateway.ModelErrorDefaultLocale == "" {
-		c.Gateway.ModelErrorDefaultLocale = "en"
+		c.Gateway.ModelErrorDefaultLocale = "zh"
 	}
 	if c.Gateway.ModelErrorDefaultLocale != "en" && c.Gateway.ModelErrorDefaultLocale != "zh" {
 		return fmt.Errorf("gateway.model_error_default_locale must be either en or zh")

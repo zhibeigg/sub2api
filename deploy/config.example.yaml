@@ -89,12 +89,13 @@ server:
 # =============================================================================
 # The built-in QQBot center is configured from Admin -> QQBot. It keeps the
 # official Tencent BotGo webhook/runtime and can additionally run SnowLuma
-# OneBot v11 over a loopback reverse WebSocket. All bot credentials are encrypted
-# in PostgreSQL. Do not place Tencent AppSecret, Webhook Secret, or OneBot access
-# tokens in this file. OneBot defaults to disabled with 2 workers, a 1024-event
-# isolated queue, a 10000 ms action timeout, and the reverse URL
-# ws://127.0.0.1:8080/webhooks/qq/onebot. Keep SnowLuma HTTP/WS action ports on
-# loopback; no public OneBot action port is required. The HMAC bridge below exists only so an older
+# OneBot v11 over a direct loopback/private-network reverse WebSocket. All bot
+# credentials are encrypted in PostgreSQL. Do not place Tencent AppSecret,
+# Webhook Secret, or OneBot access tokens in this file. OneBot defaults to
+# disabled with 2 workers, a 1024-event isolated queue, a 10000 ms action timeout,
+# and the reverse URL ws://127.0.0.1:8080/webhooks/qq/onebot. Keep SnowLuma HTTP/WS
+# action ports on loopback unless a private container network is required; never
+# expose a public OneBot action port. The HMAC bridge below exists only so an older
 # standalone sub2api-qqbot container can be restored during a migration window.
 # Keep it disabled for normal built-in operation and remove its environment
 # secret after the standalone instance is retired.
@@ -103,6 +104,7 @@ server:
 # 不要在此文件填写腾讯 AppSecret、Webhook Secret 或 OneBot Token。OneBot 默认关闭，默认 2 个
 # Worker、1024 事件独立队列、10000 毫秒 Action 超时，反向地址为
 # ws://127.0.0.1:8080/webhooks/qq/onebot；SnowLuma 的 3010/3011 应保持仅监听 loopback，
+# 跨容器或私网接入时只允许直连私网对端，并继续强制 Bearer Token 与 X-Self-ID，
 # 无需新增公网 OneBot 动作端口。后台中的 PublicBaseURL 必须是腾讯服务器
 # 可从公网访问的 HTTPS 根域地址，不得包含路径前缀、查询参数或内网主机；它用于 Webhook、
 # 绑定页和短期 HMAC 签名 PNG URL。/check 管理开关默认关闭；启用前必须显式配置并在所有实例共享
@@ -238,7 +240,7 @@ gateway:
   # ordinary REST/admin/OAuth/billing APIs are not localized by this setting.
   # 模型错误在 Accept-Language 缺失或不支持时的默认语言，可选 en、zh。
   # 成功响应以及普通 REST、管理、OAuth、账单接口不受此配置影响。
-  model_error_default_locale: "en"
+  model_error_default_locale: "zh"
   # Multi-group API keys use the fixed X-Sub2API-Group-ID request header to
   # select one of their bound groups before routing, subscription, and billing.
   # This security-sensitive header name is intentionally not configurable.
@@ -1047,7 +1049,7 @@ database:
   user: "postgres"
   # Database password
   # 数据库密码
-  password: "your_secure_password_here"
+  password: ""
   # Database name
   # 数据库名称
   dbname: "sub2api"
@@ -1119,7 +1121,7 @@ jwt:
   # IMPORTANT: Change this to a random string in production!
   # 重要：生产环境中请更改为随机字符串！
   # Generate with / 生成命令: openssl rand -hex 32
-  secret: "change-this-to-a-secure-random-string"
+  secret: ""
   # Token expiration time in hours (max 168)
   # 令牌过期时间（小时，最大 168）
   expire_hour: 24
@@ -1136,11 +1138,11 @@ jwt:
 totp:
   # IMPORTANT: Set a fixed encryption key for TOTP secrets.
   # 重要：设置固定的 TOTP 加密密钥。
-  # If left empty, a random key will be generated on each startup, causing all
-  # existing TOTP configurations to become invalid (users won't be able to
-  # login with 2FA).
-  # 如果留空，每次启动将生成随机密钥，导致现有的 TOTP 配置失效（用户无法使用
-  # 双因素认证登录）。
+  # Production deployments must set a stable value before startup. Docker
+  # Compose configurations reject empty values so encrypted TOTP and integration
+  # credentials remain readable after restarts and across replicas.
+  # 生产部署必须在启动前设置稳定值；Docker Compose 会拒绝空值，以确保重启和
+  # 多实例部署后仍能解密 TOTP 与集成凭据。
   # Generate with / 生成命令: openssl rand -hex 32
   encryption_key: ""
 
@@ -1220,7 +1222,8 @@ default:
   # Initial admin account (created on first run)
   # 初始管理员账户（首次运行时创建）
   admin_email: "admin@example.com"
-  admin_password: "admin123"
+  # 必须在首次自动初始化前设置高强度密码；不要在生产环境保留示例值。
+  admin_password: ""
 
   # Default settings for new users
   # 新用户默认设置

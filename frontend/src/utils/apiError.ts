@@ -122,7 +122,7 @@ export function extractI18nErrorMessage(
  */
 export function extractApiErrorMessage(
   err: unknown,
-  fallback = 'Unknown error',
+  fallback = '发生未知错误',
   i18nMap?: Record<string, string>,
 ): string {
   if (!err) return fallback

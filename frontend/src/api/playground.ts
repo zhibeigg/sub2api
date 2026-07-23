@@ -582,9 +582,9 @@ async function extractError(res: Response): Promise<PlaygroundAPIError> {
     const code = String(json?.error?.code || json?.error?.type || json?.code || '')
     const message = json?.error?.message || json?.error?.type || json?.message || (typeof json?.error === 'string' ? json.error : '')
     if (message) return new PlaygroundAPIError(`${res.status} · ${message}`, res.status, code)
-    return new PlaygroundAPIError(`${res.status} ${res.statusText || 'Request failed'}`, res.status, code)
+    return new PlaygroundAPIError(`${res.status} ${res.statusText || '请求失败'}`, res.status, code)
   } catch {
-    return new PlaygroundAPIError(`${res.status} ${res.statusText || 'Request failed'}`, res.status, '')
+    return new PlaygroundAPIError(`${res.status} ${res.statusText || '请求失败'}`, res.status, '')
   }
 }
 

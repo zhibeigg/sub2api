@@ -460,16 +460,17 @@ func (w *Wxpay) ensureNotifyHandler(ctx context.Context) (*notify.Handler, error
 	if certificateStore == nil {
 		manager := downloader.MgrInstance()
 		merchantID := strings.TrimSpace(w.config["mchId"])
-		if !manager.HasDownloader(ctx, merchantID) {
-			if err := manager.RegisterDownloaderWithPrivateKey(
-				ctx,
-				privateKey,
-				strings.TrimSpace(w.config["certSerial"]),
-				merchantID,
-				w.config["apiV3Key"],
-			); err != nil {
-				return nil, fmt.Errorf("wxpay download platform certificates: %w", err)
-			}
+		// The SDK singleton is keyed only by mchID. Always replace the downloader
+		// after a validated configuration reload so rotated APIv3/private keys and
+		// merchant certificate serials take effect without a process restart.
+		if err := manager.RegisterDownloaderWithPrivateKey(
+			ctx,
+			privateKey,
+			strings.TrimSpace(w.config["certSerial"]),
+			merchantID,
+			w.config["apiV3Key"],
+		); err != nil {
+			return nil, fmt.Errorf("wxpay download platform certificates: %w", err)
 		}
 		certificateStore = manager.GetCertificateVisitor(merchantID)
 	}

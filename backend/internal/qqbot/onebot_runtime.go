@@ -48,6 +48,9 @@ type OneBotRuntime struct {
 	stopping   atomic.Bool
 	reloadMu   sync.Mutex
 
+	generationsMu sync.RWMutex
+	generations   map[int64]*oneBotRuntimeGeneration
+
 	lifecycleMu sync.Mutex
 	root        context.Context
 	cancel      context.CancelFunc
@@ -58,10 +61,11 @@ type OneBotRuntime struct {
 
 func NewOneBotRuntime(manager *OneBotConfigManager, queue *OneBotQueue, processor *Runtime) *OneBotRuntime {
 	runtime := &OneBotRuntime{
-		manager:   manager,
-		queue:     queue,
-		processor: processor,
-		state:     RuntimeState{ProcessStatus: RuntimeDisabled},
+		manager:     manager,
+		queue:       queue,
+		processor:   processor,
+		generations: make(map[int64]*oneBotRuntimeGeneration),
+		state:       RuntimeState{ProcessStatus: RuntimeDisabled},
 	}
 	if manager != nil {
 		manager.SetOnReload(runtime.applyConfig)
@@ -99,10 +103,14 @@ func (r *OneBotRuntime) Shutdown(ctx context.Context) error {
 		managerErr = r.manager.Shutdown(ctx)
 	}
 	generation := r.generation.Swap(nil)
-	if generation != nil {
-		generation.accepting.Store(false)
+	if generation != nil && generation.hub != nil {
+		generation.hub.StopAccepting()
 	}
 	workerErr := r.drainAndStop(ctx, generation)
+	if generation != nil {
+		generation.accepting.Store(false)
+		r.untrackGeneration(generation)
+	}
 	if cancel != nil {
 		cancel()
 	}
@@ -135,9 +143,16 @@ func (r *OneBotRuntime) applyConfig(ctx context.Context, cfg OneBotActiveConfig)
 
 	if strings.TrimSpace(cfg.SelfID) == "" || strings.TrimSpace(cfg.AccessToken) == "" {
 		old := r.generation.Swap(nil)
+		if old != nil && old.hub != nil {
+			old.hub.StopAccepting()
+		}
 		stopCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		_ = r.drainAndStop(stopCtx, old)
 		cancel()
+		if old != nil {
+			old.accepting.Store(false)
+			r.untrackGeneration(old)
+		}
 		r.stateMu.Lock()
 		r.state.ActiveConfigVersion = cfg.ConfigVersion
 		r.state.WorkerTotal = 0
@@ -201,21 +216,29 @@ func (r *OneBotRuntime) applyConfig(ctx context.Context, cfg OneBotActiveConfig)
 		}
 	}
 
-	old := r.generation.Load()
-	if old != nil {
-		old.accepting.Store(false)
-		stopCtx, stopCancel := context.WithTimeout(ctx, 10*time.Second)
-		_ = r.drainAndStop(stopCtx, old)
-		stopCancel()
-	}
-	r.generation.Store(next)
+	// Publish the fully constructed generation before retiring the previous one.
+	// Existing old-generation WebSockets remain accepting while the shared queue
+	// drains, so events already read during the handoff are not discarded. All new
+	// connections immediately bind to the new generation.
+	next.accepting.Store(true)
+	r.trackGeneration(next)
+	old := r.generation.Swap(next)
 	if cfg.Enabled {
 		for workerID := 0; workerID < cfg.WorkerCount; workerID++ {
 			next.wg.Add(1)
 			go r.worker(next, workerID)
 		}
 	}
-	next.accepting.Store(true)
+	if old != nil {
+		if old.hub != nil {
+			old.hub.StopAccepting()
+		}
+		stopCtx, stopCancel := context.WithTimeout(ctx, 10*time.Second)
+		_ = r.drainAndStop(stopCtx, old)
+		stopCancel()
+		old.accepting.Store(false)
+		r.untrackGeneration(old)
+	}
 	r.stateMu.Lock()
 	r.state.ActiveConfigVersion = cfg.ConfigVersion
 	r.state.WorkerTotal = 0
@@ -271,12 +294,13 @@ func trustedOneBotPeer(request *http.Request) bool {
 }
 
 func (r *OneBotRuntime) enqueueEvent(ctx context.Context, generation *oneBotRuntimeGeneration, event InboundEvent) error {
-	if r == nil || generation == nil || r.generation.Load() != generation || !generation.accepting.Load() || !generation.config.Enabled {
+	if r == nil || generation == nil || !generation.accepting.Load() || !generation.config.Enabled {
 		return nil
 	}
 	if ctx == nil {
 		ctx = generation.ctx
 	}
+	event.RuntimeConfigVersion = generation.config.ConfigVersion
 	if err := r.queue.Enqueue(ctx, event, generation.config.QueueCapacity); err != nil {
 		r.recordError("event_enqueue_failed")
 		return err
@@ -286,6 +310,47 @@ func (r *OneBotRuntime) enqueueEvent(ctx context.Context, generation *oneBotRunt
 	r.state.LastWebhookAt = &now
 	r.stateMu.Unlock()
 	return nil
+}
+
+func (r *OneBotRuntime) trackGeneration(generation *oneBotRuntimeGeneration) {
+	if r == nil || generation == nil || generation.config.ConfigVersion == 0 {
+		return
+	}
+	r.generationsMu.Lock()
+	if r.generations == nil {
+		r.generations = make(map[int64]*oneBotRuntimeGeneration)
+	}
+	r.generations[generation.config.ConfigVersion] = generation
+	r.generationsMu.Unlock()
+}
+
+func (r *OneBotRuntime) untrackGeneration(generation *oneBotRuntimeGeneration) {
+	if r == nil || generation == nil || generation.config.ConfigVersion == 0 {
+		return
+	}
+	r.generationsMu.Lock()
+	if r.generations[generation.config.ConfigVersion] == generation {
+		delete(r.generations, generation.config.ConfigVersion)
+	}
+	r.generationsMu.Unlock()
+}
+
+func (r *OneBotRuntime) generationForEvent(worker *oneBotRuntimeGeneration, event InboundEvent) *oneBotRuntimeGeneration {
+	target := worker
+	if r != nil && event.RuntimeConfigVersion != 0 {
+		r.generationsMu.RLock()
+		if candidate := r.generations[event.RuntimeConfigVersion]; candidate != nil {
+			target = candidate
+		}
+		r.generationsMu.RUnlock()
+	}
+	if target != nil && target.hub != nil && !target.hub.Snapshot().Connected {
+		current := r.generation.Load()
+		if current != nil && current.hub != nil && current.hub.Snapshot().Connected {
+			target = current
+		}
+	}
+	return target
 }
 
 func (r *OneBotRuntime) worker(generation *oneBotRuntimeGeneration, workerID int) {
@@ -330,11 +395,16 @@ func (r *OneBotRuntime) processItems(generation *oneBotRuntimeGeneration, items 
 			slog.Warn("onebot queue payload rejected", "stream_id", shortID(item.ID), "error_code", item.DecodeError)
 			continue
 		}
-		processCtx, cancel := context.WithTimeout(generation.ctx, 20*time.Second)
-		err := r.processor.processWith(processCtx, r.activeProcessingConfig(generation.config), generation.messenger, r.queue.ReliableQueue, item.Event, r.markSent)
+		target := r.generationForEvent(generation, item.Event)
+		if target == nil || target.messenger == nil {
+			r.recordError("event_generation_unavailable")
+			continue
+		}
+		processCtx, cancel := context.WithTimeout(target.ctx, 20*time.Second)
+		err := r.processor.processWith(processCtx, r.activeProcessingConfig(target.config), target.messenger, r.queue.ReliableQueue, item.Event, r.markSent)
 		cancel()
 		if err == nil {
-			if ackErr := r.queue.Ack(generation.ctx, item.ID); ackErr != nil {
+			if ackErr := r.queue.Ack(target.ctx, item.ID); ackErr != nil {
 				r.recordError("queue_ack_failed")
 			}
 			now := time.Now().UTC()
@@ -347,7 +417,7 @@ func (r *OneBotRuntime) processItems(generation *oneBotRuntimeGeneration, items 
 		if code == "" {
 			code = "event_process_failed"
 		}
-		if failErr := r.queue.Fail(generation.ctx, item, code); failErr != nil {
+		if failErr := r.queue.Fail(target.ctx, item, code); failErr != nil {
 			r.recordError("queue_retry_failed")
 		} else {
 			r.recordError(code)
@@ -503,7 +573,8 @@ func (r *OneBotRuntime) drainAndStop(ctx context.Context, generation *oneBotRunt
 	defer ticker.Stop()
 	for {
 		backlog, pending, _ := r.queue.Stats(ctx)
-		if backlog == 0 && pending == 0 {
+		hubDrained := generation.hub == nil || generation.hub.EventsDrained()
+		if backlog == 0 && pending == 0 && hubDrained {
 			return stopOneBotGeneration(ctx, generation)
 		}
 		select {

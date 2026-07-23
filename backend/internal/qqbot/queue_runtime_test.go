@@ -103,6 +103,98 @@ func TestReliableQueueAllowOnceIsIdempotentPerEvent(t *testing.T) {
 	}
 }
 
+func TestOneBotRuntimeHandoffAcceptsOldGenerationEvent(t *testing.T) {
+	queue, client := newRedisQueue(t)
+	ctx := t.Context()
+	if err := queue.EnsureGroup(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	old := &oneBotRuntimeGeneration{config: OneBotActiveConfig{Enabled: true, QueueCapacity: 64, ConfigVersion: 1}}
+	old.accepting.Store(true)
+	next := &oneBotRuntimeGeneration{config: OneBotActiveConfig{Enabled: true, QueueCapacity: 64, ConfigVersion: 2}}
+	runtime := &OneBotRuntime{queue: &OneBotQueue{ReliableQueue: queue}, generations: make(map[int64]*oneBotRuntimeGeneration)}
+	runtime.trackGeneration(old)
+	runtime.trackGeneration(next)
+	runtime.generation.Store(next)
+
+	event := InboundEvent{EventID: "handoff-event", Scene: SceneGroup, ProviderSubject: "group-1", Content: "/help"}
+	if err := runtime.enqueueEvent(ctx, old, event); err != nil {
+		t.Fatal(err)
+	}
+	if length, _ := client.XLen(ctx, queue.stream()).Result(); length != 1 {
+		t.Fatalf("stream length=%d", length)
+	}
+	items, err := queue.Read(ctx, "handoff-inspector", 1, time.Millisecond)
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items=%#v err=%v", items, err)
+	}
+	if items[0].Event.RuntimeConfigVersion != 1 {
+		t.Fatalf("runtime config version=%d", items[0].Event.RuntimeConfigVersion)
+	}
+	if target := runtime.generationForEvent(next, items[0].Event); target != old {
+		t.Fatal("handoff event was not routed to its source generation")
+	}
+
+	old.accepting.Store(false)
+	if err := runtime.enqueueEvent(ctx, old, InboundEvent{EventID: "retired-event", Scene: SceneGroup, ProviderSubject: "group-1"}); err != nil {
+		t.Fatal(err)
+	}
+	if length, _ := client.XLen(ctx, queue.stream()).Result(); length != 1 {
+		t.Fatalf("retired generation enqueued event, stream length=%d", length)
+	}
+}
+
+func TestOneBotRuntimeDrainWaitsForBufferedHubEvents(t *testing.T) {
+	queue, _ := newRedisQueue(t)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	hub, err := NewOneBotHub(OneBotHubOptions{
+		SelfID:      "3944007489",
+		AccessToken: testOneBotToken,
+		EventBuffer: 1,
+		EventHandler: func(context.Context, InboundEvent) error {
+			close(started)
+			<-release
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	generationCtx, generationCancel := context.WithCancel(context.Background())
+	generation := &oneBotRuntimeGeneration{
+		config: OneBotActiveConfig{Enabled: true},
+		hub:    hub,
+		ctx:    generationCtx,
+		cancel: generationCancel,
+	}
+	runtime := &OneBotRuntime{queue: &OneBotQueue{ReliableQueue: queue}}
+	hub.events <- InboundEvent{EventID: "buffered"}
+	<-started
+	hub.StopAccepting()
+
+	done := make(chan error, 1)
+	go func() {
+		drainCtx, cancel := context.WithTimeout(t.Context(), time.Second)
+		defer cancel()
+		done <- runtime.drainAndStop(drainCtx, generation)
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("drain returned before hub event completed: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if generationCtx.Err() == nil {
+		t.Fatal("generation was not cancelled after drain")
+	}
+}
+
 func TestRuntimeDrainTimeoutPreservesPendingEvent(t *testing.T) {
 	queue, _ := newRedisQueue(t)
 	ctx := t.Context()

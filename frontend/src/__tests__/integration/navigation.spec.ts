@@ -9,6 +9,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { defineComponent, h, nextTick } from 'vue'
 import { useNavigationLoadingState, _resetNavigationLoadingInstance } from '@/composables/useNavigationLoading'
 import { useRoutePrefetch } from '@/composables/useRoutePrefetch'
+import { renderFatalApplicationError } from '@/main'
 
 // Mock 视图组件
 const MockDashboard = defineComponent({
@@ -267,6 +268,26 @@ describe('Navigation Integration Tests', () => {
       expect(routePrefetch.prefetchedRoutes.value.size).toBeLessThanOrEqual(2)
 
       wrapper.unmount()
+    })
+  })
+
+  describe('应用错误边界', () => {
+    it('启动级异常应该显示安全且可恢复的中文兜底页面', () => {
+      document.documentElement.lang = 'zh-CN'
+      const root = document.createElement('div')
+      root.id = 'app'
+      root.textContent = 'must-not-leak'
+      document.body.appendChild(root)
+
+      renderFatalApplicationError(root)
+
+      expect(root.getAttribute('data-fatal-error')).toBe('true')
+      expect(root.textContent).toContain('页面暂时无法显示')
+      expect(root.textContent).toContain('重新加载页面')
+      expect(root.textContent).toContain('返回首页')
+      expect(root.textContent).not.toContain('must-not-leak')
+      expect(root.querySelector('[role="alert"]')).not.toBeNull()
+      root.remove()
     })
   })
 

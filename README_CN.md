@@ -217,7 +217,7 @@ Sub2API 是一个 AI API 网关平台，用于分发和管理 AI 产品订阅的
 - **并发控制** - 用户级和账号级并发限制；`standard_quota` 套餐还可按订阅实例设置可选并发池，同一实例包含的标准分组共享该池，实际并发同时受三层限制
 - **速率限制** - 可配置的请求和 Token 速率限制
 - **公告邮件广播** - 管理员发布 active 公告时可选择向所有有效用户的已验证主邮箱创建异步群发任务；持久化任务与逐收件人账本支持重启恢复、进度反馈、失败重试和端到端幂等，邮件范围独立于公告 Targeting（[设计与 API 文档](docs/ANNOUNCEMENT_EMAIL.md)）
-- **内置 QQBot 双链路运营中心** - 保留腾讯官方 BotGo Webhook/消息 Runtime，并新增独立 SnowLuma OneBot v11 反向 WebSocket 链路，用于普通 QQ 群消息和真实 `group_increase` 进群欢迎。两条链路复用命令与绑定规则，但使用隔离 Redis Stream、加密凭据、热启停、健康诊断、群白名单和独立后台页面；OneBot 仅通过本机反向 WS 接入，强制 Bearer Token、预期 `X-Self-ID`、单活动连接、action/echo 超时关联，无需开放公网动作端口。`/check` 渠道状态图、邮箱一次性验证、按机器人身份隔离的原子绑定、单次余额赠送、兑换流水与完整审计继续保持事务保护（[集成/API/安全/迁移/回滚文档](docs/QQBOT_INTEGRATION.md)）
+- **内置 QQBot 双链路运营中心** - 保留腾讯官方 BotGo Webhook/消息 Runtime，并新增独立 SnowLuma OneBot v11 反向 WebSocket 链路，用于普通 QQ 群消息和真实 `group_increase` 进群欢迎。两条链路复用命令与绑定规则，但使用隔离 Redis Stream、加密凭据、热启停、健康诊断、群白名单和独立后台页面；OneBot 仅接受直连的回环或私网反向 WS 对端，并强制 Bearer Token、预期 `X-Self-ID`、单活动连接、action/echo 超时关联，无需开放公网动作端口。`/check` 渠道状态图、邮箱一次性验证、按机器人身份隔离的原子绑定、单次余额赠送、兑换流水与完整审计继续保持事务保护（[集成/API/安全/迁移/回滚文档](docs/QQBOT_INTEGRATION.md)）
 - **内置支付系统** - 同一 `easypay` 服务商通过版本字段兼容易支付 V1 MD5 与彩虹易支付 2.0 RSA-SHA256，支持支付宝、微信支付及上游已开通的 QQ 支付，并可与支付宝官方、微信官方、Stripe 并存。微信官方实例可独立声明 Native/H5/JSAPI 能力，同时支持 `mp` 公众号与 `wecom` 企业微信自建应用 OAuth；恢复上下文签名绑定原实例，按终端安全选路、本地阻断未开通模式，且企业微信失败不会自动回退 H5。统一前台、首充加成、订单归因、净充值统计和筛选导出均无需独立支付服务（[配置指南](docs/PAYMENT_CN.md)）
 - **双类型订阅套餐** - `subscription` 套餐只能绑定一个订阅分组并读取该分组原生限额；`standard_quota` 套餐可绑定一个或多个标准（余额）分组，并在套餐内设置共享日/周/月额度与可选并发限制。日、周、月额度分别从订阅购买或生效时间起按 24 小时、7 天、30 天滚动刷新，不再按自然日 0 点重置。额度和并发在购买或分配时写入订阅实例快照，后续套餐编辑不追溯；标准分组有有效套餐时优先消耗套餐额度，套餐过期后公开分组恢复余额计费
 - **Cyber Abuse 防护** - 风控中心可启用本地高置信度恶意网络行为预检；命中凭据窃取、恶意软件、未授权入侵、规避安全控制、数据外传或 Botnet/DDoS 等高风险模式时，网关会向用户返回警告并在转发上游前终止请求。该功能默认关闭，支持无副作用试跑、脱敏审计和上游 `cyber_policy` 反馈联动，不替代人工审核或法律判断
@@ -628,7 +628,7 @@ default:
 
 ### 模型错误语言与稳定错误码
 
-模型网关错误支持中文和英文安全展示。客户端可通过 `Accept-Language` 选择语言；缺失或不支持时使用 `gateway.model_error_default_locale`（`en` 或 `zh`，默认 `en`）。所有模型客户端可见错误消息均带 `[PokeAPI]`，并返回稳定的 `X-PokeAPI-Error-Code`、`X-PokeAPI-Request-ID` 和 `Content-Language` 响应头。
+模型网关错误支持中文和英文安全展示。客户端可通过 `Accept-Language` 选择语言；缺失或不支持时使用 `gateway.model_error_default_locale`（`en` 或 `zh`，默认 `zh`）。通用内部错误和前端最终兜底提示也默认使用中文，客户端仍可显式请求英文。Vue 根级 render/setup/生命周期异常会被可恢复错误边界隔离，并提供重试当前页面和返回首页操作；启动阶段异常会显示不含内部详情的安全 DOM 兜底。所有模型客户端可见错误消息均带 `[PokeAPI]`，并返回稳定的 `X-PokeAPI-Error-Code`、`X-PokeAPI-Request-ID` 和 `Content-Language` 响应头。
 
 Anthropic Messages、OpenAI Chat Completions、OpenAI Responses、Gemini、SSE 与 WebSocket 均保持原有 HTTP 状态、JSON envelope、协议字段、SSE 终止事件和 WebSocket 关闭码。上游原始正文、凭据和内部诊断不会直接返回客户端；普通 REST、管理、OAuth 和账单接口不受模型错误本地化影响。完整契约见 [模型错误响应契约](docs/MODEL_ERROR_CONTRACT.md)。
 

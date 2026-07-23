@@ -24,7 +24,7 @@ services:
   # Sub2API Application
   # ===========================================================================
   sub2api:
-    image: weishaw/sub2api:latest
+    image: ${SUB2API_IMAGE:-ghcr.io/zhibeigg/sub2api:0.83.90}
     container_name: sub2api
     restart: unless-stopped
     ulimits:
@@ -90,11 +90,10 @@ services:
       # =======================================================================
       # JWT Configuration
       # =======================================================================
-      # IMPORTANT: Set a fixed JWT_SECRET to prevent login sessions from being
-      # invalidated after container restarts. If left empty, a random secret
-      # will be generated on each startup.
+      # REQUIRED: Set a fixed JWT_SECRET. Compose rejects empty values so login
+      # sessions remain valid after restarts and across replicas.
       # Generate a secure secret: openssl rand -hex 32
-      - JWT_SECRET=${JWT_SECRET:-}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - JWT_EXPIRE_HOUR=${JWT_EXPIRE_HOUR:-24}
 
       # =======================================================================
@@ -105,12 +104,10 @@ services:
       # =======================================================================
       # TOTP (2FA) Configuration
       # =======================================================================
-      # IMPORTANT: Set a fixed encryption key for TOTP secrets. If left empty,
-      # a random key will be generated on each startup, causing all existing
-      # TOTP configurations to become invalid (users won't be able to login
-      # with 2FA).
+      # REQUIRED: Set a fixed encryption key for TOTP and integration secrets.
+      # Compose rejects empty values so encrypted data survives restarts.
       # Generate a secure key: openssl rand -hex 32
-      - TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY:-}
+      - TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY:?TOTP_ENCRYPTION_KEY is required}
 
       # =======================================================================
       # Timezone Configuration

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/modelerror"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 )
@@ -85,8 +86,9 @@ func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Co
 		return nil, fmt.Errorf("read alpha search response: %w", err)
 	}
 
+	upstreamMessage := ""
 	if resp.StatusCode >= http.StatusBadRequest {
-		upstreamMessage := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody)))
+		upstreamMessage = sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody)))
 		if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMessage, respBody) ||
 			isOpenAIAlphaSearchEndpointUnsupported(account, resp.StatusCode) {
 			resp.Body = io.NopCloser(bytes.NewReader(respBody))
@@ -115,11 +117,13 @@ func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Co
 	if contentType == "" {
 		contentType = "application/json"
 	}
-	c.Data(resp.StatusCode, contentType, respBody)
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		// 非 2xx（错误/重定向）已原样透传给客户端：不是一次成功的搜索，不计费。
+		// 非 2xx 不计费；客户端仅收到稳定、可本地化的安全错误，原始上游体只进入运维诊断。
+		MarkResponseCommitted(c)
+		writeUpstreamServiceModelError(c, modelerror.ProtocolOpenAIAlphaSearch, resp.StatusCode, respBody, upstreamMessage, requestedModel)
 		return nil, nil
 	}
+	c.Data(resp.StatusCode, contentType, respBody)
 	return &OpenAIForwardResult{
 		RequestID:      strings.TrimSpace(resp.Header.Get("x-request-id")),
 		Model:          requestedModel,
@@ -184,11 +188,9 @@ func (s *OpenAIGatewayService) forwardAlphaSearchViaResponsesWebSearch(
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
-		contentType := resp.Header.Get("Content-Type")
-		if contentType == "" {
-			contentType = "application/json"
-		}
-		c.Data(resp.StatusCode, contentType, respBody)
+		upstreamMessage := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody)))
+		MarkResponseCommitted(c)
+		writeUpstreamServiceModelError(c, modelerror.ProtocolOpenAIAlphaSearch, resp.StatusCode, respBody, upstreamMessage, requestedModel)
 		return nil, nil
 	}
 

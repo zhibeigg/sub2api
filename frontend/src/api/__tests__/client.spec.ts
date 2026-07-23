@@ -280,6 +280,24 @@ describe('API Client', () => {
       )
     })
 
+    it('code!=0 且后端无消息时使用中文兜底', async () => {
+      const adapter = vi.fn().mockResolvedValue({
+        status: 200,
+        data: { code: 1001, message: '', data: null },
+        headers: {},
+        config: {},
+        statusText: 'OK',
+      })
+      apiClient.defaults.adapter = adapter
+
+      await expect(apiClient.get('/test')).rejects.toEqual(
+        expect.objectContaining({
+          code: 1001,
+          message: '发生未知错误',
+        })
+      )
+    })
+
     it('部署与运营合规未确认时广播事件且保留登录态', async () => {
       localStorage.setItem('auth_token', 'admin-token')
       const listener = vi.fn()

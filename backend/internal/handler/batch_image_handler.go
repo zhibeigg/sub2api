@@ -325,12 +325,12 @@ func batchImageError(c *gin.Context, err error) {
 	if err == nil {
 		status = http.StatusInternalServerError
 		code = "INTERNAL_ERROR"
-		message = "internal error"
+		message = infraerrors.UnknownMessage
 	}
 	if status == 0 || (status == http.StatusInternalServerError && strings.TrimSpace(code) == "") {
 		status = http.StatusInternalServerError
 		code = "INTERNAL_ERROR"
-		message = "internal error"
+		message = infraerrors.UnknownMessage
 	}
 	if errors.Is(err, service.ErrBatchImageJobNotFound) {
 		status = http.StatusNotFound

@@ -12,7 +12,7 @@
 
 services:
   sub2api:
-    image: weishaw/sub2api:latest
+    image: ${SUB2API_IMAGE:-ghcr.io/zhibeigg/sub2api:0.83.90}
     container_name: sub2api
     restart: unless-stopped
     ulimits:
@@ -76,8 +76,9 @@ services:
       # =======================================================================
       # JWT Configuration
       # =======================================================================
-      - JWT_SECRET=${JWT_SECRET:-}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - JWT_EXPIRE_HOUR=${JWT_EXPIRE_HOUR:-24}
+      - TOTP_ENCRYPTION_KEY=${TOTP_ENCRYPTION_KEY:?TOTP_ENCRYPTION_KEY is required}
 
       # =======================================================================
       # Setup Configuration

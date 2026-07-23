@@ -154,6 +154,39 @@ func TestOneBotHubLimitsPendingActionsAndDeliversEvents(t *testing.T) {
 	}
 }
 
+func TestOneBotHubStopAcceptingDrainsBufferedEvents(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	processed := make(chan string, 2)
+	hub, err := NewOneBotHub(OneBotHubOptions{
+		SelfID:      "3944007489",
+		AccessToken: testOneBotToken,
+		EventBuffer: 2,
+		EventHandler: func(_ context.Context, event InboundEvent) error {
+			if event.EventID == "first" {
+				close(started)
+				<-release
+			}
+			processed <- event.EventID
+			return nil
+		},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = hub.Close() })
+
+	hub.events <- InboundEvent{EventID: "first"}
+	<-started
+	hub.events <- InboundEvent{EventID: "second"}
+	hub.StopAccepting()
+	require.False(t, hub.EventsDrained())
+	close(release)
+
+	require.Eventually(t, hub.EventsDrained, time.Second, 10*time.Millisecond)
+	seen := map[string]bool{<-processed: true, <-processed: true}
+	require.True(t, seen["first"])
+	require.True(t, seen["second"])
+}
+
 func TestTrustedOneBotPeerRejectsForwardedAndPublicRequests(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "http://example.test/webhooks/qq/onebot", nil)
 	request.RemoteAddr = "127.0.0.1:12345"

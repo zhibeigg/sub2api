@@ -46,6 +46,41 @@ func TestModelErrorMiddlewareDoesNotMarkSuccessfulResponseAsLocalizedError(t *te
 	require.Empty(t, recorder.Header().Values("Vary"))
 }
 
+func TestModelErrorMiddlewareDefaultsToChineseWithoutAcceptLanguage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(ModelErrorLocale(&config.Config{Gateway: config.GatewayConfig{ModelErrorDefaultLocale: "zh"}}))
+	router.GET("/v1/chat/completions", func(c *gin.Context) {
+		modelerror.WriteOpenAI(c, http.StatusBadRequest, "invalid_request_error", "invalid request")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/chat/completions", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Equal(t, "zh-CN", recorder.Header().Get("Content-Language"))
+	require.Contains(t, recorder.Body.String(), "模型请求")
+}
+
+func TestModelErrorMiddlewareHonorsExplicitEnglish(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(ModelErrorLocale(&config.Config{Gateway: config.GatewayConfig{ModelErrorDefaultLocale: "zh"}}))
+	router.GET("/v1/chat/completions", func(c *gin.Context) {
+		modelerror.WriteOpenAI(c, http.StatusBadRequest, "invalid_request_error", "invalid request")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/chat/completions", nil)
+	req.Header.Set("Accept-Language", "en-US")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Equal(t, "en", recorder.Header().Get("Content-Language"))
+	require.Contains(t, recorder.Body.String(), "model request")
+}
+
 func TestModelErrorMiddlewareLocalizesOnlyErrorResponse(t *testing.T) {
 	router := modelErrorTestRouter(func(c *gin.Context) {
 		modelerror.WriteOpenAI(c, http.StatusBadRequest, "invalid_request_error", "invalid request")

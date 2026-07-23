@@ -40,17 +40,18 @@ const (
 )
 
 type InboundEvent struct {
-	EventID         string `json:"event_id"`
-	MessageID       string `json:"message_id,omitempty"`
-	Scene           Scene  `json:"scene"`
-	Content         string `json:"content,omitempty"`
-	ProviderSubject string `json:"provider_subject"`
-	SourceID        string `json:"source_id,omitempty"`
-	ChannelID       string `json:"channel_id,omitempty"`
-	GuildID         string `json:"guild_id,omitempty"`
-	DisplayName     string `json:"display_name,omitempty"`
-	MemberJoined    bool   `json:"member_joined,omitempty"`
-	EnterAIO        bool   `json:"enter_aio,omitempty"`
+	EventID              string `json:"event_id"`
+	MessageID            string `json:"message_id,omitempty"`
+	Scene                Scene  `json:"scene"`
+	Content              string `json:"content,omitempty"`
+	ProviderSubject      string `json:"provider_subject"`
+	SourceID             string `json:"source_id,omitempty"`
+	ChannelID            string `json:"channel_id,omitempty"`
+	GuildID              string `json:"guild_id,omitempty"`
+	DisplayName          string `json:"display_name,omitempty"`
+	MemberJoined         bool   `json:"member_joined,omitempty"`
+	EnterAIO             bool   `json:"enter_aio,omitempty"`
+	RuntimeConfigVersion int64  `json:"runtime_config_version,omitempty"`
 }
 
 type storageConfig struct {

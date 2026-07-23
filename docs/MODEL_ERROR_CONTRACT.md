@@ -9,10 +9,10 @@ This contract applies to model-facing endpoints only. Ordinary REST, admin, OAut
 - 客户端通过 `Accept-Language` 请求中文或英文。
 - `zh`、`zh-CN`、`zh-Hans` 等中文标签解析为中文；其他受支持英文标签解析为英文。
 - 请求头缺失、无有效匹配或格式不可用时，回退到 `gateway.model_error_default_locale`。
-- `gateway.model_error_default_locale` 仅支持 `en`、`zh`，默认 `en`。
+- `gateway.model_error_default_locale` 仅支持 `en`、`zh`，默认 `zh`。
 - 语言中间件只记录选择结果；成功响应和非模型接口不会因此增加模型错误响应头。
 
-Clients select English or Chinese with `Accept-Language`. Missing or unsupported preferences fall back to `gateway.model_error_default_locale` (`en` or `zh`, default `en`). Localization metadata is emitted only when a model error is written.
+Clients select English or Chinese with `Accept-Language`. Missing or unsupported preferences fall back to `gateway.model_error_default_locale` (`en` or `zh`, default `zh`). Localization metadata is emitted only when a model error is written.
 
 ## 通用展示规则 / Common presentation rules
 
@@ -25,6 +25,15 @@ Clients select English or Chinese with `Accept-Language`. Missing or unsupported
 5. 已经品牌化的消息重复经过 writer 时保持幂等，不会出现重复前缀。
 
 Every client-visible model error is safely classified and branded. Raw upstream diagnostics remain server-side and are never treated as client response content.
+
+## 前端错误边界 / Frontend error boundary
+
+- Vue 根组件使用 `onErrorCaptured` 隔离子组件的 render、setup 与生命周期异常，展示不含异常正文的安全提示。
+- 用户可以重试当前页面（强制重新挂载路由视图）或返回首页。
+- Vue 全局错误处理器与 bootstrap Promise 兜底会在根组件无法渲染时直接创建安全 DOM 页面；日志仅记录错误类型和 Vue 阶段，不记录异常 message、stack 或响应正文。
+- 错误边界不替代模型协议错误响应；它只防止前端异常导致空白页面。
+
+The root Vue boundary contains component failures and provides retry/home recovery. Bootstrap failures use a DOM-only fallback, and neither path exposes raw exception details to the user.
 
 ## 稳定响应头 / Stable response headers
 

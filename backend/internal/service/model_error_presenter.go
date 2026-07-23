@@ -31,6 +31,18 @@ func presentUpstreamServiceModelError(c *gin.Context, status int, body []byte, m
 	}))
 }
 
+func writeUpstreamServiceModelError(c *gin.Context, protocol string, status int, body []byte, message, model string) {
+	descriptor := modelerror.ClassifyUpstream(modelerror.UpstreamInput{
+		Status:  status,
+		Body:    body,
+		Message: message,
+		Model:   model,
+	})
+	if !modelerror.WriteGatewayProtocolDescriptor(c, protocol, status, "", "", descriptor) {
+		modelerror.WriteOpenAIDescriptor(c, status, "api_error", "", descriptor)
+	}
+}
+
 func presentUpstreamCustomServiceModelError(c *gin.Context, status int, body []byte, message, model string) modelerror.Presentation {
 	descriptor := modelerror.ClassifyUpstream(modelerror.UpstreamInput{
 		Status: status,

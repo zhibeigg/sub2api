@@ -33,6 +33,14 @@ func TestResolveAcceptLanguage(t *testing.T) {
 	}
 }
 
+func TestLocaleFromContextUsesExplicitLocale(t *testing.T) {
+	require.Equal(t, LocaleEnglish, LocaleFromContext(context.Background()))
+	require.Equal(t, LocaleEnglish, LocaleFromContext(nil))
+
+	chinese := WithLocale(context.Background(), LocaleChinese, "zh")
+	require.Equal(t, LocaleChinese, LocaleFromContext(chinese))
+}
+
 func TestCatalogsHaveSameKeys(t *testing.T) {
 	require.Equal(t, len(catalogEnglish), len(catalogChinese))
 	for code := range catalogEnglish {

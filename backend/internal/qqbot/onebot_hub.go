@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	coderws "github.com/coder/websocket"
@@ -120,6 +121,7 @@ type OneBotHub struct {
 	cancel          context.CancelFunc
 
 	mu               sync.Mutex
+	accepting        bool
 	closed           bool
 	nextConnectionID uint64
 	session          *oneBotHubSession
@@ -129,6 +131,9 @@ type OneBotHub struct {
 	lastActionAt     time.Time
 	lastDisconnectAt time.Time
 	lastErrorCode    string
+
+	activeReaders atomic.Int64
+	activeEvents  atomic.Int64
 }
 
 func NewOneBotHub(options OneBotHubOptions) (*OneBotHub, error) {
@@ -163,6 +168,7 @@ func NewOneBotHub(options OneBotHubOptions) (*OneBotHub, error) {
 		rootCtx:         rootCtx,
 		cancel:          cancel,
 		pending:         make(map[string]*oneBotPendingAction),
+		accepting:       true,
 	}
 	if options.EventHandler != nil {
 		hub.events = make(chan InboundEvent, options.EventBuffer)
@@ -191,9 +197,9 @@ func (h *OneBotHub) ServeHTTP(writer http.ResponseWriter, request *http.Request)
 		return
 	}
 	h.mu.Lock()
-	closed := h.closed
+	accepting := h.accepting && !h.closed
 	h.mu.Unlock()
-	if closed {
+	if !accepting {
 		http.Error(writer, "onebot hub unavailable", http.StatusServiceUnavailable)
 		return
 	}
@@ -222,6 +228,8 @@ func (h *OneBotHub) ServeHTTP(writer http.ResponseWriter, request *http.Request)
 		notifyOneBotPending(replacedPending, ErrOneBotDisconnected)
 	}
 	defer func() { _ = conn.CloseNow() }()
+	h.activeReaders.Add(1)
+	defer h.activeReaders.Add(-1)
 	go h.pingLoop(session)
 	h.readLoop(request.Context(), session)
 }
@@ -339,26 +347,51 @@ func (h *OneBotHub) Snapshot() OneBotHubStatus {
 	return status
 }
 
+func (h *OneBotHub) StopAccepting() {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	if h.closed || !h.accepting {
+		h.mu.Unlock()
+		return
+	}
+	h.accepting = false
+	session := h.session
+	h.session = nil
+	pending := h.takePendingLocked(0)
+	h.lastDisconnectAt = time.Now().UTC()
+	h.lastErrorCode = "hub_retiring"
+	h.mu.Unlock()
+	if session != nil {
+		_ = session.conn.CloseNow()
+	}
+	notifyOneBotPending(pending, ErrOneBotDisconnected)
+}
+
+func (h *OneBotHub) EventsDrained() bool {
+	if h == nil {
+		return true
+	}
+	return h.activeReaders.Load() == 0 && h.activeEvents.Load() == 0 && len(h.events) == 0
+}
+
 func (h *OneBotHub) Close() error {
 	if h == nil {
 		return nil
 	}
+	h.StopAccepting()
 	h.mu.Lock()
 	if h.closed {
 		h.mu.Unlock()
 		return nil
 	}
 	h.closed = true
-	session := h.session
-	h.session = nil
 	pending := h.takePendingLocked(0)
 	h.lastDisconnectAt = time.Now().UTC()
 	h.lastErrorCode = "hub_closed"
 	h.mu.Unlock()
 	h.cancel()
-	if session != nil {
-		_ = session.conn.CloseNow()
-	}
 	notifyOneBotPending(pending, ErrOneBotHubClosed)
 	return nil
 }
@@ -366,7 +399,7 @@ func (h *OneBotHub) Close() error {
 func (h *OneBotHub) attach(conn *coderws.Conn) (*oneBotHubSession, *oneBotHubSession, []*oneBotPendingAction, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if h.closed {
+	if h.closed || !h.accepting {
 		return nil, nil, nil, ErrOneBotHubClosed
 	}
 	h.nextConnectionID++
@@ -551,9 +584,11 @@ func (h *OneBotHub) eventLoop() {
 		case <-h.rootCtx.Done():
 			return
 		case event := <-h.events:
+			h.activeEvents.Add(1)
 			if err := h.eventHandler(h.rootCtx, event); err != nil {
 				h.setErrorCode("event_handler_failed")
 			}
+			h.activeEvents.Add(-1)
 		}
 	}
 }
