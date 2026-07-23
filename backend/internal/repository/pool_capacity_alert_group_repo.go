@@ -201,14 +201,16 @@ func (r *poolCapacityAlertRepository) EvaluateGroupBalanceAndMaybeCreateEvent(ct
 }
 
 func enqueuePoolCapacityAlertDeliveriesTx(ctx context.Context, tx *sql.Tx, eventID int64, qqbotAppID string, maxAttempts int, now time.Time) error {
+	// INSERT ... SELECT does not always infer lib/pq parameters from the target
+	// columns. Cast scalar parameters explicitly so event_id cannot default to text.
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO pool_capacity_alert_deliveries (
 			event_id,channel,recipient_user_id,identity_channel_id,recipient_email,recipient_name,locale,
 			status,attempt_count,max_attempts,next_attempt_at,created_at,updated_at
 		)
-		SELECT $1,'email',u.id,0,u.email,
+		SELECT $1::bigint,'email',u.id,0::bigint,u.email,
 		       COALESCE(NULLIF(u.username,''),split_part(u.email,'@',1)),'',
-		       'pending',0,$2,$3,$3,$3
+		       'pending',0,$2::integer,$3::timestamptz,$3::timestamptz,$3::timestamptz
 		FROM (
 			SELECT DISTINCT ON (LOWER(BTRIM(candidate.email)))
 			       candidate.id,BTRIM(candidate.email) AS email,BTRIM(candidate.username) AS username
@@ -235,9 +237,9 @@ func enqueuePoolCapacityAlertDeliveriesTx(ctx context.Context, tx *sql.Tx, event
 			event_id,channel,recipient_user_id,identity_channel_id,recipient_email,recipient_name,locale,
 			status,attempt_count,max_attempts,next_attempt_at,created_at,updated_at
 		)
-		SELECT DISTINCT $1,'qqbot',u.id,aic.id,'',
+		SELECT DISTINCT $1::bigint,'qqbot',u.id,aic.id,'',
 		       COALESCE(NULLIF(BTRIM(u.username),''),split_part(BTRIM(u.email),'@',1)),'zh',
-		       'pending',0,$2,$3,$3,$3
+		       'pending',0,$2::integer,$3::timestamptz,$3::timestamptz,$3::timestamptz
 		FROM users u
 		JOIN auth_identities ai ON ai.user_id=u.id
 		JOIN auth_identity_channels aic ON aic.identity_id=ai.id

@@ -191,53 +191,8 @@ func (r *poolCapacityAlertRepository) EvaluateAndMaybeCreateEvent(ctx context.Co
 		return nil, err
 	}
 
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO pool_capacity_alert_deliveries (
-			event_id,channel,recipient_user_id,identity_channel_id,recipient_email,recipient_name,locale,
-			status,attempt_count,max_attempts,next_attempt_at,created_at,updated_at
-		)
-		SELECT $1,'email',u.id,0,u.email,
-		       COALESCE(NULLIF(u.username,''),split_part(u.email,'@',1)),'',
-		       'pending',0,$2,$3,$3,$3
-		FROM (
-			SELECT DISTINCT ON (LOWER(BTRIM(candidate.email)))
-			       candidate.id,BTRIM(candidate.email) AS email,BTRIM(candidate.username) AS username
-			FROM users candidate
-			WHERE candidate.role=$4 AND candidate.status=$5 AND candidate.deleted_at IS NULL
-			  AND BTRIM(candidate.email) <> ''
-			  AND BTRIM(candidate.email) ~* '^[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}$'
-			  AND LOWER(BTRIM(candidate.email)) NOT LIKE '%-connect.invalid'
-			ORDER BY LOWER(BTRIM(candidate.email)),candidate.id
-		) u
-		ON CONFLICT (event_id,channel,recipient_user_id,identity_channel_id) DO NOTHING`,
-		event.ID, evaluation.DeliveryMaxAttempts, now, service.RoleAdmin, service.StatusActive,
-	); err != nil {
+	if err := enqueuePoolCapacityAlertDeliveriesTx(ctx, tx, event.ID, evaluation.QQBotAppID, evaluation.DeliveryMaxAttempts, now); err != nil {
 		return nil, err
-	}
-
-	if strings.TrimSpace(evaluation.QQBotAppID) != "" {
-		providerKey := "qqbot:" + strings.TrimSpace(evaluation.QQBotAppID)
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO pool_capacity_alert_deliveries (
-				event_id,channel,recipient_user_id,identity_channel_id,recipient_email,recipient_name,locale,
-				status,attempt_count,max_attempts,next_attempt_at,created_at,updated_at
-			)
-			SELECT DISTINCT $1,'qqbot',u.id,aic.id,'',
-			       COALESCE(NULLIF(BTRIM(u.username),''),split_part(BTRIM(u.email),'@',1)),'zh',
-			       'pending',0,$2,$3,$3,$3
-			FROM users u
-			JOIN auth_identities ai ON ai.user_id=u.id
-			JOIN auth_identity_channels aic ON aic.identity_id=ai.id
-			WHERE u.role=$4 AND u.status=$5 AND u.deleted_at IS NULL
-			  AND ai.provider_type='qqbot' AND ai.provider_key=$6 AND ai.verified_at IS NOT NULL
-			  AND ai.provider_subject=aic.channel_subject
-			  AND aic.provider_type='qqbot' AND aic.provider_key=$6
-			  AND aic.channel='c2c' AND aic.channel_app_id=$7
-			ON CONFLICT (event_id,channel,recipient_user_id,identity_channel_id) DO NOTHING`,
-			event.ID, evaluation.DeliveryMaxAttempts, now, service.RoleAdmin, service.StatusActive, providerKey, evaluation.QQBotAppID,
-		); err != nil {
-			return nil, err
-		}
 	}
 
 	if err := tx.Commit(); err != nil {

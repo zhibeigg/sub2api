@@ -102,9 +102,9 @@ func TestPoolCapacityAlertEventDeduplicatesAdministratorEmails(t *testing.T) {
 	mock.ExpectExec(`(?s)UPDATE pool_capacity_alert_states SET.*status='low'`).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery(`(?s)INSERT INTO pool_capacity_alert_events.*RETURNING id`).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(9))
-	mock.ExpectExec(`(?s)INSERT INTO pool_capacity_alert_deliveries.*SELECT DISTINCT ON \(LOWER\(BTRIM\(candidate\.email\)\)\)`).
+	mock.ExpectExec(`(?s)INSERT INTO pool_capacity_alert_deliveries.*SELECT \$1::bigint,'email'.*SELECT DISTINCT ON \(LOWER\(BTRIM\(candidate\.email\)\)\)`).
 		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(`(?s)INSERT INTO pool_capacity_alert_deliveries.*ai\.provider_subject=aic\.channel_subject`).
+	mock.ExpectExec(`(?s)INSERT INTO pool_capacity_alert_deliveries.*SELECT DISTINCT \$1::bigint,'qqbot'.*ai\.provider_subject=aic\.channel_subject`).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 	mock.ExpectClose()

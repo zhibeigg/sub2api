@@ -36,7 +36,7 @@ func TestPoolCapacityGroupBalanceCreatesSingleGroupScopeEvent(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery(`(?s)INSERT INTO pool_capacity_alert_events.*'group'.*RETURNING id`).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(9))
-	mock.ExpectExec(`(?s)INSERT INTO pool_capacity_alert_deliveries.*SELECT \$1,'email'`).
+	mock.ExpectExec(`(?s)INSERT INTO pool_capacity_alert_deliveries.*SELECT \$1::bigint,'email'.*\$2::integer,\$3::timestamptz`).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 	mock.ExpectClose()
