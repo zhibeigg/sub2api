@@ -53,9 +53,14 @@ func TestAPIKeyRepository_GetByKeyForAuth_PreservesMessagesDispatchModelConfig_S
 		"grok-4.5": 0.60,
 		"gpt-*":    0.65,
 	}
+	endpointProtocols := []string{
+		string(service.EndpointProtocolOpenAIChatCompletions),
+		string(service.EndpointProtocolOpenAIResponses),
+	}
 	group, err := client.Group.Create().
 		SetName("g-auth-dispatch-unit").
 		SetPlatform(service.PlatformOpenAI).
+		SetEndpointProtocols(endpointProtocols).
 		SetStatus(service.StatusActive).
 		SetSubscriptionType(service.SubscriptionTypeStandard).
 		SetRateMultiplier(1).
@@ -88,6 +93,8 @@ func TestAPIKeyRepository_GetByKeyForAuth_PreservesMessagesDispatchModelConfig_S
 	require.NoError(t, err)
 	require.Equal(t, key.Name, got.Name)
 	require.NotNil(t, got.Group)
+	require.Equal(t, endpointProtocols, got.Group.EndpointProtocols)
+	require.True(t, service.GroupAllowsEndpoint(got.Group, service.EndpointProtocolOpenAIResponses))
 	require.Equal(t, group.MessagesDispatchModelConfig, got.Group.MessagesDispatchModelConfig)
 	require.Equal(t, modelRateMultipliers, got.Group.ModelRateMultipliers)
 	require.True(t, got.Group.PoolCapacityAlertEnabled)
