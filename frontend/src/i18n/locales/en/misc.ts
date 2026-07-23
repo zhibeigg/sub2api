@@ -413,8 +413,8 @@ export default {
         nextBtn: 'Next'
       },
       groupPlatform: {
-        title: '🤖 2. Select Platform',
-        description: '<div style="line-height: 1.7;"><p style="margin-bottom: 12px;">Choose the AI platform this group supports.</p><div style="padding: 8px 12px; background: #eff6ff; border-left: 3px solid #3b82f6; border-radius: 4px; font-size: 13px; margin-bottom: 12px;"><b>📌 Platform Guide:</b><ul style="margin: 8px 0 0 16px;"><li><b>Anthropic</b> - Claude models</li><li><b>OpenAI</b> - GPT models</li><li><b>Google</b> - Gemini models</li></ul></div><p style="font-size: 13px; color: #6b7280;">One group can only have one platform</p></div>',
+        title: '🔌 2. Select Endpoint Protocols',
+        description: '<div style="line-height: 1.7;"><p style="margin-bottom: 12px;">Choose the inbound client endpoint protocols accepted by this group.</p><div style="padding: 8px 12px; background: #eff6ff; border-left: 3px solid #3b82f6; border-radius: 4px; font-size: 13px; margin-bottom: 12px;"><b>📌 Protocol Guide:</b><ul style="margin: 8px 0 0 16px;"><li><b>Messages</b> - Anthropic Messages API</li><li><b>Chat / Responses</b> - OpenAI-compatible text APIs</li><li><b>GenerateContent</b> - Native Gemini API</li></ul></div><p style="font-size: 13px; color: #6b7280;">A group can accept multiple protocols. Protocols are not account vendor brands.</p></div>',
         nextBtn: 'Next'
       },
       groupMultiplier: {

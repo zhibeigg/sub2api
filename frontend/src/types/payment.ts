@@ -187,6 +187,8 @@ export interface SubscriptionPlanGroup {
   id: number
   name: string
   platform: string
+  endpoint_protocols?: import('./index').EndpointProtocol[]
+  quota_platform?: string
   rate_multiplier: number
   description?: string | null
   subscription_type?: 'standard' | 'subscription'

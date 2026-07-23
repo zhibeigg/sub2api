@@ -51,6 +51,8 @@ type accountRepository struct {
 	schedulerCache service.SchedulerCache
 }
 
+var _ service.AccountGroupBindingRepository = (*accountRepository)(nil)
+
 var schedulerNeutralExtraKeyPrefixes = []string{
 	"codex_primary_",
 	"codex_secondary_",
@@ -200,7 +202,8 @@ func (r *accountRepository) CreateWithAccountGroups(ctx context.Context, account
 			builders = append(builders, txClient.AccountGroup.Create().
 				SetAccountID(account.ID).
 				SetGroupID(groups[i].GroupID).
-				SetPriority(groups[i].Priority),
+				SetPriority(groups[i].Priority).
+				SetEndpointCompatibilityEnabled(groups[i].EndpointCompatibilityEnabled),
 			)
 		}
 		if _, err := txClient.AccountGroup.CreateBulk(builders...).Save(ctx); err != nil {
@@ -1606,6 +1609,7 @@ func (r *accountRepository) AddToGroup(ctx context.Context, accountID, groupID i
 		SetAccountID(accountID).
 		SetGroupID(groupID).
 		SetPriority(priority).
+		SetEndpointCompatibilityEnabled(false).
 		Save(ctx)
 	if err != nil {
 		return err
@@ -1652,6 +1656,20 @@ func (r *accountRepository) GetGroups(ctx context.Context, accountID int64) ([]s
 }
 
 func (r *accountRepository) BindGroups(ctx context.Context, accountID int64, groupIDs []int64) error {
+	groups := make([]service.AccountGroup, 0, len(groupIDs))
+	for i, groupID := range groupIDs {
+		groups = append(groups, service.AccountGroup{
+			AccountID: accountID,
+			GroupID:   groupID,
+			Priority:  i + 1,
+		})
+	}
+	return r.BindAccountGroups(ctx, accountID, groups)
+}
+
+// BindAccountGroups replaces an account's group bindings while preserving the
+// per-relation endpoint compatibility policy supplied by the caller.
+func (r *accountRepository) BindAccountGroups(ctx context.Context, accountID int64, groups []service.AccountGroup) error {
 	existingGroupIDs, err := r.loadAccountGroupIDs(ctx, accountID)
 	if err != nil {
 		return err
@@ -1675,19 +1693,23 @@ func (r *accountRepository) BindGroups(ctx context.Context, accountID int64, gro
 		return err
 	}
 
-	if len(groupIDs) == 0 {
+	if len(groups) == 0 {
 		if tx != nil {
 			return tx.Commit()
 		}
 		return nil
 	}
 
-	builders := make([]*dbent.AccountGroupCreate, 0, len(groupIDs))
-	for i, groupID := range groupIDs {
+	groupIDs := make([]int64, 0, len(groups))
+	builders := make([]*dbent.AccountGroupCreate, 0, len(groups))
+	for i := range groups {
+		groups[i].AccountID = accountID
+		groupIDs = append(groupIDs, groups[i].GroupID)
 		builders = append(builders, txClient.AccountGroup.Create().
 			SetAccountID(accountID).
-			SetGroupID(groupID).
-			SetPriority(i+1),
+			SetGroupID(groups[i].GroupID).
+			SetPriority(groups[i].Priority).
+			SetEndpointCompatibilityEnabled(groups[i].EndpointCompatibilityEnabled),
 		)
 	}
 
@@ -3012,11 +3034,12 @@ func (r *accountRepository) loadAccountGroups(ctx context.Context, accountIDs []
 		for _, ag := range entries {
 			groupSvc := groupMap[ag.GroupID]
 			agSvc := service.AccountGroup{
-				AccountID: ag.AccountID,
-				GroupID:   ag.GroupID,
-				Priority:  ag.Priority,
-				CreatedAt: ag.CreatedAt,
-				Group:     groupSvc,
+				AccountID:                    ag.AccountID,
+				GroupID:                      ag.GroupID,
+				Priority:                     ag.Priority,
+				EndpointCompatibilityEnabled: ag.EndpointCompatibilityEnabled,
+				CreatedAt:                    ag.CreatedAt,
+				Group:                        groupSvc,
 			}
 			accountGroupsByAccount[ag.AccountID] = append(accountGroupsByAccount[ag.AccountID], agSvc)
 			groupIDsByAccount[ag.AccountID] = append(groupIDsByAccount[ag.AccountID], ag.GroupID)

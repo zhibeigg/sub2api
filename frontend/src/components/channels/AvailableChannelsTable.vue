@@ -95,6 +95,7 @@
                   <GroupBadge
                     :name="g.name"
                     :platform="g.platform as GroupPlatform"
+                    :endpoint-protocols="g.endpoint_protocols"
                     :subscription-type="(g.subscription_type || 'standard') as SubscriptionType"
                     :rate-multiplier="g.rate_multiplier"
                     :user-rate-multiplier="userGroupRates[g.id] ?? null"
@@ -129,6 +130,7 @@
                   <GroupBadge
                     :name="g.name"
                     :platform="g.platform as GroupPlatform"
+                    :endpoint-protocols="g.endpoint_protocols"
                     :subscription-type="(g.subscription_type || 'standard') as SubscriptionType"
                     :rate-multiplier="g.rate_multiplier"
                     :user-rate-multiplier="userGroupRates[g.id] ?? null"

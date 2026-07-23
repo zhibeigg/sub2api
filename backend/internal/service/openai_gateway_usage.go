@@ -489,6 +489,7 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageTokenCost(
 		return s.billingService.CalculateCostUnified(CostInput{
 			Ctx:                       ctx,
 			Model:                     billingModel,
+			Platform:                  QuotaPlatform(ctx, apiKey),
 			GroupID:                   &gid,
 			Tokens:                    tokens,
 			RequestCount:              1,
@@ -532,6 +533,7 @@ func (s *OpenAIGatewayService) calculateOpenAIImageCost(
 		cost, err := s.billingService.CalculateCostUnified(CostInput{
 			Ctx:            ctx,
 			Model:          billingModel,
+			Platform:       QuotaPlatform(ctx, apiKey),
 			GroupID:        &gid,
 			RequestCount:   result.ImageCount,
 			SizeTier:       sizeTier,
@@ -579,6 +581,7 @@ func (s *OpenAIGatewayService) calculateOpenAIVideoCost(
 		cost, err := s.billingService.CalculateCostUnified(CostInput{
 			Ctx:            ctx,
 			Model:          billingModel,
+			Platform:       QuotaPlatform(ctx, apiKey),
 			GroupID:        &gid,
 			RequestCount:   videoCount,
 			SizeTier:       resolution,

@@ -25,6 +25,11 @@ func Priority(v int) predicate.AccountGroup {
 	return predicate.AccountGroup(sql.FieldEQ(FieldPriority, v))
 }
 
+// EndpointCompatibilityEnabled applies equality check predicate on the "endpoint_compatibility_enabled" field. It's identical to EndpointCompatibilityEnabledEQ.
+func EndpointCompatibilityEnabled(v bool) predicate.AccountGroup {
+	return predicate.AccountGroup(sql.FieldEQ(FieldEndpointCompatibilityEnabled, v))
+}
+
 // CreatedAt applies equality check predicate on the "created_at" field. It's identical to CreatedAtEQ.
 func CreatedAt(v time.Time) predicate.AccountGroup {
 	return predicate.AccountGroup(sql.FieldEQ(FieldCreatedAt, v))
@@ -108,6 +113,16 @@ func PriorityLT(v int) predicate.AccountGroup {
 // PriorityLTE applies the LTE predicate on the "priority" field.
 func PriorityLTE(v int) predicate.AccountGroup {
 	return predicate.AccountGroup(sql.FieldLTE(FieldPriority, v))
+}
+
+// EndpointCompatibilityEnabledEQ applies the EQ predicate on the "endpoint_compatibility_enabled" field.
+func EndpointCompatibilityEnabledEQ(v bool) predicate.AccountGroup {
+	return predicate.AccountGroup(sql.FieldEQ(FieldEndpointCompatibilityEnabled, v))
+}
+
+// EndpointCompatibilityEnabledNEQ applies the NEQ predicate on the "endpoint_compatibility_enabled" field.
+func EndpointCompatibilityEnabledNEQ(v bool) predicate.AccountGroup {
+	return predicate.AccountGroup(sql.FieldNEQ(FieldEndpointCompatibilityEnabled, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.

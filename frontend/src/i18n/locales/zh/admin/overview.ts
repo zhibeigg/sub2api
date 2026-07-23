@@ -821,7 +821,8 @@ export default {
       columns: {
         name: '名称',
         id: 'ID',
-        platform: '平台',
+        platform: '兼容平台',
+        endpointProtocols: '端点协议',
         rateMultiplier: '费率倍数',
         rpmOverride: 'RPM 覆盖',
         rpmOverrideHint: '该用户在此分组的 RPM 上限；留空 = 使用分组默认；0 = 不限制',
@@ -865,6 +866,8 @@ export default {
         name: '名称',
         description: '描述',
         platform: '平台',
+        legacyPlatform: '旧平台 / 运行配置',
+        quotaPlatform: '配额与统计平台',
         rateMultiplier: '费率倍数',
         status: '状态',
         exclusive: '专属分组',
@@ -921,6 +924,19 @@ export default {
           tooMany: '模型级倍率规则最多允许 {max} 条',
           invalid: '模型级倍率规则无效，请检查后重试'
         }
+      },
+      endpointProtocols: {
+        title: '端点协议',
+        hint: '选择该分组可承接的客户端入站协议，可多选。协议决定入口资格，不代表账号供应商。',
+        all: '全部端点协议',
+        required: '请至少选择一个端点协议',
+        compatibilitySettings: '高级兼容与计费分类',
+        compatibilityHint: '旧平台用于滚动升级和运行配置投影；配额平台用于历史配额与统计口径。通常保持后端默认即可。',
+        backendDefault: '使用后端默认',
+        editImpactHint: '修改协议可能影响已绑定账号；若存在不兼容账号，服务端会拒绝更新并返回账号清单。',
+        selectedIncompatible: '此分组当前与账号端点能力不兼容；保留显示以便明确解绑。',
+        incompatibleSelectedWarning: '有 {count} 个已选分组与当前账号端点能力不兼容。保存前请确认，界面不会自动移除。',
+        incompatibleAccounts: '协议修改会使以下账号不兼容：{accounts}。请先解绑或按服务端提供的强制流程处理。'
       },
       platforms: {
         all: '全部平台',

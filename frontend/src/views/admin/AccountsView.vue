@@ -440,6 +440,7 @@
     <BulkEditAccountModal
       :show="showBulkEdit"
       :account-ids="selIds"
+      :selected-accounts="selectedAccountRecords"
       :selected-platforms="selPlatforms"
       :selected-types="selTypes"
       :target="bulkEditTarget ?? undefined"
@@ -912,6 +913,11 @@ const {
 } = useTableSelection<Account>({
   rows: accounts,
   getId: (account) => account.id
+})
+
+const selectedAccountRecords = computed(() => {
+  const selected = new Set(selIds.value)
+  return accounts.value.filter((account) => selected.has(account.id))
 })
 
 const swipeVirtualContext: SwipeSelectVirtualContext = {

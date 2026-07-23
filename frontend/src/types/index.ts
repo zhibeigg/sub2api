@@ -540,7 +540,23 @@ export interface PaginationConfig {
 
 // ==================== API Key & Group Types ====================
 
-export type GroupPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'adobe' | 'cursor' | 'opencode' | 'kiro'
+export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'adobe' | 'cursor' | 'opencode' | 'kiro'
+
+/** @deprecated 分组平台仅用于旧 API、运行配置投影和滚动升级兼容。 */
+export type LegacyGroupPlatform = AccountPlatform
+/** @deprecated 请按语义使用 AccountPlatform、LegacyGroupPlatform 或 EndpointProtocol。 */
+export type GroupPlatform = LegacyGroupPlatform
+
+export type EndpointProtocol =
+  | 'anthropic_messages'
+  | 'openai_chat_completions'
+  | 'openai_responses'
+  | 'gemini_generate_content'
+  | 'openai_embeddings'
+  | 'openai_alpha_search'
+  | 'openai_images'
+  | 'openai_videos'
+  | 'batch_images'
 
 export type SubscriptionType = 'standard' | 'subscription'
 
@@ -557,7 +573,10 @@ export interface Group {
   id: number
   name: string
   description: string | null
-  platform: GroupPlatform
+  /** @deprecated 旧运行配置投影；客户端入口资格请使用 endpoint_protocols。 */
+  platform: LegacyGroupPlatform
+  endpoint_protocols: EndpointProtocol[]
+  quota_platform: string
   rate_multiplier: number
   rpm_limit?: number // Group-level RPM cap (0 = unlimited); overrides user-level rpm_limit when set
   is_exclusive: boolean
@@ -742,7 +761,10 @@ export interface UpdateApiKeyRequest {
 export interface CreateGroupRequest {
   name: string
   description?: string | null
-  platform?: GroupPlatform
+  /** @deprecated 兼容旧 API；新界面应同时提交 endpoint_protocols。 */
+  platform?: LegacyGroupPlatform
+  endpoint_protocols?: EndpointProtocol[]
+  quota_platform?: string
   rate_multiplier?: number
   model_rate_multipliers?: Record<string, number>
   is_exclusive?: boolean
@@ -794,7 +816,10 @@ export interface CreateGroupRequest {
 export interface UpdateGroupRequest {
   name?: string
   description?: string | null
-  platform?: GroupPlatform
+  /** @deprecated 兼容旧 API；新界面应同时提交 endpoint_protocols。 */
+  platform?: LegacyGroupPlatform
+  endpoint_protocols?: EndpointProtocol[]
+  quota_platform?: string
   rate_multiplier?: number
   model_rate_multipliers?: Record<string, number>
   is_exclusive?: boolean
@@ -845,7 +870,6 @@ export interface UpdateGroupRequest {
 
 // ==================== Account & Proxy Types ====================
 
-export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'adobe' | 'cursor' | 'opencode' | 'kiro'
 export type AccountType = 'oauth' | 'setup-token' | 'apikey' | 'upstream' | 'bedrock' | 'service_account'
 export type CursorTransportMode = 'auto' | 'ide_chat' | 'cloud_agent'
 export type OAuthAddMethod = 'oauth' | 'setup-token'
@@ -1020,6 +1044,8 @@ export interface Account {
   name: string
   notes?: string | null
   platform: AccountPlatform
+  /** 由服务端根据账号供应平台、凭据与动态能力计算；客户端只读。 */
+  supported_endpoint_protocols?: EndpointProtocol[]
   type: AccountType
   // 后端响应里 credentials 已脱敏：access_token / refresh_token / id_token /
   // api_key / session_key / cookie / aws_secret_access_key / aws_session_token /
@@ -1135,6 +1161,15 @@ export interface Account {
   parent_privacy_mode?: string
   parent_subscription_expires_at?: string
   parent_chatgpt_account_id?: string
+}
+
+export interface AccountGroup {
+  account_id: number
+  group_id: number
+  /** 跨供应平台绑定经服务端校验后显式启用；旧响应可能缺省。 */
+  endpoint_compatibility_enabled?: boolean
+  account?: Account
+  group?: Group
 }
 
 export interface AccountSchedulerGroupScore {

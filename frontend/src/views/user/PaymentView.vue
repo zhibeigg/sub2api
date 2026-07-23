@@ -108,7 +108,7 @@
                     :key="group.id"
                     :class="['rounded-md border px-2 py-0.5 text-xs font-medium', platformBadgeClass(group.platform)]"
                   >
-                    {{ group.name }} · {{ platformLabel(group.platform) }} · ×{{ group.rate_multiplier }}
+                    {{ group.name }} · {{ groupEndpointLabel(group) }} · ×{{ group.rate_multiplier }}
                   </span>
                   <h3 class="w-full text-lg font-bold text-gray-900 dark:text-white">{{ selectedPlan.name }}</h3>
                 </div>
@@ -212,7 +212,7 @@
                           :key="group.id"
                           :class="['shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium', platformBadgeLightClass(group.platform)]"
                         >
-                          {{ group.name }} · {{ platformLabel(group.platform) }} · ×{{ group.rate_multiplier }}
+                          {{ group.name }} · {{ groupEndpointLabel(group) }} · ×{{ group.rate_multiplier }}
                         </span>
                         <span v-if="getSubscriptionGroups(sub).length === 0" class="truncate text-xs font-semibold text-gray-900 dark:text-white">
                           {{ t('payment.groupFallback', { id: sub.group_id }) }}
@@ -283,7 +283,7 @@ import { paymentAPI } from '@/api/payment'
 import { extractApiErrorMessage, extractI18nErrorMessage } from '@/utils/apiError'
 import { isMobileDevice } from '@/utils/device'
 import { hasPeakRate, formatPeakRateWindow, serverTimezoneLabel } from '@/utils/peak-rate'
-import type { SubscriptionPlan, CheckoutInfoResponse, CreateOrderResult, OrderType, WechatJSAPIPayload } from '@/types/payment'
+import type { SubscriptionPlan, SubscriptionPlanGroup, CheckoutInfoResponse, CreateOrderResult, OrderType, WechatJSAPIPayload } from '@/types/payment'
 import type { Group, UserSubscription } from '@/types'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import AmountInput from '@/components/payment/AmountInput.vue'
@@ -301,7 +301,8 @@ import {
   type PaymentRecoverySnapshot,
   writePaymentRecoverySnapshot,
 } from '@/components/payment/paymentFlow'
-import { platformAccentBarClass, platformBadgeLightClass, platformBadgeClass, platformTextClass, platformLabel } from '@/utils/platformColors'
+import { platformAccentBarClass, platformBadgeLightClass, platformBadgeClass, platformTextClass } from '@/utils/platformColors'
+import { ENDPOINT_PROTOCOL_REGISTRY, getGroupEndpointProtocols } from '@/constants/platforms'
 import { getEffectiveSubscriptionQuotaLimit } from '@/utils/subscriptionQuota'
 import SubscriptionPlanCard from '@/components/payment/SubscriptionPlanCard.vue'
 import PaymentStatusPanel from '@/components/payment/PaymentStatusPanel.vue'
@@ -361,6 +362,12 @@ function getDaysRemaining(expiresAt: string): number {
 function getSubscriptionGroups(subscription: UserSubscription): Group[] {
   if (subscription.groups?.length) return subscription.groups
   return subscription.group ? [subscription.group] : []
+}
+
+function groupEndpointLabel(group: Group | SubscriptionPlanGroup): string {
+  return getGroupEndpointProtocols(group)
+    .map(protocol => ENDPOINT_PROTOCOL_REGISTRY[protocol].shortLabel)
+    .join(' / ')
 }
 
 function subscriptionHasPeakRate(subscription: UserSubscription): boolean {

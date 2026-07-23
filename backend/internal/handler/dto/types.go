@@ -97,13 +97,15 @@ type APIKeyGroupBinding struct {
 }
 
 type Group struct {
-	ID             int64   `json:"id"`
-	Name           string  `json:"name"`
-	Description    string  `json:"description"`
-	Platform       string  `json:"platform"`
-	RateMultiplier float64 `json:"rate_multiplier"`
-	IsExclusive    bool    `json:"is_exclusive"`
-	Status         string  `json:"status"`
+	ID                int64    `json:"id"`
+	Name              string   `json:"name"`
+	Description       string   `json:"description"`
+	Platform          string   `json:"platform"`
+	EndpointProtocols []string `json:"endpoint_protocols"`
+	QuotaPlatform     string   `json:"quota_platform"`
+	RateMultiplier    float64  `json:"rate_multiplier"`
+	IsExclusive       bool     `json:"is_exclusive"`
+	Status            string   `json:"status"`
 
 	SubscriptionType string   `json:"subscription_type"`
 	DailyLimitUSD    *float64 `json:"daily_limit_usd"`
@@ -310,10 +312,11 @@ type Account struct {
 }
 
 type AccountGroup struct {
-	AccountID int64     `json:"account_id"`
-	GroupID   int64     `json:"group_id"`
-	Priority  int       `json:"priority"`
-	CreatedAt time.Time `json:"created_at"`
+	AccountID                    int64     `json:"account_id"`
+	GroupID                      int64     `json:"group_id"`
+	Priority                     int       `json:"priority"`
+	EndpointCompatibilityEnabled bool      `json:"endpoint_compatibility_enabled"`
+	CreatedAt                    time.Time `json:"created_at"`
 
 	Account *Account `json:"account,omitempty"`
 	Group   *Group   `json:"group,omitempty"`

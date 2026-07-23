@@ -34,7 +34,7 @@ const messages: Record<string, string> = {
   'admin.groups.columnSettings': 'Column Settings',
   'admin.groups.columns.name': 'Name',
   'admin.groups.columns.id': 'ID',
-  'admin.groups.columns.platform': 'Platform',
+  'admin.groups.columns.endpointProtocols': 'Endpoint Protocols',
   'admin.groups.columns.billingType': 'Billing Type',
   'admin.groups.columns.rateMultiplier': 'Rate Multiplier',
   'admin.groups.columns.type': 'Type',
@@ -95,6 +95,8 @@ const createGroup = (overrides: Partial<AdminGroup> = {}): AdminGroup => ({
   name: 'Core Anthropic',
   description: null,
   platform: 'anthropic',
+  endpoint_protocols: ['anthropic_messages'],
+  quota_platform: 'anthropic',
   rate_multiplier: 1,
   rpm_limit: 0,
   is_exclusive: false,
@@ -270,7 +272,7 @@ describe('admin GroupsView column settings', () => {
 
     expect(columnKeys(wrapper)).toEqual([
       'name',
-      'platform',
+      'endpoint_protocols',
       'billing_type',
       'rate_multiplier',
       'is_exclusive',
@@ -282,7 +284,7 @@ describe('admin GroupsView column settings', () => {
       'actions',
     ])
     expect(localStorage.getItem('group-hidden-columns')).toBe(JSON.stringify(['id']))
-    expect(localStorage.getItem('group-column-settings-version')).toBe('2')
+    expect(localStorage.getItem('group-column-settings-version')).toBe('3')
   })
 
   it('applies saved hidden columns on mount and ignores unknown keys', async () => {
@@ -297,7 +299,7 @@ describe('admin GroupsView column settings', () => {
     expect(columnKeys(wrapper)).toEqual([
       'name',
       'id',
-      'platform',
+      'endpoint_protocols',
       'billing_type',
       'rate_multiplier',
       'is_exclusive',
@@ -316,7 +318,7 @@ describe('admin GroupsView column settings', () => {
 
     expect(columnKeys(wrapper)).toEqual([
       'name',
-      'platform',
+      'endpoint_protocols',
       'billing_type',
       'rate_multiplier',
       'is_exclusive',
@@ -329,7 +331,7 @@ describe('admin GroupsView column settings', () => {
     expect(JSON.parse(localStorage.getItem('group-hidden-columns')!)).toEqual(
       expect.arrayContaining(['usage', 'id']),
     )
-    expect(localStorage.getItem('group-column-settings-version')).toBe('2')
+    expect(localStorage.getItem('group-column-settings-version')).toBe('3')
   })
 
   it('toggles a column and persists hidden column keys', async () => {
@@ -340,7 +342,7 @@ describe('admin GroupsView column settings', () => {
 
     expect(columnKeys(wrapper)).toEqual([
       'name',
-      'platform',
+      'endpoint_protocols',
       'billing_type',
       'rate_multiplier',
       'is_exclusive',
@@ -364,7 +366,7 @@ describe('admin GroupsView column settings', () => {
     expect(columnKeys(wrapper)).toEqual([
       'name',
       'id',
-      'platform',
+      'endpoint_protocols',
       'billing_type',
       'rate_multiplier',
       'is_exclusive',
@@ -472,5 +474,28 @@ describe('admin GroupsView column settings', () => {
       expect.arrayContaining(['id', 'predicted_capacity']),
     )
     wrapper.unmount()
+  })
+
+  it('migrates the legacy platform column preference to endpoint protocols', async () => {
+    localStorage.setItem('group-hidden-columns', JSON.stringify(['platform']))
+    localStorage.setItem('group-column-settings-version', '2')
+
+    const wrapper = await mountView()
+
+    expect(columnKeys(wrapper)).not.toContain('endpoint_protocols')
+    expect(JSON.parse(localStorage.getItem('group-hidden-columns')!)).toContain('endpoint_protocols')
+  })
+
+  it('sends endpoint_protocol membership filters to the groups API', async () => {
+    const wrapper = await mountView()
+    await wrapper.findAll('select')[0].setValue('openai_responses')
+    await flushPromises()
+
+    expect(listGroups).toHaveBeenLastCalledWith(
+      1,
+      20,
+      expect.objectContaining({ endpoint_protocol: 'openai_responses' }),
+      { signal: expect.any(AbortSignal) },
+    )
   })
 })

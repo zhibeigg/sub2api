@@ -5672,19 +5672,20 @@ func (m *AccountMutation) ResetEdge(name string) error {
 // AccountGroupMutation represents an operation that mutates the AccountGroup nodes in the graph.
 type AccountGroupMutation struct {
 	config
-	op             Op
-	typ            string
-	priority       *int
-	addpriority    *int
-	created_at     *time.Time
-	clearedFields  map[string]struct{}
-	account        *int64
-	clearedaccount bool
-	group          *int64
-	clearedgroup   bool
-	done           bool
-	oldValue       func(context.Context) (*AccountGroup, error)
-	predicates     []predicate.AccountGroup
+	op                             Op
+	typ                            string
+	priority                       *int
+	addpriority                    *int
+	endpoint_compatibility_enabled *bool
+	created_at                     *time.Time
+	clearedFields                  map[string]struct{}
+	account                        *int64
+	clearedaccount                 bool
+	group                          *int64
+	clearedgroup                   bool
+	done                           bool
+	oldValue                       func(context.Context) (*AccountGroup, error)
+	predicates                     []predicate.AccountGroup
 }
 
 var _ ent.Mutation = (*AccountGroupMutation)(nil)
@@ -5802,6 +5803,25 @@ func (m *AccountGroupMutation) ResetPriority() {
 	m.addpriority = nil
 }
 
+// SetEndpointCompatibilityEnabled sets the "endpoint_compatibility_enabled" field.
+func (m *AccountGroupMutation) SetEndpointCompatibilityEnabled(b bool) {
+	m.endpoint_compatibility_enabled = &b
+}
+
+// EndpointCompatibilityEnabled returns the value of the "endpoint_compatibility_enabled" field in the mutation.
+func (m *AccountGroupMutation) EndpointCompatibilityEnabled() (r bool, exists bool) {
+	v := m.endpoint_compatibility_enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetEndpointCompatibilityEnabled resets all changes to the "endpoint_compatibility_enabled" field.
+func (m *AccountGroupMutation) ResetEndpointCompatibilityEnabled() {
+	m.endpoint_compatibility_enabled = nil
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (m *AccountGroupMutation) SetCreatedAt(t time.Time) {
 	m.created_at = &t
@@ -5909,7 +5929,7 @@ func (m *AccountGroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AccountGroupMutation) Fields() []string {
-	fields := make([]string, 0, 4)
+	fields := make([]string, 0, 5)
 	if m.account != nil {
 		fields = append(fields, accountgroup.FieldAccountID)
 	}
@@ -5918,6 +5938,9 @@ func (m *AccountGroupMutation) Fields() []string {
 	}
 	if m.priority != nil {
 		fields = append(fields, accountgroup.FieldPriority)
+	}
+	if m.endpoint_compatibility_enabled != nil {
+		fields = append(fields, accountgroup.FieldEndpointCompatibilityEnabled)
 	}
 	if m.created_at != nil {
 		fields = append(fields, accountgroup.FieldCreatedAt)
@@ -5936,6 +5959,8 @@ func (m *AccountGroupMutation) Field(name string) (ent.Value, bool) {
 		return m.GroupID()
 	case accountgroup.FieldPriority:
 		return m.Priority()
+	case accountgroup.FieldEndpointCompatibilityEnabled:
+		return m.EndpointCompatibilityEnabled()
 	case accountgroup.FieldCreatedAt:
 		return m.CreatedAt()
 	}
@@ -5974,6 +5999,13 @@ func (m *AccountGroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPriority(v)
+		return nil
+	case accountgroup.FieldEndpointCompatibilityEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEndpointCompatibilityEnabled(v)
 		return nil
 	case accountgroup.FieldCreatedAt:
 		v, ok := value.(time.Time)
@@ -6054,6 +6086,9 @@ func (m *AccountGroupMutation) ResetField(name string) error {
 		return nil
 	case accountgroup.FieldPriority:
 		m.ResetPriority()
+		return nil
+	case accountgroup.FieldEndpointCompatibilityEnabled:
+		m.ResetEndpointCompatibilityEnabled()
 		return nil
 	case accountgroup.FieldCreatedAt:
 		m.ResetCreatedAt()
@@ -25153,6 +25188,9 @@ type GroupMutation struct {
 	status                                    *string
 	duplicate_operation_id                    *string
 	platform                                  *string
+	endpoint_protocols                        *[]string
+	appendendpoint_protocols                  []string
+	quota_platform                            *string
 	subscription_type                         *string
 	daily_limit_usd                           *float64
 	adddaily_limit_usd                        *float64
@@ -25967,6 +26005,93 @@ func (m *GroupMutation) OldPlatform(ctx context.Context) (v string, err error) {
 // ResetPlatform resets all changes to the "platform" field.
 func (m *GroupMutation) ResetPlatform() {
 	m.platform = nil
+}
+
+// SetEndpointProtocols sets the "endpoint_protocols" field.
+func (m *GroupMutation) SetEndpointProtocols(s []string) {
+	m.endpoint_protocols = &s
+	m.appendendpoint_protocols = nil
+}
+
+// EndpointProtocols returns the value of the "endpoint_protocols" field in the mutation.
+func (m *GroupMutation) EndpointProtocols() (r []string, exists bool) {
+	v := m.endpoint_protocols
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldEndpointProtocols returns the old "endpoint_protocols" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldEndpointProtocols(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldEndpointProtocols is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldEndpointProtocols requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldEndpointProtocols: %w", err)
+	}
+	return oldValue.EndpointProtocols, nil
+}
+
+// AppendEndpointProtocols adds s to the "endpoint_protocols" field.
+func (m *GroupMutation) AppendEndpointProtocols(s []string) {
+	m.appendendpoint_protocols = append(m.appendendpoint_protocols, s...)
+}
+
+// AppendedEndpointProtocols returns the list of values that were appended to the "endpoint_protocols" field in this mutation.
+func (m *GroupMutation) AppendedEndpointProtocols() ([]string, bool) {
+	if len(m.appendendpoint_protocols) == 0 {
+		return nil, false
+	}
+	return m.appendendpoint_protocols, true
+}
+
+// ResetEndpointProtocols resets all changes to the "endpoint_protocols" field.
+func (m *GroupMutation) ResetEndpointProtocols() {
+	m.endpoint_protocols = nil
+	m.appendendpoint_protocols = nil
+}
+
+// SetQuotaPlatform sets the "quota_platform" field.
+func (m *GroupMutation) SetQuotaPlatform(s string) {
+	m.quota_platform = &s
+}
+
+// QuotaPlatform returns the value of the "quota_platform" field in the mutation.
+func (m *GroupMutation) QuotaPlatform() (r string, exists bool) {
+	v := m.quota_platform
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQuotaPlatform returns the old "quota_platform" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldQuotaPlatform(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQuotaPlatform is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQuotaPlatform requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQuotaPlatform: %w", err)
+	}
+	return oldValue.QuotaPlatform, nil
+}
+
+// ResetQuotaPlatform resets all changes to the "quota_platform" field.
+func (m *GroupMutation) ResetQuotaPlatform() {
+	m.quota_platform = nil
 }
 
 // SetSubscriptionType sets the "subscription_type" field.
@@ -28633,7 +28758,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 55)
+	fields := make([]string, 0, 57)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -28678,6 +28803,12 @@ func (m *GroupMutation) Fields() []string {
 	}
 	if m.platform != nil {
 		fields = append(fields, group.FieldPlatform)
+	}
+	if m.endpoint_protocols != nil {
+		fields = append(fields, group.FieldEndpointProtocols)
+	}
+	if m.quota_platform != nil {
+		fields = append(fields, group.FieldQuotaPlatform)
 	}
 	if m.subscription_type != nil {
 		fields = append(fields, group.FieldSubscriptionType)
@@ -28837,6 +28968,10 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.DuplicateOperationID()
 	case group.FieldPlatform:
 		return m.Platform()
+	case group.FieldEndpointProtocols:
+		return m.EndpointProtocols()
+	case group.FieldQuotaPlatform:
+		return m.QuotaPlatform()
 	case group.FieldSubscriptionType:
 		return m.SubscriptionType()
 	case group.FieldDailyLimitUsd:
@@ -28956,6 +29091,10 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldDuplicateOperationID(ctx)
 	case group.FieldPlatform:
 		return m.OldPlatform(ctx)
+	case group.FieldEndpointProtocols:
+		return m.OldEndpointProtocols(ctx)
+	case group.FieldQuotaPlatform:
+		return m.OldQuotaPlatform(ctx)
 	case group.FieldSubscriptionType:
 		return m.OldSubscriptionType(ctx)
 	case group.FieldDailyLimitUsd:
@@ -29149,6 +29288,20 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPlatform(v)
+		return nil
+	case group.FieldEndpointProtocols:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetEndpointProtocols(v)
+		return nil
+	case group.FieldQuotaPlatform:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQuotaPlatform(v)
 		return nil
 	case group.FieldSubscriptionType:
 		v, ok := value.(string)
@@ -29919,6 +30072,12 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldPlatform:
 		m.ResetPlatform()
+		return nil
+	case group.FieldEndpointProtocols:
+		m.ResetEndpointProtocols()
+		return nil
+	case group.FieldQuotaPlatform:
+		m.ResetQuotaPlatform()
 		return nil
 	case group.FieldSubscriptionType:
 		m.ResetSubscriptionType()

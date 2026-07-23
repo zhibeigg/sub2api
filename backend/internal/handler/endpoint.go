@@ -277,7 +277,23 @@ func InboundEndpointMiddleware() gin.HandlerFunc {
 		if path == "" {
 			path = c.FullPath()
 		}
-		c.Set(ctxKeyInboundEndpoint, NormalizeInboundEndpoint(path))
+		normalizedEndpoint := NormalizeInboundEndpoint(path)
+		c.Set(ctxKeyInboundEndpoint, normalizedEndpoint)
+
+		// Keep the provider-independent endpoint protocol on request.Context so
+		// group resolution, scheduler snapshots and sticky-account rechecks share
+		// one canonical request descriptor. Prefer the raw path for Gemini action
+		// suffixes, then fall back to the normalized endpoint for aliases such as
+		// /messages/count_tokens.
+		if c.Request != nil {
+			protocol, ok := service.EndpointProtocolForRequestPath(path)
+			if !ok {
+				protocol, ok = service.EndpointProtocolForRequestPath(normalizedEndpoint)
+			}
+			if ok {
+				c.Request = c.Request.WithContext(service.WithEndpointProtocol(c.Request.Context(), protocol))
+			}
+		}
 		c.Next()
 	}
 }

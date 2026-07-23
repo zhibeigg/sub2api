@@ -259,6 +259,14 @@ gateway:
   # Pure-text endpoint body limit (embeddings and alpha/search), default 32 MiB.
   # 纯文本端点请求体上限（embeddings、alpha/search），默认 32 MiB。
   text_max_body_size: 33554432
+  # Route groups by their declared inbound endpoint protocols. Disable only for
+  # emergency rollback to the legacy group.platform route selection.
+  # 按分组声明的入站端点协议路由；仅在紧急回滚到旧 group.platform 路径时关闭。
+  group_endpoint_routing_enabled: true
+  # Activate account_groups.endpoint_compatibility_enabled cross-provider bindings.
+  # Keep false during schema/code rollout; enable after validating target groups.
+  # 启用已显式校验的跨供应平台绑定。部署结构与代码阶段保持 false，完成目标组验证后再开启。
+  cross_provider_compatibility_enabled: false
   # Max bytes to read for non-stream upstream responses (default: 8MB)
   # 非流式上游响应体读取上限（默认 8MB）
   upstream_response_read_max_bytes: 8388608

@@ -1752,7 +1752,7 @@ func IsMixedSchedulingCapablePlatform(platform string) bool {
 // GroupPlatformSupportsMixedScheduling 返回该分组平台是否启用混合调度候选加载。
 // Anthropic、Gemini、OpenAI 与 Grok 分组可纳入启用了 mixed_scheduling 的兼容账户。
 func GroupPlatformSupportsMixedScheduling(platform string) bool {
-	return platform == PlatformAnthropic || platform == PlatformGemini || platform == PlatformOpenAI || platform == PlatformGrok
+	return len(legacyMixedSchedulingCandidatePlatforms(platform)) > 1
 }
 
 // CursorSupportsGroupPlatform 返回 Cursor Cloud Agents 模型目录可参与的分组平台。
@@ -1763,20 +1763,9 @@ func CursorSupportsGroupPlatform(platform string) bool {
 }
 
 // MixedSchedulingCandidatePlatforms 返回指定分组在混合调度模式下需要加载的账号平台。
+// 保留旧查询集合与顺序；平台规范化和有效性由新端点协议注册表统一处理。
 func MixedSchedulingCandidatePlatforms(groupPlatform string) []string {
-	platforms := []string{groupPlatform}
-	if groupPlatform == PlatformAnthropic || groupPlatform == PlatformGemini || groupPlatform == PlatformOpenAI {
-		platforms = append(platforms, PlatformAntigravity, PlatformKiro)
-	}
-	if CursorSupportsGroupPlatform(groupPlatform) && groupPlatform != PlatformCursor {
-		platforms = append(platforms, PlatformCursor)
-	}
-	// OpenCode Go only exposes Chat Completions and Anthropic Messages upstreams;
-	// do not mix it into Gemini/Grok native groups.
-	if groupPlatform == PlatformAnthropic || groupPlatform == PlatformOpenAI {
-		platforms = append(platforms, PlatformOpenCode)
-	}
-	return platforms
+	return legacyMixedSchedulingCandidatePlatforms(groupPlatform)
 }
 
 // IsMixedSchedulingEnabled 检查账户是否启用混合调度

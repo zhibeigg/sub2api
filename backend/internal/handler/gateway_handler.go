@@ -1579,6 +1579,9 @@ func (h *GatewayHandler) resolveMultiGroupAPIKey(c *gin.Context, apiKey *service
 	}
 	group := h.gatewayService.ResolveEffectiveGroupBinding(c.Request.Context(), apiKey, requestedModel)
 	if group == nil {
+		if _, hasProtocol := service.EndpointProtocolFromContext(c.Request.Context()); hasProtocol {
+			return nil, nil
+		}
 		return apiKey, nil
 	}
 	selected := cloneAPIKeyWithGroup(apiKey, group)

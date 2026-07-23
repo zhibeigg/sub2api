@@ -22,10 +22,10 @@
               />
             </div>
             <Select
-              v-model="filters.platform"
-              :options="platformFilterOptions"
-              :placeholder="t('admin.groups.allPlatforms')"
-              class="w-44"
+              v-model="filters.endpoint_protocol"
+              :options="endpointProtocolFilterOptions"
+              :placeholder="t('admin.groups.endpointProtocols.all')"
+              class="w-56"
               @change="handleFilterChange"
             />
             <Select
@@ -134,24 +134,21 @@
             >
           </template>
 
-          <template #cell-platform="{ value }">
-            <span
-              :class="[
-                'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium',
-                value === 'anthropic'
-                  ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-                  : value === 'openai'
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                    : value === 'antigravity'
-                      ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                      : value === 'grok'
-                        ? 'bg-zinc-200 text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100'
-                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-              ]"
-            >
-              <PlatformIcon :platform="value" size="xs" />
-              {{ t("admin.groups.platforms." + value) }}
-            </span>
+          <template #cell-endpoint_protocols="{ row }">
+            <div class="flex max-w-80 flex-wrap gap-1">
+              <span
+                v-for="protocol in groupEndpointProtocols(row)"
+                :key="protocol"
+                :class="[
+                  'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
+                  ENDPOINT_PROTOCOL_REGISTRY[protocol].colorClass
+                ]"
+                :title="ENDPOINT_PROTOCOL_REGISTRY[protocol].label"
+              >
+                <Icon :name="ENDPOINT_PROTOCOL_REGISTRY[protocol].icon" size="xs" />
+                {{ ENDPOINT_PROTOCOL_REGISTRY[protocol].shortLabel }}
+              </span>
+            </div>
           </template>
 
           <template #cell-billing_type="{ row }">
@@ -500,17 +497,55 @@
           ></textarea>
         </div>
         <div>
-          <label class="input-label">{{
-            t("admin.groups.form.platform")
-          }}</label>
-          <Select
-            v-model="createForm.platform"
-            :options="platformOptions"
-            data-tour="group-form-platform"
-            @change="createForm.copy_accounts_from_group_ids = []"
-          />
-          <p class="input-hint">{{ t("admin.groups.platformHint") }}</p>
+          <label class="input-label">{{ t("admin.groups.endpointProtocols.title") }}</label>
+          <div class="grid gap-2 sm:grid-cols-2">
+            <label
+              v-for="protocol in endpointProtocolOptions"
+              :key="protocol.value"
+              :class="[
+                'flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 text-sm transition-colors',
+                createForm.endpoint_protocols.includes(protocol.value)
+                  ? protocol.selectedClass
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-300'
+              ]"
+            >
+              <input
+                v-model="createForm.endpoint_protocols"
+                type="checkbox"
+                :value="protocol.value"
+                class="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              <span class="min-w-0">
+                <span class="flex items-center gap-1.5 font-medium">
+                  <Icon :name="protocol.icon" size="xs" />
+                  {{ protocol.label }}
+                </span>
+              </span>
+            </label>
+          </div>
+          <p class="input-hint">{{ t("admin.groups.endpointProtocols.hint") }}</p>
         </div>
+        <details class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-dark-600 dark:bg-dark-800">
+          <summary class="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-200">
+            {{ t("admin.groups.endpointProtocols.compatibilitySettings") }}
+          </summary>
+          <div class="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label class="input-label">{{ t("admin.groups.form.legacyPlatform") }}</label>
+              <Select
+                v-model="createForm.platform"
+                :options="platformOptions"
+                data-tour="group-form-platform"
+                @change="handleCreateLegacyPlatformChange"
+              />
+            </div>
+            <div>
+              <label class="input-label">{{ t("admin.groups.form.quotaPlatform") }}</label>
+              <Select v-model="createForm.quota_platform" :options="quotaPlatformOptions" />
+            </div>
+          </div>
+          <p class="input-hint">{{ t("admin.groups.endpointProtocols.compatibilityHint") }}</p>
+        </details>
         <!-- 从分组复制账号 -->
         <div v-if="copyAccountsGroupOptions.length > 0">
           <div class="mb-1.5 flex items-center gap-1">
@@ -1124,7 +1159,7 @@
 
         <!-- 图片生成计费配置 -->
         <div
-          v-if="supportsImagePricingPlatform(createForm.platform)"
+          v-if="supportsEndpointCapability(createForm, 'image') || supportsImagePricingPlatform(createForm.platform)"
           class="border-t pt-4"
         >
           <label
@@ -1276,7 +1311,7 @@
 
         <!-- 视频生成计费配置（仅 Grok 平台） -->
         <div
-          v-if="supportsVideoPricingPlatform(createForm.platform)"
+          v-if="supportsEndpointCapability(createForm, 'video') || supportsVideoPricingPlatform(createForm.platform)"
           class="border-t pt-4"
         >
           <label
@@ -1415,7 +1450,7 @@
         </div>
 
         <!-- 支持的模型系列（仅 antigravity 平台） -->
-        <div v-if="createForm.platform === 'antigravity'" class="border-t pt-4">
+        <div v-if="usesLegacyRuntimeProfile(createForm, 'antigravity')" class="border-t pt-4">
           <div class="mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.supportedScopes.title") }}
@@ -1489,7 +1524,7 @@
         </div>
 
         <!-- MCP XML 协议注入（仅 antigravity 平台） -->
-        <div v-if="createForm.platform === 'antigravity'" class="border-t pt-4">
+        <div v-if="usesLegacyRuntimeProfile(createForm, 'antigravity')" class="border-t pt-4">
           <div class="mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.mcpXml.title") }}
@@ -1546,7 +1581,7 @@
         </div>
 
         <!-- Claude Code 客户端限制（仅 anthropic 平台） -->
-        <div v-if="createForm.platform === 'anthropic'" class="border-t pt-4">
+        <div v-if="usesLegacyRuntimeProfile(createForm, 'anthropic')" class="border-t pt-4">
           <div class="mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.claudeCode.title") }}
@@ -1623,7 +1658,7 @@
 
         <!-- Codex 网页搜索按次计费（仅 openai 平台） -->
         <div
-          v-if="createForm.platform === 'openai'"
+          v-if="usesLegacyRuntimeProfile(createForm, 'openai')"
           class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
         >
           <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
@@ -1658,7 +1693,7 @@
 
         <!-- OpenAI Messages 调度配置（仅 openai 平台） -->
         <div
-          v-if="createForm.platform === 'openai'"
+          v-if="usesLegacyRuntimeProfile(createForm, 'openai')"
           class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
         >
           <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
@@ -1993,7 +2028,7 @@
         </div>
 
         <!-- 模型路由配置（仅 anthropic 平台） -->
-        <div v-if="createForm.platform === 'anthropic'" class="border-t pt-4">
+        <div v-if="usesLegacyRuntimeProfile(createForm, 'anthropic')" class="border-t pt-4">
           <div class="mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.modelRouting.title") }}
@@ -2263,17 +2298,53 @@
           ></textarea>
         </div>
         <div>
-          <label class="input-label">{{
-            t("admin.groups.form.platform")
-          }}</label>
-          <Select
-            v-model="editForm.platform"
-            :options="platformOptions"
-            :disabled="true"
-            data-tour="group-form-platform"
-          />
-          <p class="input-hint">{{ t("admin.groups.platformNotEditable") }}</p>
+          <label class="input-label">{{ t("admin.groups.endpointProtocols.title") }}</label>
+          <div class="grid gap-2 sm:grid-cols-2">
+            <label
+              v-for="protocol in endpointProtocolOptions"
+              :key="protocol.value"
+              :class="[
+                'flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 text-sm transition-colors',
+                editForm.endpoint_protocols.includes(protocol.value)
+                  ? protocol.selectedClass
+                  : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-300'
+              ]"
+            >
+              <input
+                v-model="editForm.endpoint_protocols"
+                type="checkbox"
+                :value="protocol.value"
+                class="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              <span class="flex items-center gap-1.5 font-medium">
+                <Icon :name="protocol.icon" size="xs" />
+                {{ protocol.label }}
+              </span>
+            </label>
+          </div>
+          <p class="input-hint">{{ t("admin.groups.endpointProtocols.editImpactHint") }}</p>
         </div>
+        <details class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-dark-600 dark:bg-dark-800">
+          <summary class="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-200">
+            {{ t("admin.groups.endpointProtocols.compatibilitySettings") }}
+          </summary>
+          <div class="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label class="input-label">{{ t("admin.groups.form.legacyPlatform") }}</label>
+              <Select
+                v-model="editForm.platform"
+                :options="platformOptions"
+                :disabled="true"
+                data-tour="group-form-platform"
+              />
+            </div>
+            <div>
+              <label class="input-label">{{ t("admin.groups.form.quotaPlatform") }}</label>
+              <Select v-model="editForm.quota_platform" :options="quotaPlatformOptions" />
+            </div>
+          </div>
+          <p class="input-hint">{{ t("admin.groups.endpointProtocols.compatibilityHint") }}</p>
+        </details>
         <!-- 从分组复制账号（编辑时） -->
         <div v-if="copyAccountsGroupOptionsForEdit.length > 0">
           <div class="mb-1.5 flex items-center gap-1">
@@ -2891,7 +2962,7 @@
 
         <!-- 图片生成计费配置 -->
         <div
-          v-if="supportsImagePricingPlatform(editForm.platform)"
+          v-if="supportsEndpointCapability(editForm, 'image') || supportsImagePricingPlatform(editForm.platform)"
           class="border-t pt-4"
         >
           <label
@@ -3043,7 +3114,7 @@
 
         <!-- 视频生成计费配置（仅 Grok 平台） -->
         <div
-          v-if="supportsVideoPricingPlatform(editForm.platform)"
+          v-if="supportsEndpointCapability(editForm, 'video') || supportsVideoPricingPlatform(editForm.platform)"
           class="border-t pt-4"
         >
           <label
@@ -3182,7 +3253,7 @@
         </div>
 
         <!-- 支持的模型系列（仅 antigravity 平台） -->
-        <div v-if="editForm.platform === 'antigravity'" class="border-t pt-4">
+        <div v-if="usesLegacyRuntimeProfile(editForm, 'antigravity')" class="border-t pt-4">
           <div class="mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.supportedScopes.title") }}
@@ -3256,7 +3327,7 @@
         </div>
 
         <!-- MCP XML 协议注入（仅 antigravity 平台） -->
-        <div v-if="editForm.platform === 'antigravity'" class="border-t pt-4">
+        <div v-if="usesLegacyRuntimeProfile(editForm, 'antigravity')" class="border-t pt-4">
           <div class="mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.mcpXml.title") }}
@@ -3313,7 +3384,7 @@
         </div>
 
         <!-- Claude Code 客户端限制（仅 anthropic 平台） -->
-        <div v-if="editForm.platform === 'anthropic'" class="border-t pt-4">
+        <div v-if="usesLegacyRuntimeProfile(editForm, 'anthropic')" class="border-t pt-4">
           <div class="mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.claudeCode.title") }}
@@ -3386,7 +3457,7 @@
 
         <!-- Codex 网页搜索按次计费（仅 openai 平台） -->
         <div
-          v-if="editForm.platform === 'openai'"
+          v-if="usesLegacyRuntimeProfile(editForm, 'openai')"
           class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
         >
           <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
@@ -3421,7 +3492,7 @@
 
         <!-- OpenAI Messages 调度配置（仅 openai 平台） -->
         <div
-          v-if="editForm.platform === 'openai'"
+          v-if="usesLegacyRuntimeProfile(editForm, 'openai')"
           class="border-t border-gray-200 dark:border-dark-400 pt-4 mt-4"
         >
           <h4 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
@@ -3756,7 +3827,7 @@
         </div>
 
         <!-- 模型路由配置（仅 anthropic 平台） -->
-        <div v-if="editForm.platform === 'anthropic'" class="border-t pt-4">
+        <div v-if="usesLegacyRuntimeProfile(editForm, 'anthropic')" class="border-t pt-4">
           <div class="mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.modelRouting.title") }}
@@ -4031,24 +4102,17 @@
               <div class="font-medium text-gray-900 dark:text-white">
                 {{ group.name }}
               </div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">
+              <div class="mt-1 flex flex-wrap gap-1">
                 <span
+                  v-for="protocol in groupEndpointProtocols(group)"
+                  :key="protocol"
                   :class="[
                     'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
-                    group.platform === 'anthropic'
-                      ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
-                      : group.platform === 'openai'
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                        : group.platform === 'antigravity'
-                          ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                          : group.platform === 'grok'
-                            ? 'bg-zinc-200 text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100'
-                            : group.platform === 'opencode'
-                              ? 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300'
-                              : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                    ENDPOINT_PROTOCOL_REGISTRY[protocol].colorClass
                   ]"
                 >
-                  {{ t("admin.groups.platforms." + group.platform) }}
+                  <Icon :name="ENDPOINT_PROTOCOL_REGISTRY[protocol].icon" size="xs" />
+                  {{ ENDPOINT_PROTOCOL_REGISTRY[protocol].shortLabel }}
                 </span>
               </div>
             </div>
@@ -4123,12 +4187,21 @@ import { useOnboardingStore } from "@/stores/onboarding";
 import { adminAPI } from "@/api/admin";
 import type {
   AdminGroup,
+  EndpointProtocol,
   GroupPlatform,
   GroupPredictedCapacitySummary,
   PoolCapacityAlertMetric,
   SubscriptionType,
 } from "@/types";
-import { PLATFORM_ORDER, PLATFORM_REGISTRY } from "@/constants/platforms";
+import {
+  ENDPOINT_PROTOCOL_ORDER,
+  ENDPOINT_PROTOCOL_REGISTRY,
+  PLATFORM_ORDER,
+  PLATFORM_REGISTRY,
+  getGroupEndpointProtocols,
+  getLegacyGroupEndpointProtocols,
+  groupSupportsEndpointCapability,
+} from "@/constants/platforms";
 import type { Column } from "@/components/common/types";
 import AppLayout from "@/components/layout/AppLayout.vue";
 import TablePageLayout from "@/components/layout/TablePageLayout.vue";
@@ -4138,7 +4211,6 @@ import BaseDialog from "@/components/common/BaseDialog.vue";
 import ConfirmDialog from "@/components/common/ConfirmDialog.vue";
 import EmptyState from "@/components/common/EmptyState.vue";
 import Select from "@/components/common/Select.vue";
-import PlatformIcon from "@/components/common/PlatformIcon.vue";
 import Icon from "@/components/icons/Icon.vue";
 import GroupRateMultipliersModal from "@/components/admin/group/GroupRateMultipliersModal.vue";
 import GroupRPMOverridesModal from "@/components/admin/group/GroupRPMOverridesModal.vue";
@@ -4194,18 +4266,19 @@ const DEFAULT_HIDDEN_COLUMNS = ["id"];
 const HIDDEN_COLUMNS_KEY = "group-hidden-columns";
 // Bump when adding new default-hidden columns so existing admins pick them up once.
 const COLUMN_SETTINGS_VERSION_KEY = "group-column-settings-version";
-const COLUMN_SETTINGS_VERSION = 2;
+const COLUMN_SETTINGS_VERSION = 3;
 const VERSION_NEW_HIDDEN_COLUMNS: Record<number, string[]> = {
   2: ["id"],
+  3: [],
 };
 
 const allColumns = computed<Column[]>(() => [
   { key: "name", label: t("admin.groups.columns.name"), sortable: true },
   { key: "id", label: t("admin.groups.columns.id"), sortable: true },
   {
-    key: "platform",
-    label: t("admin.groups.columns.platform"),
-    sortable: true,
+    key: "endpoint_protocols",
+    label: t("admin.groups.columns.endpointProtocols"),
+    sortable: false,
   },
   {
     key: "billing_type",
@@ -4260,8 +4333,10 @@ const loadSavedColumns = () => {
 
     if (saved) {
       const parsed = JSON.parse(saved);
+      const migratedLegacyPlatformColumn = Array.isArray(parsed) && parsed.includes("platform");
       if (Array.isArray(parsed)) {
         parsed
+          .map((key) => key === "platform" ? "endpoint_protocols" : key)
           .filter(
             (key): key is string =>
               typeof key === "string" && validKeys.has(key),
@@ -4274,7 +4349,7 @@ const loadSavedColumns = () => {
         localStorage.getItem(COLUMN_SETTINGS_VERSION_KEY) ?? "1",
       );
       if (storedVersion < COLUMN_SETTINGS_VERSION) {
-        let mutated = false;
+        let mutated = migratedLegacyPlatformColumn;
         for (let v = storedVersion + 1; v <= COLUMN_SETTINGS_VERSION; v++) {
           for (const key of VERSION_NEW_HIDDEN_COLUMNS[v] ?? []) {
             if (validKeys.has(key) && !hiddenColumns.has(key)) {
@@ -4385,10 +4460,43 @@ const platformOptions = computed(() =>
   })),
 );
 
-const platformFilterOptions = computed(() => [
-  { value: "", label: t("admin.groups.allPlatforms") },
-  ...platformOptions.value,
+const quotaPlatformOptions = computed(() => [
+  { value: "", label: t("admin.groups.endpointProtocols.backendDefault") },
+  ...PLATFORM_ORDER.map((platform) => ({
+    value: platform,
+    label: PLATFORM_REGISTRY[platform].label,
+  })),
 ]);
+
+const endpointProtocolOptions = computed(() =>
+  ENDPOINT_PROTOCOL_ORDER.map((protocol) => ENDPOINT_PROTOCOL_REGISTRY[protocol]),
+);
+
+const endpointProtocolFilterOptions = computed(() => [
+  { value: "", label: t("admin.groups.endpointProtocols.all") },
+  ...endpointProtocolOptions.value.map((protocol) => ({
+    value: protocol.value,
+    label: protocol.label,
+  })),
+]);
+
+const groupEndpointProtocols = (group: AdminGroup) => getGroupEndpointProtocols(group);
+
+const supportsEndpointCapability = (
+  form: { endpoint_protocols: EndpointProtocol[]; platform: GroupPlatform },
+  capability: "text" | "embeddings" | "search" | "image" | "video" | "batch_image",
+) => groupSupportsEndpointCapability(form, capability);
+
+const usesLegacyRuntimeProfile = (
+  form: { platform: GroupPlatform },
+  platform: GroupPlatform,
+) => form.platform === platform;
+
+const handleCreateLegacyPlatformChange = () => {
+  createForm.endpoint_protocols = getLegacyGroupEndpointProtocols(createForm);
+  createForm.quota_platform = createForm.platform;
+  createForm.copy_accounts_from_group_ids = [];
+};
 
 const editStatusOptions = computed(() => [
   { value: "active", label: t("admin.accounts.status.active") },
@@ -4407,7 +4515,7 @@ const fallbackGroupOptions = computed(() => {
   ];
   const eligibleGroups = groups.value.filter(
     (g) =>
-      g.platform === "anthropic" &&
+      groupEndpointProtocols(g).includes("anthropic_messages") &&
       !g.claude_code_only &&
       g.status === "active",
   );
@@ -4425,7 +4533,7 @@ const fallbackGroupOptionsForEdit = computed(() => {
   const currentId = editingGroup.value?.id;
   const eligibleGroups = groups.value.filter(
     (g) =>
-      g.platform === "anthropic" &&
+      groupEndpointProtocols(g).includes("anthropic_messages") &&
       !g.claude_code_only &&
       g.status === "active" &&
       g.id !== currentId,
@@ -4443,7 +4551,7 @@ const invalidRequestFallbackOptions = computed(() => {
   ];
   const eligibleGroups = groups.value.filter(
     (g) =>
-      g.platform === "anthropic" &&
+      groupEndpointProtocols(g).includes("anthropic_messages") &&
       g.status === "active" &&
       g.subscription_type !== "subscription" &&
       g.fallback_group_id_on_invalid_request === null,
@@ -4462,7 +4570,7 @@ const invalidRequestFallbackOptionsForEdit = computed(() => {
   const currentId = editingGroup.value?.id;
   const eligibleGroups = groups.value.filter(
     (g) =>
-      g.platform === "anthropic" &&
+      groupEndpointProtocols(g).includes("anthropic_messages") &&
       g.status === "active" &&
       g.subscription_type !== "subscription" &&
       g.fallback_group_id_on_invalid_request === null &&
@@ -4477,7 +4585,9 @@ const invalidRequestFallbackOptionsForEdit = computed(() => {
 // 复制账号的源分组选项（创建时）- 仅包含相同平台且有账号的分组
 const copyAccountsGroupOptions = computed(() => {
   const eligibleGroups = groups.value.filter(
-    (g) => g.platform === createForm.platform && (g.account_count || 0) > 0,
+    (g) =>
+      groupEndpointProtocols(g).some((protocol) => createForm.endpoint_protocols.includes(protocol)) &&
+      (g.account_count || 0) > 0,
   );
   return eligibleGroups.map((g) => ({
     value: g.id,
@@ -4490,7 +4600,7 @@ const copyAccountsGroupOptionsForEdit = computed(() => {
   const currentId = editingGroup.value?.id;
   const eligibleGroups = groups.value.filter(
     (g) =>
-      g.platform === editForm.platform &&
+      groupEndpointProtocols(g).some((protocol) => editForm.endpoint_protocols.includes(protocol)) &&
       (g.account_count || 0) > 0 &&
       g.id !== currentId,
   );
@@ -4528,7 +4638,7 @@ const predictedCapacityMap = ref<Map<number, GroupPredictedCapacitySummary>>(
 const predictedCapacityLoading = ref(false);
 const searchQuery = ref("");
 const filters = reactive({
-  platform: "",
+  endpoint_protocol: "",
   status: "",
   is_exclusive: "",
 });
@@ -4717,6 +4827,8 @@ const createForm = reactive({
   name: "",
   description: "",
   platform: "anthropic" as GroupPlatform,
+  endpoint_protocols: getLegacyGroupEndpointProtocols({ platform: "anthropic" }),
+  quota_platform: "anthropic",
   rate_multiplier: 1.0,
   is_exclusive: false,
   subscription_type: "standard" as SubscriptionType,
@@ -5080,6 +5192,8 @@ const editForm = reactive({
   name: "",
   description: "",
   platform: "anthropic" as GroupPlatform,
+  endpoint_protocols: getLegacyGroupEndpointProtocols({ platform: "anthropic" }),
+  quota_platform: "anthropic",
   rate_multiplier: 1.0,
   is_exclusive: false,
   status: "active" as "active" | "inactive",
@@ -5385,7 +5499,7 @@ const loadGroups = async () => {
       pagination.page,
       pagination.page_size,
       {
-        platform: (filters.platform as GroupPlatform) || undefined,
+        endpoint_protocol: (filters.endpoint_protocol as EndpointProtocol) || undefined,
         status: filters.status as any,
         is_exclusive: filters.is_exclusive
           ? filters.is_exclusive === "true"
@@ -5558,6 +5672,8 @@ const closeCreateModal = () => {
   createForm.name = "";
   createForm.description = "";
   createForm.platform = "anthropic";
+  createForm.endpoint_protocols = getLegacyGroupEndpointProtocols({ platform: "anthropic" });
+  createForm.quota_platform = "anthropic";
   createForm.rate_multiplier = 1.0;
   createForm.is_exclusive = false;
   createForm.subscription_type = "standard";
@@ -5685,9 +5801,26 @@ const normalizeRateMultiplier = (
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 1;
 };
 
+const formatGroupMutationError = (error: any, fallbackKey: string): string => {
+  const data = error?.response?.data;
+  const incompatible = data?.incompatible_accounts ?? data?.details?.incompatible_accounts;
+  if (Array.isArray(incompatible) && incompatible.length > 0) {
+    const accounts = incompatible
+      .map((item: any) => item?.name || item?.email || (item?.id ? `#${item.id}` : null))
+      .filter(Boolean)
+      .join(", ");
+    return t("admin.groups.endpointProtocols.incompatibleAccounts", { accounts });
+  }
+  return data?.detail || data?.message || extractApiErrorMessage(error) || t(fallbackKey);
+};
+
 const handleCreateGroup = async () => {
   if (!createForm.name.trim()) {
     appStore.showError(t("admin.groups.nameRequired"));
+    return;
+  }
+  if (createForm.endpoint_protocols.length === 0) {
+    appStore.showError(t("admin.groups.endpointProtocols.required"));
     return;
   }
 
@@ -5794,9 +5927,7 @@ const handleCreateGroup = async () => {
       onboardingStore.nextStep(500);
     }
   } catch (error: any) {
-    appStore.showError(
-      error.response?.data?.detail || t("admin.groups.failedToCreate"),
-    );
+    appStore.showError(formatGroupMutationError(error, "admin.groups.failedToCreate"));
     console.error("Error creating group:", error);
     // Don't advance tour on error
   } finally {
@@ -5809,6 +5940,8 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.name = group.name;
   editForm.description = group.description || "";
   editForm.platform = group.platform;
+  editForm.endpoint_protocols = getGroupEndpointProtocols(group);
+  editForm.quota_platform = group.quota_platform || group.platform;
   editForm.rate_multiplier = group.rate_multiplier;
   editForm.is_exclusive = group.is_exclusive;
   editForm.status = group.status;
@@ -5920,6 +6053,10 @@ const handleUpdateGroup = async () => {
     appStore.showError(t("admin.groups.nameRequired"));
     return;
   }
+  if (editForm.endpoint_protocols.length === 0) {
+    appStore.showError(t("admin.groups.endpointProtocols.required"));
+    return;
+  }
 
   const poolCapacityAlertPolicy = validatePoolCapacityAlertPolicy(editForm);
   if (!poolCapacityAlertPolicy.ok) {
@@ -6028,9 +6165,7 @@ const handleUpdateGroup = async () => {
     closeEditModal();
     loadGroups();
   } catch (error: any) {
-    appStore.showError(
-      error.response?.data?.detail || t("admin.groups.failedToUpdate"),
-    );
+    appStore.showError(formatGroupMutationError(error, "admin.groups.failedToUpdate"));
     console.error("Error updating group:", error);
   } finally {
     submitting.value = false;
@@ -6249,6 +6384,28 @@ watch(
     if (newVal !== 'openai') {
       editForm.allow_messages_dispatch = false
       editForm.default_mapped_model = ''
+    }
+  }
+)
+
+watch(
+  () => [...createForm.endpoint_protocols],
+  (protocols) => {
+    createForm.allow_image_generation = protocols.includes('openai_images')
+    createForm.allow_batch_image_generation = protocols.includes('batch_images')
+    if (createForm.platform === 'openai') {
+      createForm.allow_messages_dispatch = protocols.includes('anthropic_messages')
+    }
+  }
+)
+
+watch(
+  () => [...editForm.endpoint_protocols],
+  (protocols) => {
+    editForm.allow_image_generation = protocols.includes('openai_images')
+    editForm.allow_batch_image_generation = protocols.includes('batch_images')
+    if (editForm.platform === 'openai') {
+      editForm.allow_messages_dispatch = protocols.includes('anthropic_messages')
     }
   }
 )

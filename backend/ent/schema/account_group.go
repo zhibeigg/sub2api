@@ -32,6 +32,9 @@ func (AccountGroup) Fields() []ent.Field {
 		field.Int64("group_id"),
 		field.Int("priority").
 			Default(50),
+		field.Bool("endpoint_compatibility_enabled").
+			Default(false).
+			Comment("是否允许该账号通过协议兼容参与此分组；默认关闭以避免意外跨协议调度"),
 		field.Time("created_at").
 			Immutable().
 			Default(time.Now).

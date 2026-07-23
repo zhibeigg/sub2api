@@ -5,10 +5,24 @@
       badgeClass
     ]"
   >
-    <!-- Platform logo -->
-    <PlatformIcon v-if="platform" :platform="platform" size="sm" />
+    <!-- Endpoint protocol icon; legacy platform logo is only a fallback for old DTOs. -->
+    <Icon
+      v-if="primaryEndpointProtocol"
+      :name="primaryEndpointProtocol.icon"
+      size="xs"
+      class="shrink-0"
+      :title="endpointProtocolTitle"
+    />
+    <PlatformIcon v-else-if="platform" :platform="platform" size="sm" />
     <!-- Group name -->
     <span class="truncate">{{ name }}</span>
+    <span
+      v-if="normalizedEndpointProtocols.length > 1"
+      class="rounded bg-black/10 px-1 py-0.5 text-[9px] font-semibold dark:bg-white/10"
+      :title="endpointProtocolTitle"
+    >
+      +{{ normalizedEndpointProtocols.length - 1 }}
+    </span>
     <!-- Right side label -->
     <span v-if="showLabel" :class="labelClass">
       <template v-if="hasCustomRate">
@@ -29,14 +43,20 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { SubscriptionType, GroupPlatform } from '@/types'
+import type { EndpointProtocol, SubscriptionType, GroupPlatform } from '@/types'
 import { useAppStore } from '@/stores/app'
 import { formatPeakRateWindow, serverTimezoneLabel } from '@/utils/peak-rate'
+import {
+  ENDPOINT_PROTOCOL_REGISTRY,
+  getGroupEndpointProtocols
+} from '@/constants/platforms'
 import PlatformIcon from './PlatformIcon.vue'
+import Icon from '@/components/icons/Icon.vue'
 
 interface Props {
   name: string
   platform?: GroupPlatform
+  endpointProtocols?: EndpointProtocol[]
   subscriptionType?: SubscriptionType
   rateMultiplier?: number
   userRateMultiplier?: number | null // 用户专属倍率
@@ -66,6 +86,17 @@ const props = withDefaults(defineProps<Props>(), {
 const { t } = useI18n()
 
 const isSubscription = computed(() => props.subscriptionType === 'subscription')
+const normalizedEndpointProtocols = computed(() => getGroupEndpointProtocols({
+  platform: props.platform,
+  endpoint_protocols: props.endpointProtocols
+}))
+const primaryEndpointProtocol = computed(() => {
+  const protocol = normalizedEndpointProtocols.value[0]
+  return protocol ? ENDPOINT_PROTOCOL_REGISTRY[protocol] : undefined
+})
+const endpointProtocolTitle = computed(() => normalizedEndpointProtocols.value
+  .map((protocol) => ENDPOINT_PROTOCOL_REGISTRY[protocol].label)
+  .join(', '))
 
 // 是否有专属倍率（且与默认倍率不同）
 const hasCustomRate = computed(() => {
@@ -171,6 +202,9 @@ const peakRateClass = computed(() => {
 
 // Badge color based on platform and subscription type
 const badgeClass = computed(() => {
+  if (primaryEndpointProtocol.value) {
+    return primaryEndpointProtocol.value.colorClass
+  }
   if (props.platform === 'anthropic') {
     // Claude: orange theme
     return isSubscription.value

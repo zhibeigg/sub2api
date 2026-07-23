@@ -49,6 +49,10 @@ type Group struct {
 	DuplicateOperationID *string `json:"duplicate_operation_id,omitempty"`
 	// Platform holds the value of the "platform" field.
 	Platform string `json:"platform,omitempty"`
+	// 分组公开入站协议集合；platform 保留为兼容期旧运行配置
+	EndpointProtocols []string `json:"endpoint_protocols,omitempty"`
+	// 分组用量归属平台；与 endpoint_protocols 解耦
+	QuotaPlatform string `json:"quota_platform,omitempty"`
 	// SubscriptionType holds the value of the "subscription_type" field.
 	SubscriptionType string `json:"subscription_type,omitempty"`
 	// DailyLimitUsd holds the value of the "daily_limit_usd" field.
@@ -323,7 +327,7 @@ func (*Group) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case group.FieldModelRateMultipliers, group.FieldModelRouting, group.FieldSupportedModelScopes, group.FieldMessagesDispatchModelConfig, group.FieldModelsListConfig:
+		case group.FieldModelRateMultipliers, group.FieldEndpointProtocols, group.FieldModelRouting, group.FieldSupportedModelScopes, group.FieldMessagesDispatchModelConfig, group.FieldModelsListConfig:
 			values[i] = new([]byte)
 		case group.FieldPeakRateEnabled, group.FieldIsExclusive, group.FieldAllowImageGeneration, group.FieldAllowBatchImageGeneration, group.FieldImageRateIndependent, group.FieldVideoRateIndependent, group.FieldClaudeCodeOnly, group.FieldModelRoutingEnabled, group.FieldMcpXMLInject, group.FieldAllowMessagesDispatch, group.FieldRequireOauthOnly, group.FieldRequirePrivacySet, group.FieldPoolCapacityAlertEnabled:
 			values[i] = new(sql.NullBool)
@@ -331,7 +335,7 @@ func (*Group) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullFloat64)
 		case group.FieldID, group.FieldDefaultValidityDays, group.FieldFallbackGroupID, group.FieldFallbackGroupIDOnInvalidRequest, group.FieldSortOrder, group.FieldRpmLimit, group.FieldPoolCapacityAlertThresholdRequests, group.FieldPoolCapacityAlertGeneration:
 			values[i] = new(sql.NullInt64)
-		case group.FieldName, group.FieldDescription, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldSubscriptionType, group.FieldDefaultMappedModel, group.FieldPoolCapacityAlertMetric:
+		case group.FieldName, group.FieldDescription, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldQuotaPlatform, group.FieldSubscriptionType, group.FieldDefaultMappedModel, group.FieldPoolCapacityAlertMetric:
 			values[i] = new(sql.NullString)
 		case group.FieldCreatedAt, group.FieldUpdatedAt, group.FieldDeletedAt:
 			values[i] = new(sql.NullTime)
@@ -450,6 +454,20 @@ func (_m *Group) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field platform", values[i])
 			} else if value.Valid {
 				_m.Platform = value.String
+			}
+		case group.FieldEndpointProtocols:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field endpoint_protocols", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.EndpointProtocols); err != nil {
+					return fmt.Errorf("unmarshal field endpoint_protocols: %w", err)
+				}
+			}
+		case group.FieldQuotaPlatform:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field quota_platform", values[i])
+			} else if value.Valid {
+				_m.QuotaPlatform = value.String
 			}
 		case group.FieldSubscriptionType:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -878,6 +896,12 @@ func (_m *Group) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("platform=")
 	builder.WriteString(_m.Platform)
+	builder.WriteString(", ")
+	builder.WriteString("endpoint_protocols=")
+	builder.WriteString(fmt.Sprintf("%v", _m.EndpointProtocols))
+	builder.WriteString(", ")
+	builder.WriteString("quota_platform=")
+	builder.WriteString(_m.QuotaPlatform)
 	builder.WriteString(", ")
 	builder.WriteString("subscription_type=")
 	builder.WriteString(_m.SubscriptionType)

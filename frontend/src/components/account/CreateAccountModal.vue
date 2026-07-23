@@ -3296,6 +3296,7 @@
           v-if="!authStore.isSimpleMode"
           v-model="form.group_ids"
           :groups="groups"
+          :supported-endpoint-protocols="createSupportedEndpointProtocols"
           :platform="form.platform"
           :mixed-scheduling="mixedScheduling"
           data-tour="account-form-groups"
@@ -3989,6 +3990,7 @@ import {
 import { formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
 import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
+import { getLegacyAccountEndpointProtocols } from '@/constants/platforms'
 import {
   OPENAI_WS_MODE_CTX_POOL,
   OPENAI_WS_MODE_OFF,
@@ -4599,6 +4601,10 @@ const form = reactive({
   group_ids: [] as number[],
   expires_at: null as number | null
 })
+
+const createSupportedEndpointProtocols = computed(() =>
+  getLegacyAccountEndpointProtocols(form.platform, mixedScheduling.value)
+)
 
 // Helper to check if current type needs OAuth flow
 const isCredentialValidationFlow = computed(() =>

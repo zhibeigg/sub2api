@@ -310,10 +310,11 @@
                       class="h-3 w-3 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                       @change="toggleGroupInSection(sIdx, group.id)"
                     />
-                    <span :class="['font-medium', platformTextClass(group.platform)]">{{ group.name }}</span>
-                    <span
-                      :class="['rounded-full px-1 py-0 text-[10px]', platformBadgeLightClass(group.platform)]"
-                    >{{ group.rate_multiplier }}x</span>
+                    <span class="font-medium text-gray-800 dark:text-gray-200">{{ group.name }}</span>
+                    <span class="truncate text-[10px] text-gray-400" :title="groupEndpointProtocolLabel(group)">
+                      {{ groupEndpointProtocolLabel(group) }}
+                    </span>
+                    <span class="rounded-full bg-gray-100 px-1 py-0 text-[10px] text-gray-600 dark:bg-dark-600 dark:text-gray-300">{{ group.rate_multiplier }}x</span>
                     <span class="text-[10px] text-gray-400">{{ group.account_count || 0 }}</span>
                     <span
                       v-if="isGroupInOtherChannel(group.id, section.platform)"
@@ -635,9 +636,13 @@ import type { Channel, ChannelModelPricing, CreateChannelRequest, UpdateChannelR
 import type { PricingFormEntry } from '@/components/admin/channel/types'
 import { mTokToPerToken, perTokenToMTok, apiIntervalsToForm, formIntervalsToAPI, findModelConflict, validateIntervals } from '@/components/admin/channel/types'
 import type { AdminGroup, GroupPlatform } from '@/types'
-import { PLATFORM_ORDER } from '@/constants/platforms'
+import {
+  ENDPOINT_PROTOCOL_REGISTRY,
+  PLATFORM_ORDER,
+  getGroupEndpointProtocols
+} from '@/constants/platforms'
 import type { Column } from '@/components/common/types'
-import { platformTextClass, platformBadgeLightClass } from '@/utils/platformColors'
+import { platformTextClass } from '@/utils/platformColors'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import TablePageLayout from '@/components/layout/TablePageLayout.vue'
 import DataTable from '@/components/common/DataTable.vue'
@@ -765,6 +770,12 @@ let abortController: AbortController | null = null
 const platformOrder: GroupPlatform[] = PLATFORM_ORDER.filter((platform): platform is GroupPlatform => platform !== 'kiro')
 
 // ── Helpers ──
+function groupEndpointProtocolLabel(group: AdminGroup): string {
+  return getGroupEndpointProtocols(group)
+    .map(protocol => ENDPOINT_PROTOCOL_REGISTRY[protocol].shortLabel)
+    .join(' / ')
+}
+
 function formatDate(value: string): string {
   if (!value) return '-'
   return new Date(value).toLocaleDateString()

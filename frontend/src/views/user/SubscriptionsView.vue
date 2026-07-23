@@ -44,7 +44,7 @@
                     :key="group.id"
                     :class="['rounded-md border px-2 py-0.5 text-[11px] font-medium', platformBadgeClass(group.platform)]"
                   >
-                    {{ group.name }} · {{ platformLabel(group.platform) }} · ×{{ group.rate_multiplier }}
+                    {{ group.name }} · {{ groupEndpointLabel(group) }} · ×{{ group.rate_multiplier }}
                   </span>
                   <span v-if="getSubscriptionGroups(subscription).length === 0" class="font-semibold text-gray-900 dark:text-white">
                     {{ `Group #${subscription.group_id}` }}
@@ -254,7 +254,8 @@ import AppLayout from '@/components/layout/AppLayout.vue'
 import Icon from '@/components/icons/Icon.vue'
 import { formatDateTimeToMinute } from '@/utils/format'
 import { hasPeakRate, formatPeakRateWindow, serverTimezoneLabel } from '@/utils/peak-rate'
-import { platformBorderClass, platformBadgeClass, platformButtonClass, platformLabel } from '@/utils/platformColors'
+import { platformBorderClass, platformBadgeClass, platformButtonClass } from '@/utils/platformColors'
+import { ENDPOINT_PROTOCOL_REGISTRY, getGroupEndpointProtocols } from '@/constants/platforms'
 import {
   getEffectiveSubscriptionQuotaLimit,
   getRemainingDurationParts,
@@ -288,6 +289,12 @@ function getSubscriptionGroups(subscription: UserSubscription): Group[] {
 
 function getPrimaryGroup(subscription: UserSubscription): Group | undefined {
   return getSubscriptionGroups(subscription)[0]
+}
+
+function groupEndpointLabel(group: Group): string {
+  return getGroupEndpointProtocols(group)
+    .map(protocol => ENDPOINT_PROTOCOL_REGISTRY[protocol].shortLabel)
+    .join(' / ')
 }
 
 function subscriptionHasPeakRate(subscription: UserSubscription): boolean {

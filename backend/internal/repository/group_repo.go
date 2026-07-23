@@ -42,6 +42,21 @@ func newGroupRepositoryWithSQL(client *dbent.Client, sqlq sqlExecutor) *groupRep
 	return &groupRepository{client: client, sql: sqlq}
 }
 
+func applyGroupEndpointPersistenceDefaults(groupIn *service.Group) {
+	if groupIn == nil {
+		return
+	}
+	if len(groupIn.EndpointProtocols) == 0 {
+		groupIn.EndpointProtocols = service.LegacyEndpointProtocols(groupIn)
+	} else {
+		groupIn.EndpointProtocols = append([]string(nil), groupIn.EndpointProtocols...)
+	}
+	groupIn.QuotaPlatform = service.NormalizePlatform(groupIn.QuotaPlatform)
+	if groupIn.QuotaPlatform == "" {
+		groupIn.QuotaPlatform = service.NormalizePlatform(groupIn.Platform)
+	}
+}
+
 func (r *groupRepository) Create(ctx context.Context, groupIn *service.Group) error {
 	if err := createGroupRecord(ctx, r.client, groupIn); err != nil {
 		return err
@@ -56,6 +71,7 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 	if groupIn == nil {
 		return errors.New("group is nil")
 	}
+	applyGroupEndpointPersistenceDefaults(groupIn)
 	policy := service.NormalizePoolCapacityAlertPolicy(groupIn.PoolCapacityAlertPolicy())
 	if policy.Metric == "" {
 		policy.Metric = service.DefaultPoolCapacityAlertMetric
@@ -75,6 +91,8 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetName(groupIn.Name).
 		SetDescription(groupIn.Description).
 		SetPlatform(groupIn.Platform).
+		SetEndpointProtocols(groupIn.EndpointProtocols).
+		SetQuotaPlatform(groupIn.QuotaPlatform).
 		SetRateMultiplier(groupIn.RateMultiplier).
 		SetModelRateMultipliers(groupIn.ModelRateMultipliers).
 		SetSortOrder(groupIn.SortOrder).
@@ -192,8 +210,8 @@ func (r *groupRepository) CreateFromSource(ctx context.Context, groupIn *service
 	}
 	result, err := txClient.ExecContext(
 		ctx,
-		`INSERT INTO account_groups (account_id, group_id, priority, created_at)
-		 SELECT ag.account_id, $2, ag.priority, NOW()
+		`INSERT INTO account_groups (account_id, group_id, priority, endpoint_compatibility_enabled, created_at)
+		 SELECT ag.account_id, $2, ag.priority, ag.endpoint_compatibility_enabled, NOW()
 		 FROM account_groups ag
 		 JOIN accounts a ON a.id = ag.account_id
 		 WHERE ag.group_id = $1
@@ -336,10 +354,13 @@ func updateGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 	if groupIn == nil {
 		return nil, errors.New("group is nil")
 	}
+	applyGroupEndpointPersistenceDefaults(groupIn)
 	builder := client.Group.UpdateOneID(groupIn.ID).
 		SetName(groupIn.Name).
 		SetDescription(groupIn.Description).
 		SetPlatform(groupIn.Platform).
+		SetEndpointProtocols(groupIn.EndpointProtocols).
+		SetQuotaPlatform(groupIn.QuotaPlatform).
 		SetRateMultiplier(groupIn.RateMultiplier).
 		SetModelRateMultipliers(groupIn.ModelRateMultipliers).
 		SetIsExclusive(groupIn.IsExclusive).
@@ -1081,8 +1102,8 @@ func (r *groupRepository) BindAccountsToGroup(ctx context.Context, groupID int64
 	// 使用 INSERT ... ON CONFLICT DO NOTHING 忽略已存在的绑定
 	_, err := r.sql.ExecContext(
 		ctx,
-		`INSERT INTO account_groups (account_id, group_id, priority, created_at)
-		 SELECT unnest($1::bigint[]), $2, 50, NOW()
+		`INSERT INTO account_groups (account_id, group_id, priority, endpoint_compatibility_enabled, created_at)
+		 SELECT unnest($1::bigint[]), $2, 50, FALSE, NOW()
 		 ON CONFLICT (account_id, group_id) DO NOTHING`,
 		pq.Array(accountIDs),
 		groupID,

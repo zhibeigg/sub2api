@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -136,6 +137,53 @@ func RequireGroupAssignment(settingService *service.SettingService, writeError G
 		service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonAPIKeyGroupUnassigned)
 		MarkIngressRejected(c, IngressRejectGroupUnassigned)
 		writeError(c, http.StatusForbidden, "API Key is not assigned to any group and cannot be used. Please contact the administrator to assign it to a group.")
+		c.Abort()
+	}
+}
+
+// RequireEndpointProtocol enforces groups.endpoint_protocols for single,
+// explicitly selected and aggregate API keys before a handler chooses any
+// provider-specific forwarding path. Auxiliary endpoints without a registered
+// ingress protocol keep their existing derived-capability behavior.
+func RequireEndpointProtocol(cfg *config.Config, writeError GatewayErrorWriter) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if cfg == nil || !cfg.Gateway.GroupEndpointRoutingEnabled || c.Request == nil {
+			c.Next()
+			return
+		}
+		protocol, ok := service.EndpointProtocolFromContext(c.Request.Context())
+		if !ok {
+			c.Next()
+			return
+		}
+		apiKey, ok := GetAPIKeyFromContext(c)
+		if !ok || apiKey == nil {
+			c.Next()
+			return
+		}
+
+		allowed := false
+		if !apiKey.ExplicitGroupSelection && len(apiKey.GroupBindings) > 0 {
+			for i := range apiKey.GroupBindings {
+				binding := apiKey.GroupBindings[i]
+				if binding.Group != nil && apiKey.AllowsGroupByUserRestriction(binding.Group) && service.GroupAllowsEndpoint(binding.Group, protocol) {
+					allowed = true
+					break
+				}
+			}
+		} else if apiKey.Group == nil && apiKey.GroupID == nil {
+			// Ungrouped-key policy remains owned by RequireGroupAssignment.
+			allowed = true
+		} else {
+			allowed = service.GroupAllowsEndpoint(apiKey.Group, protocol)
+		}
+		if allowed {
+			c.Next()
+			return
+		}
+
+		service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonLocalFeatureGate)
+		writeError(c, http.StatusForbidden, "The selected API key group does not allow this endpoint protocol.")
 		c.Abort()
 	}
 }

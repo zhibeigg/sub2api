@@ -34,6 +34,7 @@
               :key="group.id"
               :name="group.name"
               :platform="asGroupPlatform(group.platform)"
+              :endpoint-protocols="group.endpoint_protocols"
               :rate-multiplier="group.rate_multiplier"
             />
           </div>

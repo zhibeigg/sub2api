@@ -5,11 +5,14 @@
 
 import { apiClient } from './client'
 import type { BillingMode } from '@/constants/channel'
+import type { EndpointProtocol } from '@/types'
 
 export interface UserAvailableGroup {
   id: number
   name: string
   platform: string
+  endpoint_protocols?: EndpointProtocol[]
+  quota_platform?: string
   /** 'standard' | 'subscription' — 订阅分组视觉加深，和 API 密钥页保持一致。 */
   subscription_type: string
   /** 分组基础倍率；详情价格优先使用 supported_models[].group_rates 的后端快照。 */

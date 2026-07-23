@@ -325,6 +325,7 @@
                       v-if="option"
                       :name="(option as unknown as GroupOption).label"
                       :platform="(option as unknown as GroupOption).platform"
+                      :endpoint-protocols="(option as unknown as GroupOption).endpointProtocols"
                       :subscription-type="(option as unknown as GroupOption).subscriptionType"
                       :rate-multiplier="(option as unknown as GroupOption).rate"
                     />
@@ -336,6 +337,7 @@
                     <GroupOptionItem
                       :name="(option as unknown as GroupOption).label"
                       :platform="(option as unknown as GroupOption).platform"
+                      :endpoint-protocols="(option as unknown as GroupOption).endpointProtocols"
                       :subscription-type="(option as unknown as GroupOption).subscriptionType"
                       :rate-multiplier="(option as unknown as GroupOption).rate"
                       :description="(option as unknown as GroupOption).description"
@@ -620,6 +622,7 @@ import type {
   RedeemCode,
   RedeemCodeType,
   Group,
+  EndpointProtocol,
   GroupPlatform,
   SubscriptionType,
   BatchUpdateRedeemCodeFields
@@ -644,6 +647,7 @@ interface GroupOption {
   label: string
   description: string | null
   platform: GroupPlatform
+  endpointProtocols: EndpointProtocol[]
   subscriptionType: SubscriptionType
   rate: number
 }
@@ -662,6 +666,7 @@ const subscriptionGroupOptions = computed(() => {
       label: g.name,
       description: g.description,
       platform: g.platform,
+      endpointProtocols: g.endpoint_protocols,
       subscriptionType: g.subscription_type,
       rate: g.rate_multiplier
     }))

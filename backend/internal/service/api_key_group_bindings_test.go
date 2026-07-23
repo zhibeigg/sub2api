@@ -18,7 +18,7 @@ func TestAPIKeyService_SnapshotRoundTripPreservesGroupBindings(t *testing.T) {
 		Status: StatusActive,
 		User:   &User{ID: 2, Status: StatusActive, Role: RoleUser},
 		GroupBindings: []APIKeyGroupBinding{
-			{GroupID: g1, Priority: 0, Group: &Group{ID: g1, Name: "国模", Platform: PlatformOpenAI, Status: StatusActive, SubscriptionType: SubscriptionTypeStandard, RateMultiplier: 0.4}},
+			{GroupID: g1, Priority: 0, Group: &Group{ID: g1, Name: "国模", Platform: PlatformOpenAI, EndpointProtocols: []string{string(EndpointProtocolOpenAIChatCompletions), string(EndpointProtocolOpenAIResponses)}, QuotaPlatform: PlatformOpenAI, Status: StatusActive, SubscriptionType: SubscriptionTypeStandard, RateMultiplier: 0.4}},
 			{GroupID: g2, Priority: 1, Group: &Group{ID: g2, Name: "GPT", Platform: PlatformOpenAI, Status: StatusActive, SubscriptionType: SubscriptionTypeStandard, RateMultiplier: 0.2}},
 		},
 	}
@@ -49,6 +49,12 @@ func TestAPIKeyService_SnapshotRoundTripPreservesGroupBindings(t *testing.T) {
 	}
 	if restored.GroupBindings[0].Group == nil || restored.GroupBindings[0].Group.Name != "国模" {
 		t.Fatalf("binding[0] group not restored: %+v", restored.GroupBindings[0].Group)
+	}
+	if got := restored.GroupBindings[0].Group.EndpointProtocols; len(got) != 2 || got[0] != string(EndpointProtocolOpenAIChatCompletions) || got[1] != string(EndpointProtocolOpenAIResponses) {
+		t.Fatalf("binding[0] endpoint protocols not restored: %v", got)
+	}
+	if got := restored.GroupBindings[0].Group.QuotaPlatform; got != PlatformOpenAI {
+		t.Fatalf("binding[0] quota platform = %q, want %q", got, PlatformOpenAI)
 	}
 }
 

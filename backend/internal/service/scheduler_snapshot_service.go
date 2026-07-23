@@ -1459,12 +1459,53 @@ func (s *SchedulerSnapshotService) loadAccountsFromDB(ctx context.Context, bucke
 		if err != nil {
 			return nil, err
 		}
+		var groupPlatform string
+		if groupID > 0 && s.groupRepo != nil {
+			if group, groupErr := s.groupRepo.GetByIDLite(ctx, groupID); groupErr == nil && group != nil {
+				groupPlatform = NormalizePlatform(group.Platform)
+			}
+		}
 		filtered := make([]Account, 0, len(accounts))
+		crossProviderEnabled := s != nil && s.cfg != nil && s.cfg.Gateway.CrossProviderCompatibilityEnabled
 		for _, acc := range accounts {
-			if IsMixedSchedulingCapablePlatform(acc.Platform) && !acc.IsMixedSchedulingEnabled() {
+			// A provider-native binding remains valid even when this snapshot is
+			// built under a compatibility execution bucket (for example an
+			// opencode group routed through the OpenAI-compatible coordinator).
+			if groupPlatform != "" && NormalizePlatform(acc.Platform) == groupPlatform {
+				filtered = append(filtered, acc)
 				continue
 			}
-			filtered = append(filtered, acc)
+
+			hasBinding := false
+			compatibilityEnabled := false
+			for i := range acc.AccountGroups {
+				if acc.AccountGroups[i].GroupID == groupID {
+					hasBinding = true
+					compatibilityEnabled = acc.AccountGroups[i].EndpointCompatibilityEnabled
+					break
+				}
+			}
+			if !hasBinding && groupID > 0 {
+				for _, boundGroupID := range acc.GroupIDs {
+					if boundGroupID == groupID {
+						hasBinding = true
+						break
+					}
+				}
+			}
+			if hasBinding {
+				if compatibilityEnabled && crossProviderEnabled {
+					filtered = append(filtered, acc)
+				}
+				continue
+			}
+
+			// Legacy account-level mixed scheduling is retained only when there is
+			// no concrete account_groups relation whose disabled policy could be
+			// bypassed (primarily ungrouped/simple mode).
+			if IsMixedSchedulingCapablePlatform(acc.Platform) && acc.IsMixedSchedulingEnabled() {
+				filtered = append(filtered, acc)
+			}
 		}
 		return filtered, nil
 	}

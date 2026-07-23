@@ -224,6 +224,26 @@ func (_c *GroupCreate) SetNillablePlatform(v *string) *GroupCreate {
 	return _c
 }
 
+// SetEndpointProtocols sets the "endpoint_protocols" field.
+func (_c *GroupCreate) SetEndpointProtocols(v []string) *GroupCreate {
+	_c.mutation.SetEndpointProtocols(v)
+	return _c
+}
+
+// SetQuotaPlatform sets the "quota_platform" field.
+func (_c *GroupCreate) SetQuotaPlatform(v string) *GroupCreate {
+	_c.mutation.SetQuotaPlatform(v)
+	return _c
+}
+
+// SetNillableQuotaPlatform sets the "quota_platform" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableQuotaPlatform(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetQuotaPlatform(*v)
+	}
+	return _c
+}
+
 // SetSubscriptionType sets the "subscription_type" field.
 func (_c *GroupCreate) SetSubscriptionType(v string) *GroupCreate {
 	_c.mutation.SetSubscriptionType(v)
@@ -1005,6 +1025,14 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultPlatform
 		_c.mutation.SetPlatform(v)
 	}
+	if _, ok := _c.mutation.EndpointProtocols(); !ok {
+		v := group.DefaultEndpointProtocols
+		_c.mutation.SetEndpointProtocols(v)
+	}
+	if _, ok := _c.mutation.QuotaPlatform(); !ok {
+		v := group.DefaultQuotaPlatform
+		_c.mutation.SetQuotaPlatform(v)
+	}
 	if _, ok := _c.mutation.SubscriptionType(); !ok {
 		v := group.DefaultSubscriptionType
 		_c.mutation.SetSubscriptionType(v)
@@ -1178,6 +1206,17 @@ func (_c *GroupCreate) check() error {
 	if v, ok := _c.mutation.Platform(); ok {
 		if err := group.PlatformValidator(v); err != nil {
 			return &ValidationError{Name: "platform", err: fmt.Errorf(`ent: validator failed for field "Group.platform": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.EndpointProtocols(); !ok {
+		return &ValidationError{Name: "endpoint_protocols", err: errors.New(`ent: missing required field "Group.endpoint_protocols"`)}
+	}
+	if _, ok := _c.mutation.QuotaPlatform(); !ok {
+		return &ValidationError{Name: "quota_platform", err: errors.New(`ent: missing required field "Group.quota_platform"`)}
+	}
+	if v, ok := _c.mutation.QuotaPlatform(); ok {
+		if err := group.QuotaPlatformValidator(v); err != nil {
+			return &ValidationError{Name: "quota_platform", err: fmt.Errorf(`ent: validator failed for field "Group.quota_platform": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.SubscriptionType(); !ok {
@@ -1359,6 +1398,14 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Platform(); ok {
 		_spec.SetField(group.FieldPlatform, field.TypeString, value)
 		_node.Platform = value
+	}
+	if value, ok := _c.mutation.EndpointProtocols(); ok {
+		_spec.SetField(group.FieldEndpointProtocols, field.TypeJSON, value)
+		_node.EndpointProtocols = value
+	}
+	if value, ok := _c.mutation.QuotaPlatform(); ok {
+		_spec.SetField(group.FieldQuotaPlatform, field.TypeString, value)
+		_node.QuotaPlatform = value
 	}
 	if value, ok := _c.mutation.SubscriptionType(); ok {
 		_spec.SetField(group.FieldSubscriptionType, field.TypeString, value)
@@ -1933,6 +1980,30 @@ func (u *GroupUpsert) SetPlatform(v string) *GroupUpsert {
 // UpdatePlatform sets the "platform" field to the value that was provided on create.
 func (u *GroupUpsert) UpdatePlatform() *GroupUpsert {
 	u.SetExcluded(group.FieldPlatform)
+	return u
+}
+
+// SetEndpointProtocols sets the "endpoint_protocols" field.
+func (u *GroupUpsert) SetEndpointProtocols(v []string) *GroupUpsert {
+	u.Set(group.FieldEndpointProtocols, v)
+	return u
+}
+
+// UpdateEndpointProtocols sets the "endpoint_protocols" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateEndpointProtocols() *GroupUpsert {
+	u.SetExcluded(group.FieldEndpointProtocols)
+	return u
+}
+
+// SetQuotaPlatform sets the "quota_platform" field.
+func (u *GroupUpsert) SetQuotaPlatform(v string) *GroupUpsert {
+	u.Set(group.FieldQuotaPlatform, v)
+	return u
+}
+
+// UpdateQuotaPlatform sets the "quota_platform" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateQuotaPlatform() *GroupUpsert {
+	u.SetExcluded(group.FieldQuotaPlatform)
 	return u
 }
 
@@ -2887,6 +2958,34 @@ func (u *GroupUpsertOne) SetPlatform(v string) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdatePlatform() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdatePlatform()
+	})
+}
+
+// SetEndpointProtocols sets the "endpoint_protocols" field.
+func (u *GroupUpsertOne) SetEndpointProtocols(v []string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetEndpointProtocols(v)
+	})
+}
+
+// UpdateEndpointProtocols sets the "endpoint_protocols" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateEndpointProtocols() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateEndpointProtocols()
+	})
+}
+
+// SetQuotaPlatform sets the "quota_platform" field.
+func (u *GroupUpsertOne) SetQuotaPlatform(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQuotaPlatform(v)
+	})
+}
+
+// UpdateQuotaPlatform sets the "quota_platform" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateQuotaPlatform() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQuotaPlatform()
 	})
 }
 
@@ -4123,6 +4222,34 @@ func (u *GroupUpsertBulk) SetPlatform(v string) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdatePlatform() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdatePlatform()
+	})
+}
+
+// SetEndpointProtocols sets the "endpoint_protocols" field.
+func (u *GroupUpsertBulk) SetEndpointProtocols(v []string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetEndpointProtocols(v)
+	})
+}
+
+// UpdateEndpointProtocols sets the "endpoint_protocols" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateEndpointProtocols() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateEndpointProtocols()
+	})
+}
+
+// SetQuotaPlatform sets the "quota_platform" field.
+func (u *GroupUpsertBulk) SetQuotaPlatform(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetQuotaPlatform(v)
+	})
+}
+
+// UpdateQuotaPlatform sets the "quota_platform" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateQuotaPlatform() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateQuotaPlatform()
 	})
 }
 

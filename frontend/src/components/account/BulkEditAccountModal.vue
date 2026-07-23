@@ -1182,6 +1182,7 @@
           <GroupSelector
             v-model="groupIds"
             :groups="groups"
+            :supported-endpoint-protocols="commonSupportedEndpointProtocols"
             aria-labelledby="bulk-edit-groups-label"
           />
         </div>
@@ -1244,7 +1245,15 @@ import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { adminAPI } from '@/api/admin'
-import type { Proxy as ProxyConfig, AdminGroup, AccountPlatform, AccountType, OpenAICompactMode } from '@/types'
+import type {
+  Account,
+  Proxy as ProxyConfig,
+  AdminGroup,
+  AccountPlatform,
+  AccountType,
+  EndpointProtocol,
+  OpenAICompactMode
+} from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
@@ -1266,6 +1275,7 @@ import {
   type HeaderOverrideRow
 } from '@/components/account/credentialsBuilder'
 import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
+import { getLegacyAccountEndpointProtocols } from '@/constants/platforms'
 import {
   OPENAI_WS_MODE_CTX_POOL,
   OPENAI_WS_MODE_OFF,
@@ -1278,6 +1288,7 @@ import type { OpenAIWSMode } from '@/utils/openaiWsMode'
 interface Props {
   show: boolean
   accountIds: number[]
+  selectedAccounts?: Account[]
   selectedPlatforms: AccountPlatform[]
   selectedTypes: AccountType[]
   target?: {
@@ -1305,6 +1316,22 @@ const targetMode = computed(() => props.target?.mode ?? 'selected')
 const targetPreviewCount = computed(() => props.target?.previewCount ?? props.accountIds.length)
 const targetSelectedPlatforms = computed(() => props.target?.selectedPlatforms ?? props.selectedPlatforms)
 const targetSelectedTypes = computed(() => props.target?.selectedTypes ?? props.selectedTypes)
+const commonSupportedEndpointProtocols = computed<EndpointProtocol[]>(() => {
+  const protocolSets = props.selectedAccounts?.length
+    ? props.selectedAccounts.map((account) => {
+        const serverProtocols = account.supported_endpoint_protocols
+        return serverProtocols && serverProtocols.length > 0
+          ? serverProtocols
+          : getLegacyAccountEndpointProtocols(account.platform)
+      })
+    : targetSelectedPlatforms.value.map((platform) => getLegacyAccountEndpointProtocols(platform))
+
+  if (protocolSets.length === 0) return []
+  return protocolSets.slice(1).reduce(
+    (common, protocols) => common.filter((protocol) => protocols.includes(protocol)),
+    [...protocolSets[0]]
+  )
+})
 // Grok 快捷端点仅在所选账号全部为 grok 平台时展示（其他平台不显示）
 const allTargetsGrok = computed(
   () =>

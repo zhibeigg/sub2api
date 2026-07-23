@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 21 // v21: include group pool-capacity alert metric and thresholds
+const apiKeyAuthSnapshotVersion = 22 // v22: include group endpoint/quota semantics in auth snapshots
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -406,6 +406,8 @@ func groupToAuthSnapshot(g *Group) *APIKeyAuthGroupSnapshot {
 		ID:                                 g.ID,
 		Name:                               g.Name,
 		Platform:                           g.Platform,
+		EndpointProtocols:                  append([]string(nil), g.EndpointProtocols...),
+		QuotaPlatform:                      g.QuotaPlatform,
 		IsExclusive:                        g.IsExclusive,
 		Status:                             g.Status,
 		SubscriptionType:                   g.SubscriptionType,
@@ -518,6 +520,8 @@ func groupFromAuthSnapshot(g *APIKeyAuthGroupSnapshot) *Group {
 		ID:                                 g.ID,
 		Name:                               g.Name,
 		Platform:                           g.Platform,
+		EndpointProtocols:                  append([]string(nil), g.EndpointProtocols...),
+		QuotaPlatform:                      g.QuotaPlatform,
 		IsExclusive:                        g.IsExclusive,
 		Status:                             g.Status,
 		Hydrated:                           true,

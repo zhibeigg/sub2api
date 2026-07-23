@@ -259,6 +259,9 @@ func (s *AccountService) Create(ctx context.Context, req CreateAccountRequest) (
 	} else {
 		account.AutoPauseOnExpired = true
 	}
+	if _, err := BuildCompatibleAccountGroupBindings(ctx, s.groupRepo, account, req.GroupIDs); err != nil {
+		return nil, err
+	}
 
 	if err := s.accountRepo.Create(ctx, account); err != nil {
 		return nil, fmt.Errorf("create account: %w", err)
@@ -279,7 +282,7 @@ func (s *AccountService) Create(ctx context.Context, req CreateAccountRequest) (
 
 	// 绑定分组
 	if len(req.GroupIDs) > 0 {
-		if err := s.accountRepo.BindGroups(ctx, account.ID, req.GroupIDs); err != nil {
+		if err := BindCompatibleAccountGroups(ctx, s.accountRepo, account, s.groupRepo, req.GroupIDs); err != nil {
 			return nil, fmt.Errorf("bind groups: %w", err)
 		}
 	}
@@ -390,6 +393,9 @@ func (s *AccountService) Update(ctx context.Context, id int64, req UpdateAccount
 		if err := s.validateGroupIDsExist(ctx, *req.GroupIDs); err != nil {
 			return nil, err
 		}
+		if _, err := BuildCompatibleAccountGroupBindings(ctx, s.groupRepo, account, *req.GroupIDs); err != nil {
+			return nil, err
+		}
 	}
 
 	// 执行更新
@@ -412,7 +418,7 @@ func (s *AccountService) Update(ctx context.Context, id int64, req UpdateAccount
 
 	// 绑定分组
 	if req.GroupIDs != nil {
-		if err := s.accountRepo.BindGroups(ctx, account.ID, *req.GroupIDs); err != nil {
+		if err := BindCompatibleAccountGroups(ctx, s.accountRepo, account, s.groupRepo, *req.GroupIDs); err != nil {
 			return nil, fmt.Errorf("bind groups: %w", err)
 		}
 	}

@@ -2712,6 +2712,7 @@
         v-if="!authStore.isSimpleMode"
         v-model="form.group_ids"
         :groups="groups"
+        :supported-endpoint-protocols="editSupportedEndpointProtocols"
         :platform="account?.platform"
         :mixed-scheduling="mixedScheduling"
         data-tour="account-form-groups"
@@ -2841,6 +2842,7 @@ import {
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
 import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
+import { getLegacyAccountEndpointProtocols } from '@/constants/platforms'
 import {
   OPENAI_WS_MODE_CTX_POOL,
   OPENAI_WS_MODE_OFF,
@@ -3252,6 +3254,12 @@ const autoPause5hDisabled = ref(false)
 const autoPause7dDisabled = ref(false)
 const upstreamBillingAutoProbeEnabled = ref(false)
 const mixedScheduling = ref(false) // For antigravity accounts: enable mixed scheduling
+const editSupportedEndpointProtocols = computed(() => {
+  const serverProtocols = props.account?.supported_endpoint_protocols
+  return serverProtocols && serverProtocols.length > 0
+    ? serverProtocols
+    : getLegacyAccountEndpointProtocols(props.account?.platform, mixedScheduling.value)
+})
 const allowOverages = ref(false) // For antigravity accounts: enable AI Credits overages
 const antigravityProjectId = ref('')
 const antigravityModelRestrictionMode = ref<'whitelist' | 'mapping'>('whitelist')

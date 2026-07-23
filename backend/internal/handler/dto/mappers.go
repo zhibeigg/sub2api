@@ -190,6 +190,8 @@ func groupFromServiceBase(g *service.Group) Group {
 		Name:                            g.Name,
 		Description:                     g.Description,
 		Platform:                        g.Platform,
+		EndpointProtocols:               append([]string(nil), g.EndpointProtocols...),
+		QuotaPlatform:                   g.QuotaPlatform,
 		RateMultiplier:                  g.RateMultiplier,
 		IsExclusive:                     g.IsExclusive,
 		Status:                          g.Status,
@@ -434,12 +436,13 @@ func AccountGroupFromService(ag *service.AccountGroup) *AccountGroup {
 		return nil
 	}
 	return &AccountGroup{
-		AccountID: ag.AccountID,
-		GroupID:   ag.GroupID,
-		Priority:  ag.Priority,
-		CreatedAt: ag.CreatedAt,
-		Account:   AccountFromServiceShallow(ag.Account),
-		Group:     GroupFromServiceShallow(ag.Group),
+		AccountID:                    ag.AccountID,
+		GroupID:                      ag.GroupID,
+		Priority:                     ag.Priority,
+		EndpointCompatibilityEnabled: ag.EndpointCompatibilityEnabled,
+		CreatedAt:                    ag.CreatedAt,
+		Account:                      AccountFromServiceShallow(ag.Account),
+		Group:                        GroupFromServiceShallow(ag.Group),
 	}
 }
 

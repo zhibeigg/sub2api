@@ -83,28 +83,36 @@ type postUsageBillingParams struct {
 	StrictFunds           bool   // 媒体快照结算：余额/订阅/API key 配额不足时事务回滚并允许重试
 }
 
-// PlatformFromAPIKey 从 APIKey 关联的 Group 推导 platform 名称。
-// apiKey 为 nil 或 Group 信息缺失时返回空串（调用方据此 short-circuit quota 累加）。
-// 导出供 handler 层调用。
+// PlatformFromAPIKey returns the quota/reporting platform attributed to the
+// selected group. Endpoint routing and the selected account provider must not
+// silently move existing usage into another user-platform quota bucket.
+// Legacy groups fall back to platform until quota_platform is backfilled.
 func PlatformFromAPIKey(apiKey *APIKey) string {
 	if apiKey == nil || apiKey.Group == nil {
 		return ""
 	}
-	return apiKey.Group.Platform
+	if quotaPlatform := strings.TrimSpace(apiKey.Group.QuotaPlatform); quotaPlatform != "" {
+		return quotaPlatform
+	}
+	return strings.TrimSpace(apiKey.Group.Platform)
 }
 
 // QuotaPlatform 返回 user×platform 配额计量使用的平台标识。
-// 强制平台路由（如 /antigravity）优先按 ctx 中的 ForcePlatform 计量，否则回退到
-// APIKey 关联 Group 的平台。
+// 已选分组的 quota_platform 是权威口径；ForcePlatform 只改变上游供应商，
+// 仅在请求没有分组配额命名空间时作为兜底。
 //
 // 注意：必须用带 ForcePlatform 的请求 context 调用（如 handler 的 c.Request.Context()）。
 // 后扣运行在 worker 池的 background ctx 上没有 ForcePlatform，因此后扣平台由 handler
 // 预先算定、经 RecordUsageInput.QuotaPlatform 传入，不要在后扣链路用 worker ctx 调用本函数。
 func QuotaPlatform(ctx context.Context, apiKey *APIKey) string {
+	if platform := PlatformFromAPIKey(apiKey); platform != "" {
+		return platform
+	}
+	// Ungrouped/internal forced routes have no group quota namespace to preserve.
 	if fp, ok := ctx.Value(ctxkey.ForcePlatform).(string); ok && fp != "" {
 		return fp
 	}
-	return PlatformFromAPIKey(apiKey)
+	return ""
 }
 
 func (p *postUsageBillingParams) shouldDeductAPIKeyQuota() bool {
@@ -711,8 +719,13 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 		requestedModel = input.OriginalModel
 	}
 
-	// 计算费用；账号平台用于选择 Cursor 等平台专属默认定价。
-	cost := s.calculateRecordUsageCost(ctx, result, apiKey, billingModel, account.Platform, multiplier, imageMultiplier, opts)
+	// 计算费用；分组 quota_platform 保持既有用户计价命名空间，最终账号平台
+	// 仅用于上游适配和账号成本统计，不能因跨供应调度静默改变用户价格。
+	pricingPlatform := QuotaPlatform(ctx, apiKey)
+	if pricingPlatform == "" {
+		pricingPlatform = account.Platform
+	}
+	cost := s.calculateRecordUsageCost(ctx, result, apiKey, billingModel, pricingPlatform, multiplier, imageMultiplier, opts)
 
 	// 判断计费方式：订阅模式 vs 余额模式
 	isSubscriptionBilling := subscription != nil && apiKey.Group != nil

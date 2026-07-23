@@ -268,7 +268,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 				}
 				continue
 			}
-			if !s.isAccountAllowedForPlatform(account, platform, useMixed) {
+			if !s.isAccountAllowedForPlatformWithContext(ctx, account, platform, useMixed) {
 				filteredPlatform++
 				continue
 			}
@@ -323,7 +323,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 						var stickyCacheMissReason string
 
 						gatePass := s.isAccountSchedulableForSelection(stickyAccount) &&
-							s.isAccountAllowedForPlatform(stickyAccount, platform, useMixed) &&
+							s.isAccountAllowedForPlatformWithContext(ctx, stickyAccount, platform, useMixed) &&
 							(requestedModel == "" || s.isModelSupportedByAccountWithContext(ctx, stickyAccount, requestedModel)) &&
 							s.isAccountSchedulableForModelSelection(ctx, stickyAccount, requestedModel) &&
 							s.isAccountSchedulableForQuota(stickyAccount) &&
@@ -506,7 +506,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 				// 注意：不再检查 isAccountInGroup，因为 accountByID 已经从按分组过滤的
 				// accounts 列表构建，账号一定在分组内。而 scheduler snapshot 缓存
 				// 反序列化后 AccountGroups 字段为空，导致 isAccountInGroup 永远返回 false。
-				platformOK := s.isAccountAllowedForPlatform(account, platform, useMixed)
+				platformOK := s.isAccountAllowedForPlatformWithContext(ctx, account, platform, useMixed)
 				modelSupported := requestedModel == "" || s.isModelSupportedByAccountWithContext(ctx, account, requestedModel)
 				modelSchedulable := s.isAccountSchedulableForModelSelection(ctx, account, requestedModel)
 				quotaOK := s.isAccountSchedulableForQuota(account)
@@ -623,7 +623,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 		if !s.isAccountSchedulableForSelection(acc) {
 			continue
 		}
-		if !s.isAccountAllowedForPlatform(acc, platform, useMixed) {
+		if !s.isAccountAllowedForPlatformWithContext(ctx, acc, platform, useMixed) {
 			continue
 		}
 		if requestedModel != "" && !s.isModelSupportedByAccountWithContext(ctx, acc, requestedModel) {
@@ -1020,6 +1020,51 @@ func (s *GatewayService) IsSingleAntigravityAccountGroup(ctx context.Context, gr
 	return len(accounts) == 1
 }
 
+func (s *GatewayService) isAccountAllowedForPlatformWithContext(ctx context.Context, account *Account, platform string, useMixed bool) bool {
+	if account == nil {
+		return false
+	}
+
+	group, _ := ctx.Value(ctxkey.Group).(*Group)
+	protocol, hasProtocol := EndpointProtocolFromContext(ctx)
+	if group != nil && hasProtocol {
+		groupID := group.ID
+		hasBinding := s.isAccountInGroup(account, &groupID)
+		compatibilityEnabled := false
+		for i := range account.AccountGroups {
+			binding := &account.AccountGroups[i]
+			if binding.GroupID == group.ID {
+				hasBinding = true
+				compatibilityEnabled = binding.EndpointCompatibilityEnabled
+				break
+			}
+		}
+		compatibilityEnabled = compatibilityEnabled && s != nil && s.cfg != nil && s.cfg.Gateway.CrossProviderCompatibilityEnabled
+		return IsAccountCompatibleForRequest(account, RequestDescriptor{
+			Protocol: protocol,
+		}, AccountGroupCompatibilityOptions{
+			Context:                      ctx,
+			Group:                        group,
+			HasAccountGroupBinding:       hasBinding,
+			EndpointCompatibilityEnabled: compatibilityEnabled,
+			AllowMixedScheduling:         useMixed,
+			RequireOAuthOnly:             group.RequireOAuthOnly,
+			RequirePrivacySet:            group.RequirePrivacySet,
+			SkipSchedulabilityChecks:     true,
+		})
+	}
+
+	if useMixed {
+		if account.Platform == platform {
+			return true
+		}
+		return IsMixedSchedulingCapablePlatform(account.Platform) && account.IsMixedSchedulingEnabled()
+	}
+	return account.Platform == platform
+}
+
+// isAccountAllowedForPlatform 保留旧调用签名；没有端点协议 context 时继续
+// 使用原生平台与 mixed_scheduling 规则。
 func (s *GatewayService) isAccountAllowedForPlatform(account *Account, platform string, useMixed bool) bool {
 	if account == nil {
 		return false
@@ -2477,7 +2522,11 @@ func (s *GatewayService) isModelSupportedByAccount(account *Account, requestedMo
 // single-group selection logic: it does not change scheduling internals, so
 // billing/session/subscription all attribute to the returned group unchanged.
 func (s *GatewayService) ResolveEffectiveGroupBinding(ctx context.Context, apiKey *APIKey, requestedModel string) *Group {
+	protocol, hasProtocol := EndpointProtocolFromContext(ctx)
 	if apiKey != nil && apiKey.ExplicitGroupSelection {
+		if hasProtocol && !GroupAllowsEndpoint(apiKey.Group, protocol) {
+			return nil
+		}
 		return apiKey.Group
 	}
 	if apiKey == nil || len(apiKey.GroupBindings) == 0 {
@@ -2489,13 +2538,17 @@ func (s *GatewayService) ResolveEffectiveGroupBinding(ctx context.Context, apiKe
 		if b.Group == nil || !apiKey.AllowsGroupByUserRestriction(b.Group) {
 			continue
 		}
+		if hasProtocol && !GroupAllowsEndpoint(b.Group, protocol) {
+			continue
+		}
 		if firstGroup == nil {
 			firstGroup = b.Group
 		}
 		gid := b.GroupID
+		probeCtx := context.WithValue(ctx, ctxkey.Group, b.Group)
 		// Probe availability without a sticky session and without mutating any
 		// state. A successful select means this group can serve the request.
-		if _, err := s.SelectAccountForModelWithExclusions(ctx, &gid, "", requestedModel, nil); err == nil {
+		if _, err := s.SelectAccountForModelWithExclusions(probeCtx, &gid, "", requestedModel, nil); err == nil {
 			return b.Group
 		}
 	}

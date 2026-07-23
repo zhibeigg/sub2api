@@ -226,6 +226,8 @@ type CreateGroupInput struct {
 	Name                 string
 	Description          string
 	Platform             string
+	EndpointProtocols    []string
+	QuotaPlatform        string
 	RateMultiplier       float64
 	ModelRateMultipliers map[string]float64
 	IsExclusive          bool
@@ -287,6 +289,8 @@ type UpdateGroupInput struct {
 	Name                 string
 	Description          *string
 	Platform             string
+	EndpointProtocols    *[]string
+	QuotaPlatform        *string
 	RateMultiplier       *float64 // 使用指针以支持设置为0
 	ModelRateMultipliers *map[string]float64
 	IsExclusive          *bool

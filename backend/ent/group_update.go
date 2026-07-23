@@ -229,6 +229,32 @@ func (_u *GroupUpdate) SetNillablePlatform(v *string) *GroupUpdate {
 	return _u
 }
 
+// SetEndpointProtocols sets the "endpoint_protocols" field.
+func (_u *GroupUpdate) SetEndpointProtocols(v []string) *GroupUpdate {
+	_u.mutation.SetEndpointProtocols(v)
+	return _u
+}
+
+// AppendEndpointProtocols appends value to the "endpoint_protocols" field.
+func (_u *GroupUpdate) AppendEndpointProtocols(v []string) *GroupUpdate {
+	_u.mutation.AppendEndpointProtocols(v)
+	return _u
+}
+
+// SetQuotaPlatform sets the "quota_platform" field.
+func (_u *GroupUpdate) SetQuotaPlatform(v string) *GroupUpdate {
+	_u.mutation.SetQuotaPlatform(v)
+	return _u
+}
+
+// SetNillableQuotaPlatform sets the "quota_platform" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableQuotaPlatform(v *string) *GroupUpdate {
+	if v != nil {
+		_u.SetQuotaPlatform(*v)
+	}
+	return _u
+}
+
 // SetSubscriptionType sets the "subscription_type" field.
 func (_u *GroupUpdate) SetSubscriptionType(v string) *GroupUpdate {
 	_u.mutation.SetSubscriptionType(v)
@@ -1451,6 +1477,11 @@ func (_u *GroupUpdate) check() error {
 			return &ValidationError{Name: "platform", err: fmt.Errorf(`ent: validator failed for field "Group.platform": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.QuotaPlatform(); ok {
+		if err := group.QuotaPlatformValidator(v); err != nil {
+			return &ValidationError{Name: "quota_platform", err: fmt.Errorf(`ent: validator failed for field "Group.quota_platform": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.SubscriptionType(); ok {
 		if err := group.SubscriptionTypeValidator(v); err != nil {
 			return &ValidationError{Name: "subscription_type", err: fmt.Errorf(`ent: validator failed for field "Group.subscription_type": %w`, err)}
@@ -1534,6 +1565,17 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Platform(); ok {
 		_spec.SetField(group.FieldPlatform, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.EndpointProtocols(); ok {
+		_spec.SetField(group.FieldEndpointProtocols, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedEndpointProtocols(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, group.FieldEndpointProtocols, value)
+		})
+	}
+	if value, ok := _u.mutation.QuotaPlatform(); ok {
+		_spec.SetField(group.FieldQuotaPlatform, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.SubscriptionType(); ok {
 		_spec.SetField(group.FieldSubscriptionType, field.TypeString, value)
@@ -2498,6 +2540,32 @@ func (_u *GroupUpdateOne) SetPlatform(v string) *GroupUpdateOne {
 func (_u *GroupUpdateOne) SetNillablePlatform(v *string) *GroupUpdateOne {
 	if v != nil {
 		_u.SetPlatform(*v)
+	}
+	return _u
+}
+
+// SetEndpointProtocols sets the "endpoint_protocols" field.
+func (_u *GroupUpdateOne) SetEndpointProtocols(v []string) *GroupUpdateOne {
+	_u.mutation.SetEndpointProtocols(v)
+	return _u
+}
+
+// AppendEndpointProtocols appends value to the "endpoint_protocols" field.
+func (_u *GroupUpdateOne) AppendEndpointProtocols(v []string) *GroupUpdateOne {
+	_u.mutation.AppendEndpointProtocols(v)
+	return _u
+}
+
+// SetQuotaPlatform sets the "quota_platform" field.
+func (_u *GroupUpdateOne) SetQuotaPlatform(v string) *GroupUpdateOne {
+	_u.mutation.SetQuotaPlatform(v)
+	return _u
+}
+
+// SetNillableQuotaPlatform sets the "quota_platform" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableQuotaPlatform(v *string) *GroupUpdateOne {
+	if v != nil {
+		_u.SetQuotaPlatform(*v)
 	}
 	return _u
 }
@@ -3737,6 +3805,11 @@ func (_u *GroupUpdateOne) check() error {
 			return &ValidationError{Name: "platform", err: fmt.Errorf(`ent: validator failed for field "Group.platform": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.QuotaPlatform(); ok {
+		if err := group.QuotaPlatformValidator(v); err != nil {
+			return &ValidationError{Name: "quota_platform", err: fmt.Errorf(`ent: validator failed for field "Group.quota_platform": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.SubscriptionType(); ok {
 		if err := group.SubscriptionTypeValidator(v); err != nil {
 			return &ValidationError{Name: "subscription_type", err: fmt.Errorf(`ent: validator failed for field "Group.subscription_type": %w`, err)}
@@ -3837,6 +3910,17 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.Platform(); ok {
 		_spec.SetField(group.FieldPlatform, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.EndpointProtocols(); ok {
+		_spec.SetField(group.FieldEndpointProtocols, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedEndpointProtocols(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, group.FieldEndpointProtocols, value)
+		})
+	}
+	if value, ok := _u.mutation.QuotaPlatform(); ok {
+		_spec.SetField(group.FieldQuotaPlatform, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.SubscriptionType(); ok {
 		_spec.SetField(group.FieldSubscriptionType, field.TypeString, value)

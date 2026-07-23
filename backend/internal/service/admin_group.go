@@ -164,6 +164,10 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	if err := ValidatePlatform(platform); err != nil {
 		return nil, err
 	}
+	quotaPlatform := NormalizePlatform(input.QuotaPlatform)
+	if quotaPlatform == "" {
+		quotaPlatform = platform
+	}
 
 	subscriptionType := input.SubscriptionType
 	if subscriptionType == "" {
@@ -289,6 +293,8 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		Name:                               input.Name,
 		Description:                        input.Description,
 		Platform:                           platform,
+		EndpointProtocols:                  append([]string(nil), input.EndpointProtocols...),
+		QuotaPlatform:                      quotaPlatform,
 		RateMultiplier:                     input.RateMultiplier,
 		ModelRateMultipliers:               modelRateMultipliers,
 		IsExclusive:                        input.IsExclusive,
@@ -336,6 +342,14 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		PoolCapacityAlertGeneration:        0,
 	}
 	sanitizeGroupMessagesDispatchFields(group)
+	if len(group.EndpointProtocols) == 0 {
+		group.EndpointProtocols = LegacyEndpointProtocols(group)
+	}
+	normalizedEndpointProtocols, err := NormalizeEndpointProtocols(group.EndpointProtocols)
+	if err != nil {
+		return nil, err
+	}
+	group.EndpointProtocols = normalizedEndpointProtocols
 	if err := s.groupRepo.Create(ctx, group); err != nil {
 		return nil, err
 	}
@@ -485,6 +499,16 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 			return nil, err
 		}
 		group.Platform = platform
+	}
+	if input.EndpointProtocols != nil {
+		group.EndpointProtocols = append([]string(nil), (*input.EndpointProtocols)...)
+	}
+	if input.QuotaPlatform != nil {
+		quotaPlatform := NormalizePlatform(*input.QuotaPlatform)
+		if quotaPlatform == "" {
+			quotaPlatform = group.Platform
+		}
+		group.QuotaPlatform = quotaPlatform
 	}
 	if input.RateMultiplier != nil {
 		if *input.RateMultiplier <= 0 {
@@ -677,6 +701,15 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 		group.RPMLimit = *input.RPMLimit
 	}
 	sanitizeGroupMessagesDispatchFields(group)
+	if input.EndpointProtocols != nil {
+		normalizedEndpointProtocols, err := NormalizeEndpointProtocols(group.EndpointProtocols)
+		if err != nil {
+			return nil, err
+		}
+		group.EndpointProtocols = normalizedEndpointProtocols
+	} else if input.Platform != "" {
+		group.EndpointProtocols = LegacyEndpointProtocols(group)
+	}
 
 	poolAlertPatch := PoolCapacityAlertPolicyPatch{
 		Enabled:           input.PoolCapacityAlertEnabled,

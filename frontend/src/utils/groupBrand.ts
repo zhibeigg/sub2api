@@ -1,5 +1,6 @@
 /**
- * Resolve a group (platform + name) to a brand identity for display:
+ * Resolve a group (legacy provider/runtime platform + name) to a brand identity for display.
+ * Endpoint protocols are intentionally not treated as provider brands:
  *  - `keyword`: a model-like string that <ModelIcon> already recognizes, so we
  *    reuse the existing 30+ brand logos (Claude / OpenAI / DeepSeek / Kimi /
  *    GLM / MiMo / Qwen / MiniMax ...).
@@ -116,7 +117,7 @@ const KEYWORD_TO_BRAND: Record<string, string> = {
   doubao: 'doubao',
 }
 
-export function resolveGroupBrand(platform: string, name: string): GroupBrand {
+export function resolveGroupBrand(providerPlatform: string, name: string): GroupBrand {
   const lower = (name || '').toLowerCase()
   let keyword: string | null = null
 
@@ -128,7 +129,7 @@ export function resolveGroupBrand(platform: string, name: string): GroupBrand {
   }
 
   if (!keyword) {
-    keyword = PLATFORM_KEYWORD[platform] || 'gpt'
+    keyword = PLATFORM_KEYWORD[providerPlatform] || 'model'
   }
 
   const brand = KEYWORD_TO_BRAND[keyword] || keyword

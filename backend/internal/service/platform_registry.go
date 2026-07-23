@@ -9,6 +9,7 @@ import (
 type PlatformCapabilities struct {
 	DisplayName          string
 	AccountTypes         map[string]struct{}
+	EndpointProtocols    []EndpointProtocol
 	ImageGeneration      bool
 	VideoGeneration      bool
 	BatchImageGeneration bool
@@ -19,55 +20,110 @@ type PlatformCapabilities struct {
 
 var platformCapabilities = map[string]PlatformCapabilities{
 	PlatformAnthropic: {
-		AccountTypes:      accountTypeSet(AccountTypeOAuth, AccountTypeSetupToken, AccountTypeAPIKey, AccountTypeUpstream, AccountTypeBedrock, AccountTypeServiceAccount),
+		AccountTypes: accountTypeSet(AccountTypeOAuth, AccountTypeSetupToken, AccountTypeAPIKey, AccountTypeUpstream, AccountTypeBedrock, AccountTypeServiceAccount),
+		EndpointProtocols: endpointProtocolList(
+			EndpointProtocolAnthropicMessages,
+			EndpointProtocolOpenAIChatCompletions,
+			EndpointProtocolOpenAIResponses,
+		),
 		UpstreamModelSync: true,
 	},
 	PlatformOpenAI: {
-		AccountTypes:      accountTypeSet(AccountTypeOAuth, AccountTypeAPIKey, AccountTypeUpstream),
+		AccountTypes: accountTypeSet(AccountTypeOAuth, AccountTypeAPIKey, AccountTypeUpstream),
+		EndpointProtocols: endpointProtocolList(
+			EndpointProtocolAnthropicMessages,
+			EndpointProtocolOpenAIChatCompletions,
+			EndpointProtocolOpenAIResponses,
+			EndpointProtocolOpenAIEmbeddings,
+			EndpointProtocolOpenAIAlphaSearch,
+			EndpointProtocolOpenAIImages,
+			EndpointProtocolOpenAIVideos,
+		),
 		ImageGeneration:   true,
+		VideoGeneration:   true,
 		UpstreamModelSync: true,
 	},
 	PlatformGemini: {
-		AccountTypes:         accountTypeSet(AccountTypeOAuth, AccountTypeAPIKey, AccountTypeServiceAccount),
+		AccountTypes: accountTypeSet(AccountTypeOAuth, AccountTypeAPIKey, AccountTypeServiceAccount),
+		EndpointProtocols: endpointProtocolList(
+			EndpointProtocolAnthropicMessages,
+			EndpointProtocolOpenAIChatCompletions,
+			EndpointProtocolOpenAIResponses,
+			EndpointProtocolGeminiGenerateContent,
+			EndpointProtocolOpenAIImages,
+		),
 		ImageGeneration:      true,
 		BatchImageGeneration: true,
 		UpstreamModelSync:    true,
 	},
 	PlatformAntigravity: {
-		AccountTypes:      accountTypeSet(AccountTypeOAuth),
+		AccountTypes: accountTypeSet(AccountTypeOAuth),
+		EndpointProtocols: endpointProtocolList(
+			EndpointProtocolAnthropicMessages,
+			EndpointProtocolOpenAIChatCompletions,
+			EndpointProtocolOpenAIResponses,
+			EndpointProtocolGeminiGenerateContent,
+			EndpointProtocolOpenAIImages,
+		),
 		ImageGeneration:   true,
 		MixedScheduling:   true,
 		UpstreamModelSync: true,
 	},
 	PlatformGrok: {
-		AccountTypes:       accountTypeSet(AccountTypeOAuth),
+		AccountTypes: accountTypeSet(AccountTypeOAuth),
+		EndpointProtocols: endpointProtocolList(
+			EndpointProtocolAnthropicMessages,
+			EndpointProtocolOpenAIChatCompletions,
+			EndpointProtocolOpenAIResponses,
+			EndpointProtocolOpenAIImages,
+			EndpointProtocolOpenAIVideos,
+		),
 		ImageGeneration:    true,
 		VideoGeneration:    true,
 		UpstreamModelSync:  true,
 		DefaultConcurrency: 1,
 	},
 	PlatformAdobe: {
-		AccountTypes:       accountTypeSet(AccountTypeOAuth),
+		AccountTypes: accountTypeSet(AccountTypeOAuth),
+		EndpointProtocols: endpointProtocolList(
+			EndpointProtocolOpenAIImages,
+			EndpointProtocolOpenAIVideos,
+		),
 		ImageGeneration:    true,
 		VideoGeneration:    true,
 		UpstreamModelSync:  false,
 		DefaultConcurrency: 1,
 	},
 	PlatformCursor: {
-		AccountTypes:       accountTypeSet(AccountTypeAPIKey),
+		AccountTypes: accountTypeSet(AccountTypeAPIKey),
+		EndpointProtocols: endpointProtocolList(
+			EndpointProtocolAnthropicMessages,
+			EndpointProtocolOpenAIChatCompletions,
+			EndpointProtocolOpenAIResponses,
+		),
 		MixedScheduling:    true,
 		UpstreamModelSync:  true,
 		DefaultConcurrency: 1,
 	},
 	PlatformOpenCode: {
-		DisplayName:        PlatformOpenCodeDisplayName,
-		AccountTypes:       accountTypeSet(AccountTypeAPIKey),
+		DisplayName:  PlatformOpenCodeDisplayName,
+		AccountTypes: accountTypeSet(AccountTypeAPIKey),
+		EndpointProtocols: endpointProtocolList(
+			EndpointProtocolAnthropicMessages,
+			EndpointProtocolOpenAIChatCompletions,
+			EndpointProtocolOpenAIResponses,
+		),
 		MixedScheduling:    true,
 		UpstreamModelSync:  true,
 		DefaultConcurrency: 1,
 	},
 	PlatformKiro: {
-		AccountTypes:       accountTypeSet(AccountTypeOAuth),
+		AccountTypes: accountTypeSet(AccountTypeOAuth),
+		EndpointProtocols: endpointProtocolList(
+			EndpointProtocolAnthropicMessages,
+			EndpointProtocolOpenAIChatCompletions,
+			EndpointProtocolOpenAIResponses,
+		),
 		MixedScheduling:    true,
 		UpstreamModelSync:  false,
 		DefaultConcurrency: 1,

@@ -171,7 +171,11 @@ func duplicateAccountGroups(source *Account) ([]AccountGroup, []int64) {
 		groups := make([]AccountGroup, 0, len(source.AccountGroups))
 		groupIDs := make([]int64, 0, len(source.AccountGroups))
 		for _, sourceGroup := range source.AccountGroups {
-			groups = append(groups, AccountGroup{GroupID: sourceGroup.GroupID, Priority: sourceGroup.Priority})
+			groups = append(groups, AccountGroup{
+				GroupID:                      sourceGroup.GroupID,
+				Priority:                     sourceGroup.Priority,
+				EndpointCompatibilityEnabled: sourceGroup.EndpointCompatibilityEnabled,
+			})
 			groupIDs = append(groupIDs, sourceGroup.GroupID)
 		}
 		return groups, groupIDs
@@ -555,13 +559,6 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 		}
 	}
 
-	if (input.Platform == PlatformAdobe || input.Platform == PlatformCursor) && len(groupIDs) > 0 {
-		mixedScheduling := (&Account{Platform: input.Platform, Extra: accountExtra}).IsMixedSchedulingEnabled()
-		if err := s.validateAccountGroupPlatform(ctx, input.Platform, groupIDs, mixedScheduling); err != nil {
-			return nil, err
-		}
-	}
-
 	// 检查混合渠道风险（除非用户已确认）
 	if len(groupIDs) > 0 && !input.SkipMixedChannelCheck {
 		if err := s.checkMixedChannelRisk(ctx, 0, input.Platform, groupIDs); err != nil {
@@ -578,13 +575,16 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	if err != nil {
 		return nil, err
 	}
+	if _, err := BuildCompatibleAccountGroupBindings(ctx, s.groupRepo, account, groupIDs); err != nil {
+		return nil, err
+	}
 	if err := s.accountRepo.Create(ctx, account); err != nil {
 		return nil, err
 	}
 
-	// 绑定分组
+	// 绑定分组：跨供应平台关系只有在统一端点兼容校验通过后才会显式启用。
 	if len(groupIDs) > 0 {
-		if err := s.accountRepo.BindGroups(ctx, account.ID, groupIDs); err != nil {
+		if err := BindCompatibleAccountGroups(ctx, s.accountRepo, account, s.groupRepo, groupIDs); err != nil {
 			return nil, err
 		}
 	}
@@ -820,10 +820,8 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		if err := s.validateGroupIDsExist(ctx, *input.GroupIDs); err != nil {
 			return nil, err
 		}
-		if account.IsAdobe() || account.IsCursor() {
-			if err := s.validateAccountGroupPlatform(ctx, account.Platform, *input.GroupIDs, account.IsMixedSchedulingEnabled()); err != nil {
-				return nil, err
-			}
+		if _, err := BuildCompatibleAccountGroupBindings(ctx, s.groupRepo, account, *input.GroupIDs); err != nil {
+			return nil, err
 		}
 
 		// 检查混合渠道风险（除非用户已确认）
@@ -866,7 +864,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 
 	// 绑定分组
 	if input.GroupIDs != nil {
-		if err := s.accountRepo.BindGroups(ctx, account.ID, *input.GroupIDs); err != nil {
+		if err := BindCompatibleAccountGroups(ctx, s.accountRepo, account, s.groupRepo, *input.GroupIDs); err != nil {
 			return nil, err
 		}
 	}
@@ -1099,7 +1097,11 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 		entry := BulkUpdateAccountResult{AccountID: accountID}
 
 		if input.GroupIDs != nil {
-			if err := s.accountRepo.BindGroups(ctx, accountID, *input.GroupIDs); err != nil {
+			account, err := s.accountRepo.GetByID(ctx, accountID)
+			if err == nil {
+				err = BindCompatibleAccountGroups(ctx, s.accountRepo, account, s.groupRepo, *input.GroupIDs)
+			}
+			if err != nil {
 				entry.Success = false
 				entry.Error = err.Error()
 				result.Failed++

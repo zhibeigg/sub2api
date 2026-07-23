@@ -126,6 +126,8 @@ type CreateGroupRequest struct {
 	Name                 string             `json:"name" binding:"required"`
 	Description          string             `json:"description"`
 	Platform             string             `json:"platform"`
+	EndpointProtocols    []string           `json:"endpoint_protocols"`
+	QuotaPlatform        string             `json:"quota_platform"`
 	RateMultiplier       float64            `json:"rate_multiplier"`
 	ModelRateMultipliers map[string]float64 `json:"model_rate_multipliers"`
 	IsExclusive          bool               `json:"is_exclusive"`
@@ -185,6 +187,8 @@ type UpdateGroupRequest struct {
 	Name                 string              `json:"name"`
 	Description          *string             `json:"description"`
 	Platform             string              `json:"platform"`
+	EndpointProtocols    *[]string           `json:"endpoint_protocols"`
+	QuotaPlatform        *string             `json:"quota_platform"`
 	RateMultiplier       *float64            `json:"rate_multiplier"`
 	ModelRateMultipliers *map[string]float64 `json:"model_rate_multipliers"`
 	IsExclusive          *bool               `json:"is_exclusive"`
@@ -371,6 +375,8 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		Name:                               req.Name,
 		Description:                        req.Description,
 		Platform:                           req.Platform,
+		EndpointProtocols:                  req.EndpointProtocols,
+		QuotaPlatform:                      req.QuotaPlatform,
 		RateMultiplier:                     req.RateMultiplier,
 		ModelRateMultipliers:               req.ModelRateMultipliers,
 		IsExclusive:                        req.IsExclusive,
@@ -498,6 +504,8 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		Name:                               req.Name,
 		Description:                        req.Description,
 		Platform:                           req.Platform,
+		EndpointProtocols:                  req.EndpointProtocols,
+		QuotaPlatform:                      req.QuotaPlatform,
 		RateMultiplier:                     req.RateMultiplier,
 		ModelRateMultipliers:               req.ModelRateMultipliers,
 		IsExclusive:                        req.IsExclusive,

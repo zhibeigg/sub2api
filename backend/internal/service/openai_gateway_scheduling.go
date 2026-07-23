@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
@@ -170,6 +171,11 @@ func normalizeOpenAICompatiblePlatform(platform string) string {
 	return PlatformOpenAI
 }
 
+func (s *OpenAIGatewayService) withCrossProviderCompatibilityContext(ctx context.Context) context.Context {
+	enabled := s != nil && s.cfg != nil && s.cfg.Gateway.CrossProviderCompatibilityEnabled
+	return WithCrossProviderCompatibilityEnabled(ctx, enabled)
+}
+
 func noAvailableOpenAISelectionError(requestedModel string, compactBlocked bool) error {
 	if compactBlocked {
 		return ErrNoAvailableCompactAccounts
@@ -213,9 +219,51 @@ func openAICompactSupportTier(account *Account) int {
 //
 // 注意：对 spark 影子账号，调用方还须额外调用 parentHealthyForShadow(account, lookup)
 // 检查母账号凭据可用性；该检查未内置于本函数，以避免注入 DB 依赖。
-// openAIPlatformAllowed 判断账号是否可进入 openai 兼容端点的候选：
-// 原生 openai/grok 账号(平台相等且兼容)，或启用了 mixed_scheduling 的
-// 混合调度平台账号(如 kiro)——后者上游透传国产模型，可被 openai 分组调度。
+// openAIPlatformAllowed 判断账号是否可进入 OpenAI 兼容端点候选。新端点路由
+// 启用后，最终分组来自请求 context：同供应平台绑定继续兼容，跨供应平台绑定
+// 必须显式开启 endpoint_compatibility_enabled（旧 mixed_scheduling 仅作兼容回退）。
+func openAIPlatformAllowedForContext(ctx context.Context, account *Account, platform string) bool {
+	if account == nil {
+		return false
+	}
+	platform = normalizeOpenAICompatiblePlatform(platform)
+
+	group, _ := ctx.Value(ctxkey.Group).(*Group)
+	protocol, hasProtocol := EndpointProtocolFromContext(ctx)
+	if group != nil && hasProtocol {
+		hasBinding := openAIStickyAccountMatchesGroup(account, &group.ID)
+		compatibilityEnabled := false
+		for i := range account.AccountGroups {
+			binding := &account.AccountGroups[i]
+			if binding.GroupID == group.ID {
+				hasBinding = true
+				compatibilityEnabled = binding.EndpointCompatibilityEnabled
+				break
+			}
+		}
+		compatibilityEnabled = compatibilityEnabled && CrossProviderCompatibilityEnabledFromContext(ctx)
+		return IsAccountCompatibleForRequest(account, RequestDescriptor{
+			Protocol: protocol,
+		}, AccountGroupCompatibilityOptions{
+			Context:                      ctx,
+			Group:                        group,
+			HasAccountGroupBinding:       hasBinding,
+			EndpointCompatibilityEnabled: compatibilityEnabled,
+			AllowMixedScheduling:         GroupPlatformSupportsMixedScheduling(group.Platform),
+			RequireOAuthOnly:             group.RequireOAuthOnly,
+			RequirePrivacySet:            group.RequirePrivacySet,
+			SkipSchedulabilityChecks:     true,
+		})
+	}
+
+	if account.Platform == platform && account.IsOpenAICompatible() {
+		return true
+	}
+	return openAIPlatformAllowed(account, platform)
+}
+
+// openAIPlatformAllowed 保留无 context 的旧调度器接口。端点协议尚未写入
+// context 的内部探测继续沿用原生平台或 mixed_scheduling 判定。
 func openAIPlatformAllowed(account *Account, platform string) bool {
 	if account == nil {
 		return false
@@ -229,7 +277,7 @@ func openAIPlatformAllowed(account *Account, platform string) bool {
 
 func isOpenAICompatibleAccountEligibleForRequest(ctx context.Context, account *Account, platform string, requestedModel string, requireCompact bool, requiredCapability OpenAIEndpointCapability) bool {
 	platform = normalizeOpenAICompatiblePlatform(platform)
-	if account == nil || !openAIPlatformAllowed(account, platform) || !account.IsSchedulableForModelWithContext(ctx, requestedModel) {
+	if account == nil || !openAIPlatformAllowedForContext(ctx, account, platform) || !account.IsSchedulableForModelWithContext(ctx, requestedModel) {
 		return false
 	}
 	if account.IsOpenAI() {
@@ -606,6 +654,7 @@ func resolveOpenAIAccountUpstreamModelForRequest(account *Account, requestedMode
 }
 
 func (s *OpenAIGatewayService) selectAccountForModelWithExclusions(ctx context.Context, groupID *int64, platform string, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, stickyAccountID int64, requiredCapability OpenAIEndpointCapability, preferLowUpstreamRate bool) (*Account, error) {
+	ctx = s.withCrossProviderCompatibilityContext(ctx)
 	platform = normalizeOpenAICompatiblePlatform(platform)
 	if s.checkChannelPricingRestriction(ctx, groupID, requestedModel) {
 		slog.Warn("channel pricing restriction blocked request",
@@ -821,6 +870,7 @@ func (s *OpenAIGatewayService) SelectAccountWithLoadAwareness(ctx context.Contex
 }
 
 func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Context, groupID *int64, platform string, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, requiredCapability OpenAIEndpointCapability, useUpstreamTokenCost bool) (*AccountSelectionResult, error) {
+	ctx = s.withCrossProviderCompatibilityContext(ctx)
 	platform = normalizeOpenAICompatiblePlatform(platform)
 	if s.checkChannelPricingRestriction(ctx, groupID, requestedModel) {
 		slog.Warn("channel pricing restriction blocked request",
@@ -1172,14 +1222,33 @@ func (s *OpenAIGatewayService) listSchedulableAccounts(ctx context.Context, grou
 		accounts, _, err := s.schedulerSnapshot.ListSchedulableAccounts(ctx, groupID, platform, false)
 		return accounts, err
 	}
+
+	// Keep the database fallback semantically identical to Scheduler Snapshot.
+	// OpenAI-compatible groups can contain explicitly mixed Cursor/Kiro/OpenCode
+	// accounts, so querying only the native platform here makes availability
+	// depend on Redis health and produces false "no available accounts" errors.
+	platforms := []string{platform}
+	_, endpointProtocolKnown := EndpointProtocolFromContext(ctx)
+	if endpointProtocolKnown && GroupPlatformSupportsMixedScheduling(platform) {
+		platforms = MixedSchedulingCandidatePlatforms(platform)
+	}
+
 	var accounts []Account
 	var err error
-	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
-		accounts, err = s.accountRepo.ListSchedulableByPlatform(ctx, platform)
+	if len(platforms) == 1 {
+		if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
+			accounts, err = s.accountRepo.ListSchedulableByPlatform(ctx, platform)
+		} else if groupID != nil {
+			accounts, err = s.accountRepo.ListSchedulableByGroupIDAndPlatform(ctx, *groupID, platform)
+		} else {
+			accounts, err = s.accountRepo.ListSchedulableUngroupedByPlatform(ctx, platform)
+		}
+	} else if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
+		accounts, err = s.accountRepo.ListSchedulableByPlatforms(ctx, platforms)
 	} else if groupID != nil {
-		accounts, err = s.accountRepo.ListSchedulableByGroupIDAndPlatform(ctx, *groupID, platform)
+		accounts, err = s.accountRepo.ListSchedulableByGroupIDAndPlatforms(ctx, *groupID, platforms)
 	} else {
-		accounts, err = s.accountRepo.ListSchedulableUngroupedByPlatform(ctx, platform)
+		accounts, err = s.accountRepo.ListSchedulableUngroupedByPlatforms(ctx, platforms)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query accounts failed: %w", err)
@@ -1347,7 +1416,11 @@ func (s *OpenAIGatewayService) schedulingConfig() config.GatewaySchedulingConfig
 // Returns nil when the key has no multi-group bindings. Read-only probe layered
 // on the existing single-group selection — no scheduling internals change.
 func (s *OpenAIGatewayService) ResolveEffectiveGroupBinding(ctx context.Context, apiKey *APIKey, requestedModel string) *Group {
+	protocol, hasProtocol := EndpointProtocolFromContext(ctx)
 	if apiKey != nil && apiKey.ExplicitGroupSelection {
+		if hasProtocol && !GroupAllowsEndpoint(apiKey.Group, protocol) {
+			return nil
+		}
 		return apiKey.Group
 	}
 	if apiKey == nil || len(apiKey.GroupBindings) == 0 {
@@ -1359,11 +1432,15 @@ func (s *OpenAIGatewayService) ResolveEffectiveGroupBinding(ctx context.Context,
 		if b.Group == nil || !apiKey.AllowsGroupByUserRestriction(b.Group) {
 			continue
 		}
+		if hasProtocol && !GroupAllowsEndpoint(b.Group, protocol) {
+			continue
+		}
 		if firstGroup == nil {
 			firstGroup = b.Group
 		}
 		gid := b.GroupID
-		if _, err := s.SelectAccountForModelWithExclusions(ctx, &gid, "", requestedModel, nil); err == nil {
+		probeCtx := context.WithValue(ctx, ctxkey.Group, b.Group)
+		if _, err := s.SelectAccountForModelWithExclusions(probeCtx, &gid, "", requestedModel, nil); err == nil {
 			return b.Group
 		}
 	}

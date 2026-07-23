@@ -81,6 +81,14 @@ func (Group) Fields() []ent.Field {
 		field.String("platform").
 			MaxLen(50).
 			Default(domain.PlatformAnthropic),
+		field.JSON("endpoint_protocols", []string{}).
+			Default([]string{}).
+			SchemaType(map[string]string{dialect.Postgres: "jsonb"}).
+			Comment("分组公开入站协议集合；platform 保留为兼容期旧运行配置"),
+		field.String("quota_platform").
+			MaxLen(50).
+			Default(domain.PlatformAnthropic).
+			Comment("分组用量归属平台；与 endpoint_protocols 解耦"),
 		field.String("subscription_type").
 			MaxLen(20).
 			Default(domain.SubscriptionTypeStandard),

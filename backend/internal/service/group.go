@@ -19,6 +19,8 @@ type Group struct {
 	Name                 string
 	Description          string
 	Platform             string
+	EndpointProtocols    []string
+	QuotaPlatform        string
 	RateMultiplier       float64
 	ModelRateMultipliers map[string]float64
 	// 高峰时段倍率：peak_rate_enabled 为 true 且当前时刻处于 [PeakStart, PeakEnd) 时，

@@ -38,4 +38,13 @@ describe('locale messages compile', () => {
     collectCompileErrors(messages, locale, errors)
     expect(errors).toEqual([])
   })
+
+  it.each([
+    ['zh', zh, '端点协议'],
+    ['en', en, 'Endpoint Protocols']
+  ] as const)('%s exposes endpoint protocol group-management copy', (_locale, messages, title) => {
+    expect(messages.admin.groups.endpointProtocols.title).toBe(title)
+    expect(messages.admin.groups.endpointProtocols.incompatibleSelectedWarning).toContain('{count}')
+    expect(messages.admin.groups.columns.endpointProtocols).toBe(title)
+  })
 })

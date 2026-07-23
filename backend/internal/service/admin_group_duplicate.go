@@ -83,6 +83,8 @@ func cloneGroupForDuplicate(source *Group, operationID string) *Group {
 		Name:                            duplicateGroupName(source.Name, 1),
 		Description:                     source.Description,
 		Platform:                        source.Platform,
+		EndpointProtocols:               append([]string(nil), source.EndpointProtocols...),
+		QuotaPlatform:                   source.QuotaPlatform,
 		RateMultiplier:                  source.RateMultiplier,
 		PeakRateEnabled:                 source.PeakRateEnabled,
 		PeakStart:                       source.PeakStart,

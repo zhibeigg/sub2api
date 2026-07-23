@@ -6,6 +6,7 @@
 import { apiClient } from '../client'
 import type {
   AdminGroup,
+  EndpointProtocol,
   GroupPlatform,
   CreateGroupRequest,
   UpdateGroupRequest,
@@ -25,6 +26,7 @@ export async function list(
   pageSize: number = 20,
   filters?: {
     platform?: GroupPlatform
+    endpoint_protocol?: EndpointProtocol
     status?: 'active' | 'inactive'
     is_exclusive?: boolean
     search?: string

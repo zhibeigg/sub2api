@@ -828,7 +828,8 @@ export default {
       columns: {
         name: 'Name',
         id: 'ID',
-        platform: 'Platform',
+        platform: 'Compatibility Platform',
+        endpointProtocols: 'Endpoint Protocols',
         rateMultiplier: 'Rate Multiplier',
         rpmOverride: 'RPM Override',
         rpmOverrideHint: 'Per-user RPM cap in this group; empty = group default; 0 = unlimited',
@@ -917,6 +918,8 @@ export default {
         name: 'Name',
         description: 'Description',
         platform: 'Platform',
+        legacyPlatform: 'Legacy Platform / Runtime Profile',
+        quotaPlatform: 'Quota and Reporting Platform',
         rateMultiplier: 'Rate Multiplier',
         status: 'Status',
         exclusive: 'Exclusive Group',
@@ -1023,6 +1026,19 @@ export default {
       unsavedChanges: 'Unsaved changes',
       revertChanges: 'Revert',
       userInfo: 'User Info',
+      endpointProtocols: {
+        title: 'Endpoint Protocols',
+        hint: 'Select one or more inbound client protocols accepted by this group. Protocols define entry eligibility, not account vendors.',
+        all: 'All Endpoint Protocols',
+        required: 'Select at least one endpoint protocol',
+        compatibilitySettings: 'Advanced Compatibility and Billing Classification',
+        compatibilityHint: 'The legacy platform remains for rolling upgrades and runtime projection. The quota platform preserves historical quota and reporting attribution. Backend defaults are recommended.',
+        backendDefault: 'Use backend default',
+        editImpactHint: 'Changing protocols may affect bound accounts. The server rejects incompatible changes and returns the affected account list.',
+        selectedIncompatible: 'This selected group is currently incompatible with the account endpoint capabilities. It remains visible so you can explicitly remove it.',
+        incompatibleSelectedWarning: '{count} selected group(s) are incompatible with the current account endpoint capabilities. They will not be removed automatically.',
+        incompatibleAccounts: 'This protocol change would make these accounts incompatible: {accounts}. Unbind them first or use the explicit server-supported force workflow.'
+      },
       platforms: {
         all: 'All Platforms',
         anthropic: 'Anthropic',

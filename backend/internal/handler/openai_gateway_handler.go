@@ -74,6 +74,9 @@ func (h *OpenAIGatewayHandler) resolveMultiGroupAPIKey(c *gin.Context, apiKey *s
 	}
 	group := h.gatewayService.ResolveEffectiveGroupBinding(c.Request.Context(), apiKey, requestedModel)
 	if group == nil {
+		if _, hasProtocol := service.EndpointProtocolFromContext(c.Request.Context()); hasProtocol {
+			return nil, nil
+		}
 		return apiKey, nil
 	}
 	selected := cloneAPIKeyWithGroup(apiKey, group)
@@ -158,7 +161,7 @@ func allowOpenAICompatibleMessagesDispatch(apiKey *service.APIKey) bool {
 	if apiKey == nil || apiKey.Group == nil {
 		return true
 	}
-	if apiKey.Group.Platform == service.PlatformGrok {
+	if apiKey.Group.Platform == service.PlatformGrok || apiKey.Group.Platform == service.PlatformOpenCode {
 		return true
 	}
 	return apiKey.Group.AllowMessagesDispatch

@@ -14,7 +14,9 @@ OpenCode Go 分组复用 Sub2API API Key 鉴权、计费、并发、限流、代
 
 OpenCode Go 上游只有两类模型级协议：`chat_completions` 与 `messages`。三种公开入口均支持流式和非流式响应；网关按模型解析协议，并在需要时转换请求、响应、SSE 工具调用与用量字段。
 
-OpenCode Go 账号可启用 `extra.mixed_scheduling=true`，但只会加入 **Anthropic** 或 **OpenAI** 分组的候选池，不会加入 Gemini、Grok 或其他原生分组。独立 OpenCode Go 分组仍只调度 `platform=opencode` 的账号。
+从 `0.76.83` 起，分组通过多值 `endpoint_protocols` 声明公开入口，账号继续用 `accounts.platform` 表示真实上游供应商。OpenCode Go 分组可同时绑定 `platform=opencode` 与经过统一协议/模型能力校验的 OpenAI 兼容 API Key（例如 Geek2API）；跨供应关系写入 `account_groups.endpoint_compatibility_enabled=true`，并且只有在 `gateway.cross_provider_compatibility_enabled=true` 时参与调度。关闭灰度开关时，OpenCode 原生账号仍正常工作，跨供应账号不会被旧关联或账号级 `mixed_scheduling` 自动激活。
+
+`groups.quota_platform` 独立决定用户配额、历史统计和平台默认计价口径。升级时旧 OpenCode 分组应保持 `quota_platform=opencode`，即使最终选中 `platform=openai` 的上游账号，也不会静默改记到 OpenAI 配额桶。
 
 ## 渠道与模型广场配置
 

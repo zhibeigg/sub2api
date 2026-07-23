@@ -25,7 +25,7 @@ Cursor API Key 账号通过 `credentials.cursor_transport_mode` 选择路径：
 - `auto` 的回退是可配置的安全兜底：只有在下游响应尚未提交、错误被明确归类为可安全重放、请求不携带客户端工具/工具结果/工具调用历史/内联图片/Responses 延续状态且 Cloud Agent 凭据可用时，才能切换 Cloud Agent；一旦请求依赖本地工具或图片语义、已发送响应事件或错误可能产生副作用，就不会重放。显式 `cloud_agent` 模式仍会把图片写入 `prompt.images`，避免静默丢图。
 - Cloud Agent 仍用于创建和管理可自主执行任务的持久资源；它保持独立的显式任务模式，每次提示词执行对应一个 run，同一 Agent 同时只能有一个活跃 run。
 - 管理后台白名单优先以 `GET /v1/models` 返回的逻辑模型 ID 为准；仅配置 Dashboard Token 的账号使用内部 `GetUsableModels` 目录获得同样的逻辑目录与运行时变体，不会把 thinking、effort、fast 等执行变体逐项写入白名单。
-- Cursor 账号可显式启用混合调度。兼容层可承接 `/v1/messages`、`/v1/chat/completions`、`/v1/responses` 三种普通聊天协议；被 Anthropic、Gemini、OpenAI 或 Grok 分组选中后，转发阶段始终按账号平台进入 Cursor 网关，不会把 Cursor API Key 当作对应分组平台的上游凭据。Gemini 原生 `generateContent` 不会调度到 Cursor。不同上游的会话上下文与模型能力可能不同，应通过分组隔离账号，并只启用已同步且验证可用的模型。
+- Cursor 账号可承接 `/v1/messages`、`/v1/chat/completions`、`/v1/responses` 三种普通聊天协议。分组入口资格来自 `groups.endpoint_protocols`；跨供应分组关联必须经统一协议/模型能力校验并显式写入 `account_groups.endpoint_compatibility_enabled=true`，且受默认关闭的 `gateway.cross_provider_compatibility_enabled` 灰度开关控制。被兼容分组选中后，转发阶段始终按真实 `accounts.platform=cursor` 进入 Cursor 网关，不会把 Cursor API Key 当作分组旧 `platform` 的上游凭据。Gemini 原生 `generateContent` 不会调度到 Cursor。不同上游的会话上下文与模型能力可能不同，应通过分组隔离账号，并只启用已同步且验证可用的模型。
 - Cursor 套餐资格、模型用量、按需超额费用、速率限制和 Cloud Agent 执行成本均由 Cursor 侧决定；Sub2API 不应把本地价格、余额或配额描述成 Cursor 官方额度。
 
 ## 普通聊天兼容语义
