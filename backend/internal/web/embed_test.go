@@ -776,6 +776,7 @@ func TestEmbeddedFrontendBypassesBareVideoAPIRoutes(t *testing.T) {
 
 func TestEmbeddedFrontendBypassesQQBotWebhook(t *testing.T) {
 	require.True(t, shouldBypassEmbeddedFrontend("/webhooks/qq"))
+	require.True(t, shouldBypassEmbeddedFrontend("/webhooks/qq/onebot"))
 	require.False(t, shouldBypassEmbeddedFrontend("/webhooks/qq/extra"))
 }
 
