@@ -5,7 +5,7 @@
  * instead of defining their own color mappings.
  */
 
-export type Platform = 'anthropic' | 'openai' | 'antigravity' | 'gemini' | 'grok' | 'adobe' | 'cursor' | 'opencode' | 'kiro'
+export type Platform = 'anthropic' | 'openai' | 'antigravity' | 'gemini' | 'grok' | 'adobe' | 'cursor' | 'opencode' | 'kiro' | 'composite'
 
 // ── Badge (bg + text + border, for inline badges with border) ───────
 const BADGE: Record<Platform, string> = {
@@ -18,6 +18,7 @@ const BADGE: Record<Platform, string> = {
   cursor: 'bg-cyan-500/10 text-cyan-700 border-cyan-500/30 dark:text-cyan-300',
   opencode: 'bg-teal-500/10 text-teal-700 border-teal-500/30 dark:text-teal-300',
   kiro: 'bg-amber-500/10 text-amber-600 border-amber-500/30 dark:text-amber-400',
+  composite: 'bg-cyan-500/10 text-cyan-700 border-cyan-500/30 dark:text-cyan-300',
 }
 const BADGE_DEFAULT = 'bg-slate-500/10 text-slate-600 border-slate-500/30 dark:text-slate-400'
 
@@ -32,6 +33,7 @@ const BADGE_LIGHT: Record<Platform, string> = {
   cursor: 'bg-cyan-500/10 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-300',
   opencode: 'bg-teal-500/10 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300',
   kiro: 'bg-amber-500/10 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300',
+  composite: 'bg-cyan-500/10 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-300',
 }
 
 // ── Border ──────────────────────────────────────────────────────────
@@ -45,6 +47,7 @@ const BORDER: Record<Platform, string> = {
   cursor: 'border-cyan-500/20 dark:border-cyan-500/20',
   opencode: 'border-teal-500/20 dark:border-teal-500/20',
   kiro: 'border-amber-500/20 dark:border-amber-500/20',
+  composite: 'border-cyan-500/20 dark:border-cyan-500/20',
 }
 const BORDER_DEFAULT = 'border-gray-200 dark:border-dark-700'
 
@@ -59,6 +62,7 @@ const ACCENT_BAR: Record<Platform, string> = {
   cursor: 'bg-gradient-to-r from-cyan-400 to-blue-500',
   opencode: 'bg-gradient-to-r from-teal-400 to-cyan-500',
   kiro: 'bg-gradient-to-r from-amber-400 to-orange-500',
+  composite: 'bg-gradient-to-r from-slate-500 to-cyan-500',
 }
 const ACCENT_BAR_DEFAULT = 'bg-gradient-to-r from-primary-400 to-primary-500'
 
@@ -73,6 +77,7 @@ const TEXT: Record<Platform, string> = {
   cursor: 'text-cyan-700 dark:text-cyan-300',
   opencode: 'text-teal-700 dark:text-teal-300',
   kiro: 'text-amber-600 dark:text-amber-400',
+  composite: 'text-cyan-700 dark:text-cyan-300',
 }
 const TEXT_DEFAULT = 'text-primary-600 dark:text-primary-400'
 
@@ -87,6 +92,7 @@ const ICON: Record<Platform, string> = {
   cursor: 'text-cyan-700 dark:text-cyan-300',
   opencode: 'text-teal-700 dark:text-teal-300',
   kiro: 'text-amber-500 dark:text-amber-400',
+  composite: 'text-cyan-600 dark:text-cyan-300',
 }
 const ICON_DEFAULT = 'text-primary-500 dark:text-primary-400'
 
@@ -101,6 +107,7 @@ const BUTTON: Record<Platform, string> = {
   cursor: 'bg-cyan-600 text-white hover:bg-cyan-700 active:bg-cyan-800 dark:bg-cyan-600 dark:hover:bg-cyan-500',
   opencode: 'bg-teal-600 text-white hover:bg-teal-700 active:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-500',
   kiro: 'bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700 dark:bg-amber-500/80 dark:hover:bg-amber-500',
+  composite: 'bg-cyan-700 text-white hover:bg-cyan-800 active:bg-cyan-900 dark:bg-cyan-600 dark:hover:bg-cyan-500',
 }
 const BUTTON_DEFAULT = 'bg-primary-500 text-white hover:bg-primary-600 dark:bg-primary-600 dark:hover:bg-primary-500'
 
@@ -115,6 +122,7 @@ const DISCOUNT: Record<Platform, string> = {
   cursor: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/40 dark:text-cyan-300',
   opencode: 'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
   kiro: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  composite: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300',
 }
 const DISCOUNT_DEFAULT = 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
 
@@ -129,6 +137,7 @@ const GRADIENT: Record<Platform, string> = {
   cursor: 'from-cyan-500 to-blue-600',
   opencode: 'from-teal-500 to-cyan-600',
   kiro: 'from-amber-500 to-orange-600',
+  composite: 'from-slate-600 to-cyan-600',
 }
 const GRADIENT_DEFAULT = 'from-primary-500 to-primary-600'
 
@@ -143,6 +152,7 @@ const GRADIENT_TEXT: Record<Platform, string> = {
   cursor: 'text-cyan-100',
   opencode: 'text-teal-100',
   kiro: 'text-amber-100',
+  composite: 'text-cyan-100',
 }
 const GRADIENT_TEXT_DEFAULT = 'text-primary-100'
 
@@ -156,13 +166,14 @@ const GRADIENT_SUBTEXT: Record<Platform, string> = {
   cursor: 'text-cyan-200',
   opencode: 'text-teal-200',
   kiro: 'text-amber-200',
+  composite: 'text-cyan-200',
 }
 const GRADIENT_SUBTEXT_DEFAULT = 'text-primary-200'
 
 // ── Public API ──────────────────────────────────────────────────────
 
 function isPlatform(p: string): p is Platform {
-  return p === 'anthropic' || p === 'openai' || p === 'antigravity' || p === 'gemini' || p === 'grok' || p === 'adobe' || p === 'cursor' || p === 'opencode' || p === 'kiro'
+  return p === 'anthropic' || p === 'openai' || p === 'antigravity' || p === 'gemini' || p === 'grok' || p === 'adobe' || p === 'cursor' || p === 'opencode' || p === 'kiro' || p === 'composite'
 }
 
 export function platformBadgeClass(p: string): string {
@@ -220,6 +231,7 @@ export function platformLabel(p: string): string {
     case 'cursor': return 'Cursor'
     case 'opencode': return 'OpenCode Go'
     case 'kiro': return 'Kiro'
+    case 'composite': return 'Composite'
     default: return p || 'API'
   }
 }

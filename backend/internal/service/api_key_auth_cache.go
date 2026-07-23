@@ -124,6 +124,10 @@ type APIKeyAuthGroupSnapshot struct {
 	PoolCapacityAlertThresholdRequests int64    `json:"pool_capacity_alert_threshold_requests"`
 	PoolCapacityAlertThresholdUSD      *float64 `json:"pool_capacity_alert_threshold_usd,omitempty"`
 	PoolCapacityAlertGeneration        int64    `json:"pool_capacity_alert_generation"`
+	// MaxReasoningEffort OpenAI/Codex 请求的推理强度上限，空字符串表示不限制。
+	MaxReasoningEffort string `json:"max_reasoning_effort,omitempty"`
+	// ReasoningEffortMappings rewrites explicit effort values before the ceiling.
+	ReasoningEffortMappings []ReasoningEffortMapping `json:"reasoning_effort_mappings"`
 
 	// 高峰时段倍率：PeakRateEnabled 为 true 且请求时刻处于 [PeakStart, PeakEnd) 时，
 	// token 计费倍率额外乘以 PeakRateMultiplier（详见 Group.PeakMultiplierAt）。

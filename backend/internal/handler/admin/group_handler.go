@@ -178,6 +178,10 @@ type CreateGroupRequest struct {
 	PoolCapacityAlertMetric            *string  `json:"pool_capacity_alert_metric"`
 	PoolCapacityAlertThresholdRequests *int64   `json:"pool_capacity_alert_threshold_requests"`
 	PoolCapacityAlertThresholdUSD      *float64 `json:"pool_capacity_alert_threshold_usd"`
+	// OpenAI/Codex 请求推理强度上限，空字符串表示不限制。
+	MaxReasoningEffort string `json:"max_reasoning_effort"`
+	// OpenAI/Codex 推理强度精确映射。
+	ReasoningEffortMappings []service.ReasoningEffortMapping `json:"reasoning_effort_mappings"`
 	// 从指定分组复制账号（创建后自动绑定）
 	CopyAccountsFromGroupIDs []int64 `json:"copy_accounts_from_group_ids"`
 }
@@ -240,8 +244,28 @@ type UpdateGroupRequest struct {
 	PoolCapacityAlertMetric            *string                    `json:"pool_capacity_alert_metric"`
 	PoolCapacityAlertThresholdRequests *int64                     `json:"pool_capacity_alert_threshold_requests"`
 	PoolCapacityAlertThresholdUSD      optionalNullableFloatField `json:"pool_capacity_alert_threshold_usd"`
+	// OpenAI/Codex 请求推理强度上限；空字符串清除，nil 不修改。
+	MaxReasoningEffort *string `json:"max_reasoning_effort"`
+	// nil 不修改，空数组清空，非空数组替换。
+	ReasoningEffortMappings *[]service.ReasoningEffortMapping `json:"reasoning_effort_mappings"`
 	// 从指定分组复制账号（同步操作：先清空当前分组的账号绑定，再绑定源分组的账号）
 	CopyAccountsFromGroupIDs []int64 `json:"copy_accounts_from_group_ids"`
+}
+
+type CompositeRouteRequest struct {
+	PublicModel    string `json:"public_model" binding:"required"`
+	MatchType      string `json:"match_type" binding:"omitempty,oneof=exact prefix"`
+	TargetPlatform string `json:"target_platform" binding:"required,oneof=anthropic openai gemini antigravity grok"`
+	UpstreamModel  string `json:"upstream_model"`
+	Endpoint       string `json:"endpoint" binding:"omitempty,oneof=any messages count_tokens responses chat_completions embeddings images gemini"`
+	Priority       int    `json:"priority"`
+	Enabled        *bool  `json:"enabled"`
+	Notes          string `json:"notes"`
+}
+
+type CompositeRoutePreviewRequest struct {
+	Model    string `json:"model" binding:"required"`
+	Endpoint string `json:"endpoint" binding:"omitempty,oneof=any messages count_tokens responses chat_completions embeddings images gemini"`
 }
 
 // List handles listing all groups with pagination
@@ -277,6 +301,133 @@ func (h *GroupHandler) List(c *gin.Context) {
 		outGroups = append(outGroups, *dto.GroupFromServiceAdmin(&groups[i]))
 	}
 	response.Paginated(c, outGroups, total, page, pageSize)
+}
+
+// ListCompositeRoutes handles listing composite model routes for one group.
+// GET /api/v1/admin/groups/:id/composite-routes
+func (h *GroupHandler) ListCompositeRoutes(c *gin.Context) {
+	groupID, ok := parsePositiveIDParam(c, "id")
+	if !ok {
+		return
+	}
+	routes, err := h.adminService.ListCompositeRoutes(c.Request.Context(), groupID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, routes)
+}
+
+// CreateCompositeRoute handles creating one composite model route.
+// POST /api/v1/admin/groups/:id/composite-routes
+func (h *GroupHandler) CreateCompositeRoute(c *gin.Context) {
+	groupID, ok := parsePositiveIDParam(c, "id")
+	if !ok {
+		return
+	}
+	var req CompositeRouteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+	route, err := h.adminService.CreateCompositeRoute(c.Request.Context(), groupID, compositeRouteRequestToInput(req, true))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Created(c, route)
+}
+
+// UpdateCompositeRoute handles replacing one composite model route.
+// PUT /api/v1/admin/groups/:id/composite-routes/:route_id
+func (h *GroupHandler) UpdateCompositeRoute(c *gin.Context) {
+	groupID, ok := parsePositiveIDParam(c, "id")
+	if !ok {
+		return
+	}
+	routeID, ok := parsePositiveIDParam(c, "route_id")
+	if !ok {
+		return
+	}
+	var req CompositeRouteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+	route, err := h.adminService.UpdateCompositeRoute(c.Request.Context(), groupID, routeID, compositeRouteRequestToInput(req, true))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, route)
+}
+
+// DeleteCompositeRoute handles deleting one composite model route.
+// DELETE /api/v1/admin/groups/:id/composite-routes/:route_id
+func (h *GroupHandler) DeleteCompositeRoute(c *gin.Context) {
+	groupID, ok := parsePositiveIDParam(c, "id")
+	if !ok {
+		return
+	}
+	routeID, ok := parsePositiveIDParam(c, "route_id")
+	if !ok {
+		return
+	}
+	if err := h.adminService.DeleteCompositeRoute(c.Request.Context(), groupID, routeID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "Composite route deleted"})
+}
+
+// PreviewCompositeRoute resolves a model without mutating routes.
+// POST /api/v1/admin/groups/:id/composite-routes/preview
+func (h *GroupHandler) PreviewCompositeRoute(c *gin.Context) {
+	groupID, ok := parsePositiveIDParam(c, "id")
+	if !ok {
+		return
+	}
+	var req CompositeRoutePreviewRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+	decision, err := h.adminService.PreviewCompositeRoute(c.Request.Context(), groupID, service.CompositeRoutePreviewRequest{
+		Model:    req.Model,
+		Endpoint: req.Endpoint,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, decision)
+}
+
+func compositeRouteRequestToInput(req CompositeRouteRequest, defaultEnabled bool) service.CompositeRouteInput {
+	enabled := defaultEnabled
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+	return service.CompositeRouteInput{
+		PublicModel:    req.PublicModel,
+		MatchType:      req.MatchType,
+		TargetPlatform: req.TargetPlatform,
+		UpstreamModel:  req.UpstreamModel,
+		Endpoint:       req.Endpoint,
+		Priority:       req.Priority,
+		Enabled:        enabled,
+		Notes:          req.Notes,
+	}
+}
+
+func parsePositiveIDParam(c *gin.Context, name string) (int64, bool) {
+	raw := c.Param(name)
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id <= 0 {
+		response.BadRequest(c, "Invalid "+name)
+		return 0, false
+	}
+	return id, true
 }
 
 // GetAll handles getting all active groups without pagination.
@@ -360,7 +511,7 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		return
 	}
 
-	if req.Platform != "" {
+	if req.Platform != "" && service.NormalizePlatform(req.Platform) != service.PlatformComposite {
 		if err := service.ValidatePlatform(req.Platform); err != nil {
 			response.BadRequest(c, err.Error())
 			return
@@ -421,6 +572,8 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		PoolCapacityAlertMetric:            req.PoolCapacityAlertMetric,
 		PoolCapacityAlertThresholdRequests: req.PoolCapacityAlertThresholdRequests,
 		PoolCapacityAlertThresholdUSD:      req.PoolCapacityAlertThresholdUSD,
+		MaxReasoningEffort:                 req.MaxReasoningEffort,
+		ReasoningEffortMappings:            req.ReasoningEffortMappings,
 		CopyAccountsFromGroupIDs:           req.CopyAccountsFromGroupIDs,
 	})
 	if err != nil {
@@ -493,7 +646,7 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		return
 	}
 
-	if req.Platform != "" {
+	if req.Platform != "" && service.NormalizePlatform(req.Platform) != service.PlatformComposite {
 		if err := service.ValidatePlatform(req.Platform); err != nil {
 			response.BadRequest(c, err.Error())
 			return
@@ -551,6 +704,8 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		PoolCapacityAlertMetric:            req.PoolCapacityAlertMetric,
 		PoolCapacityAlertThresholdRequests: req.PoolCapacityAlertThresholdRequests,
 		PoolCapacityAlertThresholdUSD:      req.PoolCapacityAlertThresholdUSD.ToServicePatch(),
+		MaxReasoningEffort:                 req.MaxReasoningEffort,
+		ReasoningEffortMappings:            req.ReasoningEffortMappings,
 		CopyAccountsFromGroupIDs:           req.CopyAccountsFromGroupIDs,
 	})
 	if err != nil {

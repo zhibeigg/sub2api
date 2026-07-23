@@ -185,6 +185,11 @@ Model authenticity: no content intervention or secondary filtering — experienc
 </td>
 </tr>
 
+<tr>
+<td width="180"><a href="https://nagora.ai/"><img src="assets/partners/logos/nagora.png" alt="Nagora" width="150"></a></td>
+<td><a href="https://nagora.ai/">Nagora</a> is a multi-model AI API gateway built for developers and teams. With a single account and API key, you can access more than 26 leading text and image models through one unified interface. It is compatible with OpenAI, Anthropic, and Gemini protocols and integrates seamlessly with development tools such as Claude Code, Codex, and Gemini CLI. The platform provides intelligent routing, automatic failover, transparent pricing, and consolidated billing, along with budget management, rate limiting, and concurrency controls. This makes AI usage more reliable and manageable across individual development, team collaboration, and production environments. No changes to your existing application are required. Simply replace the Base URL and API key to complete the integration in as little as one minute.</td>
+</tr>
+
 </table>
 
 ## Overview
@@ -215,6 +220,7 @@ Sub2API is an AI API gateway platform designed to distribute and manage API quot
 - **Cyber Abuse Guard** - The risk-control center can enable conservative, high-confidence preflight detection for credential theft, malware, unauthorized intrusion, security-control evasion, data exfiltration, and botnet/DDoS patterns. Matching requests receive a warning and are terminated before upstream forwarding. The guard is disabled by default and includes side-effect-free testing, redacted audit records, and integration with upstream `cyber_policy` feedback; it does not replace human review or legal advice
 - **Trustworthy Editorial Public Entrance** - Home uses a three-scene, scroll-driven editorial stage for genuine models, protocol access, and traceable billing; login and registration share the same route-aware protocol orbit, while the documentation homepage provides matching Base URL and toolchain shortcuts. Motion uses only lightweight CSS/SVG and transform/opacity effects, automatically becomes static with `prefers-reduced-motion` or constrained pointer/data settings, and does not copy third-party artwork or brand assets. The privacy boundary remains explicit: only account, routing, billing, and security data required to run the service is processed; full API request bodies are not retained by default, while enabled risk-control auditing stores only necessary redacted and truncated excerpts; data is not sold or used for model training
 - **Admin Dashboard** - Web interface for monitoring and management
+- **Composite Groups** - Admin routing layer that resolves requested models to concrete providers for multi-provider groups ([Operator Guide](docs/COMPOSITE_GROUPS.md))
 - **External System Integration** - Embed external systems (e.g. ticketing) via iframe to extend the admin dashboard
 - **Chatwoot Online Support** - Administrators can enable the official Chatwoot Website Widget globally, use Chatwoot Cloud or a self-hosted instance, serve anonymous visitors, and optionally bind signed logged-in identities without exposing the identity-validation secret
 
@@ -593,6 +599,7 @@ database:
 redis:
   host: "localhost"
   port: 6379
+  username: ""
   password: ""
 
 jwt:

@@ -44,7 +44,8 @@ func BuildCompatibleAccountGroupBindings(
 			return nil, ErrGroupNotFound
 		}
 
-		crossProvider := NormalizePlatform(account.Platform) != NormalizePlatform(group.Platform)
+		groupPlatform := NormalizePlatform(group.Platform)
+		crossProvider := groupPlatform != PlatformComposite && NormalizePlatform(account.Platform) != groupPlatform
 		existing, existed := existingBindings[group.ID]
 		compatibilityEnabled := crossProvider && (!existed || existing.EndpointCompatibilityEnabled)
 
@@ -78,6 +79,9 @@ func BuildCompatibleAccountGroupBindings(
 
 func accountSupportsAnyGroupEndpoint(ctx context.Context, account *Account, group *Group, hasBinding, compatibilityEnabled bool) bool {
 	protocols := GroupEndpointProtocols(group)
+	if len(protocols) == 0 && group != nil && NormalizePlatform(group.Platform) == PlatformComposite {
+		protocols = compositeDefaultEndpointProtocols()
+	}
 	if len(protocols) == 0 {
 		return false
 	}

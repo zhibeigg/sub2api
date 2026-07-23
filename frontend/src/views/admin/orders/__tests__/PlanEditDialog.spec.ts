@@ -111,6 +111,32 @@ describe('PlanEditDialog subscription CNY payment preview', () => {
 })
 
 describe('PlanEditDialog plan types', () => {
+  it('allows composite subscription groups for payment plans', () => {
+    const wrapper = mountDialog(null, {
+      groups: [
+        {
+          id: 10,
+          name: 'OpenAI + Claude + Gemini + Grok',
+          platform: 'composite',
+          rate_multiplier: 1.2,
+          subscription_type: 'subscription',
+          status: 'active',
+        },
+        {
+          id: 11,
+          name: 'Standard OpenAI',
+          platform: 'openai',
+          rate_multiplier: 1,
+          subscription_type: 'standard',
+          status: 'active',
+        },
+      ] as unknown as AdminGroup[],
+    })
+
+    const selector = wrapper.findComponent(GroupSelector)
+    expect((selector.props('groups') as AdminGroup[]).map(group => group.id)).toEqual([10])
+  })
+
   it('filters subscription groups, uses single selection, and hides plan quotas', async () => {
     const wrapper = mountDialog()
     const selector = wrapper.findComponent(GroupSelector)

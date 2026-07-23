@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 22 // v22: include group endpoint/quota semantics in auth snapshots
+const apiKeyAuthSnapshotVersion = 23 // v23: include endpoint/quota, pool alert, and reasoning effort group fields
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -446,6 +446,8 @@ func groupToAuthSnapshot(g *Group) *APIKeyAuthGroupSnapshot {
 		PoolCapacityAlertThresholdRequests: g.PoolCapacityAlertPolicy().ThresholdRequests,
 		PoolCapacityAlertThresholdUSD:      g.PoolCapacityAlertPolicy().ThresholdUSD,
 		PoolCapacityAlertGeneration:        g.PoolCapacityAlertGeneration,
+		MaxReasoningEffort:                 g.MaxReasoningEffort,
+		ReasoningEffortMappings:            append([]ReasoningEffortMapping(nil), g.ReasoningEffortMappings...),
 		PeakRateEnabled:                    g.PeakRateEnabled,
 		PeakStart:                          g.PeakStart,
 		PeakEnd:                            g.PeakEnd,
@@ -561,6 +563,8 @@ func groupFromAuthSnapshot(g *APIKeyAuthGroupSnapshot) *Group {
 		PoolCapacityAlertThresholdRequests: g.PoolCapacityAlertThresholdRequests,
 		PoolCapacityAlertThresholdUSD:      g.PoolCapacityAlertThresholdUSD,
 		PoolCapacityAlertGeneration:        g.PoolCapacityAlertGeneration,
+		MaxReasoningEffort:                 g.MaxReasoningEffort,
+		ReasoningEffortMappings:            append([]ReasoningEffortMapping(nil), g.ReasoningEffortMappings...),
 		PeakRateEnabled:                    g.PeakRateEnabled,
 		PeakStart:                          g.PeakStart,
 		PeakEnd:                            g.PeakEnd,

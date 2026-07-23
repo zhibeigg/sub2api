@@ -130,6 +130,10 @@ const (
 	FieldPoolCapacityAlertThresholdUsd = "pool_capacity_alert_threshold_usd"
 	// FieldPoolCapacityAlertGeneration holds the string denoting the pool_capacity_alert_generation field in the database.
 	FieldPoolCapacityAlertGeneration = "pool_capacity_alert_generation"
+	// FieldMaxReasoningEffort holds the string denoting the max_reasoning_effort field in the database.
+	FieldMaxReasoningEffort = "max_reasoning_effort"
+	// FieldReasoningEffortMappings holds the string denoting the reasoning_effort_mappings field in the database.
+	FieldReasoningEffortMappings = "reasoning_effort_mappings"
 	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
 	EdgeAPIKeys = "api_keys"
 	// EdgeRedeemCodes holds the string denoting the redeem_codes edge name in mutations.
@@ -326,6 +330,8 @@ var Columns = []string{
 	FieldPoolCapacityAlertThresholdRequests,
 	FieldPoolCapacityAlertThresholdUsd,
 	FieldPoolCapacityAlertGeneration,
+	FieldMaxReasoningEffort,
+	FieldReasoningEffortMappings,
 }
 
 var (
@@ -467,6 +473,12 @@ var (
 	DefaultPoolCapacityAlertThresholdRequests int64
 	// DefaultPoolCapacityAlertGeneration holds the default value on creation for the "pool_capacity_alert_generation" field.
 	DefaultPoolCapacityAlertGeneration int64
+	// DefaultMaxReasoningEffort holds the default value on creation for the "max_reasoning_effort" field.
+	DefaultMaxReasoningEffort string
+	// MaxReasoningEffortValidator is a validator for the "max_reasoning_effort" field. It is called by the builders before save.
+	MaxReasoningEffortValidator func(string) error
+	// DefaultReasoningEffortMappings holds the default value on creation for the "reasoning_effort_mappings" field.
+	DefaultReasoningEffortMappings []domain.ReasoningEffortMapping
 )
 
 // OrderOption defines the ordering options for the Group queries.
@@ -730,6 +742,11 @@ func ByPoolCapacityAlertThresholdUsd(opts ...sql.OrderTermOption) OrderOption {
 // ByPoolCapacityAlertGeneration orders the results by the pool_capacity_alert_generation field.
 func ByPoolCapacityAlertGeneration(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPoolCapacityAlertGeneration, opts...).ToFunc()
+}
+
+// ByMaxReasoningEffort orders the results by the max_reasoning_effort field.
+func ByMaxReasoningEffort(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMaxReasoningEffort, opts...).ToFunc()
 }
 
 // ByAPIKeysCount orders the results by api_keys count.

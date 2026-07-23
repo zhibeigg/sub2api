@@ -63,6 +63,7 @@ func cloneGroupForDuplicateTest(group *Group) *Group {
 	cloned.SupportedModelScopes = append([]string(nil), group.SupportedModelScopes...)
 	cloned.MessagesDispatchModelConfig = cloneGroupMessagesDispatchModelConfig(group.MessagesDispatchModelConfig)
 	cloned.ModelsListConfig.Models = append([]string(nil), group.ModelsListConfig.Models...)
+	cloned.ReasoningEffortMappings = append([]ReasoningEffortMapping(nil), group.ReasoningEffortMappings...)
 	cloned.AccountGroups = append([]AccountGroup(nil), group.AccountGroups...)
 	return &cloned
 }
@@ -179,6 +180,8 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
 		PoolCapacityAlertThresholdRequests: 345,
 		PoolCapacityAlertThresholdUSD:      groupDuplicateTestPointer(18.75),
 		PoolCapacityAlertGeneration:        9,
+		MaxReasoningEffort:                 "medium",
+		ReasoningEffortMappings:            []ReasoningEffortMapping{{From: "max", To: "xhigh"}},
 		CreatedAt:                          createdAt,
 		UpdatedAt:                          createdAt,
 		AccountCount:                       12,
@@ -218,6 +221,8 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
 	require.Equal(t, source.PoolCapacityAlertThresholdRequests, duplicate.PoolCapacityAlertThresholdRequests)
 	require.Equal(t, source.PoolCapacityAlertThresholdUSD, duplicate.PoolCapacityAlertThresholdUSD)
 	require.Zero(t, duplicate.PoolCapacityAlertGeneration)
+	require.Equal(t, source.MaxReasoningEffort, duplicate.MaxReasoningEffort)
+	require.Equal(t, source.ReasoningEffortMappings, duplicate.ReasoningEffortMappings)
 	require.EqualValues(t, 2, duplicate.AccountCount)
 	require.EqualValues(t, 2, duplicate.ActiveAccountCount)
 	require.NotEmpty(t, duplicate.DuplicateOperationID)
@@ -231,12 +236,14 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
 	duplicate.SupportedModelScopes[0] = "changed"
 	duplicate.MessagesDispatchModelConfig.ExactModelMappings["claude-special"] = "changed"
 	duplicate.ModelsListConfig.Models[0] = "changed"
+	duplicate.ReasoningEffortMappings[0].To = "changed"
 	*duplicate.DailyLimitUSD = 999
 	*duplicate.PoolCapacityAlertThresholdUSD = 999
 	require.Equal(t, int64(13), source.ModelRouting["gpt-*"][0])
 	require.Equal(t, "claude", source.SupportedModelScopes[0])
 	require.Equal(t, "gpt-special", source.MessagesDispatchModelConfig.ExactModelMappings["claude-special"])
 	require.Equal(t, "gpt-5.4", source.ModelsListConfig.Models[0])
+	require.Equal(t, "xhigh", source.ReasoningEffortMappings[0].To)
 	require.Equal(t, 11.0, *source.DailyLimitUSD)
 	require.Equal(t, 18.75, *source.PoolCapacityAlertThresholdUSD)
 }

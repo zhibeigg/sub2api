@@ -6,6 +6,9 @@ import type { SubscriptionPlan } from '@/types/payment'
 
 const messages = vi.hoisted<Record<string, string>>(() => ({
   'payment.days': 'days',
+  'payment.weeks': 'weeks',
+  'payment.months': 'months',
+  'payment.perMonth': 'month',
   'payment.groupFallback': 'Group',
   'payment.planCard.dailyLimit': 'Daily',
   'payment.planCard.weeklyLimit': 'Weekly',
@@ -246,6 +249,15 @@ describe('SubscriptionPlanCard renewal detection', () => {
     expect(mountPlanCard(plan, [
       makeSubscription({ source_plan_id: null, group_id: 10, group_ids: [10] }),
     ]).text()).toContain('Subscribe now')
+  })
+})
+
+describe('SubscriptionPlanCard validity display', () => {
+  it('renders plural admin-form validity units instead of mislabeled days', () => {
+    expect(mountPlanCard(makePlan({ validity_days: 1, validity_unit: 'months' })).text()).toContain('/ month')
+    expect(mountPlanCard(makePlan({ validity_days: 3, validity_unit: 'months' })).text()).toContain('/ 3months')
+    expect(mountPlanCard(makePlan({ validity_days: 2, validity_unit: 'weeks' })).text()).toContain('/ 2weeks')
+    expect(mountPlanCard(makePlan({ validity_days: 30, validity_unit: 'day' })).text()).toContain('/ 30days')
   })
 })
 

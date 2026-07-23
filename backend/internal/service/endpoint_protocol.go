@@ -170,6 +170,8 @@ func LegacyEndpointProtocols(group *Group) []string {
 		add(EndpointProtocolAnthropicMessages)
 		add(EndpointProtocolOpenAIChatCompletions)
 		add(EndpointProtocolOpenAIResponses)
+	case PlatformComposite:
+		protocols = append(protocols, compositeDefaultEndpointProtocols()...)
 	}
 
 	normalized, err := NormalizeEndpointProtocolsAllowEmpty(protocols)
@@ -487,6 +489,9 @@ func IsAccountCompatibleForRequest(account *Account, request RequestDescriptor, 
 	groupPlatform := NormalizePlatform(options.GroupPlatform)
 	if groupPlatform == "" && options.Group != nil {
 		groupPlatform = NormalizePlatform(options.Group.Platform)
+	}
+	if groupPlatform == PlatformComposite {
+		groupPlatform = ""
 	}
 	if groupPlatform != "" && NormalizePlatform(account.Platform) != groupPlatform {
 		if options.HasAccountGroupBinding || options.EndpointCompatibilityEnabled {

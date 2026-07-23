@@ -123,7 +123,7 @@ const isSearchable = computed(() => {
 const hasProtocolFilter = computed(() => props.supportedEndpointProtocols !== undefined)
 
 function legacyPlatformCompatible(group: AdminGroup): boolean {
-  if (!props.platform) return true
+  if (!props.platform || group.platform === 'composite') return true
   if (props.platform === 'antigravity' && props.mixedScheduling) {
     return group.platform === 'antigravity' || group.platform === 'anthropic' || group.platform === 'gemini'
   }

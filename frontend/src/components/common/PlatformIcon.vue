@@ -41,6 +41,13 @@
   <svg v-else-if="platform === 'adobe'" :class="sizeClass" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
     <path d="M8.1 3H3l6.2 18 2.55-7.45L8.1 3Zm7.8 0H21l-6.2 18-2.55-7.45L15.9 3Zm-5.06 14.1h2.32L12 20.5l-1.16-3.4Z" />
   </svg>
+  <!-- Composite group icon -->
+  <svg v-else-if="platform === 'composite'" :class="sizeClass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="6" cy="12" r="3" />
+    <circle cx="18" cy="6" r="3" />
+    <circle cx="18" cy="18" r="3" />
+    <path stroke-linecap="round" stroke-linejoin="round" d="M8.7 10.7 15.3 7.3M8.7 13.3l6.6 3.4" />
+  </svg>
   <!-- Fallback: generic platform icon -->
   <svg v-else :class="sizeClass" fill="currentColor" viewBox="0 0 24 24">
     <path

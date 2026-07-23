@@ -27,6 +27,7 @@ const (
 	PlatformCursor      = "cursor"
 	PlatformOpenCode    = "opencode"
 	PlatformKiro        = "kiro" // AWS Kiro / CodeWhisperer (provides Claude models)
+	PlatformComposite   = "composite"
 
 	PlatformOpenCodeDisplayName = "OpenCode Go"
 	DefaultOpenCodeBaseURL      = "https://opencode.ai/zen/go"

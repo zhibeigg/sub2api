@@ -540,12 +540,22 @@ export interface PaginationConfig {
 
 // ==================== API Key & Group Types ====================
 
-export type AccountPlatform = 'anthropic' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'adobe' | 'cursor' | 'opencode' | 'kiro'
+export type ConcreteAccountPlatform =
+  | 'anthropic'
+  | 'openai'
+  | 'gemini'
+  | 'antigravity'
+  | 'grok'
+  | 'adobe'
+  | 'cursor'
+  | 'opencode'
+  | 'kiro'
 
-/** @deprecated 分组平台仅用于旧 API、运行配置投影和滚动升级兼容。 */
-export type LegacyGroupPlatform = AccountPlatform
-/** @deprecated 请按语义使用 AccountPlatform、LegacyGroupPlatform 或 EndpointProtocol。 */
-export type GroupPlatform = LegacyGroupPlatform
+export type AccountPlatform = ConcreteAccountPlatform
+/** @deprecated 分组旧平台仅用于旧 API、运行配置投影和滚动升级兼容。 */
+export type LegacyGroupPlatform = ConcreteAccountPlatform
+/** @deprecated 请按语义使用 AccountPlatform、LegacyGroupPlatform、GroupPlatform 或 EndpointProtocol。 */
+export type GroupPlatform = LegacyGroupPlatform | 'composite'
 
 export type EndpointProtocol =
   | 'anthropic_messages'
@@ -569,16 +579,23 @@ export interface OpenAIMessagesDispatchModelConfig {
   exact_model_mappings?: Record<string, string>
 }
 
+export interface ReasoningEffortMapping {
+  from: string
+  to: string
+}
+
 export interface Group {
   id: number
   name: string
   description: string | null
-  /** @deprecated 旧运行配置投影；客户端入口资格请使用 endpoint_protocols。 */
-  platform: LegacyGroupPlatform
+  /** @deprecated 旧运行配置投影；客户端入口资格请使用 endpoint_protocols。composite 为组合分组。 */
+  platform: GroupPlatform
   endpoint_protocols: EndpointProtocol[]
   quota_platform: string
   rate_multiplier: number
   rpm_limit?: number // Group-level RPM cap (0 = unlimited); overrides user-level rpm_limit when set
+  max_reasoning_effort?: string // OpenAI/Codex reasoning ceiling; empty means unlimited
+  reasoning_effort_mappings?: ReasoningEffortMapping[]
   is_exclusive: boolean
   status: 'active' | 'inactive'
   subscription_type: SubscriptionType
@@ -678,6 +695,63 @@ export interface ModelsListConfig {
   models: string[]
 }
 
+export type CompositeRouteMatchType = 'exact' | 'prefix'
+
+export type CompositeRouteEndpoint =
+  | 'any'
+  | 'messages'
+  | 'count_tokens'
+  | 'responses'
+  | 'chat_completions'
+  | 'embeddings'
+  | 'images'
+  | 'gemini'
+
+export type CompositeRouteSource = 'route' | 'detector' | string
+
+export interface CompositeModelRoute {
+  id: number
+  group_id: number
+  public_model: string
+  match_type: CompositeRouteMatchType
+  target_platform: Exclude<GroupPlatform, 'composite'>
+  upstream_model: string
+  endpoint: CompositeRouteEndpoint
+  priority: number
+  enabled: boolean
+  notes: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface CompositeModelRouteInput {
+  public_model: string
+  match_type: CompositeRouteMatchType
+  target_platform: Exclude<GroupPlatform, 'composite'>
+  upstream_model?: string
+  endpoint: CompositeRouteEndpoint
+  priority?: number
+  enabled?: boolean
+  notes?: string
+}
+
+export interface CompositeRoutePreviewRequest {
+  model: string
+  endpoint: CompositeRouteEndpoint
+}
+
+export interface CompositeRouteDecision {
+  matched: boolean
+  source: CompositeRouteSource
+  group_id: number
+  public_model: string
+  target_platform: Exclude<GroupPlatform, 'composite'> | ''
+  upstream_model: string
+  endpoint: CompositeRouteEndpoint
+  route?: CompositeModelRoute
+  reason?: string
+}
+
 export interface ApiKey {
   id: number
   user_id: number
@@ -762,7 +836,7 @@ export interface CreateGroupRequest {
   name: string
   description?: string | null
   /** @deprecated 兼容旧 API；新界面应同时提交 endpoint_protocols。 */
-  platform?: LegacyGroupPlatform
+  platform?: GroupPlatform
   endpoint_protocols?: EndpointProtocol[]
   quota_platform?: string
   rate_multiplier?: number
@@ -807,6 +881,8 @@ export interface CreateGroupRequest {
   pool_capacity_alert_metric?: PoolCapacityAlertMetric
   pool_capacity_alert_threshold_requests?: number
   pool_capacity_alert_threshold_usd?: number | null
+  max_reasoning_effort?: string
+  reasoning_effort_mappings?: ReasoningEffortMapping[]
   require_oauth_only?: boolean
   require_privacy_set?: boolean
   // 从指定分组复制账号
@@ -817,7 +893,7 @@ export interface UpdateGroupRequest {
   name?: string
   description?: string | null
   /** @deprecated 兼容旧 API；新界面应同时提交 endpoint_protocols。 */
-  platform?: LegacyGroupPlatform
+  platform?: GroupPlatform
   endpoint_protocols?: EndpointProtocol[]
   quota_platform?: string
   rate_multiplier?: number
@@ -863,6 +939,8 @@ export interface UpdateGroupRequest {
   pool_capacity_alert_metric?: PoolCapacityAlertMetric
   pool_capacity_alert_threshold_requests?: number
   pool_capacity_alert_threshold_usd?: number | null
+  max_reasoning_effort?: string
+  reasoning_effort_mappings?: ReasoningEffortMapping[]
   require_oauth_only?: boolean
   require_privacy_set?: boolean
   copy_accounts_from_group_ids?: number[]

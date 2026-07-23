@@ -47,6 +47,7 @@ const (
 	PlatformCursor      = domain.PlatformCursor
 	PlatformOpenCode    = domain.PlatformOpenCode
 	PlatformKiro        = domain.PlatformKiro
+	PlatformComposite   = domain.PlatformComposite
 
 	PlatformOpenCodeDisplayName = domain.PlatformOpenCodeDisplayName
 	DefaultOpenCodeBaseURL      = domain.DefaultOpenCodeBaseURL
