@@ -50,9 +50,10 @@
   --vp-c-brand-2: oklch(58% 0.13 238);
   --vp-c-brand-3: oklch(50% 0.12 238);
   --vp-c-brand-soft: var(--docs-accent-soft);
-  --vp-nav-height: 72px;
+  --vp-nav-height: 60px;
   --vp-layout-max-width: 1480px;
   --vp-sidebar-bg-color: var(--docs-surface);
+  --vp-nav-bg-color: var(--docs-bg);
   --vp-code-block-bg: oklch(92.5% 0.014 112);
 }
 
@@ -100,11 +101,22 @@ body {
   outline-offset: 3px;
 }
 
-/* Align the shared VitePress chrome with the public PokeAPI header. */
+/* Keep the fixed navigation fully opaque so page content never shows through it. */
+.VPNav,
+.VPNav .VPNavBar,
+.VPNav .VPNavBar.home.top,
+.VPNav .VPNavBar.has-sidebar:not(.home),
+.VPNavBar .wrapper,
+.VPNavBar .content-body {
+  background-color: var(--docs-bg) !important;
+  background-image: none !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 .VPNavBar,
 .VPNavBar.home.top {
   border-bottom: 1px solid var(--docs-line);
-  background: var(--docs-bg);
 }
 
 .VPNavBar .wrapper {
@@ -113,23 +125,29 @@ body {
 
 .VPNavBar .wrapper > .container {
   width: min(100%, var(--docs-max));
-  min-height: 72px;
+  min-height: var(--vp-nav-height);
   margin-inline: auto;
   padding-inline: var(--docs-gutter);
 }
 
+.VPNavBar .content-body {
+  align-items: center;
+  gap: 8px;
+  height: var(--vp-nav-height);
+}
+
 .VPNavBarTitle .title {
-  gap: 10px;
-  min-height: 72px;
+  gap: 9px;
+  min-height: var(--vp-nav-height);
   border-bottom: 0;
   color: var(--docs-ink);
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 500;
 }
 
 .VPNavBarTitle .logo {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   margin: 0;
   object-fit: contain;
   transition: filter 180ms var(--docs-ease), transform 420ms var(--docs-ease);
@@ -140,27 +158,35 @@ body {
   transform: rotate(18deg) scale(0.9);
 }
 
+.VPNavBarSearch {
+  padding-left: clamp(12px, 2vw, 28px);
+}
+
 .VPNavBarMenu {
-  align-self: stretch;
+  align-self: center;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
 }
 
 .VPNavBarMenuLink {
-  display: grid;
-  min-width: 76px;
-  min-height: 72px;
-  padding: 0 14px;
-  border-left: 1px solid var(--docs-line);
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: auto;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
   color: var(--docs-muted);
   font-family: var(--docs-font-mono);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1;
-  text-transform: uppercase;
+  text-transform: none;
+  white-space: nowrap;
   transition: color 160ms var(--docs-ease), background-color 160ms var(--docs-ease);
-}
-
-.VPNavBarMenuLink:nth-last-child(1) {
-  border-right: 1px solid var(--docs-line);
 }
 
 .VPNavBarMenuLink:hover {
@@ -169,33 +195,35 @@ body {
 }
 
 .VPNavBarMenuLink.active {
-  color: var(--docs-accent);
+  color: var(--vp-c-brand-3);
+  background: var(--docs-accent-soft);
 }
 
-.VPNavBarMenuLink[href="https://www.poke2api.com/home"] {
+.VPNavBarMenuLink[href="https://www.poke2api.com/dashboard"] {
   align-self: center;
-  min-width: auto;
-  min-height: 38px;
-  margin-left: 8px;
-  padding: 0 14px;
-  border: 1px solid var(--docs-ink);
-  border-radius: 4px;
-  color: var(--docs-bg);
-  background: var(--docs-ink);
+  height: 36px;
+  min-height: 36px;
+  margin-left: 4px;
+  padding: 0 15px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--docs-inverse-ink);
+  background: var(--docs-inverse-bg);
   font-family: var(--docs-font-display);
   font-size: 13px;
-  text-transform: none;
 }
 
-.VPNavBarMenuLink[href="https://www.poke2api.com/home"]:hover {
+.VPNavBarMenuLink[href="https://www.poke2api.com/dashboard"]:hover {
+  border-color: var(--docs-ink);
   color: var(--docs-ink);
   background: transparent;
 }
 
 .DocSearch-Button {
-  min-height: 38px;
+  height: 36px;
+  min-height: 36px;
   border: 1px solid var(--docs-line);
-  border-radius: 4px;
+  border-radius: 6px;
   color: var(--docs-muted);
   background: var(--docs-surface);
   box-shadow: none;
@@ -213,16 +241,24 @@ body {
   font-size: 11px;
 }
 
+.VPNavBarAppearance {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  margin-left: 2px;
+  padding-left: 0;
+}
+
 .VPNavBarAppearance .VPSwitchAppearance {
   display: grid;
   width: 36px;
   height: 36px;
   padding: 0;
   border: 1px solid var(--docs-line);
-  border-radius: 4px;
+  border-radius: 6px;
   place-items: center;
   color: var(--docs-ink);
-  background: transparent;
+  background: var(--docs-surface);
   transition: border-color 160ms var(--docs-ease), background-color 160ms var(--docs-ease);
 }
 
@@ -981,9 +1017,22 @@ body {
 }
 
 @media (max-width: 1120px) {
+  .VPNavBar .content-body {
+    gap: 6px;
+  }
+
+  .VPNavBarMenu {
+    gap: 4px;
+  }
+
   .VPNavBarMenuLink {
-    min-width: 66px;
+    min-width: auto;
     padding-inline: 10px;
+  }
+
+  .VPNavBarMenuLink[href="https://www.poke2api.com/dashboard"] {
+    margin-left: 2px;
+    padding-inline: 13px;
   }
 
   .docs-section__grid,
@@ -999,12 +1048,14 @@ body {
 
 @media (max-width: 900px) {
   :root {
-    --vp-nav-height: 64px;
+    --vp-nav-height: 56px;
   }
 
   .VPNavBar .wrapper > .container,
+  .VPNavBar .content-body,
   .VPNavBarTitle .title {
-    min-height: 64px;
+    min-height: var(--vp-nav-height);
+    height: var(--vp-nav-height);
   }
 
   .docs-hero {
@@ -1044,8 +1095,8 @@ body {
   }
 
   .VPNavBarTitle .logo {
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
   }
 
   .VPNavBarSearch {
@@ -1053,9 +1104,9 @@ body {
   }
 
   .DocSearch-Button {
-    width: 36px;
-    height: 36px;
-    min-height: 36px;
+    width: 34px;
+    height: 34px;
+    min-height: 34px;
     padding: 0;
   }
 
@@ -1257,5 +1308,70 @@ body {
   .VPHome .docs-home h1.docs-hero__title {
     font-size: clamp(3.5rem, 17vw, 5.75rem);
     line-height: 0.88;
+  }
+}
+
+/* Tutorial media: keep real screenshots and embedded videos readable on every device. */
+.vp-doc .tutorial-media {
+  margin: 1.25rem 0 1.75rem;
+}
+
+.vp-doc .tutorial-media img {
+  display: block;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  border: 1px solid var(--docs-line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 18px 48px color-mix(in oklch, var(--docs-ink) 10%, transparent);
+}
+
+.vp-doc .tutorial-media--compact img {
+  max-height: 34rem;
+  object-fit: contain;
+  background: #000;
+}
+
+.vp-doc .tutorial-media figcaption,
+.vp-doc .tutorial-media-caption {
+  margin: 0.7rem 0 0;
+  color: var(--docs-soft);
+  font-family: var(--docs-font-mono);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.65;
+  text-align: center;
+}
+
+.vp-doc .tutorial-video {
+  position: relative;
+  width: 100%;
+  margin: 1.25rem 0 0;
+  overflow: hidden;
+  border: 1px solid var(--docs-line);
+  border-radius: 12px;
+  background: #000;
+  box-shadow: 0 18px 48px color-mix(in oklch, var(--docs-ink) 12%, transparent);
+  aspect-ratio: 16 / 9;
+}
+
+.vp-doc .tutorial-video iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+@media screen and (max-width: 640px) {
+  .vp-doc .tutorial-media img,
+  .vp-doc .tutorial-video {
+    border-radius: 8px;
+  }
+
+  .vp-doc .tutorial-media figcaption,
+  .vp-doc .tutorial-media-caption {
+    text-align: left;
   }
 }

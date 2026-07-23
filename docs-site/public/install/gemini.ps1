@@ -1,59 +1,73 @@
 # Poke API - Gemini CLI 一键配置脚本 (Windows PowerShell)
 # 用法: irm https://docs.poke2api.com/install/gemini.ps1 | iex
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = 'Stop'
 
-$BaseUrl    = "https://www.poke2api.com"
-$ConsoleUrl = "https://www.poke2api.com"
-$Model      = "gemini-3-pro-preview"
+$BaseUrl = 'https://www.poke2api.com'
+$ConsoleUrl = 'https://www.poke2api.com'
+$Model = 'gemini-3-pro-preview'
 
-function Info($m){ Write-Host "[信息] $m" -ForegroundColor Cyan }
-function Ok($m){   Write-Host "[成功] $m" -ForegroundColor Green }
-function Warn($m){ Write-Host "[提示] $m" -ForegroundColor Yellow }
-function Err($m){  Write-Host "[错误] $m" -ForegroundColor Red }
+function Write-InfoMessage([string]$Message) { Write-Host "[信息] $Message" -ForegroundColor Cyan }
+function Write-SuccessMessage([string]$Message) { Write-Host "[成功] $Message" -ForegroundColor Green }
+function Write-WarnMessage([string]$Message) { Write-Host "[提示] $Message" -ForegroundColor Yellow }
 
-Write-Host "======================================"
-Write-Host "    Poke API - Gemini CLI 一键配置"
-Write-Host "======================================"
-
-# 1. 检测 Node.js
-if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-  Err "未检测到 Node.js。请先安装 Node.js LTS: https://nodejs.org"
-  Err "教程: https://docs.poke2api.com/guide/nodejs"
-  return
-}
-Info ("Node.js 版本: " + (node -v))
-
-# 2. 检测 / 安装 Gemini CLI
-if (-not (Get-Command gemini -ErrorAction SilentlyContinue)) {
-  Info "未检测到 Gemini CLI，正在通过 npm 安装..."
-  npm install -g @google/gemini-cli
-}
-if (Get-Command gemini -ErrorAction SilentlyContinue) {
-  Ok "Gemini CLI 已就绪"
-} else {
-  Err "Gemini CLI 安装失败，请手动执行: npm install -g @google/gemini-cli"
-  return
+function Resolve-NativeCommand([string]$Name) {
+    foreach ($candidate in @("$Name.cmd", "$Name.exe", $Name)) {
+        $command = Get-Command $candidate -ErrorAction SilentlyContinue
+        if ($command) { return $command.Source }
+    }
+    return $null
 }
 
-# 3. 输入 API Key
-Write-Host ""
-$ApiKey = Read-Host "请输入你的 Poke API Key (在 $ConsoleUrl 控制台获取)"
-if ([string]::IsNullOrWhiteSpace($ApiKey)) { Err "API Key 不能为空。"; return }
+function Read-SecretText([string]$Prompt) {
+    $secure = Read-Host $Prompt -AsSecureString
+    $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try {
+        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
+    } finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
+    }
+}
 
-# 4. 写入用户环境变量（永久）
-[System.Environment]::SetEnvironmentVariable("GOOGLE_GEMINI_BASE_URL", $BaseUrl, [System.EnvironmentVariableTarget]::User)
-[System.Environment]::SetEnvironmentVariable("GEMINI_API_KEY", $ApiKey, [System.EnvironmentVariableTarget]::User)
-[System.Environment]::SetEnvironmentVariable("GEMINI_MODEL", $Model, [System.EnvironmentVariableTarget]::User)
-# 当前会话立即生效
+Write-Host '======================================'
+Write-Host '    Poke API · Gemini CLI 一键配置'
+Write-Host '======================================'
+
+$node = Resolve-NativeCommand 'node'
+$npm = Resolve-NativeCommand 'npm'
+if (-not $node -or -not $npm) {
+    throw '未检测到 Node.js 与 npm。请先完成 https://docs.poke2api.com/guide/nodejs'
+}
+Write-InfoMessage "Node.js 版本: $(& $node --version)"
+
+$gemini = Resolve-NativeCommand 'gemini'
+if (-not $gemini) {
+    Write-InfoMessage '未检测到 Gemini CLI，正在安装 @google/gemini-cli@latest...'
+    & $npm install --global '@google/gemini-cli@latest'
+    if ($LASTEXITCODE -ne 0) { throw 'Gemini CLI 安装失败。' }
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    if ($userPath) { $env:Path = "$userPath;$env:Path" }
+    $gemini = Resolve-NativeCommand 'gemini'
+}
+if (-not $gemini) { throw '未找到 gemini 命令，请重新打开 PowerShell 后再次运行本脚本。' }
+Write-SuccessMessage "Gemini CLI 已就绪: $(& $gemini --version)"
+
+$apiKey = Read-SecretText "请输入 Poke API Key（从 $ConsoleUrl 获取，输入不会回显）"
+if ([string]::IsNullOrWhiteSpace($apiKey)) { throw 'API Key 不能为空。' }
+
+[Environment]::SetEnvironmentVariable('GOOGLE_GEMINI_BASE_URL', $BaseUrl, 'User')
+[Environment]::SetEnvironmentVariable('GEMINI_API_KEY', $apiKey, 'User')
+[Environment]::SetEnvironmentVariable('GEMINI_MODEL', $Model, 'User')
 $env:GOOGLE_GEMINI_BASE_URL = $BaseUrl
-$env:GEMINI_API_KEY = $ApiKey
+$env:GEMINI_API_KEY = $apiKey
 $env:GEMINI_MODEL = $Model
+$apiKey = $null
 
-Ok "环境变量已写入用户配置"
-Write-Host ""
-Write-Host "======================================"
-Ok "Gemini CLI 配置完成！"
+Write-Host ''
+Write-Host '======================================'
+Write-SuccessMessage 'Gemini CLI 配置完成'
 Write-Host "  Base URL : $BaseUrl"
 Write-Host "  模型     : $Model"
-Write-Host "======================================"
-Warn "请重新打开终端使环境变量全局生效，然后运行: gemini"
+Write-Host '  认证变量 : GEMINI_API_KEY（值未显示）'
+Write-Host '======================================'
+Write-WarnMessage '重新打开终端后运行: gemini'
+Write-WarnMessage '首次启动如出现认证选择，请选择 “Use Gemini API key”。'

@@ -229,7 +229,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="docs-closing__copy">
           <p>在控制台创建 API Key，然后按照协议选择正确的 Base URL。</p>
-          <a class="docs-button docs-button--light" href="https://www.poke2api.com/home">
+          <a class="docs-button docs-button--light" href="https://www.poke2api.com/dashboard">
             前往控制台 <span aria-hidden="true">↗</span>
           </a>
         </div>

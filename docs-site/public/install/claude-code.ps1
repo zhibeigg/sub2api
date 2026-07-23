@@ -1,57 +1,79 @@
 # Poke API - Claude Code 一键配置脚本 (Windows PowerShell)
 # 用法: irm https://docs.poke2api.com/install/claude-code.ps1 | iex
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 
-$BaseUrl    = "https://www.poke2api.com"
-$ConsoleUrl = "https://www.poke2api.com"
+$BaseUrl = 'https://www.poke2api.com'
+$ConsoleUrl = 'https://www.poke2api.com'
+$OfficialInstallerUrl = 'https://claude.ai/install.ps1'
 
-function Info($m){ Write-Host "[信息] $m" -ForegroundColor Cyan }
-function Ok($m){   Write-Host "[成功] $m" -ForegroundColor Green }
-function Warn($m){ Write-Host "[提示] $m" -ForegroundColor Yellow }
-function Err($m){  Write-Host "[错误] $m" -ForegroundColor Red }
+function Write-InfoMessage([string]$Message) { Write-Host "[信息] $Message" -ForegroundColor Cyan }
+function Write-SuccessMessage([string]$Message) { Write-Host "[成功] $Message" -ForegroundColor Green }
+function Write-WarnMessage([string]$Message) { Write-Host "[提示] $Message" -ForegroundColor Yellow }
 
-Write-Host "======================================"
-Write-Host "   Poke API - Claude Code 一键配置"
-Write-Host "======================================"
-
-# 1. 检测 Node.js
-if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-  Err "未检测到 Node.js。请先安装 Node.js LTS: https://nodejs.org"
-  Err "教程: https://docs.poke2api.com/guide/nodejs"
-  return
+function Resolve-NativeCommand([string]$Name) {
+    foreach ($candidate in @("$Name.exe", "$Name.cmd", $Name)) {
+        $command = Get-Command $candidate -ErrorAction SilentlyContinue
+        if ($command) { return $command.Source }
+    }
+    return $null
 }
-Info ("Node.js 版本: " + (node -v))
 
-# 2. 检测 / 安装 Claude Code
-if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
-  Info "未检测到 Claude Code，正在通过 npm 安装..."
-  npm install -g @anthropic-ai/claude-code
+function Read-SecretText([string]$Prompt) {
+    $secure = Read-Host $Prompt -AsSecureString
+    $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try {
+        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
+    } finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
+    }
 }
-if (Get-Command claude -ErrorAction SilentlyContinue) {
-  Ok "Claude Code 已就绪"
+
+Write-Host '======================================'
+Write-Host '   Poke API · Claude Code 一键配置'
+Write-Host '======================================'
+
+$claude = Resolve-NativeCommand 'claude'
+if (-not $claude) {
+    Write-InfoMessage '未检测到 Claude Code，正在运行 Anthropic 官方原生安装器...'
+    $installer = Invoke-RestMethod -Uri $OfficialInstallerUrl -UseBasicParsing
+    & ([ScriptBlock]::Create([string]$installer))
+
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    if ($userPath) { $env:Path = "$userPath;$env:Path" }
+    $localBin = Join-Path $HOME '.local\bin'
+    if (Test-Path -LiteralPath $localBin) { $env:Path = "$localBin;$env:Path" }
+    $claude = Resolve-NativeCommand 'claude'
+}
+
+if ($claude) {
+    $version = & $claude --version 2>$null
+    if ($LASTEXITCODE -eq 0 -and $version) {
+        Write-SuccessMessage "Claude Code 已就绪: $version"
+    } else {
+        Write-SuccessMessage 'Claude Code 已就绪'
+    }
 } else {
-  Err "Claude Code 安装失败，请手动执行: npm install -g @anthropic-ai/claude-code"
-  return
+    throw '官方安装器已执行，但当前 PowerShell 尚未找到 claude。请重新打开终端后再次运行本脚本。'
 }
 
-# 3. 输入 API Key
-Write-Host ""
-$ApiKey = Read-Host "请输入你的 Poke API Key (在 $ConsoleUrl 控制台获取)"
-if ([string]::IsNullOrWhiteSpace($ApiKey)) { Err "API Key 不能为空。"; return }
+Write-Host ''
+$apiKey = Read-SecretText "请输入 Poke API Key（从 $ConsoleUrl 获取，输入不会回显）"
+if ([string]::IsNullOrWhiteSpace($apiKey)) { throw 'API Key 不能为空。' }
 
-# 4. 写入用户环境变量（永久）
-[System.Environment]::SetEnvironmentVariable("ANTHROPIC_BASE_URL", $BaseUrl, [System.EnvironmentVariableTarget]::User)
-[System.Environment]::SetEnvironmentVariable("ANTHROPIC_AUTH_TOKEN", $ApiKey, [System.EnvironmentVariableTarget]::User)
-[System.Environment]::SetEnvironmentVariable("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1", [System.EnvironmentVariableTarget]::User)
-# 当前会话立即生效
+[Environment]::SetEnvironmentVariable('ANTHROPIC_BASE_URL', $BaseUrl, 'User')
+[Environment]::SetEnvironmentVariable('ANTHROPIC_AUTH_TOKEN', $apiKey, 'User')
+[Environment]::SetEnvironmentVariable('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC', '1', 'User')
 $env:ANTHROPIC_BASE_URL = $BaseUrl
-$env:ANTHROPIC_AUTH_TOKEN = $ApiKey
-$env:CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
+$env:ANTHROPIC_AUTH_TOKEN = $apiKey
+$env:CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1'
+$apiKey = $null
 
-Ok "环境变量已写入用户配置"
-Write-Host ""
-Write-Host "======================================"
-Ok "Claude Code 配置完成！"
+Write-Host ''
+Write-Host '======================================'
+Write-SuccessMessage 'Claude Code 配置完成'
 Write-Host "  Base URL : $BaseUrl"
-Write-Host "======================================"
-Warn "请重新打开终端使环境变量全局生效，然后进入项目目录运行: claude"
+Write-Host '  认证变量 : ANTHROPIC_AUTH_TOKEN（值未显示）'
+Write-Host '======================================'
+Write-WarnMessage '重新打开终端后，进入项目目录运行: claude'
+Write-WarnMessage '如需诊断安装状态，可运行: claude doctor'

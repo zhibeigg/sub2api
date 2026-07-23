@@ -57,6 +57,11 @@ sudo mv cc-switch /usr/local/bin/
 
 **Windows**：前往 [GitHub Releases](https://github.com/SaladDay/cc-switch-cli/releases) 下载 `cc-switch-cli-windows-x64.zip`，解压后把 `cc-switch.exe` 放到 `PATH` 目录中，或直接在当前目录运行 `.\cc-switch.exe`。
 
+<figure class="tutorial-media tutorial-media--terminal">
+  <img src="/images/cc-switch-cli/release-download.png" alt="Windows Terminal 中通过 GitHub CLI 查询 CC-Switch CLI v5.9.0 与 Windows 发布文件" loading="lazy">
+  <figcaption>真实发布信息：通过 GitHub CLI 查询维护仓库的 v5.9.0 Release，可看到 Windows x64 压缩包与校验文件。版本更新后文件名中的版本号会变化。</figcaption>
+</figure>
+
 ## 两种使用方式
 
 ### 进入 TUI 界面
@@ -74,6 +79,11 @@ cc-switch --app gemini
 ```
 
 TUI 适合第一次配置。你可以在里面新增供应商，填入 API Key，然后保存并切换到该 Provider。
+
+<figure class="tutorial-media tutorial-media--terminal">
+  <img src="/images/cc-switch-cli/provider-tui.png" alt="CC-Switch CLI v5.9.0 的真实交互式 TUI 首页，包含应用标签、供应商入口和环境检查" loading="lazy">
+  <figcaption>实机截图：CC-Switch CLI v5.9.0，使用独立的 <code>CC_SWITCH_CONFIG_DIR</code> 空白配置拍摄，不包含个人 Provider、API Key、MCP 或会话数据。</figcaption>
+</figure>
 
 ### 使用 CLI 命令
 
@@ -101,6 +111,11 @@ CLI 命令适合服务器、脚本和日常排错，也适合交给 Claude Code 
 ```bash
 cc-switch env tools
 ```
+
+<figure class="tutorial-media tutorial-media--terminal">
+  <img src="/images/cc-switch-cli/env-tools.png" alt="CC-Switch CLI 真实执行 version 与 env tools 后输出本地 CLI 检测表" loading="lazy">
+  <figcaption>实机截图：<code>env tools</code> 会逐项显示本机工具状态。出现 <code>program not found</code> 或 <code>not installed</code> 时，先完成对应 CLI 的安装再继续。</figcaption>
+</figure>
 
 建议先运行一次目标 CLI 或帮助命令，让它创建自己的配置目录：
 
