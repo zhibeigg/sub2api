@@ -63,7 +63,7 @@ describe('playground API group routing', () => {
     }])
   })
 
-  it('attaches the selected group to gateway requests', async () => {
+  it('keeps explicit groups for chat/video but lets image requests use backend failover', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')
     fetchMock
       .mockResolvedValueOnce(streamResponse(['data: [DONE]\n\n']))
@@ -72,29 +72,28 @@ describe('playground API group routing', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ request_id: 'task-1', status: 'completed', url: 'video' }), { status: 200 }))
 
     await playgroundAPI.streamChat({ apiKey: 'secret-key', groupId: 42, model: 'chat-model', messages: [], onDelta: () => undefined })
-    await playgroundAPI.generateImage({ apiKey: 'secret-key', groupId: 42, model: 'image-model', prompt: 'draw' })
+    await playgroundAPI.generateImage({ apiKey: 'secret-key', model: 'image-model', prompt: 'draw' })
     await playgroundAPI.generateVideo({ apiKey: 'secret-key', groupId: 42, model: 'video-model', prompt: 'move' })
     await playgroundAPI.getVideoStatus('secret-key', 42, 'task-1')
 
-    for (const call of fetchMock.mock.calls) {
+    fetchMock.mock.calls.forEach((call, index) => {
       const headers = new Headers((call[1] as RequestInit).headers)
-      expect(headers.get('X-Sub2API-Group-ID')).toBe('42')
+      expect(headers.get('X-Sub2API-Group-ID')).toBe(index === 1 ? null : '42')
       expect(headers.get('Authorization')).toBe('Bearer secret-key')
-    }
+    })
   })
 })
 
 describe('playground image requests', () => {
   beforeEach(() => vi.restoreAllMocks())
 
-  it('uses JSON generations with b64_json and the selected group', async () => {
+  it('uses JSON generations with b64_json without pinning a group', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ data: [{ b64_json: 'aW1hZ2U=' }] }), { status: 200 })
     )
 
     await playgroundAPI.generateImage({
       apiKey: 'image-key',
-      groupId: 7,
       model: 'gpt-image-1',
       prompt: 'sharp editorial poster',
       size: '1024x1536',
@@ -106,7 +105,7 @@ describe('playground image requests', () => {
     expect(String(url)).toContain('/v1/images/generations')
     const headers = new Headers((init as RequestInit).headers)
     expect(headers.get('Authorization')).toBe('Bearer image-key')
-    expect(headers.get('X-Sub2API-Group-ID')).toBe('7')
+    expect(headers.get('X-Sub2API-Group-ID')).toBeNull()
     expect(headers.get('Content-Type')).toBe('application/json')
     expect(JSON.parse(String((init as RequestInit).body))).toEqual({
       model: 'gpt-image-1',
@@ -127,7 +126,6 @@ describe('playground image requests', () => {
 
     await playgroundAPI.generateImage({
       apiKey: 'edit-key',
-      groupId: 9,
       model: 'dall-e-3',
       prompt: 'edit this',
       size: '1024x1024',
@@ -140,7 +138,7 @@ describe('playground image requests', () => {
     expect(String(url)).toContain('/v1/images/edits')
     const headers = new Headers((init as RequestInit).headers)
     expect(headers.get('Authorization')).toBe('Bearer edit-key')
-    expect(headers.get('X-Sub2API-Group-ID')).toBe('9')
+    expect(headers.get('X-Sub2API-Group-ID')).toBeNull()
     expect(headers.get('Content-Type')).toBeNull()
     const body = (init as RequestInit).body as FormData
     expect(body).toBeInstanceOf(FormData)

@@ -19,6 +19,7 @@
 
       <div class="space-y-5">
         <KeyModelPicker
+          ref="keyModelPicker"
           :key-id="keyId"
           :resolved-key="resolvedKey"
           :option="option"
@@ -397,6 +398,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const keyModelPicker = ref<{ refreshOptions: () => void } | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const replaceTarget = ref<number | null>(null)
 const previewUrl = ref('')
@@ -433,7 +435,8 @@ const {
 } = useImageWorkbench({
   apiKey: () => props.resolvedKey,
   option: () => props.option,
-  t
+  t,
+  onCatalogInvalidated: () => keyModelPicker.value?.refreshOptions()
 })
 
 const referenceAccept = IMAGE_REFERENCE_TYPES.join(',')

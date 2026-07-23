@@ -221,7 +221,6 @@ describe('ImagePanel workbench', () => {
 
     expect(generateImage.mock.calls[0][0]).toEqual(expect.objectContaining({
       apiKey: 'secret-key',
-      groupId: 7,
       model: 'gpt-image-1',
       images: [reference]
     }))

@@ -52,6 +52,13 @@ type PlaygroundRoutableModelLister interface {
 	GetAvailablePlaygroundModels(ctx context.Context, groupID *int64, platform string) ([]string, bool)
 }
 
+// PlaygroundCatalogModelLister returns the persistently configured catalog for
+// one concrete group. Runtime rate limits, overload, quota pauses and snapshot
+// emptiness must not remove models from this catalog.
+type PlaygroundCatalogModelLister interface {
+	GetPlaygroundModelCatalog(ctx context.Context, group *Group) ([]string, bool, error)
+}
+
 type PlaygroundGroupAccessChecker interface {
 	CanUserBindGroup(ctx context.Context, user *User, group *Group) bool
 }
@@ -86,7 +93,16 @@ func (s *PlaygroundService) GetModelOptions(ctx context.Context, userID, apiKeyI
 			continue
 		}
 		var models []string
-		if lister, ok := s.models.(PlaygroundRoutableModelLister); ok {
+		if lister, ok := s.models.(PlaygroundCatalogModelLister); ok {
+			var routable bool
+			models, routable, err = lister.GetPlaygroundModelCatalog(ctx, group)
+			if err != nil {
+				return nil, err
+			}
+			if !routable {
+				continue
+			}
+		} else if lister, ok := s.models.(PlaygroundRoutableModelLister); ok {
 			var routable bool
 			models, routable = lister.GetAvailablePlaygroundModels(ctx, &group.ID, group.Platform)
 			if !routable {

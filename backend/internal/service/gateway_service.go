@@ -19,6 +19,7 @@ import (
 	"unsafe"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/cespare/xxhash/v2"
@@ -1260,31 +1261,64 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 	return cloneStringSlice(models)
 }
 
-// GetAvailablePlaygroundModels returns models from accounts that are currently
-// schedulable for the selected group, including mixed-scheduling candidates.
-// When the group belongs to an active channel, the same platform-scoped
-// mapping/pricing catalog used by the model square is authoritative; account
-// capabilities only filter that catalog and never add extra display models.
-// The boolean is false only when the group has no routable account at all.
+// GetAvailablePlaygroundModels preserves the legacy two-result surface for
+// callers that do not have a hydrated Group. PlaygroundService uses
+// GetPlaygroundModelCatalog so channel lookup failures remain distinguishable
+// from an intentionally empty catalog.
 func (s *GatewayService) GetAvailablePlaygroundModels(ctx context.Context, groupID *int64, platform string) ([]string, bool) {
-	platform = NormalizePlatform(platform)
-	channelCandidates, useChannelCatalog := s.getChannelPlaygroundModels(ctx, groupID, platform)
-	accounts, useMixed, err := s.listSchedulableAccounts(ctx, groupID, platform, false)
-	if err != nil || len(accounts) == 0 {
+	group := &Group{Platform: NormalizePlatform(platform), Status: StatusActive, AllowImageGeneration: true}
+	if groupID != nil {
+		group.ID = *groupID
+	}
+	models, routable, err := s.getPlaygroundModelCatalog(ctx, group, groupID)
+	if err != nil {
+		slog.Warn("playground_model_catalog_failed", "group_id", derefGroupID(groupID), "platform", platform, "error", err)
 		return nil, false
 	}
+	return models, routable
+}
 
-	routableAccounts := make([]Account, 0, len(accounts))
+// GetPlaygroundModelCatalog returns a persistent capability catalog. It uses
+// active+schedulable account configuration but deliberately ignores transient
+// scheduler state such as rate limits, overload, quota auto-pause and snapshot
+// bucket emptiness.
+func (s *GatewayService) GetPlaygroundModelCatalog(ctx context.Context, group *Group) ([]string, bool, error) {
+	if group == nil || group.ID <= 0 {
+		return nil, false, nil
+	}
+	groupID := group.ID
+	ctx = context.WithValue(ctx, ctxkey.Group, group)
+	return s.getPlaygroundModelCatalog(ctx, group, &groupID)
+}
+
+func (s *GatewayService) getPlaygroundModelCatalog(ctx context.Context, group *Group, groupID *int64) ([]string, bool, error) {
+	if s == nil || s.accountRepo == nil {
+		return nil, false, errors.New("playground account repository is not configured")
+	}
+	platform := ""
+	if group != nil {
+		platform = NormalizePlatform(group.Platform)
+	}
+
+	channelCandidates, useChannelCatalog, err := s.getChannelPlaygroundModels(ctx, groupID, platform)
+	if err != nil {
+		return nil, false, err
+	}
+	platforms := playgroundCatalogCandidatePlatforms(group, platform)
+	includeGrouped := groupID == nil && s.cfg != nil && s.cfg.RunMode == config.RunModeSimple
+	accounts, err := s.accountRepo.ListModelAvailabilityCandidates(ctx, groupID, platforms, includeGrouped)
+	if err != nil {
+		return nil, false, fmt.Errorf("load persistent playground account candidates: %w", err)
+	}
+	if len(accounts) == 0 {
+		return nil, false, nil
+	}
+
 	candidates := make([]string, 0, 32)
 	hasEmptyMapping := false
 	hasWildcardMapping := false
 	for i := range accounts {
-		account := &accounts[i]
-		if !s.isAccountAllowedForPlatform(account, platform, useMixed) {
-			continue
-		}
-		routableAccounts = append(routableAccounts, *account)
-		mapping := account.GetModelMapping()
+		mapping := accounts[i].GetModelMapping()
 		if len(mapping) == 0 {
 			hasEmptyMapping = true
 		}
@@ -1302,34 +1336,24 @@ func (s *GatewayService) GetAvailablePlaygroundModels(ctx context.Context, group
 			}
 		}
 	}
-	if len(routableAccounts) == 0 {
-		return nil, false
-	}
 
 	if useChannelCatalog {
 		candidates = append(candidates, channelCandidates...)
 	} else {
-		// Legacy groups without an active channel retain their previous fallback:
-		// unrestricted/wildcard accounts expand the platform default catalog.
+		// A confirmed absence of an active channel is the only case where legacy
+		// account mappings and platform defaults may synthesize the catalog.
 		if hasEmptyMapping || hasWildcardMapping || platform == PlatformOpenAI {
 			candidates = append(candidates, playgroundDefaultModelIDs(platform)...)
 		}
 		if platform == PlatformOpenAI {
-			candidates = append(candidates, openAIPlaygroundCatalogCandidates(routableAccounts)...)
+			candidates = append(candidates, openAIPlaygroundCatalogCandidates(accounts)...)
 		}
 	}
 
 	modelSet := make(map[string]struct{})
 	for _, model := range normalizePlaygroundModels(candidates) {
-		for i := range routableAccounts {
-			account := &routableAccounts[i]
-			if platform == PlatformOpenAI {
-				mappedModel := account.GetMappedModel(model)
-				if isOpenAIPlatformImageModel(mappedModel) && !isOpenAIPlatformImageModel(model) {
-					continue
-				}
-			}
-			if accountCanRoutePlaygroundModel(account, platform, model) {
+		for i := range accounts {
+			if s.accountCanRoutePersistentPlaygroundModel(ctx, group, &accounts[i], model) {
 				modelSet[model] = struct{}{}
 				break
 			}
@@ -1341,19 +1365,108 @@ func (s *GatewayService) GetAvailablePlaygroundModels(ctx context.Context, group
 		models = append(models, model)
 	}
 	sort.Strings(models)
-	return models, true
+	return models, true, nil
 }
 
-func (s *GatewayService) getChannelPlaygroundModels(ctx context.Context, groupID *int64, platform string) ([]string, bool) {
+func playgroundCatalogCandidatePlatforms(group *Group, platform string) []string {
+	platforms := append([]string(nil), MixedSchedulingCandidatePlatforms(platform)...)
+	if group != nil {
+		for _, rawProtocol := range GroupEndpointProtocols(group) {
+			protocol := NormalizeEndpointProtocol(EndpointProtocol(rawProtocol))
+			platforms = append(platforms, CandidateAccountPlatforms(protocol, "")...)
+		}
+	}
+	seen := make(map[string]struct{}, len(platforms))
+	out := make([]string, 0, len(platforms))
+	for _, candidate := range platforms {
+		candidate = NormalizePlatform(candidate)
+		if !IsValidPlatform(candidate) {
+			continue
+		}
+		if _, ok := seen[candidate]; ok {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		out = append(out, candidate)
+	}
+	return out
+}
+
+func (s *GatewayService) accountCanRoutePersistentPlaygroundModel(ctx context.Context, group *Group, account *Account, model string) bool {
+	if account == nil || strings.TrimSpace(model) == "" {
+		return false
+	}
+	if group == nil {
+		return accountCanRoutePlaygroundModel(account, "", model)
+	}
+
+	hasBinding := s.isAccountInGroup(account, &group.ID)
+	if !hasBinding {
+		for _, boundGroupID := range account.GroupIDs {
+			if boundGroupID == group.ID {
+				hasBinding = true
+				break
+			}
+		}
+	}
+	endpointCompatibilityEnabled := false
+	for i := range account.AccountGroups {
+		binding := &account.AccountGroups[i]
+		if binding.GroupID == group.ID {
+			hasBinding = true
+			endpointCompatibilityEnabled = binding.EndpointCompatibilityEnabled
+			break
+		}
+	}
+	endpointCompatibilityEnabled = endpointCompatibilityEnabled && s.cfg != nil && s.cfg.Gateway.CrossProviderCompatibilityEnabled
+	mediaType := ModelMediaType(model)
+	for _, rawProtocol := range GroupEndpointProtocols(group) {
+		protocol := NormalizeEndpointProtocol(EndpointProtocol(rawProtocol))
+		switch mediaType {
+		case PlaygroundCapabilityImage:
+			if protocol != EndpointProtocolOpenAIImages {
+				continue
+			}
+		case PlaygroundCapabilityVideo:
+			if protocol != EndpointProtocolOpenAIVideos {
+				continue
+			}
+		default:
+			if protocol == EndpointProtocolOpenAIImages || protocol == EndpointProtocolOpenAIVideos || protocol == EndpointProtocolOpenAIEmbeddings || protocol == EndpointProtocolOpenAIAlphaSearch {
+				continue
+			}
+		}
+		request := RequestDescriptor{Protocol: protocol, Model: model}
+		if protocol == EndpointProtocolOpenAIImages {
+			request.EndpointPath = openAIImagesGenerationsEndpoint
+			request.OpenAIImageCapability = OpenAIImagesCapabilityNative
+		}
+		if IsAccountCompatibleForRequest(account, request, AccountGroupCompatibilityOptions{
+			Context:                      ctx,
+			Group:                        group,
+			HasAccountGroupBinding:       hasBinding,
+			EndpointCompatibilityEnabled: endpointCompatibilityEnabled,
+			AllowMixedScheduling:         GroupPlatformSupportsMixedScheduling(group.Platform),
+			RequireOAuthOnly:             group.RequireOAuthOnly,
+			RequirePrivacySet:            group.RequirePrivacySet,
+			SkipSchedulabilityChecks:     true,
+		}) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *GatewayService) getChannelPlaygroundModels(ctx context.Context, groupID *int64, platform string) ([]string, bool, error) {
 	if s == nil || s.channelService == nil || groupID == nil || *groupID <= 0 {
-		return nil, false
+		return nil, false, nil
 	}
 	channel, err := s.channelService.GetChannelForGroup(ctx, *groupID)
-	if err != nil || channel == nil {
-		// Production playground/model-square behavior is channel-backed. Once a
-		// ChannelService is configured, a missing/unreadable channel is an
-		// authoritative empty catalog rather than permission to synthesize defaults.
-		return nil, true
+	if err != nil {
+		return nil, false, fmt.Errorf("load playground channel catalog: %w", err)
+	}
+	if channel == nil {
+		return nil, false, nil
 	}
 
 	models := make([]string, 0)
@@ -1365,7 +1478,7 @@ func (s *GatewayService) getChannelPlaygroundModels(ctx context.Context, groupID
 			models = append(models, name)
 		}
 	}
-	return normalizePlaygroundModels(models), true
+	return normalizePlaygroundModels(models), true, nil
 }
 
 // GetSchedulablePlatforms returns the concrete platforms that currently have

@@ -17,6 +17,7 @@ interface UseImageWorkbenchOptions {
   apiKey: () => string
   option: () => PlaygroundModelOption | null
   t: (key: string, params?: Record<string, unknown>) => string
+  onCatalogInvalidated?: () => void
 }
 
 let imageIdSeed = 0
@@ -88,7 +89,7 @@ function resultsFromResponse(images: GeneratedImage[]): PlaygroundImageResult[] 
   }
 }
 
-export function useImageWorkbench({ apiKey, option, t }: UseImageWorkbenchOptions) {
+export function useImageWorkbench({ apiKey, option, t, onCatalogInvalidated }: UseImageWorkbenchOptions) {
   const prompt = ref('')
   const size = ref('1024x1024')
   const quality = ref<PlaygroundImageQuality>('')
@@ -299,7 +300,6 @@ export function useImageWorkbench({ apiKey, option, t }: UseImageWorkbenchOption
       batch.stage = 'requesting'
       const response = await playgroundAPI.generateImage({
         apiKey: selectedKey,
-        groupId: selectedOption.group_id,
         model: selectedOption.model,
         prompt: selectedPrompt,
         size: selectedSize === 'auto' ? undefined : selectedSize,
@@ -320,6 +320,9 @@ export function useImageWorkbench({ apiKey, option, t }: UseImageWorkbenchOption
       batch.stage = undefined
     } catch (error) {
       if (isAbortError(error) || !history.value.includes(batch)) return
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'image_capacity_unavailable') {
+        onCatalogInvalidated?.()
+      }
       batch.status = 'error'
       batch.error = (error as Error).message || t('playground.requestFailed')
       batch.completedAt = Date.now()

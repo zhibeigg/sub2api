@@ -11,10 +11,10 @@ import type {
 
 const GROUP_HEADER = 'X-Sub2API-Group-ID'
 
-function gatewayHeaders(apiKey: string, groupId: number, contentType = false): Record<string, string> {
+function gatewayHeaders(apiKey: string, groupId?: number, contentType = false): Record<string, string> {
   return {
     Authorization: `Bearer ${apiKey}`,
-    [GROUP_HEADER]: String(groupId),
+    ...(groupId != null ? { [GROUP_HEADER]: String(groupId) } : {}),
     ...(contentType ? { 'Content-Type': 'application/json' } : {})
   }
 }
@@ -65,7 +65,8 @@ export interface ChatStreamOptions {
 
 export interface ImageGenerationOptions {
   apiKey: string
-  groupId: number
+  /** Omit to let the backend fail over across every authorized image group. */
+  groupId?: number
   model: string
   prompt: string
   size?: string
@@ -79,6 +80,17 @@ export interface GeneratedImage {
   url?: string
   b64_json?: string
   revised_prompt?: string
+}
+
+export class PlaygroundAPIError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly code: string
+  ) {
+    super(message)
+    this.name = 'PlaygroundAPIError'
+  }
 }
 
 export interface PlaygroundSSEEvent {
@@ -220,7 +232,7 @@ export async function listModels(apiKey: string, groupId: number, signal?: Abort
   const res = await fetch(buildGatewayUrl('/v1/models'), {
     method: 'GET', headers: gatewayHeaders(apiKey, groupId), signal
   })
-  if (!res.ok) throw new Error(await extractError(res))
+  if (!res.ok) throw await extractError(res)
   const json = await res.json()
   const data = Array.isArray(json?.data) ? json.data : []
   return data.map((model: Record<string, unknown>) => ({
@@ -321,7 +333,7 @@ export async function streamChat(opts: ChatStreamOptions): Promise<void> {
     }),
     signal: opts.signal
   })
-  if (!res.ok || !res.body) throw new Error(await extractError(res))
+  if (!res.ok || !res.body) throw await extractError(res)
 
   const toolCalls = new Map<number, ChatToolCall>()
   const completed = new Set<number>()
@@ -399,7 +411,7 @@ export async function streamResponses(opts: ResponsesStreamOptions): Promise<voi
     }),
     signal: opts.signal
   })
-  if (!res.ok || !res.body) throw new Error(await extractError(res))
+  if (!res.ok || !res.body) throw await extractError(res)
 
   const activities = new Map<string, PlaygroundToolActivity>()
   await consumeSSE(res.body, (event) => {
@@ -503,7 +515,7 @@ export async function generateImage(opts: ImageGenerationOptions): Promise<Gener
     body,
     signal: opts.signal
   })
-  if (!res.ok) throw new Error(await extractError(res))
+  if (!res.ok) throw await extractError(res)
   const json = await res.json()
   return (Array.isArray(json?.data) ? json.data : []) as GeneratedImage[]
 }
@@ -540,7 +552,7 @@ export async function generateVideo(opts: VideoGenerationOptions): Promise<Video
       ...(opts.ratio ? { ratio: opts.ratio } : {})
     }), signal: opts.signal
   })
-  if (!res.ok) throw new Error(await extractError(res))
+  if (!res.ok) throw await extractError(res)
   const json = await res.json()
   const requestId = String(json?.request_id ?? json?.id ?? '')
   if (!requestId) throw new Error('Video task id missing in response')
@@ -551,7 +563,7 @@ export async function getVideoStatus(apiKey: string, groupId: number, requestId:
   const res = await fetch(buildGatewayUrl(`/v1/videos/${encodeURIComponent(requestId)}`), {
     method: 'GET', headers: gatewayHeaders(apiKey, groupId), signal
   })
-  if (!res.ok) throw new Error(await extractError(res))
+  if (!res.ok) throw await extractError(res)
   const json = await res.json()
   return {
     request_id: String(json?.request_id ?? requestId),
@@ -564,15 +576,16 @@ export async function getVideoStatus(apiKey: string, groupId: number, requestId:
   }
 }
 
-async function extractError(res: Response): Promise<string> {
+async function extractError(res: Response): Promise<PlaygroundAPIError> {
   try {
     const json = await res.json()
+    const code = String(json?.error?.code || json?.error?.type || json?.code || '')
     const message = json?.error?.message || json?.error?.type || json?.message || (typeof json?.error === 'string' ? json.error : '')
-    if (message) return `${res.status} · ${message}`
+    if (message) return new PlaygroundAPIError(`${res.status} · ${message}`, res.status, code)
+    return new PlaygroundAPIError(`${res.status} ${res.statusText || 'Request failed'}`, res.status, code)
   } catch {
-    // fall through
+    return new PlaygroundAPIError(`${res.status} ${res.statusText || 'Request failed'}`, res.status, '')
   }
-  return `${res.status} ${res.statusText || 'Request failed'}`
 }
 
 export const playgroundAPI = {

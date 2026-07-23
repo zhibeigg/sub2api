@@ -296,6 +296,7 @@ func openAIPlatformAllowedForContext(ctx context.Context, account *Account, plat
 			RequireOAuthOnly:             group.RequireOAuthOnly,
 			RequirePrivacySet:            group.RequirePrivacySet,
 			SkipSchedulabilityChecks:     true,
+			SkipModelCapabilityChecks:    true,
 		})
 	}
 
@@ -1620,10 +1621,10 @@ func (s *OpenAIGatewayService) ResolveEffectiveGroupBinding(ctx context.Context,
 	return firstGroup
 }
 
-// ResolveEffectiveImageGroupBinding applies the same binding priority semantics
-// as ResolveEffectiveGroupBinding, but only selects groups that are active,
-// enable image generation, and contain an account that can execute the exact
-// image model/endpoint combination.
+// ResolveEffectiveImageGroupBinding probes each authorized image group in key
+// priority order using the same scheduler and request descriptor as the real
+// images request. The probe releases any acquired slot immediately, so routing
+// can fail over across bindings before the single upstream call begins.
 func (s *OpenAIGatewayService) ResolveEffectiveImageGroupBinding(ctx context.Context, apiKey *APIKey, requestedModel, endpoint string, capability OpenAIImagesCapability) *Group {
 	if apiKey != nil && apiKey.ExplicitGroupSelection {
 		return apiKey.Group
@@ -1631,36 +1632,39 @@ func (s *OpenAIGatewayService) ResolveEffectiveImageGroupBinding(ctx context.Con
 	if apiKey == nil || len(apiKey.GroupBindings) == 0 {
 		return nil
 	}
-	var firstGroup *Group
+	var firstEligibleGroup *Group
 	for i := range apiKey.GroupBindings {
 		binding := apiKey.GroupBindings[i]
 		group := binding.Group
-		if group == nil || !apiKey.AllowsGroupByUserRestriction(group) {
+		if group == nil || !apiKey.AllowsGroupByUserRestriction(group) ||
+			!group.IsActive() || NormalizePlatform(group.Platform) != PlatformOpenAI ||
+			!GroupAllowsEndpoint(group, EndpointProtocolOpenAIImages) || !GroupAllowsImageGeneration(group) {
 			continue
 		}
-		if firstGroup == nil {
-			firstGroup = group
+		if firstEligibleGroup == nil {
+			firstEligibleGroup = group
 		}
-		if !group.IsActive() || NormalizePlatform(group.Platform) != PlatformOpenAI || !GroupAllowsImageGeneration(group) {
-			continue
-		}
+
 		groupID := binding.GroupID
 		probeCtx := context.WithValue(ctx, ctxkey.Group, group)
-		accounts, err := s.listSchedulableAccounts(probeCtx, &groupID, PlatformOpenAI)
-		if err != nil {
+		probeCtx = WithEndpointProtocol(probeCtx, EndpointProtocolOpenAIImages)
+		probeCtx = WithOpenAIImageGenerationIntent(probeCtx)
+		selection, _, err := s.SelectAccountWithSchedulerForImages(
+			probeCtx,
+			&groupID,
+			"",
+			requestedModel,
+			nil,
+			capability,
+			endpoint,
+		)
+		if err != nil || selection == nil || selection.Account == nil {
 			continue
 		}
-		parentLookup := s.parentAccountLookup(probeCtx)
-		for accountIndex := range accounts {
-			account := &accounts[accountIndex]
-			if !isOpenAICompatibleAccountEligibleForRequest(probeCtx, account, PlatformOpenAI, requestedModel, false, "") ||
-				!account.SupportsOpenAIImageRequest(requestedModel, endpoint, capability) ||
-				!parentHealthyForShadow(account, parentLookup) ||
-				s.isOpenAIAccountRuntimeBlocked(account) {
-				continue
-			}
-			return group
+		if selection.ReleaseFunc != nil {
+			selection.ReleaseFunc()
 		}
+		return group
 	}
-	return firstGroup
+	return firstEligibleGroup
 }

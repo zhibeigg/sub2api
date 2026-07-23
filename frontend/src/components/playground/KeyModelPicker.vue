@@ -25,13 +25,17 @@
         :disabled="optionsLoading || compatibleOptions.length === 0"
         @change="onOptionChange(($event.target as HTMLSelectElement).value)"
       >
-        <option value="" disabled>
-          {{ compatibleOptions.length === 0 ? t('playground.noModels') : t('playground.selectModel') }}
-        </option>
+        <option value="" disabled>{{ modelPlaceholder }}</option>
         <option v-for="item in compatibleOptions" :key="playgroundOptionKey(item)" :value="playgroundOptionKey(item)">
           {{ item.model }}
         </option>
       </select>
+      <div v-if="optionsError" class="mt-1.5 flex items-center gap-2 text-xs text-red-600 dark:text-red-400">
+        <span>{{ t('playground.modelListLoadFailed') }}</span>
+        <button type="button" class="font-medium underline underline-offset-2" @click="refreshOptions">
+          {{ t('playground.retry') }}
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -72,7 +76,10 @@ const { t } = useI18n()
 const keys = ref<ApiKey[]>([])
 const options = ref<PlaygroundModelOption[]>([])
 const optionsLoading = ref(false)
-const optionCache = new Map<number, PlaygroundModelOption[]>()
+const optionsLoaded = ref(false)
+const optionsError = ref(false)
+const OPTION_CACHE_TTL_MS = 30_000
+const optionCache = new Map<number, { options: PlaygroundModelOption[]; expiresAt: number }>()
 let requestVersion = 0
 let optionsController: AbortController | null = null
 
@@ -88,6 +95,14 @@ const compatibleOptions = computed(() => {
     seen.add(modelKey)
     return true
   })
+})
+const modelPlaceholder = computed(() => {
+  if (optionsLoading.value) return t('playground.loadingModels')
+  if (optionsError.value) return t('playground.modelListLoadFailed')
+  if (!optionsLoaded.value) return t('playground.selectModel')
+  if (options.value.length === 0) return t('playground.noConfiguredModels')
+  if (compatibleOptions.value.length === 0) return t('playground.noModels')
+  return t('playground.selectModel')
 })
 
 function resolvedKeyValue(keyId = props.keyId): string {
@@ -142,29 +157,35 @@ function ensureOptionSelected(): void {
   emit('update:option', migrated ?? compatibleOptions.value[0] ?? null)
 }
 
-async function loadOptions(): Promise<void> {
+async function loadOptions(force = false): Promise<void> {
   const keyId = props.keyId
-  const apiKey = resolvedKeyValue(keyId)
   syncResolvedKey()
   optionsController?.abort()
   const version = ++requestVersion
 
-  if (!keyId || !apiKey) {
+  if (!keyId) {
     options.value = []
+    optionsLoaded.value = false
+    optionsError.value = false
     emit('update:option', null)
     return
   }
 
   const cached = optionCache.get(keyId)
-  if (cached) {
-    options.value = cached
+  if (!force && cached && cached.expiresAt > Date.now() && cached.options.length > 0) {
+    options.value = cached.options
+    optionsLoaded.value = true
+    optionsError.value = false
     ensureOptionSelected()
     return
   }
+  if (cached) optionCache.delete(keyId)
 
   // Prevent the previous key's group/model route from remaining sendable while
   // the newly selected key's capability catalog is still loading.
   options.value = []
+  optionsLoaded.value = false
+  optionsError.value = false
   emit('update:option', null)
 
   const controller = new AbortController()
@@ -173,16 +194,35 @@ async function loadOptions(): Promise<void> {
   try {
     const list = await playgroundAPI.listModelOptions(keyId, controller.signal)
     if (version !== requestVersion || keyId !== props.keyId) return
-    optionCache.set(keyId, list)
+    if (list.length > 0) {
+      optionCache.set(keyId, { options: list, expiresAt: Date.now() + OPTION_CACHE_TTL_MS })
+    }
     options.value = list
+    optionsLoaded.value = true
+    optionsError.value = false
     ensureOptionSelected()
   } catch (error) {
     if ((error as Error).name !== 'CanceledError' && (error as Error).name !== 'AbortError' && version === requestVersion) {
       options.value = []
+      optionsLoaded.value = false
+      optionsError.value = true
       emit('update:option', null)
     }
   } finally {
     if (version === requestVersion) optionsLoading.value = false
+  }
+}
+
+function refreshOptions(): void {
+  if (props.keyId) optionCache.delete(props.keyId)
+  void loadOptions(true)
+}
+
+function onWindowFocus(): void {
+  if (!props.keyId || optionsLoading.value) return
+  const cached = optionCache.get(props.keyId)
+  if (optionsError.value || options.value.length === 0 || !cached || cached.expiresAt <= Date.now()) {
+    void loadOptions(true)
   }
 }
 
@@ -196,10 +236,16 @@ watch(() => props.capability, () => {
 })
 
 onMounted(async () => {
+  window.addEventListener('focus', onWindowFocus)
   await loadKeys()
   await nextTick()
   if (requestVersion === 0) await loadOptions()
 })
 
-onBeforeUnmount(() => optionsController?.abort())
+onBeforeUnmount(() => {
+  window.removeEventListener('focus', onWindowFocus)
+  optionsController?.abort()
+})
+
+defineExpose({ refreshOptions })
 </script>

@@ -1614,6 +1614,19 @@ func (s *defaultOpenAIAccountScheduler) finishLoadBalanceSelectionFallback(
 
 	cfg := s.service.schedulingConfig()
 	compactBlocked := attempt.compactBlocked
+	recordedFallbackReasons := make(map[string]map[int64]struct{})
+	excludeOnce := func(reason string, accountID int64) {
+		ids := recordedFallbackReasons[reason]
+		if ids == nil {
+			ids = make(map[int64]struct{})
+			recordedFallbackReasons[reason] = ids
+		}
+		if _, exists := ids[accountID]; exists {
+			return
+		}
+		ids[accountID] = struct{}{}
+		filterStats.exclude(reason)
+	}
 	// WaitPlan.MaxConcurrency 使用 Concurrency（非 EffectiveLoadFactor），因为 WaitPlan 控制的是 Redis 实际并发槽位等待。
 	passes := 1
 	if budget != nil && budget.limited {
@@ -1629,19 +1642,41 @@ func (s *defaultOpenAIAccountScheduler) finishLoadBalanceSelectionFallback(
 			if budget != nil && budget.limited {
 				knownFull := candidate.loadKnown && candidate.account.Concurrency > 0 &&
 					candidate.loadInfo.CurrentConcurrency >= candidate.account.Concurrency
+				if knownFull {
+					excludeOnce("concurrency_full", candidate.account.ID)
+				}
 				if budget.wasAttempted(candidate.account.ID) != wantAttempted || knownFull != wantKnownFull {
 					continue
 				}
 			}
 			fresh := s.service.resolveFreshSchedulableOpenAIAccount(ctx, candidate.account, req.Platform, req.RequestedModel, false, req.RequiredCapability)
-			if fresh == nil || !s.isAccountTransportCompatible(fresh, req.RequiredTransport) || !s.isAccountRequestCompatible(ctx, fresh, req) {
+			if fresh == nil {
+				excludeOnce("fresh_recheck_ineligible", candidate.account.ID)
+				continue
+			}
+			if !s.isAccountTransportCompatible(fresh, req.RequiredTransport) {
+				excludeOnce("transport_incompatible", candidate.account.ID)
+				continue
+			}
+			if compatible, reason := s.isAccountRequestCompatibleReason(ctx, fresh, req); !compatible {
+				excludeOnce(reason, candidate.account.ID)
 				continue
 			}
 			if !s.consumeOpenAISelectionDBRecheck(budget) {
-				return nil, candidateCount, topK, loadSkew, noAvailableOpenAISelectionError(req.RequestedModel, compactBlocked, filterStats.summary("selection_order_exhausted"))
+				filterStats.exclude("selection_probe_budget_exhausted")
+				return nil, candidateCount, topK, loadSkew, noAvailableOpenAISelectionError(req.RequestedModel, compactBlocked, filterStats.summary("selection_probe_budget_exhausted"))
 			}
 			fresh = s.service.recheckSelectedOpenAIAccountFromDBForRequest(ctx, fresh, req.GroupID, req.Platform, req.requestDescriptor(ctx), false, req.RequiredCapability)
-			if fresh == nil || !s.isAccountTransportCompatible(fresh, req.RequiredTransport) || !s.isAccountRequestCompatible(ctx, fresh, req) {
+			if fresh == nil {
+				excludeOnce("db_recheck_ineligible", candidate.account.ID)
+				continue
+			}
+			if !s.isAccountTransportCompatible(fresh, req.RequiredTransport) {
+				excludeOnce("transport_incompatible", candidate.account.ID)
+				continue
+			}
+			if compatible, reason := s.isAccountRequestCompatibleReason(ctx, fresh, req); !compatible {
+				excludeOnce(reason, candidate.account.ID)
 				continue
 			}
 			if req.RequireCompact && openAICompactSupportTier(fresh) == 0 {
@@ -1730,6 +1765,9 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatibleReason(ctx con
 		return false, "shadow_parent_unhealthy"
 	}
 	if requestedModel != "" {
+		if !account.IsSchedulableForModelWithContext(ctx, requestedModel) {
+			return false, "model_rate_limited"
+		}
 		if account.IsOpenCode() {
 			if !account.IsOpenCodeModelSupported(requestedModel) {
 				return false, "model_not_supported"

@@ -82,6 +82,56 @@ describe('KeyModelPicker model options', () => {
     expect(wrapper.emitted('update:option')?.at(-1)?.[0]).toEqual(imageOption)
   })
 
+  it('loads model options by key id even when plaintext key material is unavailable', async () => {
+    listKeys.mockResolvedValue({ items: [{ id: 1, name: 'one' }] })
+    listModelOptions.mockResolvedValue([firstOption])
+    const wrapper = mount(KeyModelPicker, {
+      props: { keyId: 1, resolvedKey: '', option: null, capability: 'chat' },
+      global: { stubs: { Icon: true } }
+    })
+    await flushPromises()
+
+    expect(listModelOptions).toHaveBeenCalledWith(1, expect.any(AbortSignal))
+    expect(wrapper.findAll('select')[1].text()).toContain('first-model')
+  })
+
+  it('distinguishes empty catalogs, capability mismatch, and request errors', async () => {
+    listModelOptions.mockResolvedValueOnce([])
+    const wrapper = mount(KeyModelPicker, {
+      props: { keyId: 1, option: null, capability: 'chat' },
+      global: { stubs: { Icon: true } }
+    })
+    await flushPromises()
+    expect(wrapper.findAll('select')[1].findAll('option')[0].text()).toBe('playground.noConfiguredModels')
+
+    listModelOptions.mockResolvedValueOnce([imageOption])
+    window.dispatchEvent(new Event('focus'))
+    await flushPromises()
+    expect(wrapper.findAll('select')[1].findAll('option')[0].text()).toBe('playground.noModels')
+
+    listModelOptions.mockRejectedValueOnce(new Error('catalog failed'))
+    await wrapper.setProps({ keyId: 2 })
+    await flushPromises()
+    expect(wrapper.text()).toContain('playground.modelListLoadFailed')
+    expect(wrapper.text()).toContain('playground.retry')
+  })
+
+  it('does not permanently cache an empty model catalog', async () => {
+    listModelOptions.mockResolvedValueOnce([]).mockResolvedValueOnce([firstOption])
+    const wrapper = mount(KeyModelPicker, {
+      props: { keyId: 1, option: null, capability: 'chat' },
+      global: { stubs: { Icon: true } }
+    })
+    await flushPromises()
+    expect(wrapper.findAll('select')[1].text()).not.toContain('first-model')
+
+    const callsBeforeFocus = listModelOptions.mock.calls.length
+    window.dispatchEvent(new Event('focus'))
+    await flushPromises()
+    expect(listModelOptions.mock.calls.length).toBeGreaterThan(callsBeforeFocus)
+    expect(wrapper.findAll('select')[1].text()).toContain('first-model')
+  })
+
   it('ignores a stale response after the selected key changes', async () => {
     const first = deferred<any[]>()
     const second = deferred<any[]>()
