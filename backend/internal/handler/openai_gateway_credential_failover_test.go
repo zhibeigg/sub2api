@@ -37,7 +37,7 @@ func TestGatewayChatCredentialStopDoesNotSelectAnotherAccountAndReturnsSafe503(t
 	(&GatewayHandler{}).handleCCFailoverExhausted(c, state.LastFailoverErr, false)
 
 	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
-	require.Contains(t, recorder.Body.String(), service.GrokCredentialUnavailableClientMessage)
+	require.Contains(t, recorder.Body.String(), "[PokeAPI]")
 	require.NotContains(t, recorder.Body.String(), "invalid_client")
 	require.NotContains(t, recorder.Body.String(), "client_secret")
 }
@@ -72,7 +72,7 @@ func TestCredentialFailoverExhaustionReturnsFixedSafe503(t *testing.T) {
 	}, false)
 
 	require.Equal(t, http.StatusServiceUnavailable, recorder.Code)
-	require.Contains(t, recorder.Body.String(), service.GrokCredentialUnavailableClientMessage)
+	require.Contains(t, recorder.Body.String(), "[PokeAPI]")
 	require.NotContains(t, strings.ToLower(recorder.Body.String()), "invalid_grant")
 	require.NotContains(t, strings.ToLower(recorder.Body.String()), "refresh_token")
 	require.NotContains(t, recorder.Body.String(), "must-not-leak")

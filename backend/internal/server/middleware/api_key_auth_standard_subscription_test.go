@@ -138,14 +138,14 @@ func TestAPIKeyAuthGoogle_StandardGroupSubscriptionAndFallback(t *testing.T) {
 			groupType:   service.SubscriptionTypeStandard,
 			balance:     0,
 			wantStatus:  http.StatusForbidden,
-			wantMessage: "Insufficient account balance",
+			wantMessage: "account balance is insufficient",
 		},
 		{
 			name:        "subscription group without subscription is rejected",
 			groupType:   service.SubscriptionTypeSubscription,
 			balance:     10,
 			wantStatus:  http.StatusForbidden,
-			wantMessage: "No active subscription found for this group",
+			wantMessage: "No active subscription is available for this group",
 		},
 		{
 			name:      "standard quota plan exhaustion returns 429",
@@ -156,7 +156,7 @@ func TestAPIKeyAuthGoogle_StandardGroupSubscriptionAndFallback(t *testing.T) {
 				QuotaSnapshotted: true, DailyLimitUSD: &limit, DailyUsageUSD: 2, DailyWindowStart: &now,
 			},
 			wantStatus:  http.StatusTooManyRequests,
-			wantMessage: "daily usage limit exceeded",
+			wantMessage: "subscription usage limit has been reached",
 		},
 	}
 

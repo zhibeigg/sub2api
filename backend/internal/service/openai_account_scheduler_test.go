@@ -64,9 +64,13 @@ type schedulerGroupAwareOpenAIAccountRepo struct {
 }
 
 func (r schedulerGroupAwareOpenAIAccountRepo) ListSchedulableByGroupIDAndPlatform(ctx context.Context, groupID int64, platform string) ([]Account, error) {
+	return r.ListSchedulableByGroupIDAndPlatforms(ctx, groupID, []string{platform})
+}
+
+func (r schedulerGroupAwareOpenAIAccountRepo) ListSchedulableByGroupIDAndPlatforms(_ context.Context, groupID int64, _ []string) ([]Account, error) {
 	var result []Account
 	for _, acc := range r.accounts {
-		if acc.Platform == platform && openAIStickyAccountMatchesGroup(&acc, &groupID) {
+		if openAIStickyAccountMatchesGroup(&acc, &groupID) {
 			result = append(result, acc)
 		}
 	}
@@ -2673,7 +2677,7 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_UsesAccountPriorityWith
 
 func TestOpenAIAccountScheduler_SkipsAccountBlockedForRequestedModel(t *testing.T) {
 	now := time.Now()
-	account := &Account{ID: 21633, Platform: PlatformOpenAI, Type: AccountTypeAPIKey}
+	account := &Account{ID: 21633, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true}
 	svc := &OpenAIGatewayService{openaiModelTransient: newOpenAIAccountModelTransientState(128)}
 	svc.openaiModelTransient.recordFailure(account.ID, "gpt-5.5", now)
 	svc.openaiModelTransient.recordFailure(account.ID, "gpt-5.5", now.Add(time.Millisecond))

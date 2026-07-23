@@ -1103,7 +1103,7 @@ func TestRequireGroupAssignmentMarksUngroupedKeyBusinessLimited(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusForbidden, w.Code)
-	require.Contains(t, w.Body.String(), "not assigned to any group")
+	require.Contains(t, w.Body.String(), "not assigned to this key")
 	require.True(t, rejected)
 	require.Equal(t, IngressRejectGroupUnassigned, rejectReason)
 	require.True(t, markedBusinessLimited)
@@ -1710,7 +1710,7 @@ func TestAPIKeyAuthOpenAIQuotaErrorFormat(t *testing.T) {
 		} `json:"error"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
-	require.Equal(t, "API key 额度已用完", response.Error.Message)
+	require.Equal(t, "[PokeAPI] The available API quota has been exhausted. Add quota, renew the plan, or use another key.", response.Error.Message)
 	require.Equal(t, "insufficient_quota", response.Error.Type)
 	require.Nil(t, response.Error.Param)
 	require.Equal(t, "insufficient_quota", response.Error.Code)

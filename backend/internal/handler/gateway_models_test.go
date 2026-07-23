@@ -52,11 +52,28 @@ func (s *gatewayModelsAccountRepoStub) ListSchedulableByGroupID(ctx context.Cont
 }
 
 func (s *gatewayModelsAccountRepoStub) ListSchedulableByGroupIDAndPlatforms(_ context.Context, groupID int64, platforms []string) ([]service.Account, error) {
+	return filterGatewayModelAccountsForTest(s.byGroup[groupID], platforms), nil
+}
+
+func (s *gatewayModelsAccountRepoStub) ListModelAvailabilityCandidates(_ context.Context, groupID *int64, platforms []string, includeGrouped bool) ([]service.Account, error) {
+	if groupID != nil {
+		return filterGatewayModelAccountsForTest(s.byGroup[*groupID], platforms), nil
+	}
+	if !includeGrouped {
+		return nil, nil
+	}
+	out := make([]service.Account, 0)
+	for _, accounts := range s.byGroup {
+		out = append(out, filterGatewayModelAccountsForTest(accounts, platforms)...)
+	}
+	return out, nil
+}
+
+func filterGatewayModelAccountsForTest(accounts []service.Account, platforms []string) []service.Account {
 	allowedPlatforms := make(map[string]struct{}, len(platforms))
 	for _, platform := range platforms {
 		allowedPlatforms[platform] = struct{}{}
 	}
-	accounts := s.byGroup[groupID]
 	out := make([]service.Account, 0, len(accounts))
 	for _, account := range accounts {
 		if _, ok := allowedPlatforms[account.Platform]; !ok || !account.IsSchedulable() {
@@ -64,7 +81,7 @@ func (s *gatewayModelsAccountRepoStub) ListSchedulableByGroupIDAndPlatforms(_ co
 		}
 		out = append(out, account)
 	}
-	return out, nil
+	return out
 }
 
 func newGatewayModelsHandlerForTest(repo service.AccountRepository) *GatewayHandler {

@@ -1165,21 +1165,6 @@ func (s *GatewayService) isAccountAllowedForPlatformWithContext(ctx context.Cont
 	return account.Platform == platform
 }
 
-// isAccountAllowedForPlatform 保留旧调用签名；没有端点协议 context 时继续
-// 使用原生平台与 mixed_scheduling 规则。
-func (s *GatewayService) isAccountAllowedForPlatform(account *Account, platform string, useMixed bool) bool {
-	if account == nil {
-		return false
-	}
-	if useMixed {
-		if account.Platform == platform {
-			return true
-		}
-		return IsMixedSchedulingCapablePlatform(account.Platform) && account.IsMixedSchedulingEnabled()
-	}
-	return account.Platform == platform
-}
-
 func (s *GatewayService) isAccountSchedulableForSelection(account *Account) bool {
 	if account == nil {
 		return false

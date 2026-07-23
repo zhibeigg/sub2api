@@ -291,7 +291,7 @@ func TestForwardAsAnthropic_ForceChatCompletionsNonFailover400UsesSharedErrorHan
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Equal(t, "error", gjson.Get(rec.Body.String(), "type").String())
 	require.Equal(t, "invalid_request_error", gjson.Get(rec.Body.String(), "error.type").String())
-	require.Equal(t, "invalid roles", gjson.Get(rec.Body.String(), "error.message").String())
+	require.Equal(t, "[PokeAPI] The model request is invalid. Check the model name, request fields, tool definitions, and message structure.", gjson.Get(rec.Body.String(), "error.message").String())
 
 	statusVal, ok := c.Get(OpsUpstreamStatusCodeKey)
 	require.True(t, ok, "shared handler must record the upstream status for ops")
