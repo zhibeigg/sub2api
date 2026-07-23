@@ -952,7 +952,7 @@ func (s *SchedulerSnapshotService) canonicalBucketsForActiveGroup(group *Group) 
 	if group == nil || group.ID <= 0 || !group.IsActive() {
 		return nil
 	}
-	return schedulerCanonicalBuckets(group.ID)
+	return schedulerBucketsForGroup(group.ID)
 }
 
 func schedulerBucketsForProtocols(groupID int64, protocols []string) []SchedulerBucket {
