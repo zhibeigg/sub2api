@@ -1201,6 +1201,8 @@ func groupEntityToService(g *dbent.Group) *service.Group {
 		PoolCapacityAlertThresholdRequests: g.PoolCapacityAlertThresholdRequests,
 		PoolCapacityAlertThresholdUSD:      g.PoolCapacityAlertThresholdUsd,
 		PoolCapacityAlertGeneration:        g.PoolCapacityAlertGeneration,
+		PredictedCapacityMode:              g.PredictedCapacityMode,
+		PredictedImageUnitCostUSD:          g.PredictedImageUnitCostUsd,
 		PeakRateEnabled:                    g.PeakRateEnabled,
 		PeakStart:                          g.PeakStart,
 		PeakEnd:                            g.PeakEnd,

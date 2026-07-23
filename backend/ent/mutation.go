@@ -26307,6 +26307,9 @@ type GroupMutation struct {
 	addpool_capacity_alert_threshold_usd      *float64
 	pool_capacity_alert_generation            *int64
 	addpool_capacity_alert_generation         *int64
+	predicted_capacity_mode                   *string
+	predicted_image_unit_cost_usd             *float64
+	addpredicted_image_unit_cost_usd          *float64
 	max_reasoning_effort                      *string
 	reasoning_effort_mappings                 *[]domain.ReasoningEffortMapping
 	appendreasoning_effort_mappings           []domain.ReasoningEffortMapping
@@ -29240,6 +29243,112 @@ func (m *GroupMutation) ResetPoolCapacityAlertGeneration() {
 	m.addpool_capacity_alert_generation = nil
 }
 
+// SetPredictedCapacityMode sets the "predicted_capacity_mode" field.
+func (m *GroupMutation) SetPredictedCapacityMode(s string) {
+	m.predicted_capacity_mode = &s
+}
+
+// PredictedCapacityMode returns the value of the "predicted_capacity_mode" field in the mutation.
+func (m *GroupMutation) PredictedCapacityMode() (r string, exists bool) {
+	v := m.predicted_capacity_mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPredictedCapacityMode returns the old "predicted_capacity_mode" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldPredictedCapacityMode(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPredictedCapacityMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPredictedCapacityMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPredictedCapacityMode: %w", err)
+	}
+	return oldValue.PredictedCapacityMode, nil
+}
+
+// ResetPredictedCapacityMode resets all changes to the "predicted_capacity_mode" field.
+func (m *GroupMutation) ResetPredictedCapacityMode() {
+	m.predicted_capacity_mode = nil
+}
+
+// SetPredictedImageUnitCostUsd sets the "predicted_image_unit_cost_usd" field.
+func (m *GroupMutation) SetPredictedImageUnitCostUsd(f float64) {
+	m.predicted_image_unit_cost_usd = &f
+	m.addpredicted_image_unit_cost_usd = nil
+}
+
+// PredictedImageUnitCostUsd returns the value of the "predicted_image_unit_cost_usd" field in the mutation.
+func (m *GroupMutation) PredictedImageUnitCostUsd() (r float64, exists bool) {
+	v := m.predicted_image_unit_cost_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPredictedImageUnitCostUsd returns the old "predicted_image_unit_cost_usd" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldPredictedImageUnitCostUsd(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPredictedImageUnitCostUsd is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPredictedImageUnitCostUsd requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPredictedImageUnitCostUsd: %w", err)
+	}
+	return oldValue.PredictedImageUnitCostUsd, nil
+}
+
+// AddPredictedImageUnitCostUsd adds f to the "predicted_image_unit_cost_usd" field.
+func (m *GroupMutation) AddPredictedImageUnitCostUsd(f float64) {
+	if m.addpredicted_image_unit_cost_usd != nil {
+		*m.addpredicted_image_unit_cost_usd += f
+	} else {
+		m.addpredicted_image_unit_cost_usd = &f
+	}
+}
+
+// AddedPredictedImageUnitCostUsd returns the value that was added to the "predicted_image_unit_cost_usd" field in this mutation.
+func (m *GroupMutation) AddedPredictedImageUnitCostUsd() (r float64, exists bool) {
+	v := m.addpredicted_image_unit_cost_usd
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearPredictedImageUnitCostUsd clears the value of the "predicted_image_unit_cost_usd" field.
+func (m *GroupMutation) ClearPredictedImageUnitCostUsd() {
+	m.predicted_image_unit_cost_usd = nil
+	m.addpredicted_image_unit_cost_usd = nil
+	m.clearedFields[group.FieldPredictedImageUnitCostUsd] = struct{}{}
+}
+
+// PredictedImageUnitCostUsdCleared returns if the "predicted_image_unit_cost_usd" field was cleared in this mutation.
+func (m *GroupMutation) PredictedImageUnitCostUsdCleared() bool {
+	_, ok := m.clearedFields[group.FieldPredictedImageUnitCostUsd]
+	return ok
+}
+
+// ResetPredictedImageUnitCostUsd resets all changes to the "predicted_image_unit_cost_usd" field.
+func (m *GroupMutation) ResetPredictedImageUnitCostUsd() {
+	m.predicted_image_unit_cost_usd = nil
+	m.addpredicted_image_unit_cost_usd = nil
+	delete(m.clearedFields, group.FieldPredictedImageUnitCostUsd)
+}
+
 // SetMaxReasoningEffort sets the "max_reasoning_effort" field.
 func (m *GroupMutation) SetMaxReasoningEffort(s string) {
 	m.max_reasoning_effort = &s
@@ -29901,7 +30010,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 59)
+	fields := make([]string, 0, 61)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -30073,6 +30182,12 @@ func (m *GroupMutation) Fields() []string {
 	if m.pool_capacity_alert_generation != nil {
 		fields = append(fields, group.FieldPoolCapacityAlertGeneration)
 	}
+	if m.predicted_capacity_mode != nil {
+		fields = append(fields, group.FieldPredictedCapacityMode)
+	}
+	if m.predicted_image_unit_cost_usd != nil {
+		fields = append(fields, group.FieldPredictedImageUnitCostUsd)
+	}
 	if m.max_reasoning_effort != nil {
 		fields = append(fields, group.FieldMaxReasoningEffort)
 	}
@@ -30201,6 +30316,10 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.PoolCapacityAlertThresholdUsd()
 	case group.FieldPoolCapacityAlertGeneration:
 		return m.PoolCapacityAlertGeneration()
+	case group.FieldPredictedCapacityMode:
+		return m.PredictedCapacityMode()
+	case group.FieldPredictedImageUnitCostUsd:
+		return m.PredictedImageUnitCostUsd()
 	case group.FieldMaxReasoningEffort:
 		return m.MaxReasoningEffort()
 	case group.FieldReasoningEffortMappings:
@@ -30328,6 +30447,10 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldPoolCapacityAlertThresholdUsd(ctx)
 	case group.FieldPoolCapacityAlertGeneration:
 		return m.OldPoolCapacityAlertGeneration(ctx)
+	case group.FieldPredictedCapacityMode:
+		return m.OldPredictedCapacityMode(ctx)
+	case group.FieldPredictedImageUnitCostUsd:
+		return m.OldPredictedImageUnitCostUsd(ctx)
 	case group.FieldMaxReasoningEffort:
 		return m.OldMaxReasoningEffort(ctx)
 	case group.FieldReasoningEffortMappings:
@@ -30740,6 +30863,20 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetPoolCapacityAlertGeneration(v)
 		return nil
+	case group.FieldPredictedCapacityMode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPredictedCapacityMode(v)
+		return nil
+	case group.FieldPredictedImageUnitCostUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPredictedImageUnitCostUsd(v)
+		return nil
 	case group.FieldMaxReasoningEffort:
 		v, ok := value.(string)
 		if !ok {
@@ -30834,6 +30971,9 @@ func (m *GroupMutation) AddedFields() []string {
 	if m.addpool_capacity_alert_generation != nil {
 		fields = append(fields, group.FieldPoolCapacityAlertGeneration)
 	}
+	if m.addpredicted_image_unit_cost_usd != nil {
+		fields = append(fields, group.FieldPredictedImageUnitCostUsd)
+	}
 	return fields
 }
 
@@ -30890,6 +31030,8 @@ func (m *GroupMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedPoolCapacityAlertThresholdUsd()
 	case group.FieldPoolCapacityAlertGeneration:
 		return m.AddedPoolCapacityAlertGeneration()
+	case group.FieldPredictedImageUnitCostUsd:
+		return m.AddedPredictedImageUnitCostUsd()
 	}
 	return nil, false
 }
@@ -31067,6 +31209,13 @@ func (m *GroupMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddPoolCapacityAlertGeneration(v)
 		return nil
+	case group.FieldPredictedImageUnitCostUsd:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPredictedImageUnitCostUsd(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Group numeric field %s", name)
 }
@@ -31125,6 +31274,9 @@ func (m *GroupMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(group.FieldPoolCapacityAlertThresholdUsd) {
 		fields = append(fields, group.FieldPoolCapacityAlertThresholdUsd)
+	}
+	if m.FieldCleared(group.FieldPredictedImageUnitCostUsd) {
+		fields = append(fields, group.FieldPredictedImageUnitCostUsd)
 	}
 	return fields
 }
@@ -31190,6 +31342,9 @@ func (m *GroupMutation) ClearField(name string) error {
 		return nil
 	case group.FieldPoolCapacityAlertThresholdUsd:
 		m.ClearPoolCapacityAlertThresholdUsd()
+		return nil
+	case group.FieldPredictedImageUnitCostUsd:
+		m.ClearPredictedImageUnitCostUsd()
 		return nil
 	}
 	return fmt.Errorf("unknown Group nullable field %s", name)
@@ -31369,6 +31524,12 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldPoolCapacityAlertGeneration:
 		m.ResetPoolCapacityAlertGeneration()
+		return nil
+	case group.FieldPredictedCapacityMode:
+		m.ResetPredictedCapacityMode()
+		return nil
+	case group.FieldPredictedImageUnitCostUsd:
+		m.ResetPredictedImageUnitCostUsd()
 		return nil
 	case group.FieldMaxReasoningEffort:
 		m.ResetMaxReasoningEffort()

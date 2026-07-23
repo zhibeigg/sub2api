@@ -1342,14 +1342,20 @@ func init() {
 	groupDescPoolCapacityAlertGeneration := groupFields[53].Descriptor()
 	// group.DefaultPoolCapacityAlertGeneration holds the default value on creation for the pool_capacity_alert_generation field.
 	group.DefaultPoolCapacityAlertGeneration = groupDescPoolCapacityAlertGeneration.Default.(int64)
+	// groupDescPredictedCapacityMode is the schema descriptor for predicted_capacity_mode field.
+	groupDescPredictedCapacityMode := groupFields[54].Descriptor()
+	// group.DefaultPredictedCapacityMode holds the default value on creation for the predicted_capacity_mode field.
+	group.DefaultPredictedCapacityMode = groupDescPredictedCapacityMode.Default.(string)
+	// group.PredictedCapacityModeValidator is a validator for the "predicted_capacity_mode" field. It is called by the builders before save.
+	group.PredictedCapacityModeValidator = groupDescPredictedCapacityMode.Validators[0].(func(string) error)
 	// groupDescMaxReasoningEffort is the schema descriptor for max_reasoning_effort field.
-	groupDescMaxReasoningEffort := groupFields[54].Descriptor()
+	groupDescMaxReasoningEffort := groupFields[56].Descriptor()
 	// group.DefaultMaxReasoningEffort holds the default value on creation for the max_reasoning_effort field.
 	group.DefaultMaxReasoningEffort = groupDescMaxReasoningEffort.Default.(string)
 	// group.MaxReasoningEffortValidator is a validator for the "max_reasoning_effort" field. It is called by the builders before save.
 	group.MaxReasoningEffortValidator = groupDescMaxReasoningEffort.Validators[0].(func(string) error)
 	// groupDescReasoningEffortMappings is the schema descriptor for reasoning_effort_mappings field.
-	groupDescReasoningEffortMappings := groupFields[55].Descriptor()
+	groupDescReasoningEffortMappings := groupFields[57].Descriptor()
 	// group.DefaultReasoningEffortMappings holds the default value on creation for the reasoning_effort_mappings field.
 	group.DefaultReasoningEffortMappings = groupDescReasoningEffortMappings.Default.([]domain.ReasoningEffortMapping)
 	idempotencyrecordMixin := schema.IdempotencyRecord{}.Mixin()

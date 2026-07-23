@@ -1,4 +1,4 @@
-# 分组容量提醒
+# 分组容量展示与提醒
 
 ## 目标与兼容性
 
@@ -20,6 +20,17 @@
 `unknown`、`stale`、非权威余额、单位不兼容或其他数据不完整情况绝不按 `0` 计入。只要本次分组重算不能得到完整、可比较的结果，就跳过本次状态变更：既不创建新的低容量 episode，也不把已有低容量状态恢复为健康。
 
 默认兼容旧配置：提醒开关关闭，指标为 `predicted_requests`，请求阈值为 `50`。
+
+## 分组列表容量预测算法
+
+分组列表中的“预估剩余”展示与上述告警指标相互独立。管理员可以为每个分组配置：
+
+- `predicted_capacity_mode=historical_requests`：默认值，继续显示现有历史请求/账号容量快照推算的剩余请求数。
+- `predicted_capacity_mode=fixed_image_cost`：用分组已知 USD 余额除以 `predicted_image_unit_cost_usd`，向下取整为预计剩余图片数。
+
+固定成本表示一张成功输出图片预计消耗的**账号容量 USD**，不是用户售价，也不会自动叠加 1K/2K/4K 图片价格、模型价格或 `image_rate_multiplier`。多图请求按实际输出张数对应多个预测单位。该配置保存在分组数据库字段中，不新增 YAML 或环境变量，也不限制分组平台或端点类型。
+
+切换列表预测算法不会修改 `pool_capacity_alert_metric`、告警阈值、内部 generation 或任何告警状态；`predicted_requests` 告警仍使用原有 50 样本语义。
 
 ## 触发条件
 
@@ -138,7 +149,8 @@ group_remaining_balance_usd < pool_capacity_alert_threshold_usd
 - 持续 `low`：达到 `reminder_cooldown_hours` 后创建提醒 episode。
 - `low -> healthy`：完整计算值大于或等于阈值时恢复；之后再次低于阈值会创建新 episode。
 - **金额数据不完整**：不执行上述任何迁移，保留当前 group 状态和 episode。
-- 分组开关、metric 或对应阈值实际变化时，`pool_capacity_alert_generation` 自增一次。
+- 分组告警开关、metric 或对应阈值实际变化时，`pool_capacity_alert_generation` 自增一次。
+- 列表展示使用的 `predicted_capacity_mode` 或 `predicted_image_unit_cost_usd` 变化不会推进告警 generation，也不会改变告警状态。
 - 旧 generation 的评估任务会被丢弃，尚未完成的旧 generation delivery 会被取消。
 - 迁移到新的金额语义时，所有已选择 `remaining_balance_usd` 的分组 generation 会推进一次，取消旧 context 语义的待投递任务。
 - 复制分组时复制 metric 和阈值作为惰性配置，但开关强制关闭，generation 重置为 `0`。
@@ -184,10 +196,12 @@ account.pool_capacity_low
 
 ## 管理员 API
 
-API 枚举和表单结构保持不变。分组创建、更新、列表和详情继续使用以下字段：
+分组创建、更新、列表和详情在保留原告警字段的同时，新增列表容量预测配置：
 
 ```json
 {
+  "predicted_capacity_mode": "fixed_image_cost",
+  "predicted_image_unit_cost_usd": 0.04,
   "pool_capacity_alert_enabled": true,
   "pool_capacity_alert_metric": "remaining_balance_usd",
   "pool_capacity_alert_threshold_requests": 50,
@@ -206,18 +220,18 @@ GET /api/v1/admin/groups/:id
 
 规则：
 
-- 创建缺省为 `enabled=false`、`metric=predicted_requests`、`threshold_requests=50`、`threshold_usd=null`。
-- 更新采用可选 patch 语义，未提供字段保持原值。
-- metric 仍只允许 `predicted_requests` 或 `remaining_balance_usd`。
-- 请求阈值范围为 `1..1_000_000_000`；USD 阈值范围为 `0.01..1e15`。
-- 选择 `remaining_balance_usd` 时必须提供有效 USD 阈值。
+- 创建缺省为 `predicted_capacity_mode=historical_requests`、`predicted_image_unit_cost_usd=null`；原告警缺省仍为 `enabled=false`、`metric=predicted_requests`、`threshold_requests=50`、`threshold_usd=null`。
+- 更新采用可选 patch 语义，未提供字段保持原值；图片成本可用显式 `null` 清空。
+- `predicted_capacity_mode` 只允许 `historical_requests` 或 `fixed_image_cost`。
+- 选择 `fixed_image_cost` 时必须提供 `1e-12..1e15` 范围内的有限正数成本；历史模式允许成本为空或保留一个有效休眠值。
+- 告警 metric 仍只允许 `predicted_requests` 或 `remaining_balance_usd`，请求阈值和 USD 阈值规则保持不变。
 - `remaining_balance_usd` 的字段名未变，但返回和配置语义是“分组预测剩余余额（USD）”，不是单账号权威余额，也不是 Key / 钱包最小余额。
-- `predicted_requests` 继续使用原有 context 状态；`remaining_balance_usd` 使用分组级状态。状态范围不改变上述管理员 API 的请求或响应结构。
-- 内部 generation 不通过管理员或用户 DTO 暴露；普通用户分组响应不暴露告警配置。
+- 列表预测模式与告警状态范围独立；修改列表预测配置不会推进告警 generation。
+- 内部 generation 不通过管理员或用户 DTO 暴露；普通用户分组响应既不暴露告警配置，也不暴露列表预测配置。
 
 ## 管理员分组列表预测容量展示
 
-分组管理列表新增“预估剩余”列，同时展示当前页分组的 USD 余额和预计剩余请求数。该列复用本节的账号资格、容量快照、缓存与并发规则，不新增数据库字段或配置项。
+分组管理列表的“预估剩余”列同时展示当前页分组的 USD 余额和所选容量单位。该列复用本节的账号资格、容量快照、缓存与并发规则；新增的模式和固定成本来自分组数据库配置，不新增全局运行参数。
 
 前端按当前页批量调用：
 
@@ -227,7 +241,7 @@ GET /api/v1/admin/groups/predicted-capacity-summary?ids=1,2,3
 
 `ids` 必须是逗号分隔的正整数，服务端按首次出现顺序去重，最多接收 100 个唯一 ID。单个分组的上游读取失败不会让整页失败，而会为该分组返回 `available=false`。
 
-响应仍使用标准 `{code,message,data}` 包装；`data` 中每个元素包含：
+响应仍使用标准 `{code,message,data}` 包装；固定生图成本模式示例：
 
 ```json
 {
@@ -237,26 +251,40 @@ GET /api/v1/admin/groups/predicted-capacity-summary?ids=1,2,3
   "balance_unlimited": false,
   "remaining_balance_usd": null,
   "known_remaining_balance_usd": 42.5,
+  "prediction_mode": "fixed_image_cost",
+  "prediction_unit": "image",
+  "prediction_configured": true,
+  "prediction_complete": false,
+  "prediction_unlimited": false,
+  "predicted_quantity": "1062",
+  "prediction_unit_cost_usd": 0.04,
+  "known_prediction_account_count": 3,
+  "unknown_prediction_account_count": 1,
   "requests_complete": false,
   "requests_unlimited": false,
-  "estimated_remaining_requests": "1200",
+  "estimated_remaining_requests": 1200,
   "known_request_account_count": 3,
   "unknown_request_account_count": 1,
   "unknown_account_count": 1,
   "stale_account_count": 0,
   "incompatible_unit_account_count": 0,
-  "evaluated_at": "2026-07-22T15:00:00Z"
+  "evaluated_at": "2026-07-23T15:00:00Z"
 }
 ```
 
-显示规则：
+通用预测字段表示管理员当前选中的列表展示算法；旧的 `requests_*` 和 `estimated_remaining_requests` 始终继续独立返回历史请求估值，绝不复用为图片数，便于旧前端滚动兼容并保持告警数据口径。
 
+显示和计算规则：
+
+- `historical_requests` 返回 `prediction_unit=request`，通用完整性与数量映射现有请求估值。
+- `fixed_image_cost` 返回 `prediction_unit=image`，并按 `floor(known_remaining_balance_usd / prediction_unit_cost_usd)` 计算图片数。
+- 新通用字段 `predicted_quantity` 使用十进制字符串传输；图片计算使用 decimal 向下取整，超出 `int64` 也不会丢精度。旧 `estimated_remaining_requests` 保持原有 JSON number 契约，继续承载 `int64` 历史请求估值，避免破坏旧客户端。
 - 完整有限估值显示 `≈`；无限容量显示“无限”。
-- 数据不完整但存在已知账号时，`known_remaining_balance_usd` 和 `estimated_remaining_requests` 是已知下界，界面显示 `≥`，不是完整总额。
-- `estimated_remaining_requests` 使用十进制字符串传输，避免超过 JavaScript 安全整数范围后发生静默舍入。
+- 数据不完整但存在已知账号时，余额和所选数量都是已知下界，界面显示 `≥`，不是完整总额。
+- `prediction_configured=false` 表示数据库脏数据或无效固定成本，界面显示配置/数据不足，不产生伪 `0`。
 - 完全没有可用估值时显示“数据不足”，绝不把 `unknown`、`stale`、单位不兼容或读取失败渲染为 `0`。
-- 余额与请求数的完整性独立。池模式账号可能具有完整的权威 USD 余额，但没有可验证的平均请求成本，因此请求数仍可能是部分可估或数据不足。
-- 分组没有任何可用账号时，有限余额和请求数均为完整的 `0`。
+- 余额、历史请求数和当前所选数量的完整性可以彼此独立；固定生图模式以余额完整性为基础。
+- 分组没有任何可用账号时，有限余额和所选容量均为完整的 `0`。
 - 管理端只在该列可见时查询当前页 ID；筛选、翻页或隐藏列会取消旧请求，避免陈旧结果覆盖当前页面。
 
 ## 管理员账户列表容量展示
@@ -310,17 +338,19 @@ pool_capacity_alert:
 - `pool_capacity_alert.enabled` 是全局运行时开关；每个分组仍默认关闭。
 - `group_balance_concurrency` 限制一次分组余额重算中的账号查询并发数。
 - `group_balance_timeout_seconds` 限制一次分组余额重算的总耗时；超时视为数据不完整，不改变状态。
-- 请求预测样本数固定为 `50`；metric 和阈值仍由每个分组配置。
+- 请求告警样本数固定为 `50`；告警 metric 和阈值仍由每个分组配置。
+- 列表容量预测的模式与固定成本保存在分组数据库字段中，不新增 YAML 或环境变量。
 - `lease_seconds` 会被规范化为不小于 `send_timeout_seconds + 30`。
 
 ## 运维检查
 
-1. 应用当前版本随附的全部数据库迁移，包括将金额告警切换为分组状态的 `194_group_predicted_balance_alert.sql`。
-2. 确认 SMTP 已配置；如需 QQ 提醒，确认 QQBot 已启用且管理员完成当前机器人 C2C 绑定。
-3. 在管理端分组创建/编辑弹窗中开启提醒，选择指标并配置对应阈值。
-4. 请求模式：产生足够的成功落账样本，验证 `49 < 50` 告警而 `50` 不告警。
-5. 金额模式：分别准备池模式权威 USD 余额、普通 `usage_window` 与普通 `local_quota` 账号，验证分组结果按求和公式计算。
-6. 让分组内任意普通或池账号成功计费，确认都会触发金额模式的分组重算。
-7. 分别模拟 `stale`、`unknown`、非权威、单位不兼容、缺少平均成本和查询超时，确认不会按 `0` 计入，也不会创建、恢复或提醒。
-8. 验证金额通知仅表达分组聚合值和阈值，不再显示 API Key / 钱包瓶颈。
-9. 修改开关、metric 或阈值，确认 generation 变化后旧任务和旧待投递通知被取消。
+1. 应用当前版本随附的全部数据库迁移，包括 `194_group_predicted_balance_alert.sql` 和 `196_add_group_capacity_prediction_mode.sql`。
+2. 在管理端分别验证默认历史请求预测，以及固定生图成本模式的 `floor(已知 USD 余额 / 每张成本)` 结果、图片单位、部分下界和旧请求字段兼容。
+3. 确认 SMTP 已配置；如需 QQ 提醒，确认 QQBot 已启用且管理员完成当前机器人 C2C 绑定。
+4. 在管理端分组创建/编辑弹窗中开启提醒，选择指标并配置对应阈值。
+5. 请求告警模式：产生足够的成功落账样本，验证 `49 < 50` 告警而 `50` 不告警。
+6. 金额告警模式：分别准备池模式权威 USD 余额、普通 `usage_window` 与普通 `local_quota` 账号，验证分组结果按求和公式计算。
+7. 让分组内任意普通或池账号成功计费，确认都会触发金额模式的分组重算。
+8. 分别模拟 `stale`、`unknown`、非权威、单位不兼容、缺少平均成本和查询超时，确认不会按 `0` 计入，也不会创建、恢复或提醒。
+9. 验证金额通知仅表达分组聚合值和阈值，不再显示 API Key / 钱包瓶颈。
+10. 修改告警开关、metric 或阈值，确认 generation 变化后旧任务和旧待投递通知被取消；仅修改列表预测模式/成本时 generation 保持不变。

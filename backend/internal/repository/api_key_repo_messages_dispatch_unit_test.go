@@ -10,6 +10,7 @@ import (
 )
 
 func TestGroupEntityToService_PreservesMessagesDispatchModelConfig(t *testing.T) {
+	predictionUnitCostUSD := 0.125
 	group := &dbent.Group{
 		ID:                          1,
 		Name:                        "openai-dispatch",
@@ -21,6 +22,8 @@ func TestGroupEntityToService_PreservesMessagesDispatchModelConfig(t *testing.T)
 		DefaultMappedModel:          "gpt-5.4",
 		PoolCapacityAlertEnabled:    true,
 		PoolCapacityAlertGeneration: 17,
+		PredictedCapacityMode:       service.PredictedCapacityModeFixedImageCost,
+		PredictedImageUnitCostUsd:   &predictionUnitCostUSD,
 		MessagesDispatchModelConfig: service.OpenAIMessagesDispatchModelConfig{
 			OpusMappedModel:   "gpt-5.4-nano",
 			SonnetMappedModel: "gpt-5.3-codex",
@@ -36,6 +39,9 @@ func TestGroupEntityToService_PreservesMessagesDispatchModelConfig(t *testing.T)
 	require.Equal(t, group.MessagesDispatchModelConfig, got.MessagesDispatchModelConfig)
 	require.True(t, got.PoolCapacityAlertEnabled)
 	require.Equal(t, int64(17), got.PoolCapacityAlertGeneration)
+	require.Equal(t, service.PredictedCapacityModeFixedImageCost, got.PredictedCapacityMode)
+	require.NotNil(t, got.PredictedImageUnitCostUSD)
+	require.Equal(t, predictionUnitCostUSD, *got.PredictedImageUnitCostUSD)
 }
 
 func TestAPIKeyRepository_GetByKeyForAuth_PreservesMessagesDispatchModelConfig_SQLite(t *testing.T) {

@@ -18,6 +18,62 @@ import type {
   GroupPredictedCapacitySummary
 } from '@/types'
 
+const normalizeAdminGroup = (group: AdminGroup): AdminGroup => ({
+  ...group,
+  predicted_capacity_mode:
+    group.predicted_capacity_mode === 'fixed_image_cost'
+      ? 'fixed_image_cost'
+      : 'historical_requests',
+  predicted_image_unit_cost_usd:
+    typeof group.predicted_image_unit_cost_usd === 'number' &&
+    Number.isFinite(group.predicted_image_unit_cost_usd)
+      ? group.predicted_image_unit_cost_usd
+      : null
+})
+
+const normalizePredictedQuantity = (
+  value: string | number | null | undefined
+): string | null => {
+  if (typeof value === 'string') return /^\d+$/.test(value.trim()) ? value.trim() : null
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
+    return String(value)
+  }
+  return null
+}
+
+export const normalizeGroupPredictedCapacitySummary = (
+  summary: GroupPredictedCapacitySummary
+): GroupPredictedCapacitySummary => {
+  const hasGenericQuantity = Object.prototype.hasOwnProperty.call(summary, 'predicted_quantity')
+  const predictedQuantity = normalizePredictedQuantity(
+    hasGenericQuantity ? summary.predicted_quantity : summary.estimated_remaining_requests
+  )
+
+  return {
+    ...summary,
+    prediction_mode:
+      summary.prediction_mode === 'fixed_image_cost'
+        ? 'fixed_image_cost'
+        : 'historical_requests',
+    prediction_unit: summary.prediction_unit === 'image' ? 'image' : 'request',
+    prediction_configured:
+      summary.prediction_configured ??
+      (summary.requests_unlimited === true || summary.estimated_remaining_requests != null),
+    prediction_complete: summary.prediction_complete ?? summary.requests_complete,
+    prediction_unlimited: summary.prediction_unlimited ?? summary.requests_unlimited,
+    predicted_quantity: predictedQuantity,
+    prediction_unit_cost_usd:
+      typeof summary.prediction_unit_cost_usd === 'number' &&
+      Number.isFinite(summary.prediction_unit_cost_usd)
+        ? summary.prediction_unit_cost_usd
+        : null,
+    known_prediction_account_count:
+      summary.known_prediction_account_count ?? summary.known_request_account_count,
+    unknown_prediction_account_count:
+      summary.unknown_prediction_account_count ?? summary.unknown_request_account_count
+  }
+}
+
 /**
  * List all groups with pagination
  * @param page - Page number (default: 1)
@@ -49,7 +105,10 @@ export async function list(
     },
     signal: options?.signal
   })
-  return data
+  return {
+    ...data,
+    items: data.items.map(normalizeAdminGroup)
+  }
 }
 
 /**
@@ -61,7 +120,7 @@ export async function getAll(platform?: GroupPlatform): Promise<AdminGroup[]> {
   const { data } = await apiClient.get<AdminGroup[]>('/admin/groups/all', {
     params: platform ? { platform } : undefined
   })
-  return data
+  return data.map(normalizeAdminGroup)
 }
 
 /**
@@ -72,7 +131,7 @@ export async function getAllIncludingInactive(): Promise<AdminGroup[]> {
   const { data } = await apiClient.get<AdminGroup[]>('/admin/groups/all', {
     params: { include_inactive: true }
   })
-  return data
+  return data.map(normalizeAdminGroup)
 }
 
 /**
@@ -91,7 +150,7 @@ export async function getByPlatform(platform: GroupPlatform): Promise<AdminGroup
  */
 export async function getById(id: number): Promise<AdminGroup> {
   const { data } = await apiClient.get<AdminGroup>(`/admin/groups/${id}`)
-  return data
+  return normalizeAdminGroup(data)
 }
 
 /**
@@ -118,7 +177,7 @@ export async function getModelsListCandidates(
  */
 export async function create(groupData: CreateGroupRequest): Promise<AdminGroup> {
   const { data } = await apiClient.post<AdminGroup>('/admin/groups', groupData)
-  return data
+  return normalizeAdminGroup(data)
 }
 
 /**
@@ -198,7 +257,7 @@ export async function duplicate(id: number): Promise<AdminGroup> {
     duplicateOperationKeys.delete(scope.key)
     storeDuplicateOperationKey(scope.key, null)
   }
-  return data
+  return normalizeAdminGroup(data)
 }
 
 /**
@@ -209,7 +268,7 @@ export async function duplicate(id: number): Promise<AdminGroup> {
  */
 export async function update(id: number, updates: UpdateGroupRequest): Promise<AdminGroup> {
   const { data } = await apiClient.put<AdminGroup>(`/admin/groups/${id}`, updates)
-  return data
+  return normalizeAdminGroup(data)
 }
 
 /**
@@ -488,7 +547,7 @@ export async function getPredictedCapacitySummary(
         signal: options?.signal
       }
     )
-    summaries.push(...data)
+    summaries.push(...data.map(normalizeGroupPredictedCapacitySummary))
   }
   return summaries
 }

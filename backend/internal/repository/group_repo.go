@@ -86,6 +86,10 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 	groupIn.PoolCapacityAlertMetric = policy.Metric
 	groupIn.PoolCapacityAlertThresholdRequests = policy.ThresholdRequests
 	groupIn.PoolCapacityAlertThresholdUSD = policy.ThresholdUSD
+	groupIn.PredictedCapacityMode = service.NormalizePredictedCapacityMode(groupIn.PredictedCapacityMode)
+	if err := service.ValidatePredictedCapacityConfig(groupIn.PredictedCapacityMode, groupIn.PredictedImageUnitCostUSD); err != nil {
+		return err
+	}
 
 	builder := client.Group.Create().
 		SetName(groupIn.Name).
@@ -135,6 +139,8 @@ func createGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetPoolCapacityAlertThresholdRequests(groupIn.PoolCapacityAlertThresholdRequests).
 		SetNillablePoolCapacityAlertThresholdUsd(groupIn.PoolCapacityAlertThresholdUSD).
 		SetPoolCapacityAlertGeneration(groupIn.PoolCapacityAlertGeneration).
+		SetPredictedCapacityMode(service.NormalizePredictedCapacityMode(groupIn.PredictedCapacityMode)).
+		SetNillablePredictedImageUnitCostUsd(groupIn.PredictedImageUnitCostUSD).
 		SetMaxReasoningEffort(groupIn.MaxReasoningEffort).
 		SetReasoningEffortMappings(groupIn.ReasoningEffortMappings).
 		SetPeakRateEnabled(groupIn.PeakRateEnabled).
@@ -357,6 +363,10 @@ func updateGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		return nil, errors.New("group is nil")
 	}
 	applyGroupEndpointPersistenceDefaults(groupIn)
+	groupIn.PredictedCapacityMode = service.NormalizePredictedCapacityMode(groupIn.PredictedCapacityMode)
+	if err := service.ValidatePredictedCapacityConfig(groupIn.PredictedCapacityMode, groupIn.PredictedImageUnitCostUSD); err != nil {
+		return nil, err
+	}
 	builder := client.Group.UpdateOneID(groupIn.ID).
 		SetName(groupIn.Name).
 		SetDescription(groupIn.Description).
@@ -396,6 +406,7 @@ func updateGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		SetMessagesDispatchModelConfig(groupIn.MessagesDispatchModelConfig).
 		SetModelsListConfig(groupIn.ModelsListConfig).
 		SetRpmLimit(groupIn.RPMLimit).
+		SetPredictedCapacityMode(groupIn.PredictedCapacityMode).
 		SetMaxReasoningEffort(groupIn.MaxReasoningEffort).
 		SetReasoningEffortMappings(groupIn.ReasoningEffortMappings).
 		SetPeakRateEnabled(groupIn.PeakRateEnabled).
@@ -465,6 +476,11 @@ func updateGroupRecord(ctx context.Context, client *dbent.Client, groupIn *servi
 		builder = builder.SetWebSearchPricePerCall(*groupIn.WebSearchPricePerCall)
 	} else {
 		builder = builder.ClearWebSearchPricePerCall()
+	}
+	if groupIn.PredictedImageUnitCostUSD != nil {
+		builder = builder.SetPredictedImageUnitCostUsd(*groupIn.PredictedImageUnitCostUSD)
+	} else {
+		builder = builder.ClearPredictedImageUnitCostUsd()
 	}
 
 	// 处理 FallbackGroupID：nil 时清除，否则设置

@@ -335,6 +335,10 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 	if err := ValidatePoolCapacityAlertPolicy(poolCapacityAlertPolicy); err != nil {
 		return nil, err
 	}
+	predictedCapacityMode := NormalizePredictedCapacityMode(input.PredictedCapacityMode)
+	if err := ValidatePredictedCapacityConfig(predictedCapacityMode, input.PredictedImageUnitCostUSD); err != nil {
+		return nil, err
+	}
 
 	platform := NormalizePlatform(input.Platform)
 	if platform == "" {
@@ -531,6 +535,8 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		PoolCapacityAlertThresholdRequests: poolCapacityAlertPolicy.ThresholdRequests,
 		PoolCapacityAlertThresholdUSD:      poolCapacityAlertPolicy.ThresholdUSD,
 		PoolCapacityAlertGeneration:        0,
+		PredictedCapacityMode:              predictedCapacityMode,
+		PredictedImageUnitCostUSD:          cloneGroupValuePointer(input.PredictedImageUnitCostUSD),
 	}
 	sanitizeGroupMessagesDispatchFields(group)
 	if len(group.EndpointProtocols) == 0 {
@@ -897,6 +903,16 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 	if input.RPMLimit != nil {
 		group.RPMLimit = *input.RPMLimit
+	}
+	group.PredictedCapacityMode = NormalizePredictedCapacityMode(group.PredictedCapacityMode)
+	if input.PredictedCapacityMode != nil {
+		group.PredictedCapacityMode = NormalizePredictedCapacityMode(*input.PredictedCapacityMode)
+	}
+	if input.PredictedImageUnitCostUSD != nil {
+		group.PredictedImageUnitCostUSD = cloneGroupValuePointer(*input.PredictedImageUnitCostUSD)
+	}
+	if err := ValidatePredictedCapacityConfig(group.PredictedCapacityMode, group.PredictedImageUnitCostUSD); err != nil {
+		return nil, err
 	}
 	if input.MaxReasoningEffort != nil {
 		maxReasoningEffort, err := normalizeMaxReasoningEffortForPlatform(group.Platform, *input.MaxReasoningEffort)

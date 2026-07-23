@@ -130,6 +130,10 @@ const (
 	FieldPoolCapacityAlertThresholdUsd = "pool_capacity_alert_threshold_usd"
 	// FieldPoolCapacityAlertGeneration holds the string denoting the pool_capacity_alert_generation field in the database.
 	FieldPoolCapacityAlertGeneration = "pool_capacity_alert_generation"
+	// FieldPredictedCapacityMode holds the string denoting the predicted_capacity_mode field in the database.
+	FieldPredictedCapacityMode = "predicted_capacity_mode"
+	// FieldPredictedImageUnitCostUsd holds the string denoting the predicted_image_unit_cost_usd field in the database.
+	FieldPredictedImageUnitCostUsd = "predicted_image_unit_cost_usd"
 	// FieldMaxReasoningEffort holds the string denoting the max_reasoning_effort field in the database.
 	FieldMaxReasoningEffort = "max_reasoning_effort"
 	// FieldReasoningEffortMappings holds the string denoting the reasoning_effort_mappings field in the database.
@@ -330,6 +334,8 @@ var Columns = []string{
 	FieldPoolCapacityAlertThresholdRequests,
 	FieldPoolCapacityAlertThresholdUsd,
 	FieldPoolCapacityAlertGeneration,
+	FieldPredictedCapacityMode,
+	FieldPredictedImageUnitCostUsd,
 	FieldMaxReasoningEffort,
 	FieldReasoningEffortMappings,
 }
@@ -473,6 +479,10 @@ var (
 	DefaultPoolCapacityAlertThresholdRequests int64
 	// DefaultPoolCapacityAlertGeneration holds the default value on creation for the "pool_capacity_alert_generation" field.
 	DefaultPoolCapacityAlertGeneration int64
+	// DefaultPredictedCapacityMode holds the default value on creation for the "predicted_capacity_mode" field.
+	DefaultPredictedCapacityMode string
+	// PredictedCapacityModeValidator is a validator for the "predicted_capacity_mode" field. It is called by the builders before save.
+	PredictedCapacityModeValidator func(string) error
 	// DefaultMaxReasoningEffort holds the default value on creation for the "max_reasoning_effort" field.
 	DefaultMaxReasoningEffort string
 	// MaxReasoningEffortValidator is a validator for the "max_reasoning_effort" field. It is called by the builders before save.
@@ -742,6 +752,16 @@ func ByPoolCapacityAlertThresholdUsd(opts ...sql.OrderTermOption) OrderOption {
 // ByPoolCapacityAlertGeneration orders the results by the pool_capacity_alert_generation field.
 func ByPoolCapacityAlertGeneration(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldPoolCapacityAlertGeneration, opts...).ToFunc()
+}
+
+// ByPredictedCapacityMode orders the results by the predicted_capacity_mode field.
+func ByPredictedCapacityMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPredictedCapacityMode, opts...).ToFunc()
+}
+
+// ByPredictedImageUnitCostUsd orders the results by the predicted_image_unit_cost_usd field.
+func ByPredictedImageUnitCostUsd(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPredictedImageUnitCostUsd, opts...).ToFunc()
 }
 
 // ByMaxReasoningEffort orders the results by the max_reasoning_effort field.

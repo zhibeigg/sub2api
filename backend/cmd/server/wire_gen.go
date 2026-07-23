@@ -211,7 +211,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	kiroTokenProvider := service.ProvideKiroTokenProvider(accountRepository, geminiTokenCache, kiroOAuthService, oAuthRefreshAPI, tempUnschedCache)
 	kiroUsageService := service.ProvideKiroUsageService(accountRepository, proxyRepository, kiroTokenProvider)
 	accountUsageService := service.ProvideAccountUsageService(accountRepository, usageLogRepository, claudeUsageFetcher, geminiQuotaService, antigravityQuotaFetcher, grokQuotaFetcher, grokQuotaService, openAIQuotaService, openCodeQuotaService, usageCache, identityCache, tlsFingerprintProfileService, accountCapacityService, adobeTokenProvider, cursorGatewayService, cursorDashboardAuthService, kiroUsageService)
-	groupPredictedBalanceService := service.ProvideGroupPredictedBalanceService(accountRepository, accountCapacityService, accountUsageService, configConfig)
+	groupPredictedBalanceService := service.ProvideGroupPredictedBalanceService(accountRepository, groupRepository, accountCapacityService, accountUsageService, configConfig)
 	groupHandler := admin.NewGroupHandler(adminService, dashboardService, groupCapacityService, groupPredictedBalanceService)
 	openCodeGatewayService := service.NewOpenCodeGatewayService(httpUpstream, proxyRepository, configConfig, rateLimitService)
 	accountTestService := service.ProvideAccountTestServiceWithAgentIdentity(accountRepository, geminiTokenProvider, claudeTokenProvider, grokTokenProvider, antigravityGatewayService, httpUpstream, configConfig, tlsFingerprintProfileService, adobeTokenProvider, cursorGatewayService, openCodeGatewayService, kiroUsageService, openAIGatewayService)

@@ -136,6 +136,8 @@ func cloneGroupForDuplicate(source *Group, operationID string) *Group {
 		PoolCapacityAlertThresholdRequests: source.PoolCapacityAlertPolicy().ThresholdRequests,
 		PoolCapacityAlertThresholdUSD:      cloneGroupValuePointer(source.PoolCapacityAlertThresholdUSD),
 		PoolCapacityAlertGeneration:        0,
+		PredictedCapacityMode:              NormalizePredictedCapacityMode(source.PredictedCapacityMode),
+		PredictedImageUnitCostUSD:          cloneGroupValuePointer(source.PredictedImageUnitCostUSD),
 		MaxReasoningEffort:                 source.MaxReasoningEffort,
 		ReasoningEffortMappings:            append([]ReasoningEffortMapping(nil), source.ReasoningEffortMappings...),
 	}

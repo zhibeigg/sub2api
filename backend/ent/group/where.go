@@ -310,6 +310,16 @@ func PoolCapacityAlertGeneration(v int64) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldPoolCapacityAlertGeneration, v))
 }
 
+// PredictedCapacityMode applies equality check predicate on the "predicted_capacity_mode" field. It's identical to PredictedCapacityModeEQ.
+func PredictedCapacityMode(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldPredictedCapacityMode, v))
+}
+
+// PredictedImageUnitCostUsd applies equality check predicate on the "predicted_image_unit_cost_usd" field. It's identical to PredictedImageUnitCostUsdEQ.
+func PredictedImageUnitCostUsd(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldPredictedImageUnitCostUsd, v))
+}
+
 // MaxReasoningEffort applies equality check predicate on the "max_reasoning_effort" field. It's identical to MaxReasoningEffortEQ.
 func MaxReasoningEffort(v string) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldMaxReasoningEffort, v))
@@ -2408,6 +2418,121 @@ func PoolCapacityAlertGenerationLT(v int64) predicate.Group {
 // PoolCapacityAlertGenerationLTE applies the LTE predicate on the "pool_capacity_alert_generation" field.
 func PoolCapacityAlertGenerationLTE(v int64) predicate.Group {
 	return predicate.Group(sql.FieldLTE(FieldPoolCapacityAlertGeneration, v))
+}
+
+// PredictedCapacityModeEQ applies the EQ predicate on the "predicted_capacity_mode" field.
+func PredictedCapacityModeEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldPredictedCapacityMode, v))
+}
+
+// PredictedCapacityModeNEQ applies the NEQ predicate on the "predicted_capacity_mode" field.
+func PredictedCapacityModeNEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldPredictedCapacityMode, v))
+}
+
+// PredictedCapacityModeIn applies the In predicate on the "predicted_capacity_mode" field.
+func PredictedCapacityModeIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldPredictedCapacityMode, vs...))
+}
+
+// PredictedCapacityModeNotIn applies the NotIn predicate on the "predicted_capacity_mode" field.
+func PredictedCapacityModeNotIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldPredictedCapacityMode, vs...))
+}
+
+// PredictedCapacityModeGT applies the GT predicate on the "predicted_capacity_mode" field.
+func PredictedCapacityModeGT(v string) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldPredictedCapacityMode, v))
+}
+
+// PredictedCapacityModeGTE applies the GTE predicate on the "predicted_capacity_mode" field.
+func PredictedCapacityModeGTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldPredictedCapacityMode, v))
+}
+
+// PredictedCapacityModeLT applies the LT predicate on the "predicted_capacity_mode" field.
+func PredictedCapacityModeLT(v string) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldPredictedCapacityMode, v))
+}
+
+// PredictedCapacityModeLTE applies the LTE predicate on the "predicted_capacity_mode" field.
+func PredictedCapacityModeLTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldPredictedCapacityMode, v))
+}
+
+// PredictedCapacityModeContains applies the Contains predicate on the "predicted_capacity_mode" field.
+func PredictedCapacityModeContains(v string) predicate.Group {
+	return predicate.Group(sql.FieldContains(FieldPredictedCapacityMode, v))
+}
+
+// PredictedCapacityModeHasPrefix applies the HasPrefix predicate on the "predicted_capacity_mode" field.
+func PredictedCapacityModeHasPrefix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasPrefix(FieldPredictedCapacityMode, v))
+}
+
+// PredictedCapacityModeHasSuffix applies the HasSuffix predicate on the "predicted_capacity_mode" field.
+func PredictedCapacityModeHasSuffix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasSuffix(FieldPredictedCapacityMode, v))
+}
+
+// PredictedCapacityModeEqualFold applies the EqualFold predicate on the "predicted_capacity_mode" field.
+func PredictedCapacityModeEqualFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldEqualFold(FieldPredictedCapacityMode, v))
+}
+
+// PredictedCapacityModeContainsFold applies the ContainsFold predicate on the "predicted_capacity_mode" field.
+func PredictedCapacityModeContainsFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldContainsFold(FieldPredictedCapacityMode, v))
+}
+
+// PredictedImageUnitCostUsdEQ applies the EQ predicate on the "predicted_image_unit_cost_usd" field.
+func PredictedImageUnitCostUsdEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldPredictedImageUnitCostUsd, v))
+}
+
+// PredictedImageUnitCostUsdNEQ applies the NEQ predicate on the "predicted_image_unit_cost_usd" field.
+func PredictedImageUnitCostUsdNEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldPredictedImageUnitCostUsd, v))
+}
+
+// PredictedImageUnitCostUsdIn applies the In predicate on the "predicted_image_unit_cost_usd" field.
+func PredictedImageUnitCostUsdIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldPredictedImageUnitCostUsd, vs...))
+}
+
+// PredictedImageUnitCostUsdNotIn applies the NotIn predicate on the "predicted_image_unit_cost_usd" field.
+func PredictedImageUnitCostUsdNotIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldPredictedImageUnitCostUsd, vs...))
+}
+
+// PredictedImageUnitCostUsdGT applies the GT predicate on the "predicted_image_unit_cost_usd" field.
+func PredictedImageUnitCostUsdGT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldPredictedImageUnitCostUsd, v))
+}
+
+// PredictedImageUnitCostUsdGTE applies the GTE predicate on the "predicted_image_unit_cost_usd" field.
+func PredictedImageUnitCostUsdGTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldPredictedImageUnitCostUsd, v))
+}
+
+// PredictedImageUnitCostUsdLT applies the LT predicate on the "predicted_image_unit_cost_usd" field.
+func PredictedImageUnitCostUsdLT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldPredictedImageUnitCostUsd, v))
+}
+
+// PredictedImageUnitCostUsdLTE applies the LTE predicate on the "predicted_image_unit_cost_usd" field.
+func PredictedImageUnitCostUsdLTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldPredictedImageUnitCostUsd, v))
+}
+
+// PredictedImageUnitCostUsdIsNil applies the IsNil predicate on the "predicted_image_unit_cost_usd" field.
+func PredictedImageUnitCostUsdIsNil() predicate.Group {
+	return predicate.Group(sql.FieldIsNull(FieldPredictedImageUnitCostUsd))
+}
+
+// PredictedImageUnitCostUsdNotNil applies the NotNil predicate on the "predicted_image_unit_cost_usd" field.
+func PredictedImageUnitCostUsdNotNil() predicate.Group {
+	return predicate.Group(sql.FieldNotNull(FieldPredictedImageUnitCostUsd))
 }
 
 // MaxReasoningEffortEQ applies the EQ predicate on the "max_reasoning_effort" field.

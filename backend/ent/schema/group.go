@@ -251,6 +251,15 @@ func (Group) Fields() []ent.Field {
 		field.Int64("pool_capacity_alert_generation").
 			Default(0).
 			Comment("分组池容量告警配置代际，仅供内部缓存一致性使用"),
+		field.String("predicted_capacity_mode").
+			MaxLen(32).
+			Default("historical_requests").
+			Comment("管理员分组列表容量预测模式：historical_requests 或 fixed_image_cost"),
+		field.Float("predicted_image_unit_cost_usd").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "numeric(30,12)"}).
+			Comment("fixed_image_cost 模式下每个预测图片单位消耗的账号容量 USD"),
 
 		// OpenAI/Codex 请求的推理强度上限（空字符串表示不限制）。
 		field.String("max_reasoning_effort").

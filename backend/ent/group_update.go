@@ -1043,6 +1043,47 @@ func (_u *GroupUpdate) AddPoolCapacityAlertGeneration(v int64) *GroupUpdate {
 	return _u
 }
 
+// SetPredictedCapacityMode sets the "predicted_capacity_mode" field.
+func (_u *GroupUpdate) SetPredictedCapacityMode(v string) *GroupUpdate {
+	_u.mutation.SetPredictedCapacityMode(v)
+	return _u
+}
+
+// SetNillablePredictedCapacityMode sets the "predicted_capacity_mode" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillablePredictedCapacityMode(v *string) *GroupUpdate {
+	if v != nil {
+		_u.SetPredictedCapacityMode(*v)
+	}
+	return _u
+}
+
+// SetPredictedImageUnitCostUsd sets the "predicted_image_unit_cost_usd" field.
+func (_u *GroupUpdate) SetPredictedImageUnitCostUsd(v float64) *GroupUpdate {
+	_u.mutation.ResetPredictedImageUnitCostUsd()
+	_u.mutation.SetPredictedImageUnitCostUsd(v)
+	return _u
+}
+
+// SetNillablePredictedImageUnitCostUsd sets the "predicted_image_unit_cost_usd" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillablePredictedImageUnitCostUsd(v *float64) *GroupUpdate {
+	if v != nil {
+		_u.SetPredictedImageUnitCostUsd(*v)
+	}
+	return _u
+}
+
+// AddPredictedImageUnitCostUsd adds value to the "predicted_image_unit_cost_usd" field.
+func (_u *GroupUpdate) AddPredictedImageUnitCostUsd(v float64) *GroupUpdate {
+	_u.mutation.AddPredictedImageUnitCostUsd(v)
+	return _u
+}
+
+// ClearPredictedImageUnitCostUsd clears the value of the "predicted_image_unit_cost_usd" field.
+func (_u *GroupUpdate) ClearPredictedImageUnitCostUsd() *GroupUpdate {
+	_u.mutation.ClearPredictedImageUnitCostUsd()
+	return _u
+}
+
 // SetMaxReasoningEffort sets the "max_reasoning_effort" field.
 func (_u *GroupUpdate) SetMaxReasoningEffort(v string) *GroupUpdate {
 	_u.mutation.SetMaxReasoningEffort(v)
@@ -1523,6 +1564,11 @@ func (_u *GroupUpdate) check() error {
 			return &ValidationError{Name: "pool_capacity_alert_metric", err: fmt.Errorf(`ent: validator failed for field "Group.pool_capacity_alert_metric": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.PredictedCapacityMode(); ok {
+		if err := group.PredictedCapacityModeValidator(v); err != nil {
+			return &ValidationError{Name: "predicted_capacity_mode", err: fmt.Errorf(`ent: validator failed for field "Group.predicted_capacity_mode": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.MaxReasoningEffort(); ok {
 		if err := group.MaxReasoningEffortValidator(v); err != nil {
 			return &ValidationError{Name: "max_reasoning_effort", err: fmt.Errorf(`ent: validator failed for field "Group.max_reasoning_effort": %w`, err)}
@@ -1840,6 +1886,18 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedPoolCapacityAlertGeneration(); ok {
 		_spec.AddField(group.FieldPoolCapacityAlertGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.PredictedCapacityMode(); ok {
+		_spec.SetField(group.FieldPredictedCapacityMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.PredictedImageUnitCostUsd(); ok {
+		_spec.SetField(group.FieldPredictedImageUnitCostUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedPredictedImageUnitCostUsd(); ok {
+		_spec.AddField(group.FieldPredictedImageUnitCostUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.PredictedImageUnitCostUsdCleared() {
+		_spec.ClearField(group.FieldPredictedImageUnitCostUsd, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.MaxReasoningEffort(); ok {
 		_spec.SetField(group.FieldMaxReasoningEffort, field.TypeString, value)
@@ -3400,6 +3458,47 @@ func (_u *GroupUpdateOne) AddPoolCapacityAlertGeneration(v int64) *GroupUpdateOn
 	return _u
 }
 
+// SetPredictedCapacityMode sets the "predicted_capacity_mode" field.
+func (_u *GroupUpdateOne) SetPredictedCapacityMode(v string) *GroupUpdateOne {
+	_u.mutation.SetPredictedCapacityMode(v)
+	return _u
+}
+
+// SetNillablePredictedCapacityMode sets the "predicted_capacity_mode" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillablePredictedCapacityMode(v *string) *GroupUpdateOne {
+	if v != nil {
+		_u.SetPredictedCapacityMode(*v)
+	}
+	return _u
+}
+
+// SetPredictedImageUnitCostUsd sets the "predicted_image_unit_cost_usd" field.
+func (_u *GroupUpdateOne) SetPredictedImageUnitCostUsd(v float64) *GroupUpdateOne {
+	_u.mutation.ResetPredictedImageUnitCostUsd()
+	_u.mutation.SetPredictedImageUnitCostUsd(v)
+	return _u
+}
+
+// SetNillablePredictedImageUnitCostUsd sets the "predicted_image_unit_cost_usd" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillablePredictedImageUnitCostUsd(v *float64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetPredictedImageUnitCostUsd(*v)
+	}
+	return _u
+}
+
+// AddPredictedImageUnitCostUsd adds value to the "predicted_image_unit_cost_usd" field.
+func (_u *GroupUpdateOne) AddPredictedImageUnitCostUsd(v float64) *GroupUpdateOne {
+	_u.mutation.AddPredictedImageUnitCostUsd(v)
+	return _u
+}
+
+// ClearPredictedImageUnitCostUsd clears the value of the "predicted_image_unit_cost_usd" field.
+func (_u *GroupUpdateOne) ClearPredictedImageUnitCostUsd() *GroupUpdateOne {
+	_u.mutation.ClearPredictedImageUnitCostUsd()
+	return _u
+}
+
 // SetMaxReasoningEffort sets the "max_reasoning_effort" field.
 func (_u *GroupUpdateOne) SetMaxReasoningEffort(v string) *GroupUpdateOne {
 	_u.mutation.SetMaxReasoningEffort(v)
@@ -3893,6 +3992,11 @@ func (_u *GroupUpdateOne) check() error {
 			return &ValidationError{Name: "pool_capacity_alert_metric", err: fmt.Errorf(`ent: validator failed for field "Group.pool_capacity_alert_metric": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.PredictedCapacityMode(); ok {
+		if err := group.PredictedCapacityModeValidator(v); err != nil {
+			return &ValidationError{Name: "predicted_capacity_mode", err: fmt.Errorf(`ent: validator failed for field "Group.predicted_capacity_mode": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.MaxReasoningEffort(); ok {
 		if err := group.MaxReasoningEffortValidator(v); err != nil {
 			return &ValidationError{Name: "max_reasoning_effort", err: fmt.Errorf(`ent: validator failed for field "Group.max_reasoning_effort": %w`, err)}
@@ -4227,6 +4331,18 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.AddedPoolCapacityAlertGeneration(); ok {
 		_spec.AddField(group.FieldPoolCapacityAlertGeneration, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.PredictedCapacityMode(); ok {
+		_spec.SetField(group.FieldPredictedCapacityMode, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.PredictedImageUnitCostUsd(); ok {
+		_spec.SetField(group.FieldPredictedImageUnitCostUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedPredictedImageUnitCostUsd(); ok {
+		_spec.AddField(group.FieldPredictedImageUnitCostUsd, field.TypeFloat64, value)
+	}
+	if _u.mutation.PredictedImageUnitCostUsdCleared() {
+		_spec.ClearField(group.FieldPredictedImageUnitCostUsd, field.TypeFloat64)
 	}
 	if value, ok := _u.mutation.MaxReasoningEffort(); ok {
 		_spec.SetField(group.FieldMaxReasoningEffort, field.TypeString, value)

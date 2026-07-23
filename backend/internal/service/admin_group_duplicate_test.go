@@ -57,6 +57,7 @@ func cloneGroupForDuplicateTest(group *Group) *Group {
 	cloned.VideoPrice1080P = cloneGroupValuePointer(group.VideoPrice1080P)
 	cloned.WebSearchPricePerCall = cloneGroupValuePointer(group.WebSearchPricePerCall)
 	cloned.PoolCapacityAlertThresholdUSD = cloneGroupValuePointer(group.PoolCapacityAlertThresholdUSD)
+	cloned.PredictedImageUnitCostUSD = cloneGroupValuePointer(group.PredictedImageUnitCostUSD)
 	cloned.FallbackGroupID = cloneGroupValuePointer(group.FallbackGroupID)
 	cloned.FallbackGroupIDOnInvalidRequest = cloneGroupValuePointer(group.FallbackGroupIDOnInvalidRequest)
 	cloned.ModelRouting = cloneGroupModelRouting(group.ModelRouting)
@@ -180,6 +181,8 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
 		PoolCapacityAlertThresholdRequests: 345,
 		PoolCapacityAlertThresholdUSD:      groupDuplicateTestPointer(18.75),
 		PoolCapacityAlertGeneration:        9,
+		PredictedCapacityMode:              PredictedCapacityModeFixedImageCost,
+		PredictedImageUnitCostUSD:          groupDuplicateTestPointer(0.025),
 		MaxReasoningEffort:                 "medium",
 		ReasoningEffortMappings:            []ReasoningEffortMapping{{From: "max", To: "xhigh"}},
 		CreatedAt:                          createdAt,
@@ -221,6 +224,8 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
 	require.Equal(t, source.PoolCapacityAlertThresholdRequests, duplicate.PoolCapacityAlertThresholdRequests)
 	require.Equal(t, source.PoolCapacityAlertThresholdUSD, duplicate.PoolCapacityAlertThresholdUSD)
 	require.Zero(t, duplicate.PoolCapacityAlertGeneration)
+	require.Equal(t, source.PredictedCapacityMode, duplicate.PredictedCapacityMode)
+	require.Equal(t, source.PredictedImageUnitCostUSD, duplicate.PredictedImageUnitCostUSD)
 	require.Equal(t, source.MaxReasoningEffort, duplicate.MaxReasoningEffort)
 	require.Equal(t, source.ReasoningEffortMappings, duplicate.ReasoningEffortMappings)
 	require.EqualValues(t, 2, duplicate.AccountCount)
@@ -239,6 +244,7 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
 	duplicate.ReasoningEffortMappings[0].To = "changed"
 	*duplicate.DailyLimitUSD = 999
 	*duplicate.PoolCapacityAlertThresholdUSD = 999
+	*duplicate.PredictedImageUnitCostUSD = 999
 	require.Equal(t, int64(13), source.ModelRouting["gpt-*"][0])
 	require.Equal(t, "claude", source.SupportedModelScopes[0])
 	require.Equal(t, "gpt-special", source.MessagesDispatchModelConfig.ExactModelMappings["claude-special"])
@@ -246,6 +252,7 @@ func TestDuplicateGroupCopiesConfigurationDeeplyAndResetsRuntimeState(t *testing
 	require.Equal(t, "xhigh", source.ReasoningEffortMappings[0].To)
 	require.Equal(t, 11.0, *source.DailyLimitUSD)
 	require.Equal(t, 18.75, *source.PoolCapacityAlertThresholdUSD)
+	require.Equal(t, 0.025, *source.PredictedImageUnitCostUSD)
 }
 
 func TestDuplicateGroupRecoversSameOperationAndScopesByAdmin(t *testing.T) {

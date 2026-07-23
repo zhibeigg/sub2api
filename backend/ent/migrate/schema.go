@@ -1108,6 +1108,8 @@ var (
 		{Name: "pool_capacity_alert_threshold_requests", Type: field.TypeInt64, Default: 50},
 		{Name: "pool_capacity_alert_threshold_usd", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(30,12)"}},
 		{Name: "pool_capacity_alert_generation", Type: field.TypeInt64, Default: 0},
+		{Name: "predicted_capacity_mode", Type: field.TypeString, Size: 32, Default: "historical_requests"},
+		{Name: "predicted_image_unit_cost_usd", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(30,12)"}},
 		{Name: "max_reasoning_effort", Type: field.TypeString, Size: 20, Default: ""},
 		{Name: "reasoning_effort_mappings", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
 	}

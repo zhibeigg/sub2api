@@ -902,6 +902,124 @@ func TestAdminService_CreateGroupPersistsCustomPoolCapacityAlertPolicy(t *testin
 	require.Zero(t, repo.created.PoolCapacityAlertGeneration)
 }
 
+func TestAdminService_CreateGroupDefaultsHistoricalCapacityPrediction(t *testing.T) {
+	repo := &groupRepoStubForAdmin{}
+	svc := &adminServiceImpl{groupRepo: repo}
+
+	group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
+		Name:           "prediction-default",
+		Platform:       PlatformAnthropic,
+		RateMultiplier: 1,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, group)
+	require.Equal(t, PredictedCapacityModeHistoricalRequests, repo.created.PredictedCapacityMode)
+	require.Nil(t, repo.created.PredictedImageUnitCostUSD)
+}
+
+func TestAdminService_CreateGroupValidatesCapacityPredictionConfig(t *testing.T) {
+	validCost := 0.25
+	tests := []struct {
+		name string
+		mode string
+		cost *float64
+		ok   bool
+	}{
+		{name: "historical default", ok: true},
+		{name: "fixed valid", mode: PredictedCapacityModeFixedImageCost, cost: &validCost, ok: true},
+		{name: "invalid mode", mode: "images", cost: &validCost},
+		{name: "fixed missing cost", mode: PredictedCapacityModeFixedImageCost},
+		{name: "zero cost", mode: PredictedCapacityModeFixedImageCost, cost: adminGroupTestPointer(0.0)},
+		{name: "below minimum", mode: PredictedCapacityModeFixedImageCost, cost: adminGroupTestPointer(MinPredictedImageUnitCostUSD / 10)},
+		{name: "above maximum", mode: PredictedCapacityModeFixedImageCost, cost: adminGroupTestPointer(MaxPredictedImageUnitCostUSD * 2)},
+		{name: "nan", mode: PredictedCapacityModeFixedImageCost, cost: adminGroupTestPointer(math.NaN())},
+		{name: "infinity", mode: PredictedCapacityModeFixedImageCost, cost: adminGroupTestPointer(math.Inf(1))},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &groupRepoStubForAdmin{}
+			svc := &adminServiceImpl{groupRepo: repo}
+			group, err := svc.CreateGroup(context.Background(), &CreateGroupInput{
+				Name:                      "prediction-config",
+				Platform:                  PlatformAnthropic,
+				RateMultiplier:            1,
+				PredictedCapacityMode:     tt.mode,
+				PredictedImageUnitCostUSD: tt.cost,
+			})
+			if !tt.ok {
+				require.Error(t, err)
+				require.Nil(t, group)
+				require.Nil(t, repo.created)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, group)
+			require.Equal(t, NormalizePredictedCapacityMode(tt.mode), repo.created.PredictedCapacityMode)
+		})
+	}
+}
+
+func TestAdminService_UpdateGroupCapacityPredictionSupportsExplicitNullWithoutChangingAlertState(t *testing.T) {
+	existingCost := 0.5
+	existing := &Group{
+		ID:                                 1,
+		Name:                               "prediction-update",
+		Platform:                           PlatformAnthropic,
+		Status:                             StatusActive,
+		PoolCapacityAlertEnabled:           true,
+		PoolCapacityAlertMetric:            PoolCapacityAlertMetricPredictedRequests,
+		PoolCapacityAlertThresholdRequests: 50,
+		PoolCapacityAlertGeneration:        7,
+		PredictedCapacityMode:              PredictedCapacityModeFixedImageCost,
+		PredictedImageUnitCostUSD:          &existingCost,
+	}
+	repo := &groupRepoStubForAdmin{getByID: existing}
+	svc := &adminServiceImpl{groupRepo: repo}
+	mode := PredictedCapacityModeHistoricalRequests
+	var clearedCost *float64
+
+	group, err := svc.UpdateGroup(context.Background(), existing.ID, &UpdateGroupInput{
+		PredictedCapacityMode:     &mode,
+		PredictedImageUnitCostUSD: &clearedCost,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, group)
+	require.Equal(t, PredictedCapacityModeHistoricalRequests, repo.updated.PredictedCapacityMode)
+	require.Nil(t, repo.updated.PredictedImageUnitCostUSD)
+	require.True(t, repo.updated.PoolCapacityAlertEnabled)
+	require.Equal(t, PoolCapacityAlertMetricPredictedRequests, repo.updated.PoolCapacityAlertMetric)
+	require.Equal(t, int64(50), repo.updated.PoolCapacityAlertThresholdRequests)
+	require.Equal(t, int64(7), repo.updated.PoolCapacityAlertGeneration)
+}
+
+func TestAdminService_UpdateGroupRejectsFixedImageExplicitNullCost(t *testing.T) {
+	existing := &Group{
+		ID:                                 1,
+		Name:                               "prediction-update-invalid",
+		Platform:                           PlatformAnthropic,
+		Status:                             StatusActive,
+		PoolCapacityAlertMetric:            PoolCapacityAlertMetricPredictedRequests,
+		PoolCapacityAlertThresholdRequests: 50,
+		PredictedCapacityMode:              PredictedCapacityModeHistoricalRequests,
+	}
+	repo := &groupRepoStubForAdmin{getByID: existing}
+	svc := &adminServiceImpl{groupRepo: repo}
+	mode := PredictedCapacityModeFixedImageCost
+	var clearedCost *float64
+
+	group, err := svc.UpdateGroup(context.Background(), existing.ID, &UpdateGroupInput{
+		PredictedCapacityMode:     &mode,
+		PredictedImageUnitCostUSD: &clearedCost,
+	})
+
+	require.Error(t, err)
+	require.Nil(t, group)
+	require.Nil(t, repo.updated)
+}
+
 func TestAdminService_UpdateGroup_PoolCapacityAlertGenerationChangesOnlyWithSwitch(t *testing.T) {
 	tests := []struct {
 		name           string

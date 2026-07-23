@@ -1,8 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
 
 import AccountsView from '../AccountsView.vue'
+
+enableAutoUnmount(afterEach)
 
 const {
   listAccounts,

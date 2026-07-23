@@ -194,6 +194,10 @@ type AdminGroup struct {
 	PoolCapacityAlertMetric            string   `json:"pool_capacity_alert_metric"`
 	PoolCapacityAlertThresholdRequests int64    `json:"pool_capacity_alert_threshold_requests"`
 	PoolCapacityAlertThresholdUSD      *float64 `json:"pool_capacity_alert_threshold_usd"`
+
+	// 分组列表容量预测配置（仅管理员可见）。
+	PredictedCapacityMode     string   `json:"predicted_capacity_mode"`
+	PredictedImageUnitCostUSD *float64 `json:"predicted_image_unit_cost_usd"`
 }
 
 type Account struct {

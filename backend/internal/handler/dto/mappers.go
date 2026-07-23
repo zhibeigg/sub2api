@@ -173,6 +173,8 @@ func GroupFromServiceAdmin(g *service.Group) *AdminGroup {
 		PoolCapacityAlertMetric:            g.PoolCapacityAlertPolicy().Metric,
 		PoolCapacityAlertThresholdRequests: g.PoolCapacityAlertPolicy().ThresholdRequests,
 		PoolCapacityAlertThresholdUSD:      g.PoolCapacityAlertThresholdUSD,
+		PredictedCapacityMode:              service.NormalizePredictedCapacityMode(g.PredictedCapacityMode),
+		PredictedImageUnitCostUSD:          g.PredictedImageUnitCostUSD,
 	}
 	if len(g.AccountGroups) > 0 {
 		out.AccountGroups = make([]AccountGroup, 0, len(g.AccountGroups))

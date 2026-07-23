@@ -58,23 +58,32 @@ func TestGroupHandlerGetPredictedCapacitySummaryReturnsPartialRows(t *testing.T)
 	gin.SetMode(gin.TestMode)
 	remaining := 12.5
 	requests := int64(42)
+	predictedQuantity := "42"
 	evaluatedAt := time.Date(2026, time.July, 22, 15, 0, 0, 0, time.UTC)
 	reader := &groupPredictedBalanceReaderStub{
 		summaries: map[int64]*service.GroupPredictedBalanceSummary{
 			2: {
-				Complete:                     true,
-				RemainingBalanceUSD:          &remaining,
-				PoolAuthoritativeBalanceUSD:  10,
-				NormalEstimatedBalanceUSD:    2.5,
-				KnownBalanceAccountCount:     2,
-				RequestsComplete:             false,
-				EstimatedRemainingRequests:   &requests,
-				KnownRequestAccountCount:     1,
-				UnknownRequestAccountCount:   1,
-				UnknownAccountCount:          0,
-				StaleAccountCount:            1,
-				IncompatibleUnitAccountCount: 0,
-				EvaluatedAt:                  evaluatedAt,
+				PredictionMode:                service.PredictedCapacityModeHistoricalRequests,
+				PredictionUnit:                "request",
+				PredictionConfigured:          true,
+				PredictionComplete:            false,
+				PredictedQuantity:             &predictedQuantity,
+				KnownPredictionAccountCount:   1,
+				UnknownPredictionAccountCount: 1,
+				Complete:                      true,
+				RemainingBalanceUSD:           &remaining,
+				KnownRemainingBalanceUSD:      &remaining,
+				PoolAuthoritativeBalanceUSD:   10,
+				NormalEstimatedBalanceUSD:     2.5,
+				KnownBalanceAccountCount:      2,
+				RequestsComplete:              false,
+				EstimatedRemainingRequests:    &requests,
+				KnownRequestAccountCount:      1,
+				UnknownRequestAccountCount:    1,
+				UnknownAccountCount:           0,
+				StaleAccountCount:             1,
+				IncompatibleUnitAccountCount:  0,
+				EvaluatedAt:                   evaluatedAt,
 			},
 		},
 		errors: map[int64]error{3: errors.New("upstream unavailable")},
@@ -95,6 +104,15 @@ func TestGroupHandlerGetPredictedCapacitySummaryReturnsPartialRows(t *testing.T)
 	require.Len(t, envelope.Data, 2)
 	require.Equal(t, int64(2), envelope.Data[0].GroupID)
 	require.True(t, envelope.Data[0].Available)
+	require.Equal(t, service.PredictedCapacityModeHistoricalRequests, envelope.Data[0].PredictionMode)
+	require.Equal(t, "request", envelope.Data[0].PredictionUnit)
+	require.True(t, envelope.Data[0].PredictionConfigured)
+	require.False(t, envelope.Data[0].PredictionComplete)
+	require.False(t, envelope.Data[0].PredictionUnlimited)
+	require.NotNil(t, envelope.Data[0].PredictedQuantity)
+	require.Equal(t, "42", *envelope.Data[0].PredictedQuantity)
+	require.Equal(t, 1, envelope.Data[0].KnownPredictionAccountCount)
+	require.Equal(t, 1, envelope.Data[0].UnknownPredictionAccountCount)
 	require.True(t, envelope.Data[0].BalanceComplete)
 	require.NotNil(t, envelope.Data[0].RemainingBalanceUSD)
 	require.InDelta(t, 12.5, *envelope.Data[0].RemainingBalanceUSD, 1e-12)
@@ -102,7 +120,7 @@ func TestGroupHandlerGetPredictedCapacitySummaryReturnsPartialRows(t *testing.T)
 	require.InDelta(t, 12.5, *envelope.Data[0].KnownRemainingBalanceUSD, 1e-12)
 	require.False(t, envelope.Data[0].RequestsComplete)
 	require.NotNil(t, envelope.Data[0].EstimatedRemainingRequests)
-	require.Equal(t, "42", *envelope.Data[0].EstimatedRemainingRequests)
+	require.Equal(t, int64(42), *envelope.Data[0].EstimatedRemainingRequests)
 	require.Equal(t, evaluatedAt, *envelope.Data[0].EvaluatedAt)
 	require.Equal(t, int64(3), envelope.Data[1].GroupID)
 	require.False(t, envelope.Data[1].Available)
@@ -111,6 +129,8 @@ func TestGroupHandlerGetPredictedCapacitySummaryReturnsPartialRows(t *testing.T)
 		Data []map[string]json.RawMessage `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &rawEnvelope))
+	require.Equal(t, `"42"`, string(rawEnvelope.Data[0]["predicted_quantity"]), "new generic quantity remains a decimal string")
+	require.Equal(t, "42", string(rawEnvelope.Data[0]["estimated_remaining_requests"]), "legacy request quantity remains a JSON number")
 	for _, field := range []string{"remaining_balance_usd", "known_remaining_balance_usd", "estimated_remaining_requests", "evaluated_at"} {
 		require.Equal(t, "null", string(rawEnvelope.Data[1][field]), field)
 	}

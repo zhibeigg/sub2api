@@ -834,7 +834,7 @@ export default {
         apiKeys: 'API 密钥数',
         accounts: '账号数',
         capacity: '容量',
-        predictedCapacity: '预估剩余额度 / 请求数',
+        predictedCapacity: '预估余额 / 容量',
         usage: '用量',
         status: '状态',
         actions: '操作',
@@ -852,14 +852,21 @@ export default {
       accountsUnit: '个账号',
       predictedCapacity: {
         balance: '余额',
+        capacity: '容量',
         requests: '请求',
+        images: '图片',
         requestUnit: '请求',
+        imageUnit: '张',
         unlimited: '无限',
         partial: '部分可估',
         insufficient: '数据不足',
+        error: '加载失败',
+        errorHint: '容量预测加载失败，请刷新后重试。',
         partialBalanceHint: '部分可估：仅显示已知账号的剩余余额下界。',
         partialRequestsHint: '部分可估：仅显示可估账号的剩余请求数下界。',
-        diagnostics: '已知请求账号 {knownRequests}，未知请求账号 {unknownRequests}，未知余额账号 {unknownAccounts}，过期数据账号 {staleAccounts}，单位不兼容账号 {incompatibleAccounts}。',
+        partialImagesHint: '部分可估：仅显示可估账号的剩余图片数下界。',
+        diagnostics: '预测容量已知账号 {knownPredictions}，未知账号 {unknownPredictions}；未知余额账号 {unknownAccounts}，过期数据账号 {staleAccounts}，单位不兼容账号 {incompatibleAccounts}。',
+        unitCostDiagnostic: '预测单次成本：${cost} / {unit}。',
         evaluatedAt: '评估时间：{time}'
       },
       form: {
@@ -991,6 +998,28 @@ export default {
         privacySetOnly: '仅允许隐私保护已设置的账号',
         privacySetOnlyEnabled: '已启用 — Privacy 未设置的账号将被排除',
         disabled: '未启用'
+      },
+      predictedCapacityConfig: {
+        title: '容量预测算法',
+        description: '选择如何把账号剩余容量换算为预计可用次数。此配置只影响容量预测，不会修改用户售价、分组倍率或容量告警设置。',
+        historicalRequests: {
+          label: '历史请求',
+          description: '默认算法：根据最近成功落账请求的平均账号成本估算剩余请求数。'
+        },
+        fixedImageCost: {
+          label: '固定单次生图成本',
+          description: '使用每张图片消耗的账号上游容量成本，把剩余 USD 容量换算为预计可生成图片数。'
+        },
+        unitCost: {
+          label: '账号容量成本',
+          unit: 'USD / 张',
+          hint: '填写单张图片实际消耗的账号容量成本，不是面向用户的销售价格，也不与分组费率或图片售价联动。可填 0.000000000001 到 1,000,000,000,000,000。'
+        },
+        validation: {
+          required: '固定单次生图成本模式必须填写账号容量成本。',
+          finite: '账号容量成本必须是有限数字。',
+          range: '账号容量成本必须在 0.000000000001 到 1,000,000,000,000,000 之间。'
+        }
       },
       poolCapacityAlert: {
         title: '分组容量提醒',

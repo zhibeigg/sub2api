@@ -40,7 +40,7 @@ const messages: Record<string, string> = {
   'admin.groups.columns.type': 'Type',
   'admin.groups.columns.accounts': 'Accounts',
   'admin.groups.columns.capacity': 'Capacity',
-  'admin.groups.columns.predictedCapacity': 'Estimated Capacity',
+  'admin.groups.columns.predictedCapacity': 'Est. Balance / Capacity',
   'admin.groups.columns.usage': 'Usage',
   'admin.groups.columns.status': 'Status',
   'admin.groups.columns.actions': 'Actions',
@@ -416,7 +416,7 @@ describe('admin GroupsView column settings', () => {
     expect(getPredictedCapacitySummary).not.toHaveBeenCalled()
 
     await openColumnSettings(wrapper)
-    await clickColumnToggle(wrapper, 'Estimated Capacity')
+    await clickColumnToggle(wrapper, 'Est. Balance / Capacity')
 
     expect(getPredictedCapacitySummary).toHaveBeenCalledTimes(1)
     expect(getPredictedCapacitySummary).toHaveBeenCalledWith(
@@ -467,7 +467,7 @@ describe('admin GroupsView column settings', () => {
     expect(signal.aborted).toBe(false)
 
     await openColumnSettings(wrapper)
-    await clickColumnToggle(wrapper, 'Estimated Capacity')
+    await clickColumnToggle(wrapper, 'Est. Balance / Capacity')
 
     expect(signal.aborted).toBe(true)
     expect(JSON.parse(localStorage.getItem('group-hidden-columns')!)).toEqual(

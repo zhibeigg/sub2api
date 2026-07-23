@@ -841,7 +841,7 @@ export default {
         apiKeys: 'API Keys',
         accounts: 'Accounts',
         capacity: 'Capacity',
-        predictedCapacity: 'Est. Balance / Requests',
+        predictedCapacity: 'Est. Balance / Capacity',
         usage: 'Usage',
         status: 'Status',
         actions: 'Actions',
@@ -859,14 +859,21 @@ export default {
       accountsUnit: '',
       predictedCapacity: {
         balance: 'Balance',
+        capacity: 'Capacity',
         requests: 'Requests',
+        images: 'Images',
         requestUnit: 'requests',
+        imageUnit: 'images',
         unlimited: 'Unlimited',
         partial: 'Partial estimate',
         insufficient: 'Insufficient data',
+        error: 'Load failed',
+        errorHint: 'Capacity prediction failed to load. Refresh and try again.',
         partialBalanceHint: 'Partial estimate: shows only the known lower bound of remaining account balance.',
         partialRequestsHint: 'Partial estimate: shows only the known lower bound of estimated remaining requests.',
-        diagnostics: '{knownRequests} request accounts known, {unknownRequests} unknown; {unknownAccounts} balance accounts unknown, {staleAccounts} stale, {incompatibleAccounts} unit-incompatible.',
+        partialImagesHint: 'Partial estimate: shows only the known lower bound of estimated remaining images.',
+        diagnostics: '{knownPredictions} prediction accounts known, {unknownPredictions} unknown; {unknownAccounts} balance accounts unknown, {staleAccounts} stale, {incompatibleAccounts} unit-incompatible.',
+        unitCostDiagnostic: 'Prediction unit cost: ${cost} per {unit}.',
         evaluatedAt: 'Evaluated at {time}'
       },
       rateAndAccounts: '{rate}x rate · {count} accounts',
@@ -879,6 +886,28 @@ export default {
         privacySetOnly: 'Only allow accounts with privacy protection set',
         privacySetOnlyEnabled: 'Enabled — accounts with unset Privacy will be excluded',
         disabled: 'Disabled'
+      },
+      predictedCapacityConfig: {
+        title: 'Capacity prediction algorithm',
+        description: 'Choose how remaining account capacity is converted into estimated usable units. This affects capacity prediction only; it does not change user pricing, group multipliers, or capacity alerts.',
+        historicalRequests: {
+          label: 'Historical requests',
+          description: 'Default algorithm: estimates remaining requests from the average account cost of recent successful settlements.'
+        },
+        fixedImageCost: {
+          label: 'Fixed per-image cost',
+          description: 'Uses the upstream account-capacity cost consumed by each image to convert remaining USD capacity into an estimated image count.'
+        },
+        unitCost: {
+          label: 'Account capacity cost',
+          unit: 'USD / image',
+          hint: 'Enter the actual account capacity consumed per image. This is not the user-facing sale price and is independent of group rates and image pricing. Allowed range: 0.000000000001 to 1,000,000,000,000,000.'
+        },
+        validation: {
+          required: 'Account capacity cost is required for fixed per-image cost mode.',
+          finite: 'Account capacity cost must be a finite number.',
+          range: 'Account capacity cost must be between 0.000000000001 and 1,000,000,000,000,000.'
+        }
       },
       poolCapacityAlert: {
         title: 'Group capacity alert',

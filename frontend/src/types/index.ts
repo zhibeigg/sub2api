@@ -638,6 +638,9 @@ export interface Group {
   updated_at: string
 }
 
+export type PredictedCapacityMode = 'historical_requests' | 'fixed_image_cost'
+export type PredictionUnit = 'request' | 'image'
+
 export interface GroupPredictedCapacitySummary {
   group_id: number
   available: boolean
@@ -645,6 +648,17 @@ export interface GroupPredictedCapacitySummary {
   balance_unlimited: boolean
   remaining_balance_usd: number | null
   known_remaining_balance_usd: number | null
+  // 通用预测字段；可选以兼容尚未升级的后端响应。
+  prediction_mode?: PredictedCapacityMode
+  prediction_unit?: PredictionUnit
+  prediction_configured?: boolean
+  prediction_complete?: boolean
+  prediction_unlimited?: boolean
+  predicted_quantity?: string | null
+  prediction_unit_cost_usd?: number | null
+  known_prediction_account_count?: number
+  unknown_prediction_account_count?: number
+  // 旧请求预测字段保留用于滚动升级兼容。
   requests_complete: boolean
   requests_unlimited: boolean
   estimated_remaining_requests: string | number | null
@@ -657,6 +671,10 @@ export interface GroupPredictedCapacitySummary {
 }
 
 export interface AdminGroup extends Group {
+  // 容量预测算法（可选字段兼容旧管理 API 响应）
+  predicted_capacity_mode?: PredictedCapacityMode
+  predicted_image_unit_cost_usd?: number | null
+
   // 池账号容量提醒（仅管理员可配置；可选字段兼容旧管理 API 响应）
   pool_capacity_alert_enabled?: boolean
   pool_capacity_alert_metric?: PoolCapacityAlertMetric
@@ -877,6 +895,8 @@ export interface CreateGroupRequest {
   model_routing?: Record<string, number[]> | null
   model_routing_enabled?: boolean
   rpm_limit?: number
+  predicted_capacity_mode?: PredictedCapacityMode
+  predicted_image_unit_cost_usd?: number | null
   pool_capacity_alert_enabled?: boolean
   pool_capacity_alert_metric?: PoolCapacityAlertMetric
   pool_capacity_alert_threshold_requests?: number
@@ -935,6 +955,8 @@ export interface UpdateGroupRequest {
   model_routing?: Record<string, number[]> | null
   model_routing_enabled?: boolean
   rpm_limit?: number
+  predicted_capacity_mode?: PredictedCapacityMode
+  predicted_image_unit_cost_usd?: number | null
   pool_capacity_alert_enabled?: boolean
   pool_capacity_alert_metric?: PoolCapacityAlertMetric
   pool_capacity_alert_threshold_requests?: number

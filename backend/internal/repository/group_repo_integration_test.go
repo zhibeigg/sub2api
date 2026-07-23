@@ -50,6 +50,7 @@ func TestGroupRepoSuite(t *testing.T) {
 // --- Create / GetByID / Update / Delete ---
 
 func (s *GroupRepoSuite) TestCreate() {
+	predictionUnitCostUSD := 0.125
 	group := &service.Group{
 		Name:                        "test-create",
 		Platform:                    service.PlatformAnthropic,
@@ -59,6 +60,8 @@ func (s *GroupRepoSuite) TestCreate() {
 		SubscriptionType:            service.SubscriptionTypeStandard,
 		PoolCapacityAlertEnabled:    true,
 		PoolCapacityAlertGeneration: 5,
+		PredictedCapacityMode:       service.PredictedCapacityModeFixedImageCost,
+		PredictedImageUnitCostUSD:   &predictionUnitCostUSD,
 	}
 
 	err := s.repo.Create(s.ctx, group)
@@ -70,6 +73,9 @@ func (s *GroupRepoSuite) TestCreate() {
 	s.Require().Equal("test-create", got.Name)
 	s.Require().True(got.PoolCapacityAlertEnabled)
 	s.Require().Equal(int64(5), got.PoolCapacityAlertGeneration)
+	s.Require().Equal(service.PredictedCapacityModeFixedImageCost, got.PredictedCapacityMode)
+	s.Require().NotNil(got.PredictedImageUnitCostUSD)
+	s.Require().Equal(predictionUnitCostUSD, *got.PredictedImageUnitCostUSD)
 }
 
 func (s *GroupRepoSuite) TestCreateFromSourcePreservesPriorityAndFiltersIneligibleAccounts() {

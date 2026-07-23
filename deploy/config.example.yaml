@@ -977,8 +977,10 @@ account_capacity:
 # Pool-mode Account Capacity Alerts
 # =============================================================================
 # 全局运行时默认开启，但每个分组的 pool_capacity_alert_enabled 默认关闭。
-# predicted_requests 保留原有 50 条成功落账样本预测；remaining_balance_usd 表示
-# 分组预测剩余余额，即池模式账号权威 USD 余额之和 + 普通账号估算 USD 余额之和。
+# 分组列表的 predicted_capacity_mode / predicted_image_unit_cost_usd 保存在分组数据库字段中，
+# 可选择历史请求预测或按每张图片固定账号容量 USD 成本预测；不新增 YAML 或环境变量。
+# 该列表展示配置与告警指标独立：predicted_requests 仍保留原有 50 条成功落账样本告警，
+# remaining_balance_usd 表示池模式账号权威 USD 余额之和 + 普通账号估算 USD 余额之和。
 # 金额模式可由分组内任意普通或池账号成功计费触发重算；unknown、stale、单位不兼容
 # 或其他数据不完整情况不按 0 处理，也不会改变现有分组告警状态。
 # 金额通知会展示分组总额、两类账号小计，以及参与、跳过、未知、过期和单位不兼容账号统计。

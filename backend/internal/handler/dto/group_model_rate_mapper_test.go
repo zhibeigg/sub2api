@@ -10,6 +10,7 @@ import (
 
 func TestGroupModelRateMultipliersAreAdminOnly(t *testing.T) {
 	thresholdUSD := 17.25
+	predictionUnitCostUSD := 0.125
 	group := &service.Group{
 		ID:                                 26,
 		Name:                               "cursor",
@@ -22,6 +23,8 @@ func TestGroupModelRateMultipliersAreAdminOnly(t *testing.T) {
 		PoolCapacityAlertThresholdRequests: 125,
 		PoolCapacityAlertThresholdUSD:      &thresholdUSD,
 		PoolCapacityAlertGeneration:        9,
+		PredictedCapacityMode:              service.PredictedCapacityModeFixedImageCost,
+		PredictedImageUnitCostUSD:          &predictionUnitCostUSD,
 	}
 
 	adminDTO := GroupFromServiceAdmin(group)
@@ -33,6 +36,8 @@ func TestGroupModelRateMultipliersAreAdminOnly(t *testing.T) {
 	require.Contains(t, string(adminJSON), `"pool_capacity_alert_metric":"remaining_balance_usd"`)
 	require.Contains(t, string(adminJSON), `"pool_capacity_alert_threshold_requests":125`)
 	require.Contains(t, string(adminJSON), `"pool_capacity_alert_threshold_usd":17.25`)
+	require.Contains(t, string(adminJSON), `"predicted_capacity_mode":"fixed_image_cost"`)
+	require.Contains(t, string(adminJSON), `"predicted_image_unit_cost_usd":0.125`)
 	require.NotContains(t, string(adminJSON), "pool_capacity_alert_generation")
 
 	publicDTO := GroupFromService(group)
@@ -44,4 +49,6 @@ func TestGroupModelRateMultipliersAreAdminOnly(t *testing.T) {
 	require.NotContains(t, string(publicJSON), "pool_capacity_alert_threshold_requests")
 	require.NotContains(t, string(publicJSON), "pool_capacity_alert_threshold_usd")
 	require.NotContains(t, string(publicJSON), "pool_capacity_alert_generation")
+	require.NotContains(t, string(publicJSON), "predicted_capacity_mode")
+	require.NotContains(t, string(publicJSON), "predicted_image_unit_cost_usd")
 }

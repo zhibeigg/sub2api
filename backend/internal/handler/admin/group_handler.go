@@ -106,6 +106,10 @@ func (f optionalNullableFloatField) ToServicePatch() **float64 {
 	return &f.value
 }
 
+func (f optionalNullableFloatField) Value() *float64 {
+	return f.value
+}
+
 // NewGroupHandler creates a new admin group handler
 func NewGroupHandler(
 	adminService service.AdminService,
@@ -178,6 +182,9 @@ type CreateGroupRequest struct {
 	PoolCapacityAlertMetric            *string  `json:"pool_capacity_alert_metric"`
 	PoolCapacityAlertThresholdRequests *int64   `json:"pool_capacity_alert_threshold_requests"`
 	PoolCapacityAlertThresholdUSD      *float64 `json:"pool_capacity_alert_threshold_usd"`
+	// 分组列表容量预测配置；与告警指标相互独立。
+	PredictedCapacityMode     string                     `json:"predicted_capacity_mode"`
+	PredictedImageUnitCostUSD optionalNullableFloatField `json:"predicted_image_unit_cost_usd"`
 	// OpenAI/Codex 请求推理强度上限，空字符串表示不限制。
 	MaxReasoningEffort string `json:"max_reasoning_effort"`
 	// OpenAI/Codex 推理强度精确映射。
@@ -244,6 +251,9 @@ type UpdateGroupRequest struct {
 	PoolCapacityAlertMetric            *string                    `json:"pool_capacity_alert_metric"`
 	PoolCapacityAlertThresholdRequests *int64                     `json:"pool_capacity_alert_threshold_requests"`
 	PoolCapacityAlertThresholdUSD      optionalNullableFloatField `json:"pool_capacity_alert_threshold_usd"`
+	// 分组列表容量预测配置采用 patch 语义；成本字段支持显式 null 清空。
+	PredictedCapacityMode     *string                    `json:"predicted_capacity_mode"`
+	PredictedImageUnitCostUSD optionalNullableFloatField `json:"predicted_image_unit_cost_usd"`
 	// OpenAI/Codex 请求推理强度上限；空字符串清除，nil 不修改。
 	MaxReasoningEffort *string `json:"max_reasoning_effort"`
 	// nil 不修改，空数组清空，非空数组替换。
@@ -572,6 +582,8 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		PoolCapacityAlertMetric:            req.PoolCapacityAlertMetric,
 		PoolCapacityAlertThresholdRequests: req.PoolCapacityAlertThresholdRequests,
 		PoolCapacityAlertThresholdUSD:      req.PoolCapacityAlertThresholdUSD,
+		PredictedCapacityMode:              req.PredictedCapacityMode,
+		PredictedImageUnitCostUSD:          req.PredictedImageUnitCostUSD.Value(),
 		MaxReasoningEffort:                 req.MaxReasoningEffort,
 		ReasoningEffortMappings:            req.ReasoningEffortMappings,
 		CopyAccountsFromGroupIDs:           req.CopyAccountsFromGroupIDs,
@@ -704,6 +716,8 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		PoolCapacityAlertMetric:            req.PoolCapacityAlertMetric,
 		PoolCapacityAlertThresholdRequests: req.PoolCapacityAlertThresholdRequests,
 		PoolCapacityAlertThresholdUSD:      req.PoolCapacityAlertThresholdUSD.ToServicePatch(),
+		PredictedCapacityMode:              req.PredictedCapacityMode,
+		PredictedImageUnitCostUSD:          req.PredictedImageUnitCostUSD.ToServicePatch(),
 		MaxReasoningEffort:                 req.MaxReasoningEffort,
 		ReasoningEffortMappings:            req.ReasoningEffortMappings,
 		CopyAccountsFromGroupIDs:           req.CopyAccountsFromGroupIDs,
@@ -783,24 +797,33 @@ func (h *GroupHandler) GetCapacitySummary(c *gin.Context) {
 const maxPredictedCapacityGroupIDs = 100
 
 type groupPredictedCapacitySummaryResponse struct {
-	GroupID                      int64      `json:"group_id"`
-	Available                    bool       `json:"available"`
-	BalanceComplete              bool       `json:"balance_complete"`
-	BalanceUnlimited             bool       `json:"balance_unlimited"`
-	RemainingBalanceUSD          *float64   `json:"remaining_balance_usd"`
-	KnownRemainingBalanceUSD     *float64   `json:"known_remaining_balance_usd"`
-	RequestsComplete             bool       `json:"requests_complete"`
-	RequestsUnlimited            bool       `json:"requests_unlimited"`
-	EstimatedRemainingRequests   *string    `json:"estimated_remaining_requests"`
-	KnownRequestAccountCount     int        `json:"known_request_account_count"`
-	UnknownRequestAccountCount   int        `json:"unknown_request_account_count"`
-	UnknownAccountCount          int        `json:"unknown_account_count"`
-	StaleAccountCount            int        `json:"stale_account_count"`
-	IncompatibleUnitAccountCount int        `json:"incompatible_unit_account_count"`
-	EvaluatedAt                  *time.Time `json:"evaluated_at"`
+	GroupID                       int64      `json:"group_id"`
+	Available                     bool       `json:"available"`
+	PredictionMode                string     `json:"prediction_mode"`
+	PredictionUnit                string     `json:"prediction_unit"`
+	PredictionConfigured          bool       `json:"prediction_configured"`
+	PredictionComplete            bool       `json:"prediction_complete"`
+	PredictionUnlimited           bool       `json:"prediction_unlimited"`
+	PredictedQuantity             *string    `json:"predicted_quantity"`
+	PredictionUnitCostUSD         *float64   `json:"prediction_unit_cost_usd"`
+	KnownPredictionAccountCount   int        `json:"known_prediction_account_count"`
+	UnknownPredictionAccountCount int        `json:"unknown_prediction_account_count"`
+	BalanceComplete               bool       `json:"balance_complete"`
+	BalanceUnlimited              bool       `json:"balance_unlimited"`
+	RemainingBalanceUSD           *float64   `json:"remaining_balance_usd"`
+	KnownRemainingBalanceUSD      *float64   `json:"known_remaining_balance_usd"`
+	RequestsComplete              bool       `json:"requests_complete"`
+	RequestsUnlimited             bool       `json:"requests_unlimited"`
+	EstimatedRemainingRequests    *int64     `json:"estimated_remaining_requests"`
+	KnownRequestAccountCount      int        `json:"known_request_account_count"`
+	UnknownRequestAccountCount    int        `json:"unknown_request_account_count"`
+	UnknownAccountCount           int        `json:"unknown_account_count"`
+	StaleAccountCount             int        `json:"stale_account_count"`
+	IncompatibleUnitAccountCount  int        `json:"incompatible_unit_account_count"`
+	EvaluatedAt                   *time.Time `json:"evaluated_at"`
 }
 
-// GetPredictedCapacitySummary returns predicted USD balance and request capacity for the requested groups.
+// GetPredictedCapacitySummary returns the configured display prediction plus legacy balance/request diagnostics.
 // GET /api/v1/admin/groups/predicted-capacity-summary?ids=1,2,3
 func (h *GroupHandler) GetPredictedCapacitySummary(c *gin.Context) {
 	groupIDs, err := parsePredictedCapacityGroupIDs(c.Query("ids"))
@@ -872,19 +895,22 @@ func groupPredictedCapacityResponse(groupID int64, summary *service.GroupPredict
 	}
 
 	result.Available = true
+	result.PredictionMode = summary.PredictionMode
+	result.PredictionUnit = summary.PredictionUnit
+	result.PredictionConfigured = summary.PredictionConfigured
+	result.PredictionComplete = summary.PredictionComplete
+	result.PredictionUnlimited = summary.PredictionUnlimited
+	result.PredictedQuantity = cloneHandlerString(summary.PredictedQuantity)
+	result.PredictionUnitCostUSD = cloneHandlerFloat64(summary.PredictionUnitCostUSD)
+	result.KnownPredictionAccountCount = summary.KnownPredictionAccountCount
+	result.UnknownPredictionAccountCount = summary.UnknownPredictionAccountCount
 	result.BalanceComplete = summary.Complete
 	result.BalanceUnlimited = summary.Unlimited
 	result.RemainingBalanceUSD = cloneHandlerFloat64(summary.RemainingBalanceUSD)
-	if summary.KnownBalanceAccountCount > 0 || (summary.Complete && !summary.Unlimited) {
-		known := summary.PoolAuthoritativeBalanceUSD + summary.NormalEstimatedBalanceUSD
-		result.KnownRemainingBalanceUSD = &known
-	}
+	result.KnownRemainingBalanceUSD = cloneHandlerFloat64(summary.KnownRemainingBalanceUSD)
 	result.RequestsComplete = summary.RequestsComplete
 	result.RequestsUnlimited = summary.RequestsUnlimited
-	if summary.EstimatedRemainingRequests != nil {
-		requests := strconv.FormatInt(*summary.EstimatedRemainingRequests, 10)
-		result.EstimatedRemainingRequests = &requests
-	}
+	result.EstimatedRemainingRequests = cloneHandlerInt64(summary.EstimatedRemainingRequests)
 	result.KnownRequestAccountCount = summary.KnownRequestAccountCount
 	result.UnknownRequestAccountCount = summary.UnknownRequestAccountCount
 	result.UnknownAccountCount = summary.UnknownAccountCount
@@ -896,6 +922,22 @@ func groupPredictedCapacityResponse(groupID int64, summary *service.GroupPredict
 }
 
 func cloneHandlerFloat64(value *float64) *float64 {
+	if value == nil {
+		return nil
+	}
+	copyValue := *value
+	return &copyValue
+}
+
+func cloneHandlerInt64(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	copyValue := *value
+	return &copyValue
+}
+
+func cloneHandlerString(value *string) *string {
 	if value == nil {
 		return nil
 	}

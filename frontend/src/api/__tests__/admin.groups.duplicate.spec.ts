@@ -32,7 +32,13 @@ describe('admin group duplicate API', () => {
         'Idempotency-Key': 'group-duplicate-7-42-11111111-1111-4111-8111-111111111111'
       }
     })
-    expect(group).toEqual({ id: 43, name: 'primary (Copy)', status: 'inactive' })
+    expect(group).toEqual({
+      id: 43,
+      name: 'primary (Copy)',
+      status: 'inactive',
+      predicted_capacity_mode: 'historical_requests',
+      predicted_image_unit_cost_usd: null
+    })
     expect(sessionStorage.length).toBe(0)
   })
 

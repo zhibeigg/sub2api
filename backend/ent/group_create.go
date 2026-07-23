@@ -788,6 +788,34 @@ func (_c *GroupCreate) SetNillablePoolCapacityAlertGeneration(v *int64) *GroupCr
 	return _c
 }
 
+// SetPredictedCapacityMode sets the "predicted_capacity_mode" field.
+func (_c *GroupCreate) SetPredictedCapacityMode(v string) *GroupCreate {
+	_c.mutation.SetPredictedCapacityMode(v)
+	return _c
+}
+
+// SetNillablePredictedCapacityMode sets the "predicted_capacity_mode" field if the given value is not nil.
+func (_c *GroupCreate) SetNillablePredictedCapacityMode(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetPredictedCapacityMode(*v)
+	}
+	return _c
+}
+
+// SetPredictedImageUnitCostUsd sets the "predicted_image_unit_cost_usd" field.
+func (_c *GroupCreate) SetPredictedImageUnitCostUsd(v float64) *GroupCreate {
+	_c.mutation.SetPredictedImageUnitCostUsd(v)
+	return _c
+}
+
+// SetNillablePredictedImageUnitCostUsd sets the "predicted_image_unit_cost_usd" field if the given value is not nil.
+func (_c *GroupCreate) SetNillablePredictedImageUnitCostUsd(v *float64) *GroupCreate {
+	if v != nil {
+		_c.SetPredictedImageUnitCostUsd(*v)
+	}
+	return _c
+}
+
 // SetMaxReasoningEffort sets the "max_reasoning_effort" field.
 func (_c *GroupCreate) SetMaxReasoningEffort(v string) *GroupCreate {
 	_c.mutation.SetMaxReasoningEffort(v)
@@ -1157,6 +1185,10 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultPoolCapacityAlertGeneration
 		_c.mutation.SetPoolCapacityAlertGeneration(v)
 	}
+	if _, ok := _c.mutation.PredictedCapacityMode(); !ok {
+		v := group.DefaultPredictedCapacityMode
+		_c.mutation.SetPredictedCapacityMode(v)
+	}
 	if _, ok := _c.mutation.MaxReasoningEffort(); !ok {
 		v := group.DefaultMaxReasoningEffort
 		_c.mutation.SetMaxReasoningEffort(v)
@@ -1339,6 +1371,14 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.PoolCapacityAlertGeneration(); !ok {
 		return &ValidationError{Name: "pool_capacity_alert_generation", err: errors.New(`ent: missing required field "Group.pool_capacity_alert_generation"`)}
+	}
+	if _, ok := _c.mutation.PredictedCapacityMode(); !ok {
+		return &ValidationError{Name: "predicted_capacity_mode", err: errors.New(`ent: missing required field "Group.predicted_capacity_mode"`)}
+	}
+	if v, ok := _c.mutation.PredictedCapacityMode(); ok {
+		if err := group.PredictedCapacityModeValidator(v); err != nil {
+			return &ValidationError{Name: "predicted_capacity_mode", err: fmt.Errorf(`ent: validator failed for field "Group.predicted_capacity_mode": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.MaxReasoningEffort(); !ok {
 		return &ValidationError{Name: "max_reasoning_effort", err: errors.New(`ent: missing required field "Group.max_reasoning_effort"`)}
@@ -1605,6 +1645,14 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.PoolCapacityAlertGeneration(); ok {
 		_spec.SetField(group.FieldPoolCapacityAlertGeneration, field.TypeInt64, value)
 		_node.PoolCapacityAlertGeneration = value
+	}
+	if value, ok := _c.mutation.PredictedCapacityMode(); ok {
+		_spec.SetField(group.FieldPredictedCapacityMode, field.TypeString, value)
+		_node.PredictedCapacityMode = value
+	}
+	if value, ok := _c.mutation.PredictedImageUnitCostUsd(); ok {
+		_spec.SetField(group.FieldPredictedImageUnitCostUsd, field.TypeFloat64, value)
+		_node.PredictedImageUnitCostUsd = &value
 	}
 	if value, ok := _c.mutation.MaxReasoningEffort(); ok {
 		_spec.SetField(group.FieldMaxReasoningEffort, field.TypeString, value)
@@ -2750,6 +2798,42 @@ func (u *GroupUpsert) AddPoolCapacityAlertGeneration(v int64) *GroupUpsert {
 	return u
 }
 
+// SetPredictedCapacityMode sets the "predicted_capacity_mode" field.
+func (u *GroupUpsert) SetPredictedCapacityMode(v string) *GroupUpsert {
+	u.Set(group.FieldPredictedCapacityMode, v)
+	return u
+}
+
+// UpdatePredictedCapacityMode sets the "predicted_capacity_mode" field to the value that was provided on create.
+func (u *GroupUpsert) UpdatePredictedCapacityMode() *GroupUpsert {
+	u.SetExcluded(group.FieldPredictedCapacityMode)
+	return u
+}
+
+// SetPredictedImageUnitCostUsd sets the "predicted_image_unit_cost_usd" field.
+func (u *GroupUpsert) SetPredictedImageUnitCostUsd(v float64) *GroupUpsert {
+	u.Set(group.FieldPredictedImageUnitCostUsd, v)
+	return u
+}
+
+// UpdatePredictedImageUnitCostUsd sets the "predicted_image_unit_cost_usd" field to the value that was provided on create.
+func (u *GroupUpsert) UpdatePredictedImageUnitCostUsd() *GroupUpsert {
+	u.SetExcluded(group.FieldPredictedImageUnitCostUsd)
+	return u
+}
+
+// AddPredictedImageUnitCostUsd adds v to the "predicted_image_unit_cost_usd" field.
+func (u *GroupUpsert) AddPredictedImageUnitCostUsd(v float64) *GroupUpsert {
+	u.Add(group.FieldPredictedImageUnitCostUsd, v)
+	return u
+}
+
+// ClearPredictedImageUnitCostUsd clears the value of the "predicted_image_unit_cost_usd" field.
+func (u *GroupUpsert) ClearPredictedImageUnitCostUsd() *GroupUpsert {
+	u.SetNull(group.FieldPredictedImageUnitCostUsd)
+	return u
+}
+
 // SetMaxReasoningEffort sets the "max_reasoning_effort" field.
 func (u *GroupUpsert) SetMaxReasoningEffort(v string) *GroupUpsert {
 	u.Set(group.FieldMaxReasoningEffort, v)
@@ -3869,6 +3953,48 @@ func (u *GroupUpsertOne) AddPoolCapacityAlertGeneration(v int64) *GroupUpsertOne
 func (u *GroupUpsertOne) UpdatePoolCapacityAlertGeneration() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdatePoolCapacityAlertGeneration()
+	})
+}
+
+// SetPredictedCapacityMode sets the "predicted_capacity_mode" field.
+func (u *GroupUpsertOne) SetPredictedCapacityMode(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetPredictedCapacityMode(v)
+	})
+}
+
+// UpdatePredictedCapacityMode sets the "predicted_capacity_mode" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdatePredictedCapacityMode() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdatePredictedCapacityMode()
+	})
+}
+
+// SetPredictedImageUnitCostUsd sets the "predicted_image_unit_cost_usd" field.
+func (u *GroupUpsertOne) SetPredictedImageUnitCostUsd(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetPredictedImageUnitCostUsd(v)
+	})
+}
+
+// AddPredictedImageUnitCostUsd adds v to the "predicted_image_unit_cost_usd" field.
+func (u *GroupUpsertOne) AddPredictedImageUnitCostUsd(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddPredictedImageUnitCostUsd(v)
+	})
+}
+
+// UpdatePredictedImageUnitCostUsd sets the "predicted_image_unit_cost_usd" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdatePredictedImageUnitCostUsd() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdatePredictedImageUnitCostUsd()
+	})
+}
+
+// ClearPredictedImageUnitCostUsd clears the value of the "predicted_image_unit_cost_usd" field.
+func (u *GroupUpsertOne) ClearPredictedImageUnitCostUsd() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearPredictedImageUnitCostUsd()
 	})
 }
 
@@ -5161,6 +5287,48 @@ func (u *GroupUpsertBulk) AddPoolCapacityAlertGeneration(v int64) *GroupUpsertBu
 func (u *GroupUpsertBulk) UpdatePoolCapacityAlertGeneration() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdatePoolCapacityAlertGeneration()
+	})
+}
+
+// SetPredictedCapacityMode sets the "predicted_capacity_mode" field.
+func (u *GroupUpsertBulk) SetPredictedCapacityMode(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetPredictedCapacityMode(v)
+	})
+}
+
+// UpdatePredictedCapacityMode sets the "predicted_capacity_mode" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdatePredictedCapacityMode() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdatePredictedCapacityMode()
+	})
+}
+
+// SetPredictedImageUnitCostUsd sets the "predicted_image_unit_cost_usd" field.
+func (u *GroupUpsertBulk) SetPredictedImageUnitCostUsd(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetPredictedImageUnitCostUsd(v)
+	})
+}
+
+// AddPredictedImageUnitCostUsd adds v to the "predicted_image_unit_cost_usd" field.
+func (u *GroupUpsertBulk) AddPredictedImageUnitCostUsd(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddPredictedImageUnitCostUsd(v)
+	})
+}
+
+// UpdatePredictedImageUnitCostUsd sets the "predicted_image_unit_cost_usd" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdatePredictedImageUnitCostUsd() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdatePredictedImageUnitCostUsd()
+	})
+}
+
+// ClearPredictedImageUnitCostUsd clears the value of the "predicted_image_unit_cost_usd" field.
+func (u *GroupUpsertBulk) ClearPredictedImageUnitCostUsd() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearPredictedImageUnitCostUsd()
 	})
 }
 

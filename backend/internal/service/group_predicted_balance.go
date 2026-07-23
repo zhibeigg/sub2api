@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,9 +26,20 @@ const (
 // available for diagnostics when Complete is false, but an incomplete result
 // must never change the durable alert state.
 type GroupPredictedBalanceSummary struct {
+	PredictionMode                string
+	PredictionUnit                string
+	PredictionConfigured          bool
+	PredictionComplete            bool
+	PredictionUnlimited           bool
+	PredictedQuantity             *string
+	PredictionUnitCostUSD         *float64
+	KnownPredictionAccountCount   int
+	UnknownPredictionAccountCount int
+
 	Complete                     bool
 	Unlimited                    bool
 	RemainingBalanceUSD          *float64
+	KnownRemainingBalanceUSD     *float64
 	PoolAuthoritativeBalanceUSD  float64
 	NormalEstimatedBalanceUSD    float64
 	KnownBalanceAccountCount     int
@@ -65,6 +78,7 @@ type GroupBalanceUsageReader interface {
 
 type GroupPredictedBalanceService struct {
 	accountRepo    AccountRepository
+	groupRepo      GroupRepository
 	poolReader     PoolBalanceReader
 	usageReader    GroupBalanceUsageReader
 	maxConcurrency int
@@ -73,6 +87,7 @@ type GroupPredictedBalanceService struct {
 
 func NewGroupPredictedBalanceService(
 	accountRepo AccountRepository,
+	groupRepo GroupRepository,
 	poolReader PoolBalanceReader,
 	usageReader GroupBalanceUsageReader,
 	cfg *config.Config,
@@ -83,6 +98,7 @@ func NewGroupPredictedBalanceService(
 	}
 	return &GroupPredictedBalanceService{
 		accountRepo:    accountRepo,
+		groupRepo:      groupRepo,
 		poolReader:     poolReader,
 		usageReader:    usageReader,
 		maxConcurrency: concurrency,
@@ -92,11 +108,12 @@ func NewGroupPredictedBalanceService(
 
 func ProvideGroupPredictedBalanceService(
 	accountRepo AccountRepository,
+	groupRepo GroupRepository,
 	capacityService *AccountCapacityService,
 	usageService *AccountUsageService,
 	cfg *config.Config,
 ) *GroupPredictedBalanceService {
-	return NewGroupPredictedBalanceService(accountRepo, capacityService, usageService, cfg)
+	return NewGroupPredictedBalanceService(accountRepo, groupRepo, capacityService, usageService, cfg)
 }
 
 func (s *GroupPredictedBalanceService) EstimateGroupPredictedBalance(ctx context.Context, groupID int64) (*GroupPredictedBalanceSummary, error) {
@@ -104,8 +121,28 @@ func (s *GroupPredictedBalanceService) EstimateGroupPredictedBalance(ctx context
 	if s != nil && s.now != nil {
 		now = s.now().UTC()
 	}
+	predictionMode := DefaultPredictedCapacityMode
+	var predictionUnitCostUSD *float64
+	predictionConfigAvailable := true
+	if s != nil && s.groupRepo != nil && groupID > 0 {
+		group, err := s.groupRepo.GetByIDLite(ctx, groupID)
+		if err != nil {
+			if errors.Is(err, ErrGroupNotFound) {
+				return nil, err
+			}
+			// The balance/request aggregation is also used by durable alerts. A display
+			// configuration read failure must not change those established semantics.
+			predictionConfigAvailable = false
+		} else if group == nil {
+			return nil, ErrGroupNotFound
+		} else {
+			predictionMode = NormalizePredictedCapacityMode(group.PredictedCapacityMode)
+			predictionUnitCostUSD = cloneGroupValuePointer(group.PredictedImageUnitCostUSD)
+		}
+	}
 	summary := &GroupPredictedBalanceSummary{EvaluatedAt: now}
 	if s == nil || s.accountRepo == nil || groupID <= 0 {
+		finalizeGroupPredictionSummary(summary, predictionMode, predictionUnitCostUSD, predictionConfigAvailable, decimal.Zero)
 		return summary, nil
 	}
 
@@ -205,9 +242,18 @@ func (s *GroupPredictedBalanceService) EstimateGroupPredictedBalance(ctx context
 		return nil, err
 	}
 
-	summary.PoolAuthoritativeBalanceUSD = poolTotal.InexactFloat64()
-	summary.NormalEstimatedBalanceUSD = normalTotal.InexactFloat64()
+	knownBalance := poolTotal.Add(normalTotal)
+	if poolBalance, ok := finiteGroupBalanceFloat64(poolTotal); ok {
+		summary.PoolAuthoritativeBalanceUSD = poolBalance
+	}
+	if normalBalance, ok := finiteGroupBalanceFloat64(normalTotal); ok {
+		summary.NormalEstimatedBalanceUSD = normalBalance
+	}
+	if totalBalance, ok := finiteGroupBalanceFloat64(knownBalance); ok && (summary.KnownBalanceAccountCount > 0 || summary.UnknownAccountCount == 0) {
+		summary.KnownRemainingBalanceUSD = &totalBalance
+	}
 	finalizeGroupRequestSummary(summary, requestTotal)
+	finalizeGroupPredictionSummary(summary, predictionMode, predictionUnitCostUSD, predictionConfigAvailable, knownBalance)
 	if summary.Unlimited {
 		summary.Complete = true
 		return summary, nil
@@ -215,12 +261,11 @@ func (s *GroupPredictedBalanceService) EstimateGroupPredictedBalance(ctx context
 	if firstReadErr != nil {
 		return nil, firstReadErr
 	}
-	if summary.UnknownAccountCount > 0 {
+	if summary.UnknownAccountCount > 0 || summary.KnownRemainingBalanceUSD == nil {
 		return summary, nil
 	}
 
-	total := poolTotal.Add(normalTotal).InexactFloat64()
-	summary.RemainingBalanceUSD = &total
+	summary.RemainingBalanceUSD = cloneGroupValuePointer(summary.KnownRemainingBalanceUSD)
 	summary.Complete = true
 	return summary, nil
 }
@@ -238,6 +283,58 @@ func finalizeGroupRequestSummary(summary *GroupPredictedBalanceSummary, requestT
 	if summary.KnownRequestAccountCount > 0 || summary.RequestsComplete {
 		total := requestTotal
 		summary.EstimatedRemainingRequests = &total
+	}
+}
+
+func finalizeGroupPredictionSummary(
+	summary *GroupPredictedBalanceSummary,
+	mode string,
+	unitCostUSD *float64,
+	configAvailable bool,
+	knownBalance decimal.Decimal,
+) {
+	if summary == nil {
+		return
+	}
+	mode = NormalizePredictedCapacityMode(mode)
+	summary.PredictionMode = mode
+	summary.PredictionUnitCostUSD = cloneGroupValuePointer(unitCostUSD)
+
+	switch mode {
+	case PredictedCapacityModeHistoricalRequests:
+		summary.PredictionUnit = "request"
+		summary.PredictionConfigured = configAvailable
+		summary.PredictionComplete = summary.RequestsComplete
+		summary.PredictionUnlimited = summary.RequestsUnlimited
+		summary.KnownPredictionAccountCount = summary.KnownRequestAccountCount
+		summary.UnknownPredictionAccountCount = summary.UnknownRequestAccountCount
+		if summary.EstimatedRemainingRequests != nil {
+			quantity := strconv.FormatInt(*summary.EstimatedRemainingRequests, 10)
+			summary.PredictedQuantity = &quantity
+		}
+	case PredictedCapacityModeFixedImageCost:
+		summary.PredictionUnit = "image"
+		summary.KnownPredictionAccountCount = summary.KnownBalanceAccountCount
+		summary.UnknownPredictionAccountCount = summary.UnknownAccountCount
+		if !configAvailable || ValidatePredictedCapacityConfig(mode, unitCostUSD) != nil {
+			return
+		}
+		summary.PredictionConfigured = true
+		if summary.Unlimited {
+			summary.PredictionComplete = true
+			summary.PredictionUnlimited = true
+			return
+		}
+		summary.PredictionComplete = summary.UnknownAccountCount == 0
+		if summary.KnownBalanceAccountCount == 0 && !summary.PredictionComplete {
+			return
+		}
+		cost := decimal.NewFromFloat(*unitCostUSD)
+		quantity := knownBalance.Div(cost).Floor().StringFixed(0)
+		summary.PredictedQuantity = &quantity
+	default:
+		// Invalid persisted configuration remains visibly unconfigured and never
+		// turns unknown account capacity into a synthetic zero.
 	}
 }
 
@@ -363,6 +460,17 @@ func estimatedNormalBalanceUSD(snapshot *AccountCapacitySnapshot) (decimal.Decim
 	default:
 		return decimal.Zero, GroupBalanceReasonUnknown, nil
 	}
+}
+
+func finiteGroupBalanceFloat64(value decimal.Decimal) (float64, bool) {
+	if value.IsNegative() {
+		return 0, false
+	}
+	converted := value.InexactFloat64()
+	if math.IsNaN(converted) || math.IsInf(converted, 0) {
+		return 0, false
+	}
+	return converted, true
 }
 
 func validGroupBalanceAmount(value *float64) (float64, bool) {

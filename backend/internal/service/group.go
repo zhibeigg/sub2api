@@ -104,6 +104,11 @@ type Group struct {
 	PoolCapacityAlertThresholdUSD      *float64
 	PoolCapacityAlertGeneration        int64
 
+	// PredictedCapacityMode controls only the administrator group-list capacity display.
+	// It is deliberately independent from PoolCapacityAlertMetric and alert generation.
+	PredictedCapacityMode     string
+	PredictedImageUnitCostUSD *float64
+
 	// MaxReasoningEffort limits the effective OpenAI/Codex reasoning effort.
 	// Empty means unlimited; supported values are minimal/low/medium/high/xhigh/max.
 	MaxReasoningEffort string
@@ -131,6 +136,12 @@ const (
 	MaxPoolCapacityAlertThresholdRequests      = int64(1_000_000_000)
 	MinPoolCapacityAlertThresholdUSD           = 0.01
 	MaxPoolCapacityAlertThresholdUSD           = 1e15
+
+	PredictedCapacityModeHistoricalRequests = "historical_requests"
+	PredictedCapacityModeFixedImageCost     = "fixed_image_cost"
+	DefaultPredictedCapacityMode            = PredictedCapacityModeHistoricalRequests
+	MinPredictedImageUnitCostUSD            = 1e-12
+	MaxPredictedImageUnitCostUSD            = 1e15
 )
 
 type PoolCapacityAlertPolicy struct {
@@ -230,6 +241,33 @@ func PoolCapacityAlertPoliciesEqual(left, right PoolCapacityAlertPolicy) bool {
 		return left.ThresholdUSD == nil && right.ThresholdUSD == nil
 	}
 	return *left.ThresholdUSD == *right.ThresholdUSD
+}
+
+func NormalizePredictedCapacityMode(mode string) string {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	if mode == "" {
+		return DefaultPredictedCapacityMode
+	}
+	return mode
+}
+
+func ValidatePredictedCapacityConfig(mode string, unitCostUSD *float64) error {
+	mode = NormalizePredictedCapacityMode(mode)
+	switch mode {
+	case PredictedCapacityModeHistoricalRequests, PredictedCapacityModeFixedImageCost:
+	default:
+		return fmt.Errorf("predicted_capacity_mode must be one of %q or %q", PredictedCapacityModeHistoricalRequests, PredictedCapacityModeFixedImageCost)
+	}
+	if unitCostUSD != nil {
+		cost := *unitCostUSD
+		if math.IsNaN(cost) || math.IsInf(cost, 0) || cost < MinPredictedImageUnitCostUSD || cost > MaxPredictedImageUnitCostUSD {
+			return fmt.Errorf("predicted_image_unit_cost_usd must be a finite number between 1e-12 and 1e15")
+		}
+	}
+	if mode == PredictedCapacityModeFixedImageCost && unitCostUSD == nil {
+		return errors.New("predicted_image_unit_cost_usd is required when predicted_capacity_mode is fixed_image_cost")
+	}
+	return nil
 }
 
 // NormalizeModelRateMultipliers 校验并归一化分组模型倍率配置。

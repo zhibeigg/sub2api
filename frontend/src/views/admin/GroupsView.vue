@@ -321,6 +321,7 @@
             <GroupPredictedCapacityCell
               :summary="predictedCapacityMap.get(row.id)"
               :loading="predictedCapacityLoading"
+              :error="predictedCapacityError"
             />
           </template>
 
@@ -738,6 +739,94 @@
             :placeholder="t('admin.groups.form.rpmLimitPlaceholder')"
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
+        </div>
+
+        <div class="border-t pt-4" data-testid="create-predicted-capacity-config">
+          <fieldset>
+            <legend class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {{ t("admin.groups.predictedCapacityConfig.title") }}
+            </legend>
+            <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              {{ t("admin.groups.predictedCapacityConfig.description") }}
+            </p>
+            <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <label class="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 transition-colors focus-within:ring-2 focus-within:ring-primary-500 dark:border-dark-600">
+                <input
+                  v-model="createForm.predicted_capacity_mode"
+                  type="radio"
+                  name="create-predicted-capacity-mode"
+                  value="historical_requests"
+                  class="mt-0.5 h-4 w-4 flex-none text-primary-600 focus:ring-primary-500"
+                  data-testid="create-predicted-capacity-mode-historical"
+                  @change="predictedCapacityConfigErrors.create = ''"
+                />
+                <span>
+                  <span class="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                    {{ t("admin.groups.predictedCapacityConfig.historicalRequests.label") }}
+                  </span>
+                  <span class="mt-1 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                    {{ t("admin.groups.predictedCapacityConfig.historicalRequests.description") }}
+                  </span>
+                </span>
+              </label>
+              <label class="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 transition-colors focus-within:ring-2 focus-within:ring-primary-500 dark:border-dark-600">
+                <input
+                  v-model="createForm.predicted_capacity_mode"
+                  type="radio"
+                  name="create-predicted-capacity-mode"
+                  value="fixed_image_cost"
+                  class="mt-0.5 h-4 w-4 flex-none text-primary-600 focus:ring-primary-500"
+                  data-testid="create-predicted-capacity-mode-fixed"
+                  @change="predictedCapacityConfigErrors.create = ''"
+                />
+                <span>
+                  <span class="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                    {{ t("admin.groups.predictedCapacityConfig.fixedImageCost.label") }}
+                  </span>
+                  <span class="mt-1 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                    {{ t("admin.groups.predictedCapacityConfig.fixedImageCost.description") }}
+                  </span>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+
+          <div v-if="createForm.predicted_capacity_mode === 'fixed_image_cost'" class="mt-4">
+            <label for="create-predicted-image-unit-cost-usd" class="input-label">
+              {{ t("admin.groups.predictedCapacityConfig.unitCost.label") }}
+            </label>
+            <div class="relative">
+              <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-500 dark:text-gray-400">$</span>
+              <input
+                id="create-predicted-image-unit-cost-usd"
+                v-model.number="createForm.predicted_image_unit_cost_usd"
+                type="number"
+                inputmode="decimal"
+                min="0.000000000001"
+                max="1000000000000000"
+                step="any"
+                class="input w-full pl-7 pr-20"
+                data-testid="create-predicted-image-unit-cost-usd"
+                :aria-invalid="Boolean(predictedCapacityConfigErrors.create)"
+                :aria-describedby="predictedCapacityConfigErrors.create ? 'create-predicted-image-unit-cost-hint create-predicted-image-unit-cost-error' : 'create-predicted-image-unit-cost-hint'"
+                @input="predictedCapacityConfigErrors.create = ''"
+              />
+              <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-gray-500 dark:text-gray-400">
+                {{ t("admin.groups.predictedCapacityConfig.unitCost.unit") }}
+              </span>
+            </div>
+            <p id="create-predicted-image-unit-cost-hint" class="input-hint">
+              {{ t("admin.groups.predictedCapacityConfig.unitCost.hint") }}
+            </p>
+            <p
+              v-if="predictedCapacityConfigErrors.create"
+              id="create-predicted-image-unit-cost-error"
+              class="mt-1 text-xs text-red-600 dark:text-red-400"
+              role="alert"
+            >
+              {{ predictedCapacityConfigErrors.create }}
+            </p>
+          </div>
         </div>
 
         <div class="border-t pt-4">
@@ -2547,6 +2636,94 @@
             :placeholder="t('admin.groups.form.rpmLimitPlaceholder')"
           />
           <p class="input-hint">{{ t("admin.groups.form.rpmLimitHint") }}</p>
+        </div>
+
+        <div class="border-t pt-4" data-testid="edit-predicted-capacity-config">
+          <fieldset>
+            <legend class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {{ t("admin.groups.predictedCapacityConfig.title") }}
+            </legend>
+            <p class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+              {{ t("admin.groups.predictedCapacityConfig.description") }}
+            </p>
+            <div class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <label class="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 transition-colors focus-within:ring-2 focus-within:ring-primary-500 dark:border-dark-600">
+                <input
+                  v-model="editForm.predicted_capacity_mode"
+                  type="radio"
+                  name="edit-predicted-capacity-mode"
+                  value="historical_requests"
+                  class="mt-0.5 h-4 w-4 flex-none text-primary-600 focus:ring-primary-500"
+                  data-testid="edit-predicted-capacity-mode-historical"
+                  @change="predictedCapacityConfigErrors.edit = ''"
+                />
+                <span>
+                  <span class="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                    {{ t("admin.groups.predictedCapacityConfig.historicalRequests.label") }}
+                  </span>
+                  <span class="mt-1 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                    {{ t("admin.groups.predictedCapacityConfig.historicalRequests.description") }}
+                  </span>
+                </span>
+              </label>
+              <label class="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-3 transition-colors focus-within:ring-2 focus-within:ring-primary-500 dark:border-dark-600">
+                <input
+                  v-model="editForm.predicted_capacity_mode"
+                  type="radio"
+                  name="edit-predicted-capacity-mode"
+                  value="fixed_image_cost"
+                  class="mt-0.5 h-4 w-4 flex-none text-primary-600 focus:ring-primary-500"
+                  data-testid="edit-predicted-capacity-mode-fixed"
+                  @change="predictedCapacityConfigErrors.edit = ''"
+                />
+                <span>
+                  <span class="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                    {{ t("admin.groups.predictedCapacityConfig.fixedImageCost.label") }}
+                  </span>
+                  <span class="mt-1 block text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                    {{ t("admin.groups.predictedCapacityConfig.fixedImageCost.description") }}
+                  </span>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+
+          <div v-if="editForm.predicted_capacity_mode === 'fixed_image_cost'" class="mt-4">
+            <label for="edit-predicted-image-unit-cost-usd" class="input-label">
+              {{ t("admin.groups.predictedCapacityConfig.unitCost.label") }}
+            </label>
+            <div class="relative">
+              <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-gray-500 dark:text-gray-400">$</span>
+              <input
+                id="edit-predicted-image-unit-cost-usd"
+                v-model.number="editForm.predicted_image_unit_cost_usd"
+                type="number"
+                inputmode="decimal"
+                min="0.000000000001"
+                max="1000000000000000"
+                step="any"
+                class="input w-full pl-7 pr-20"
+                data-testid="edit-predicted-image-unit-cost-usd"
+                :aria-invalid="Boolean(predictedCapacityConfigErrors.edit)"
+                :aria-describedby="predictedCapacityConfigErrors.edit ? 'edit-predicted-image-unit-cost-hint edit-predicted-image-unit-cost-error' : 'edit-predicted-image-unit-cost-hint'"
+                @input="predictedCapacityConfigErrors.edit = ''"
+              />
+              <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-gray-500 dark:text-gray-400">
+                {{ t("admin.groups.predictedCapacityConfig.unitCost.unit") }}
+              </span>
+            </div>
+            <p id="edit-predicted-image-unit-cost-hint" class="input-hint">
+              {{ t("admin.groups.predictedCapacityConfig.unitCost.hint") }}
+            </p>
+            <p
+              v-if="predictedCapacityConfigErrors.edit"
+              id="edit-predicted-image-unit-cost-error"
+              class="mt-1 text-xs text-red-600 dark:text-red-400"
+              role="alert"
+            >
+              {{ predictedCapacityConfigErrors.edit }}
+            </p>
+          </div>
         </div>
 
         <div class="border-t pt-4">
@@ -4578,6 +4755,7 @@ import type {
   GroupPlatform,
   GroupPredictedCapacitySummary,
   PoolCapacityAlertMetric,
+  PredictedCapacityMode,
   SubscriptionType,
 } from "@/types";
 import {
@@ -4820,6 +4998,7 @@ const toggleColumn = (key: string) => {
     } else {
       cancelPredictedCapacitySummary();
       predictedCapacityMap.value = new Map();
+      predictedCapacityError.value = false;
     }
   }
 };
@@ -5086,6 +5265,7 @@ const predictedCapacityMap = ref<Map<number, GroupPredictedCapacitySummary>>(
   new Map(),
 );
 const predictedCapacityLoading = ref(false);
+const predictedCapacityError = ref(false);
 const searchQuery = ref("");
 const filters = reactive({
   endpoint_protocol: "",
@@ -5175,10 +5355,28 @@ const editModelsListSelectedCount = computed(
 const createModelRateMultiplierRows = ref<ModelRateMultiplierRow[]>([]);
 const editModelRateMultiplierRows = ref<ModelRateMultiplierRow[]>([]);
 
+const PREDICTED_IMAGE_UNIT_COST_USD_MIN = 1e-12;
+const PREDICTED_IMAGE_UNIT_COST_USD_MAX = 1e15;
 const POOL_CAPACITY_ALERT_REQUESTS_MIN = 1;
 const POOL_CAPACITY_ALERT_REQUESTS_MAX = 1_000_000_000;
 const POOL_CAPACITY_ALERT_USD_MIN = 0.01;
 const POOL_CAPACITY_ALERT_USD_MAX = 1e15;
+
+type PredictedCapacityConfigFormState = {
+  predicted_capacity_mode: PredictedCapacityMode;
+  predicted_image_unit_cost_usd: number | string | null;
+};
+
+type PredictedCapacityConfigValidationResult =
+  | {
+      ok: true;
+      mode: PredictedCapacityMode;
+      unitCostUsd: number | null;
+    }
+  | {
+      ok: false;
+      messageKey: string;
+    };
 
 type PoolCapacityAlertFormState = {
   pool_capacity_alert_enabled: boolean;
@@ -5201,6 +5399,11 @@ type PoolCapacityAlertValidationResult =
       messageKey: string;
     };
 
+const predictedCapacityConfigErrors = reactive({
+  create: "",
+  edit: "",
+});
+
 const poolCapacityAlertErrors = reactive({
   create: { requests: "", usd: "" },
   edit: { requests: "", usd: "" },
@@ -5208,6 +5411,60 @@ const poolCapacityAlertErrors = reactive({
 
 const isEmptyNumericInput = (value: number | string | null | undefined) =>
   value === null || value === undefined || (typeof value === "string" && value.trim() === "");
+
+const validatePredictedCapacityConfig = (
+  form: PredictedCapacityConfigFormState,
+): PredictedCapacityConfigValidationResult => {
+  const rawUnitCost = form.predicted_image_unit_cost_usd;
+  if (isEmptyNumericInput(rawUnitCost)) {
+    if (form.predicted_capacity_mode === "fixed_image_cost") {
+      return {
+        ok: false,
+        messageKey: "admin.groups.predictedCapacityConfig.validation.required",
+      };
+    }
+    return {
+      ok: true,
+      mode: form.predicted_capacity_mode,
+      unitCostUsd: null,
+    };
+  }
+
+  const unitCostUsd = Number(rawUnitCost);
+  if (!Number.isFinite(unitCostUsd)) {
+    return {
+      ok: false,
+      messageKey: "admin.groups.predictedCapacityConfig.validation.finite",
+    };
+  }
+  if (
+    unitCostUsd < PREDICTED_IMAGE_UNIT_COST_USD_MIN ||
+    unitCostUsd > PREDICTED_IMAGE_UNIT_COST_USD_MAX
+  ) {
+    return {
+      ok: false,
+      messageKey: "admin.groups.predictedCapacityConfig.validation.range",
+    };
+  }
+
+  return {
+    ok: true,
+    mode: form.predicted_capacity_mode,
+    unitCostUsd,
+  };
+};
+
+const showPredictedCapacityConfigValidationError = async (
+  scope: "create" | "edit",
+  form: PredictedCapacityConfigFormState,
+  result: Extract<PredictedCapacityConfigValidationResult, { ok: false }>,
+) => {
+  predictedCapacityConfigErrors[scope] = t(result.messageKey);
+  form.predicted_capacity_mode = "fixed_image_cost";
+  appStore.showError(t(result.messageKey));
+  await nextTick();
+  document.getElementById(`${scope}-predicted-image-unit-cost-usd`)?.focus();
+};
 
 const validatePoolCapacityAlertPolicy = (
   form: PoolCapacityAlertFormState,
@@ -5369,6 +5626,9 @@ const createForm = reactive({
   copy_accounts_from_group_ids: [] as number[],
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
+  // 容量预测算法
+  predicted_capacity_mode: "historical_requests" as PredictedCapacityMode,
+  predicted_image_unit_cost_usd: null as number | string | null,
   // 池账号容量提醒
   pool_capacity_alert_enabled: false,
   pool_capacity_alert_metric: "predicted_requests" as PoolCapacityAlertMetric,
@@ -5738,6 +5998,9 @@ const editForm = reactive({
   copy_accounts_from_group_ids: [] as number[],
   // 分组级 RPM 限制（每用户每分钟最大请求数；0 = 不限制）
   rpm_limit: 0 as number,
+  // 容量预测算法
+  predicted_capacity_mode: "historical_requests" as PredictedCapacityMode,
+  predicted_image_unit_cost_usd: null as number | string | null,
   // 池账号容量提醒
   pool_capacity_alert_enabled: false,
   pool_capacity_alert_metric: "predicted_requests" as PoolCapacityAlertMetric,
@@ -5930,6 +6193,7 @@ const cancelPredictedCapacitySummary = () => {
 
 const loadPredictedCapacitySummary = async () => {
   cancelPredictedCapacitySummary();
+  predictedCapacityError.value = false;
   if (!hasVisiblePredictedCapacityColumn.value) return;
 
   const groupIds = groups.value.map((group) => group.id);
@@ -5956,6 +6220,7 @@ const loadPredictedCapacitySummary = async () => {
     predictedCapacityMap.value = new Map(
       data.map((item) => [item.group_id, item]),
     );
+    predictedCapacityError.value = false;
   } catch (error: any) {
     if (
       signal.aborted ||
@@ -5964,6 +6229,7 @@ const loadPredictedCapacitySummary = async () => {
     ) {
       return;
     }
+    predictedCapacityError.value = true;
     console.error("Error loading group predicted capacity summary:", error);
   } finally {
     if (predictedCapacityAbortController === currentController) {
@@ -5978,6 +6244,7 @@ const loadGroups = async () => {
   if (hasVisiblePredictedCapacityColumn.value) {
     predictedCapacityMap.value = new Map();
     predictedCapacityLoading.value = true;
+    predictedCapacityError.value = false;
   }
   if (abortController) {
     abortController.abort();
@@ -6201,6 +6468,9 @@ const closeCreateModal = () => {
   createForm.mcp_xml_inject = true;
   createForm.copy_accounts_from_group_ids = [];
   createForm.rpm_limit = 0;
+  createForm.predicted_capacity_mode = "historical_requests";
+  createForm.predicted_image_unit_cost_usd = null;
+  predictedCapacityConfigErrors.create = "";
   createForm.pool_capacity_alert_enabled = false;
   createForm.pool_capacity_alert_metric = "predicted_requests";
   createForm.pool_capacity_alert_threshold_requests = 50;
@@ -6319,6 +6589,17 @@ const handleCreateGroup = async () => {
     return;
   }
 
+  const predictedCapacityConfig = validatePredictedCapacityConfig(createForm);
+  if (!predictedCapacityConfig.ok) {
+    await showPredictedCapacityConfigValidationError(
+      "create",
+      createForm,
+      predictedCapacityConfig,
+    );
+    return;
+  }
+  predictedCapacityConfigErrors.create = "";
+
   const poolCapacityAlertPolicy = validatePoolCapacityAlertPolicy(createForm);
   if (!poolCapacityAlertPolicy.ok) {
     await showPoolCapacityAlertValidationError(
@@ -6352,6 +6633,8 @@ const handleCreateGroup = async () => {
     // 构建请求数据，包含模型路由配置
     const requestData = {
       ...createForm,
+      predicted_capacity_mode: predictedCapacityConfig.mode,
+      predicted_image_unit_cost_usd: predictedCapacityConfig.unitCostUsd,
       pool_capacity_alert_metric: poolCapacityAlertPolicy.metric,
       pool_capacity_alert_threshold_requests:
         poolCapacityAlertPolicy.thresholdRequests,
@@ -6501,6 +6784,13 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.mcp_xml_inject = group.mcp_xml_inject ?? true;
   editForm.copy_accounts_from_group_ids = []; // 复制账号字段每次编辑时重置为空
   editForm.rpm_limit = group.rpm_limit ?? 0;
+  editForm.predicted_capacity_mode =
+    group.predicted_capacity_mode === "fixed_image_cost"
+      ? "fixed_image_cost"
+      : "historical_requests";
+  editForm.predicted_image_unit_cost_usd =
+    group.predicted_image_unit_cost_usd ?? null;
+  predictedCapacityConfigErrors.edit = "";
   editForm.pool_capacity_alert_enabled = group.pool_capacity_alert_enabled ?? false;
   editForm.pool_capacity_alert_metric =
     group.pool_capacity_alert_metric === "remaining_balance_usd"
@@ -6553,6 +6843,9 @@ const closeEditModal = () => {
   editForm.video_price_720p = null;
   editForm.video_price_1080p = null;
   editForm.web_search_price_per_call = null;
+  editForm.predicted_capacity_mode = "historical_requests";
+  editForm.predicted_image_unit_cost_usd = null;
+  predictedCapacityConfigErrors.edit = "";
   editForm.pool_capacity_alert_enabled = false;
   editForm.pool_capacity_alert_metric = "predicted_requests";
   editForm.pool_capacity_alert_threshold_requests = 50;
@@ -6573,6 +6866,17 @@ const handleUpdateGroup = async () => {
     appStore.showError(t("admin.groups.endpointProtocols.required"));
     return;
   }
+
+  const predictedCapacityConfig = validatePredictedCapacityConfig(editForm);
+  if (!predictedCapacityConfig.ok) {
+    await showPredictedCapacityConfigValidationError(
+      "edit",
+      editForm,
+      predictedCapacityConfig,
+    );
+    return;
+  }
+  predictedCapacityConfigErrors.edit = "";
 
   const poolCapacityAlertPolicy = validatePoolCapacityAlertPolicy(editForm);
   if (!poolCapacityAlertPolicy.ok) {
@@ -6608,6 +6912,8 @@ const handleUpdateGroup = async () => {
     // 转换 fallback_group_id: null -> 0 (后端使用 0 表示清除)
     const payload = {
       ...editForm,
+      predicted_capacity_mode: predictedCapacityConfig.mode,
+      predicted_image_unit_cost_usd: predictedCapacityConfig.unitCostUsd,
       pool_capacity_alert_metric: poolCapacityAlertPolicy.metric,
       pool_capacity_alert_threshold_requests:
         poolCapacityAlertPolicy.thresholdRequests,

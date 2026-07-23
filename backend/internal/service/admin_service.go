@@ -286,6 +286,9 @@ type CreateGroupInput struct {
 	PoolCapacityAlertMetric            *string
 	PoolCapacityAlertThresholdRequests *int64
 	PoolCapacityAlertThresholdUSD      *float64
+	// 分组列表容量预测配置；与池容量告警策略完全独立。
+	PredictedCapacityMode     string
+	PredictedImageUnitCostUSD *float64
 	// MaxReasoningEffort OpenAI/Codex 请求的推理强度上限，空字符串表示不限制。
 	MaxReasoningEffort string
 	// ReasoningEffortMappings OpenAI/Codex 推理强度精确映射。
@@ -354,6 +357,9 @@ type UpdateGroupInput struct {
 	PoolCapacityAlertMetric            *string
 	PoolCapacityAlertThresholdRequests *int64
 	PoolCapacityAlertThresholdUSD      **float64
+	// 分组列表容量预测配置采用 patch 语义；UnitCostUSD 外层 nil 表示未提供，内层 nil 表示清空。
+	PredictedCapacityMode     *string
+	PredictedImageUnitCostUSD **float64
 	// MaxReasoningEffort 空字符串表示清除上限；nil 表示未提供不改动。
 	MaxReasoningEffort *string
 	// ReasoningEffortMappings nil 表示不修改，空数组表示清空，非空数组表示替换。

@@ -75,6 +75,8 @@ const group: AdminGroup = {
   platform: 'anthropic',
   rate_multiplier: 1,
   rpm_limit: 0,
+  predicted_capacity_mode: 'fixed_image_cost',
+  predicted_image_unit_cost_usd: 0.25,
   pool_capacity_alert_enabled: true,
   pool_capacity_alert_metric: 'remaining_balance_usd',
   pool_capacity_alert_threshold_requests: 75,
@@ -165,6 +167,8 @@ type MountedView = ReturnType<typeof mountView>
 
 type ExposedCreateForm = {
   createForm: {
+    predicted_capacity_mode: 'historical_requests' | 'fixed_image_cost'
+    predicted_image_unit_cost_usd: number | string | null
     pool_capacity_alert_metric: 'predicted_requests' | 'remaining_balance_usd'
     pool_capacity_alert_threshold_requests: number | string
     pool_capacity_alert_threshold_usd: number | string | null
@@ -526,5 +530,146 @@ describe('GroupsView pool capacity alert form', () => {
       .toBe('true')
     expect(wrapper.get('[role="alert"]').exists()).toBe(true)
     expect(showError).toHaveBeenCalledWith('admin.groups.poolCapacityAlert.validation.requestsRange')
+  })
+
+  it('keeps capacity prediction independent from alerts and preserves image cost while switching modes', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await openCreate(wrapper)
+    await wrapper.get('[data-tour="group-form-name"]').setValue('Image capacity group')
+
+    expect((wrapper.get('[data-testid="create-predicted-capacity-mode-historical"]').element as HTMLInputElement).checked)
+      .toBe(true)
+    expect(wrapper.find('[data-testid="create-predicted-image-unit-cost-usd"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="create-pool-capacity-alert-switch"]').attributes('aria-checked'))
+      .toBe('false')
+
+    await wrapper.get('[data-testid="create-predicted-capacity-mode-fixed"]').setValue()
+    await wrapper.get('[data-testid="create-predicted-image-unit-cost-usd"]').setValue('0.125')
+    await wrapper.get('[data-testid="create-predicted-capacity-mode-historical"]').setValue()
+    expect(wrapper.find('[data-testid="create-predicted-image-unit-cost-usd"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="create-predicted-capacity-mode-fixed"]').setValue()
+    expect((wrapper.get('[data-testid="create-predicted-image-unit-cost-usd"]').element as HTMLInputElement).value)
+      .toBe('0.125')
+    expect(wrapper.get('[data-testid="create-pool-capacity-alert-switch"]').attributes('aria-checked'))
+      .toBe('false')
+
+    await submitCreate(wrapper)
+
+    expect(createGroup).toHaveBeenCalledWith(expect.objectContaining({
+      predicted_capacity_mode: 'fixed_image_cost',
+      predicted_image_unit_cost_usd: 0.125,
+      pool_capacity_alert_enabled: false,
+    }))
+  })
+
+  it('resets create prediction defaults after closing the dialog', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    await openCreate(wrapper)
+    await wrapper.get('[data-testid="create-predicted-capacity-mode-fixed"]').setValue()
+    await wrapper.get('[data-testid="create-predicted-image-unit-cost-usd"]').setValue('2.5')
+
+    await closeVisibleDialog(wrapper)
+    await openCreate(wrapper)
+
+    expect((wrapper.get('[data-testid="create-predicted-capacity-mode-historical"]').element as HTMLInputElement).checked)
+      .toBe(true)
+    await wrapper.get('[data-testid="create-predicted-capacity-mode-fixed"]').setValue()
+    expect((wrapper.get('[data-testid="create-predicted-image-unit-cost-usd"]').element as HTMLInputElement).value)
+      .toBe('')
+  })
+
+  it('loads and submits fixed image capacity settings for an edited copied group', async () => {
+    listGroups.mockResolvedValueOnce({
+      items: [{ ...group, name: 'Pool group (Copy)' }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1,
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await openEdit(wrapper)
+
+    expect((wrapper.get('[data-testid="edit-predicted-capacity-mode-fixed"]').element as HTMLInputElement).checked)
+      .toBe(true)
+    expect((wrapper.get('[data-testid="edit-predicted-image-unit-cost-usd"]').element as HTMLInputElement).value)
+      .toBe('0.25')
+    await wrapper.get('[data-testid="edit-predicted-capacity-mode-historical"]').setValue()
+    await wrapper.get('[data-testid="edit-predicted-capacity-mode-fixed"]').setValue()
+    expect((wrapper.get('[data-testid="edit-predicted-image-unit-cost-usd"]').element as HTMLInputElement).value)
+      .toBe('0.25')
+
+    await wrapper.get('#edit-group-form').trigger('submit')
+    await flushPromises()
+
+    expect(updateGroup).toHaveBeenCalledWith(7, expect.objectContaining({
+      predicted_capacity_mode: 'fixed_image_cost',
+      predicted_image_unit_cost_usd: 0.25,
+    }))
+  })
+
+  it('falls back to historical requests for legacy group prediction settings', async () => {
+    listGroups.mockResolvedValueOnce({
+      items: [{
+        ...group,
+        predicted_capacity_mode: undefined,
+        predicted_image_unit_cost_usd: undefined,
+      }],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1,
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await openEdit(wrapper)
+
+    expect((wrapper.get('[data-testid="edit-predicted-capacity-mode-historical"]').element as HTMLInputElement).checked)
+      .toBe(true)
+    expect(wrapper.find('[data-testid="edit-predicted-image-unit-cost-usd"]').exists()).toBe(false)
+  })
+
+  it.each([
+    ['empty', ''],
+    ['zero', 0],
+    ['negative', -1],
+    ['below minimum', 1e-13],
+    ['over maximum', 1e15 + 1],
+    ['NaN', Number.NaN],
+    ['Infinity', Number.POSITIVE_INFINITY],
+  ])('blocks fixed image capacity with invalid account cost: %s', async (_label, invalidValue) => {
+    const wrapper = mountView()
+    await flushPromises()
+    await openCreate(wrapper)
+    await wrapper.get('[data-tour="group-form-name"]').setValue('Invalid image cost')
+    await wrapper.get('[data-testid="create-predicted-capacity-mode-fixed"]').setValue()
+    exposedCreateForm(wrapper).predicted_image_unit_cost_usd = invalidValue
+
+    await submitCreate(wrapper)
+
+    expect(createGroup).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="create-predicted-image-unit-cost-usd"]').attributes('aria-invalid'))
+      .toBe('true')
+    expect(wrapper.get('[data-testid="create-pool-capacity-alert-switch"]').attributes('aria-checked'))
+      .toBe('false')
+    expect(showError).toHaveBeenCalled()
+  })
+
+  it.each([1e-12, 1e15])('accepts fixed image capacity cost boundary %s', async (unitCost) => {
+    const wrapper = mountView()
+    await flushPromises()
+    await openCreate(wrapper)
+    await wrapper.get('[data-tour="group-form-name"]').setValue('Valid image cost')
+    await wrapper.get('[data-testid="create-predicted-capacity-mode-fixed"]').setValue()
+    exposedCreateForm(wrapper).predicted_image_unit_cost_usd = unitCost
+
+    await submitCreate(wrapper)
+
+    expect(createGroup).toHaveBeenCalledWith(expect.objectContaining({
+      predicted_capacity_mode: 'fixed_image_cost',
+      predicted_image_unit_cost_usd: unitCost,
+    }))
   })
 })

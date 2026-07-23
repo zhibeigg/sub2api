@@ -133,6 +133,10 @@ type Group struct {
 	PoolCapacityAlertThresholdUsd *float64 `json:"pool_capacity_alert_threshold_usd,omitempty"`
 	// 分组池容量告警配置代际，仅供内部缓存一致性使用
 	PoolCapacityAlertGeneration int64 `json:"pool_capacity_alert_generation,omitempty"`
+	// 管理员分组列表容量预测模式：historical_requests 或 fixed_image_cost
+	PredictedCapacityMode string `json:"predicted_capacity_mode,omitempty"`
+	// fixed_image_cost 模式下每个预测图片单位消耗的账号容量 USD
+	PredictedImageUnitCostUsd *float64 `json:"predicted_image_unit_cost_usd,omitempty"`
 	// OpenAI reasoning effort 上限；可选 minimal/low/medium/high/xhigh/max
 	MaxReasoningEffort string `json:"max_reasoning_effort,omitempty"`
 	// OpenAI reasoning effort 自定义精确映射；先映射再应用上限
@@ -335,11 +339,11 @@ func (*Group) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case group.FieldPeakRateEnabled, group.FieldIsExclusive, group.FieldAllowImageGeneration, group.FieldAllowBatchImageGeneration, group.FieldImageRateIndependent, group.FieldVideoRateIndependent, group.FieldClaudeCodeOnly, group.FieldModelRoutingEnabled, group.FieldMcpXMLInject, group.FieldAllowMessagesDispatch, group.FieldRequireOauthOnly, group.FieldRequirePrivacySet, group.FieldPoolCapacityAlertEnabled:
 			values[i] = new(sql.NullBool)
-		case group.FieldRateMultiplier, group.FieldPeakRateMultiplier, group.FieldDailyLimitUsd, group.FieldWeeklyLimitUsd, group.FieldMonthlyLimitUsd, group.FieldImageRateMultiplier, group.FieldImagePrice1k, group.FieldImagePrice2k, group.FieldImagePrice4k, group.FieldBatchImageDiscountMultiplier, group.FieldBatchImageHoldMultiplier, group.FieldVideoRateMultiplier, group.FieldVideoPrice480p, group.FieldVideoPrice720p, group.FieldVideoPrice1080p, group.FieldWebSearchPricePerCall, group.FieldPoolCapacityAlertThresholdUsd:
+		case group.FieldRateMultiplier, group.FieldPeakRateMultiplier, group.FieldDailyLimitUsd, group.FieldWeeklyLimitUsd, group.FieldMonthlyLimitUsd, group.FieldImageRateMultiplier, group.FieldImagePrice1k, group.FieldImagePrice2k, group.FieldImagePrice4k, group.FieldBatchImageDiscountMultiplier, group.FieldBatchImageHoldMultiplier, group.FieldVideoRateMultiplier, group.FieldVideoPrice480p, group.FieldVideoPrice720p, group.FieldVideoPrice1080p, group.FieldWebSearchPricePerCall, group.FieldPoolCapacityAlertThresholdUsd, group.FieldPredictedImageUnitCostUsd:
 			values[i] = new(sql.NullFloat64)
 		case group.FieldID, group.FieldDefaultValidityDays, group.FieldFallbackGroupID, group.FieldFallbackGroupIDOnInvalidRequest, group.FieldSortOrder, group.FieldRpmLimit, group.FieldPoolCapacityAlertThresholdRequests, group.FieldPoolCapacityAlertGeneration:
 			values[i] = new(sql.NullInt64)
-		case group.FieldName, group.FieldDescription, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldQuotaPlatform, group.FieldSubscriptionType, group.FieldDefaultMappedModel, group.FieldPoolCapacityAlertMetric, group.FieldMaxReasoningEffort:
+		case group.FieldName, group.FieldDescription, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldQuotaPlatform, group.FieldSubscriptionType, group.FieldDefaultMappedModel, group.FieldPoolCapacityAlertMetric, group.FieldPredictedCapacityMode, group.FieldMaxReasoningEffort:
 			values[i] = new(sql.NullString)
 		case group.FieldCreatedAt, group.FieldUpdatedAt, group.FieldDeletedAt:
 			values[i] = new(sql.NullTime)
@@ -734,6 +738,19 @@ func (_m *Group) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.PoolCapacityAlertGeneration = value.Int64
 			}
+		case group.FieldPredictedCapacityMode:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field predicted_capacity_mode", values[i])
+			} else if value.Valid {
+				_m.PredictedCapacityMode = value.String
+			}
+		case group.FieldPredictedImageUnitCostUsd:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field predicted_image_unit_cost_usd", values[i])
+			} else if value.Valid {
+				_m.PredictedImageUnitCostUsd = new(float64)
+				*_m.PredictedImageUnitCostUsd = value.Float64
+			}
 		case group.FieldMaxReasoningEffort:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field max_reasoning_effort", values[i])
@@ -1066,6 +1083,14 @@ func (_m *Group) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("pool_capacity_alert_generation=")
 	builder.WriteString(fmt.Sprintf("%v", _m.PoolCapacityAlertGeneration))
+	builder.WriteString(", ")
+	builder.WriteString("predicted_capacity_mode=")
+	builder.WriteString(_m.PredictedCapacityMode)
+	builder.WriteString(", ")
+	if v := _m.PredictedImageUnitCostUsd; v != nil {
+		builder.WriteString("predicted_image_unit_cost_usd=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", ")
 	builder.WriteString("max_reasoning_effort=")
 	builder.WriteString(_m.MaxReasoningEffort)
