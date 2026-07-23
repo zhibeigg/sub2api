@@ -143,6 +143,12 @@ export const useAppStore = defineStore('app', () => {
    * @param duration - Auto-dismiss duration in ms (default: 5000)
    */
   function showError(message: string, duration: number = 5000): string {
+    // Parallel panel requests often fail with the same root cause. Reuse the active
+    // error toast instead of stacking identical messages across the viewport.
+    const existing = toasts.value.find((toast) => toast.type === 'error' && toast.message === message)
+    if (existing) {
+      return existing.id
+    }
     return showToast('error', message, duration)
   }
 

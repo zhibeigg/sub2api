@@ -110,6 +110,15 @@ describe('useAppStore', () => {
       expect(store.toasts[0].message).toBe('出错了')
     })
 
+    it('showError 复用仍处于活动状态的同文案错误 toast', () => {
+      const store = useAppStore()
+      const firstId = store.showError('Network error. Please check your connection.')
+      const secondId = store.showError('Network error. Please check your connection.')
+
+      expect(secondId).toBe(firstId)
+      expect(store.toasts).toHaveLength(1)
+    })
+
     it('showWarning 创建 warning 类型 toast', () => {
       const store = useAppStore()
       store.showWarning('警告信息')

@@ -90,6 +90,27 @@ describe('API Client', () => {
       expect(config.params).toHaveProperty('timezone')
     })
 
+    it('Ops Dashboard GET 添加唯一查询参数并禁用缓存', async () => {
+      const adapter = vi.fn().mockResolvedValue({
+        status: 200,
+        data: { code: 0, data: {} },
+        headers: {},
+        config: {},
+        statusText: 'OK',
+      })
+      apiClient.defaults.adapter = adapter
+
+      await apiClient.get('/admin/ops/dashboard/snapshot-v2', {
+        params: { time_range: '1h' },
+      })
+
+      const config = adapter.mock.calls[0][0]
+      expect(config.params.time_range).toBe('1h')
+      expect(config.params._ops_request).toMatch(/^\d+-\d+$/)
+      expect(config.headers.get('Cache-Control')).toBe('no-cache')
+      expect(config.headers.get('Pragma')).toBe('no-cache')
+    })
+
     it('POST 请求不附加 timezone 参数', async () => {
       const adapter = vi.fn().mockResolvedValue({
         status: 200,
@@ -364,6 +385,55 @@ describe('API Client', () => {
           message: 'Network error. Please check your connection.',
         })
       )
+    })
+
+    it('Ops Dashboard GET 网络失败后使用新 URL 自动重试一次', async () => {
+      const requestNonces: string[] = []
+      const adapter = vi.fn().mockImplementation(async (config) => {
+        requestNonces.push(config.params._ops_request)
+        if (requestNonces.length === 1) {
+          return Promise.reject({
+            code: 'ERR_NETWORK',
+            message: 'Network Error',
+            config,
+          })
+        }
+        return {
+          status: 200,
+          data: { code: 0, data: { recovered: true } },
+          headers: {},
+          config,
+          statusText: 'OK',
+        }
+      })
+      apiClient.defaults.adapter = adapter
+
+      const response = await apiClient.get('/admin/ops/dashboard/snapshot-v2', {
+        params: { time_range: '1h' },
+      })
+
+      expect(response.data).toEqual({ recovered: true })
+      expect(adapter).toHaveBeenCalledTimes(2)
+      expect(requestNonces[0]).not.toBe(requestNonces[1])
+    })
+
+    it('Ops Dashboard GET 连续网络失败时最多重试一次', async () => {
+      const adapter = vi.fn().mockImplementation((config) => Promise.reject({
+        code: 'ERR_NETWORK',
+        message: 'Network Error',
+        config,
+      }))
+      apiClient.defaults.adapter = adapter
+
+      await expect(
+        apiClient.get('/admin/ops/dashboard/overview', { params: { time_range: '1h' } })
+      ).rejects.toEqual(
+        expect.objectContaining({
+          status: 0,
+          message: 'Network error. Please check your connection.',
+        })
+      )
+      expect(adapter).toHaveBeenCalledTimes(2)
     })
   })
 

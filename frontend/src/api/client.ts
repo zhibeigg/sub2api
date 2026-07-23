@@ -50,6 +50,28 @@ function onTokenRefreshed(token: string): void {
 
 // ==================== Request Interceptor ====================
 
+const OPS_DASHBOARD_PATH_PREFIX = '/admin/ops/dashboard/'
+const OPS_CACHE_BUST_PARAM = '_ops_request'
+let opsRequestSequence = 0
+
+interface RetryableRequestConfig extends InternalAxiosRequestConfig {
+  _retry?: boolean
+  _opsNetworkRetry?: boolean
+}
+
+function isOpsDashboardGetRequest(config?: Pick<InternalAxiosRequestConfig, 'method' | 'url'>): boolean {
+  return config?.method?.toLowerCase() === 'get' && String(config.url || '').startsWith(OPS_DASHBOARD_PATH_PREFIX)
+}
+
+function addOpsCacheBust(config: InternalAxiosRequestConfig): void {
+  config.params = {
+    ...(config.params || {}),
+    [OPS_CACHE_BUST_PARAM]: `${Date.now()}-${++opsRequestSequence}`
+  }
+  config.headers.set('Cache-Control', 'no-cache')
+  config.headers.set('Pragma', 'no-cache')
+}
+
 // Get user's timezone
 const getUserTimezone = (): string => {
   try {
@@ -78,6 +100,13 @@ apiClient.interceptors.request.use(
         config.params = {}
       }
       config.params.timezone = getUserTimezone()
+    }
+
+    // Ops dashboard requests are fan-out GETs behind a CDN. A stale permanent redirect
+    // cached for one fixed URL can otherwise make several panels fail before reaching
+    // the origin. Keep each refresh URL unique and require revalidation.
+    if (isOpsDashboardGetRequest(config)) {
+      addOpsCacheBust(config)
     }
 
     if (config.headers) {
@@ -128,7 +157,7 @@ apiClient.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+    const originalRequest = error.config as RetryableRequestConfig
 
     // Handle common errors
     if (error.response) {
@@ -311,6 +340,14 @@ apiClient.interceptors.response.use(
         message: apiData.message || apiData.detail || error.message,
         metadata: apiData.metadata,
       })
+    }
+
+    // Ops dashboard fan-out requests can hit a stale CDN redirect before the request
+    // reaches the origin. Retry safe GETs once with a fresh URL before surfacing an error.
+    if (originalRequest && isOpsDashboardGetRequest(originalRequest) && !originalRequest._opsNetworkRetry) {
+      originalRequest._opsNetworkRetry = true
+      addOpsCacheBust(originalRequest)
+      return apiClient(originalRequest)
     }
 
     // Network error
