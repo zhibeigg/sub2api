@@ -592,26 +592,6 @@ func buildVisibleMethodSourceAvailability(instances []*dbent.PaymentProviderInst
 	return available
 }
 
-func applyQQPayVisibleMethodRoutingToEnabledTypes(base []string, vals map[string]string, available map[string]bool) []string {
-	seen := make(map[string]struct{}, len(base)+1)
-	out := make([]string, 0, len(base)+1)
-	for _, paymentType := range base {
-		normalized := NormalizeVisibleMethod(paymentType)
-		if normalized == "" || normalized == payment.TypeQQPay {
-			continue
-		}
-		if _, ok := seen[normalized]; ok {
-			continue
-		}
-		seen[normalized] = struct{}{}
-		out = append(out, normalized)
-	}
-	if visibleMethodShouldBeExposed(payment.TypeQQPay, vals, available) {
-		out = append(out, payment.TypeQQPay)
-	}
-	return out
-}
-
 func applyVisibleMethodRoutingToEnabledTypes(base []string, vals map[string]string, available map[string]bool) []string {
 	shouldExpose := map[string]bool{
 		payment.TypeAlipay: visibleMethodShouldBeExposed(payment.TypeAlipay, vals, available),
