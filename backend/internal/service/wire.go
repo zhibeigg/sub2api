@@ -937,6 +937,7 @@ var ProviderSet = wire.NewSet(
 	wire.Bind(new(GroupPredictedBalanceReader), new(*GroupPredictedBalanceService)),
 	ProvideAccountTestServiceWithAgentIdentity,
 	ProvideUpstreamBillingProbeService,
+	ProvideOllamaCloudUsageService,
 	ProvideSettingService,
 	NewDataManagementService,
 	ProvideBackupService,

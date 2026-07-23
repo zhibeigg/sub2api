@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 
@@ -27,18 +28,19 @@ const (
 	SettingBalanceRechargeMult     = "BALANCE_RECHARGE_MULTIPLIER"
 	// SettingSubscriptionUSDToCNYRate 是订阅 CNY 换算汇率（1 USD = X CNY）。
 	// 0/未配置 = 关闭换算（订阅按 price 数值直付），显式配置后 CNY 通道订阅按 price × rate 收款。
-	SettingSubscriptionUSDToCNYRate = "SUBSCRIPTION_USD_TO_CNY_RATE"
-	SettingRechargeFeeRate          = "RECHARGE_FEE_RATE"
-	SettingProductNamePrefix        = "PRODUCT_NAME_PREFIX"
-	SettingProductNameSuffix        = "PRODUCT_NAME_SUFFIX"
-	SettingHelpImageURL             = "PAYMENT_HELP_IMAGE_URL"
-	SettingHelpText                 = "PAYMENT_HELP_TEXT"
-	SettingCancelRateLimitOn        = "CANCEL_RATE_LIMIT_ENABLED"
-	SettingCancelRateLimitMax       = "CANCEL_RATE_LIMIT_MAX"
-	SettingCancelWindowSize         = "CANCEL_RATE_LIMIT_WINDOW"
-	SettingCancelWindowUnit         = "CANCEL_RATE_LIMIT_UNIT"
-	SettingCancelWindowMode         = "CANCEL_RATE_LIMIT_WINDOW_MODE"
-	SettingAlipayForceQRCode        = "ALIPAY_FORCE_QRCODE"
+	SettingSubscriptionUSDToCNYRate      = "SUBSCRIPTION_USD_TO_CNY_RATE"
+	SettingRechargeFeeRate               = "RECHARGE_FEE_RATE"
+	SettingProductNamePrefix             = "PRODUCT_NAME_PREFIX"
+	SettingProductNameSuffix             = "PRODUCT_NAME_SUFFIX"
+	SettingHelpImageURL                  = "PAYMENT_HELP_IMAGE_URL"
+	SettingHelpText                      = "PAYMENT_HELP_TEXT"
+	SettingCancelRateLimitOn             = "CANCEL_RATE_LIMIT_ENABLED"
+	SettingCancelRateLimitMax            = "CANCEL_RATE_LIMIT_MAX"
+	SettingCancelWindowSize              = "CANCEL_RATE_LIMIT_WINDOW"
+	SettingCancelWindowUnit              = "CANCEL_RATE_LIMIT_UNIT"
+	SettingCancelWindowMode              = "CANCEL_RATE_LIMIT_WINDOW_MODE"
+	SettingAlipayForceQRCode             = "ALIPAY_FORCE_QRCODE"
+	SettingAlipayMobilePrecreateDeepLink = "ALIPAY_MOBILE_PRECREATE_DEEP_LINK"
 )
 
 // Default values for payment configuration settings.
@@ -80,6 +82,8 @@ type PaymentConfig struct {
 
 	// Force Alipay mobile users to use QR code instead of mobile redirect
 	AlipayForceQRCode bool `json:"alipay_force_qrcode"`
+	// Use Alipay face-to-face precreate and an app deep link on mobile clients.
+	AlipayMobilePrecreateDeepLink bool `json:"alipay_mobile_precreate_deep_link"`
 }
 
 // UpdatePaymentConfigRequest contains fields to update payment configuration.
@@ -111,6 +115,8 @@ type UpdatePaymentConfigRequest struct {
 
 	// Force Alipay mobile users to use QR code instead of mobile redirect
 	AlipayForceQRCode *bool `json:"alipay_force_qrcode"`
+	// Use Alipay face-to-face precreate and an app deep link on mobile clients.
+	AlipayMobilePrecreateDeepLink *bool `json:"alipay_mobile_precreate_deep_link"`
 
 	VisibleMethodAlipaySource  *string `json:"payment_visible_method_alipay_source"`
 	VisibleMethodWxpaySource   *string `json:"payment_visible_method_wxpay_source"`
@@ -239,7 +245,7 @@ func (s *PaymentConfigService) GetPaymentConfig(ctx context.Context) (*PaymentCo
 		SettingHelpImageURL, SettingHelpText,
 		SettingCancelRateLimitOn, SettingCancelRateLimitMax,
 		SettingCancelWindowSize, SettingCancelWindowUnit, SettingCancelWindowMode,
-		SettingAlipayForceQRCode,
+		SettingAlipayForceQRCode, SettingAlipayMobilePrecreateDeepLink,
 		SettingPaymentVisibleMethodAlipayEnabled, SettingPaymentVisibleMethodAlipaySource,
 		SettingPaymentVisibleMethodWxpayEnabled, SettingPaymentVisibleMethodWxpaySource,
 		SettingPaymentVisibleMethodQQPayEnabled, SettingPaymentVisibleMethodQQPaySource,
@@ -255,7 +261,7 @@ func (s *PaymentConfigService) GetPaymentConfig(ctx context.Context) (*PaymentCo
 		if queryErr != nil {
 			return nil, fmt.Errorf("query enabled payment providers: %w", queryErr)
 		}
-		cfg.EnabledTypes = applyQQPayVisibleMethodRoutingToEnabledTypes(cfg.EnabledTypes, vals, buildVisibleMethodSourceAvailability(instances))
+		cfg.EnabledTypes = applyVisibleMethodRoutingToEnabledTypes(cfg.EnabledTypes, vals, buildVisibleMethodSourceAvailability(instances))
 	}
 	// Load Stripe publishable key from the first enabled Stripe provider instance
 	cfg.StripePublishableKey = s.getStripePublishableKey(ctx)
@@ -289,8 +295,13 @@ func (s *PaymentConfigService) parsePaymentConfig(vals map[string]string) *Payme
 		CancelRateLimitUnit:    vals[SettingCancelWindowUnit],
 		CancelRateLimitMode:    vals[SettingCancelWindowMode],
 
-		AlipayForceQRCode: vals[SettingAlipayForceQRCode] == "true",
+		AlipayForceQRCode:             vals[SettingAlipayForceQRCode] == "true",
+		AlipayMobilePrecreateDeepLink: vals[SettingAlipayMobilePrecreateDeepLink] == "true",
 	}
+	cfg.AlipayMobilePrecreateDeepLink = pcEnvBoolOverride(
+		SettingAlipayMobilePrecreateDeepLink,
+		cfg.AlipayMobilePrecreateDeepLink,
+	)
 	if cfg.LoadBalanceStrategy == "" {
 		cfg.LoadBalanceStrategy = payment.DefaultLoadBalanceStrategy
 	}
@@ -305,6 +316,18 @@ func (s *PaymentConfigService) parsePaymentConfig(vals map[string]string) *Payme
 		cfg.EnabledTypes = NormalizeVisibleMethods(types)
 	}
 	return cfg
+}
+
+func pcEnvBoolOverride(key string, fallback bool) bool {
+	raw, ok := os.LookupEnv(key)
+	if !ok || strings.TrimSpace(raw) == "" {
+		return fallback
+	}
+	value, err := strconv.ParseBool(strings.TrimSpace(raw))
+	if err != nil {
+		return fallback
+	}
+	return value
 }
 
 // getStripePublishableKey finds the publishable key from the first enabled Stripe provider instance.
@@ -360,7 +383,7 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 			return infraerrors.BadRequest("INVALID_RECHARGE_FEE_RATE", "recharge fee rate allows at most 2 decimal places")
 		}
 	}
-	updates := make(map[string]string, 29)
+	updates := make(map[string]string, 30)
 	if req.Enabled != nil {
 		updates[SettingPaymentEnabled] = formatBoolOrEmpty(req.Enabled)
 	}
@@ -429,6 +452,9 @@ func (s *PaymentConfigService) UpdatePaymentConfig(ctx context.Context, req Upda
 	}
 	if req.AlipayForceQRCode != nil {
 		updates[SettingAlipayForceQRCode] = formatBoolOrEmpty(req.AlipayForceQRCode)
+	}
+	if req.AlipayMobilePrecreateDeepLink != nil {
+		updates[SettingAlipayMobilePrecreateDeepLink] = formatBoolOrEmpty(req.AlipayMobilePrecreateDeepLink)
 	}
 	if req.VisibleMethodAlipaySource != nil {
 		updates[SettingPaymentVisibleMethodAlipaySource] = derefStr(req.VisibleMethodAlipaySource)
@@ -592,6 +618,10 @@ func applyVisibleMethodRoutingToEnabledTypes(base []string, vals map[string]stri
 		payment.TypeWxpay:  visibleMethodShouldBeExposed(payment.TypeWxpay, vals, available),
 		payment.TypeQQPay:  visibleMethodShouldBeExposed(payment.TypeQQPay, vals, available),
 	}
+	legacyRouting := map[string]bool{
+		payment.TypeAlipay: visibleMethodUsesLegacyRouting(payment.TypeAlipay, vals),
+		payment.TypeWxpay:  visibleMethodUsesLegacyRouting(payment.TypeWxpay, vals),
+	}
 
 	seen := make(map[string]struct{}, len(base)+2)
 	out := make([]string, 0, len(base)+2)
@@ -611,7 +641,7 @@ func applyVisibleMethodRoutingToEnabledTypes(base []string, vals map[string]stri
 		visibleMethod := NormalizeVisibleMethod(paymentType)
 		switch visibleMethod {
 		case payment.TypeAlipay, payment.TypeWxpay, payment.TypeQQPay:
-			if shouldExpose[visibleMethod] {
+			if legacyRouting[visibleMethod] || shouldExpose[visibleMethod] {
 				appendType(visibleMethod)
 			}
 		default:
@@ -628,11 +658,33 @@ func applyVisibleMethodRoutingToEnabledTypes(base []string, vals map[string]stri
 }
 
 func visibleMethodShouldBeExposed(method string, vals map[string]string, available map[string]bool) bool {
+	method = NormalizeVisibleMethod(method)
 	enabledKey := visibleMethodEnabledSettingKey(method)
 	sourceKey := visibleMethodSourceSettingKey(method)
-	if enabledKey == "" || sourceKey == "" || vals[enabledKey] != "true" {
+	if enabledKey == "" || sourceKey == "" {
+		return false
+	}
+	enabled := strings.TrimSpace(vals[enabledKey])
+	if method == payment.TypeQQPay {
+		if enabled != "true" {
+			return false
+		}
+	} else if enabled == "false" {
 		return false
 	}
 	source := NormalizeVisibleMethodSource(method, vals[sourceKey])
 	return source != "" && available[source]
+}
+
+func visibleMethodUsesLegacyRouting(method string, vals map[string]string) bool {
+	method = NormalizeVisibleMethod(method)
+	if method == payment.TypeQQPay {
+		return false
+	}
+	enabledKey := visibleMethodEnabledSettingKey(method)
+	sourceKey := visibleMethodSourceSettingKey(method)
+	if enabledKey == "" || sourceKey == "" {
+		return false
+	}
+	return strings.TrimSpace(vals[enabledKey]) != "true" && NormalizeVisibleMethodSource(method, vals[sourceKey]) == ""
 }

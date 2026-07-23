@@ -51,12 +51,10 @@ func (s *PaymentConfigService) pcApplyEnabledVisibleMethodInstances(ctx context.
 	}
 
 	for _, method := range []string{payment.TypeAlipay, payment.TypeWxpay, payment.TypeQQPay} {
-		if method == payment.TypeQQPay && s.settingRepo != nil {
-			enabled, settingErr := s.settingRepo.GetValue(ctx, SettingPaymentVisibleMethodQQPayEnabled)
-			if settingErr != nil || enabled != "true" {
-				delete(filtered, method)
-				continue
-			}
+		enabled, settingErr := s.visibleMethodEnabled(ctx, method)
+		if settingErr != nil || !enabled {
+			delete(filtered, method)
+			continue
 		}
 		matching := filterEnabledVisibleMethodInstances(instances, method)
 		providerKey, err := s.resolveVisibleMethodProviderKey(ctx, method, matching)

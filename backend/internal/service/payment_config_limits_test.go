@@ -549,8 +549,13 @@ func TestGetAvailableMethodLimitsPreservesLegacyCrossProviderBehaviorWhenVisible
 	require.NoError(t, err)
 
 	svc := &PaymentConfigService{
-		entClient:   client,
-		settingRepo: &paymentConfigSettingRepoStub{values: map[string]string{}},
+		entClient: client,
+		settingRepo: &paymentConfigSettingRepoStub{values: map[string]string{
+			SettingPaymentVisibleMethodAlipayEnabled: "false",
+			SettingPaymentVisibleMethodAlipaySource:  "",
+			SettingPaymentVisibleMethodWxpayEnabled:  "false",
+			SettingPaymentVisibleMethodWxpaySource:   "",
+		}},
 	}
 
 	resp, err := svc.GetAvailableMethodLimits(ctx)
@@ -568,4 +573,37 @@ func TestGetAvailableMethodLimitsPreservesLegacyCrossProviderBehaviorWhenVisible
 
 	require.Equal(t, 10.0, resp.GlobalMin)
 	require.Equal(t, 400.0, resp.GlobalMax)
+}
+
+func TestGetAvailableMethodLimitsHonorsExplicitVisibleMethodDisablement(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+
+	_, err := client.PaymentProviderInstance.Create().
+		SetProviderKey(payment.TypeAlipay).
+		SetName("Official Alipay").
+		SetConfig("{}").
+		SetSupportedTypes(payment.TypeAlipay).
+		SetEnabled(true).
+		Save(ctx)
+	require.NoError(t, err)
+	_, err = client.PaymentProviderInstance.Create().
+		SetProviderKey(payment.TypeWxpay).
+		SetName("Official WeChat").
+		SetConfig("{}").
+		SetSupportedTypes(payment.TypeWxpay).
+		SetEnabled(true).
+		Save(ctx)
+	require.NoError(t, err)
+
+	svc := &PaymentConfigService{entClient: client, settingRepo: &paymentConfigSettingRepoStub{values: map[string]string{
+		SettingPaymentVisibleMethodAlipayEnabled: "false",
+		SettingPaymentVisibleMethodAlipaySource:  VisibleMethodSourceOfficialAlipay,
+		SettingPaymentVisibleMethodWxpayEnabled:  "false",
+		SettingPaymentVisibleMethodWxpaySource:   VisibleMethodSourceOfficialWechat,
+	}}}
+	resp, err := svc.GetAvailableMethodLimits(ctx)
+	require.NoError(t, err)
+	require.NotContains(t, resp.Methods, payment.TypeAlipay)
+	require.NotContains(t, resp.Methods, payment.TypeWxpay)
 }

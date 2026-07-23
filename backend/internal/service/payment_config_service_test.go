@@ -73,6 +73,20 @@ func TestPcParseInt(t *testing.T) {
 	}
 }
 
+func TestAlipayMobilePrecreateEnvironmentOverride(t *testing.T) {
+	svc := &PaymentConfigService{}
+
+	t.Setenv(SettingAlipayMobilePrecreateDeepLink, "true")
+	if !svc.parsePaymentConfig(map[string]string{SettingAlipayMobilePrecreateDeepLink: "false"}).AlipayMobilePrecreateDeepLink {
+		t.Fatal("expected environment variable to enable mobile Alipay precreate")
+	}
+
+	t.Setenv(SettingAlipayMobilePrecreateDeepLink, "false")
+	if svc.parsePaymentConfig(map[string]string{SettingAlipayMobilePrecreateDeepLink: "true"}).AlipayMobilePrecreateDeepLink {
+		t.Fatal("expected environment variable to disable mobile Alipay precreate")
+	}
+}
+
 func TestParsePaymentConfig(t *testing.T) {
 	t.Parallel()
 
@@ -105,6 +119,9 @@ func TestParsePaymentConfig(t *testing.T) {
 		if cfg.VisibleMethodQQPayEnabled || cfg.VisibleMethodQQPaySource != "" {
 			t.Fatalf("expected QQPay visible method disabled by default, got enabled=%v source=%q", cfg.VisibleMethodQQPayEnabled, cfg.VisibleMethodQQPaySource)
 		}
+		if cfg.AlipayMobilePrecreateDeepLink {
+			t.Fatal("expected AlipayMobilePrecreateDeepLink=false by default")
+		}
 	})
 
 	t.Run("all values populated", func(t *testing.T) {
@@ -121,6 +138,7 @@ func TestParsePaymentConfig(t *testing.T) {
 			SettingLoadBalanceStrategy:              "least_amount",
 			SettingProductNamePrefix:                "PRE",
 			SettingProductNameSuffix:                "SUF",
+			SettingAlipayMobilePrecreateDeepLink:    "true",
 			SettingPaymentVisibleMethodQQPaySource:  VisibleMethodSourceEasyPayQQPay,
 			SettingPaymentVisibleMethodQQPayEnabled: "true",
 		}
@@ -164,6 +182,9 @@ func TestParsePaymentConfig(t *testing.T) {
 		}
 		if !cfg.VisibleMethodQQPayEnabled || cfg.VisibleMethodQQPaySource != VisibleMethodSourceEasyPayQQPay {
 			t.Fatalf("QQPay visible method = enabled:%v source:%q", cfg.VisibleMethodQQPayEnabled, cfg.VisibleMethodQQPaySource)
+		}
+		if !cfg.AlipayMobilePrecreateDeepLink {
+			t.Fatal("expected AlipayMobilePrecreateDeepLink=true")
 		}
 	})
 
@@ -333,7 +354,7 @@ func TestBuildVisibleMethodSourceAvailability(t *testing.T) {
 	}
 }
 
-func TestGetPaymentConfigKeepsStoredEnabledTypes(t *testing.T) {
+func TestGetPaymentConfigHonorsExplicitVisibleMethodDisablement(t *testing.T) {
 	ctx := context.Background()
 	client := newPaymentConfigServiceTestClient(t)
 
@@ -352,7 +373,11 @@ func TestGetPaymentConfigKeepsStoredEnabledTypes(t *testing.T) {
 		entClient: client,
 		settingRepo: &paymentConfigSettingRepoStub{
 			values: map[string]string{
-				SettingEnabledPaymentTypes: "alipay,wxpay,stripe",
+				SettingEnabledPaymentTypes:               "alipay,wxpay,stripe",
+				SettingPaymentVisibleMethodAlipayEnabled: "false",
+				SettingPaymentVisibleMethodAlipaySource:  VisibleMethodSourceOfficialAlipay,
+				SettingPaymentVisibleMethodWxpayEnabled:  "false",
+				SettingPaymentVisibleMethodWxpaySource:   VisibleMethodSourceOfficialWechat,
 			},
 		},
 	}
@@ -362,7 +387,7 @@ func TestGetPaymentConfigKeepsStoredEnabledTypes(t *testing.T) {
 		t.Fatalf("GetPaymentConfig returned error: %v", err)
 	}
 
-	want := []string{payment.TypeAlipay, payment.TypeWxpay, payment.TypeStripe}
+	want := []string{payment.TypeStripe}
 	if len(cfg.EnabledTypes) != len(want) {
 		t.Fatalf("EnabledTypes len = %d, want %d (%v)", len(cfg.EnabledTypes), len(want), cfg.EnabledTypes)
 	}
@@ -402,6 +427,19 @@ func TestGetPaymentConfigAppliesQQPayVisibleMethodSettings(t *testing.T) {
 	want := []string{payment.TypeAlipay, payment.TypeQQPay}
 	if !equalStringSlices(cfg.EnabledTypes, want) {
 		t.Fatalf("EnabledTypes = %v, want %v", cfg.EnabledTypes, want)
+	}
+}
+
+func TestResolveVisibleMethodProviderKeyRejectsUnavailableConfiguredSource(t *testing.T) {
+	svc := &PaymentConfigService{settingRepo: &paymentConfigSettingRepoStub{values: map[string]string{
+		SettingPaymentVisibleMethodAlipaySource: VisibleMethodSourceOfficialAlipay,
+	}}}
+
+	_, err := svc.resolveVisibleMethodProviderKey(context.Background(), payment.TypeAlipay, []*dbent.PaymentProviderInstance{
+		{ProviderKey: payment.TypeEasyPay, SupportedTypes: payment.TypeAlipay, Enabled: true},
+	})
+	if err == nil || !strings.Contains(err.Error(), "source has no enabled provider instance") {
+		t.Fatalf("resolveVisibleMethodProviderKey error = %v, want unavailable configured source", err)
 	}
 }
 
