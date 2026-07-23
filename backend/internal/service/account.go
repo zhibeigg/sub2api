@@ -1540,13 +1540,14 @@ func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapa
 	if capability == "" {
 		return true
 	}
-	// OpenCode Go can bridge both Chat Completions and Responses through its
-	// model-level Chat/Messages upstream protocols. Other mixed platforms retain
-	// the legacy Chat-only capability unless they declare a native bridge.
+	// OpenCode Go natively bridges both Chat Completions and Responses through
+	// its model-level Chat/Messages upstream protocols. Platform/group relation
+	// checks remain responsible for deciding whether the account may enter the
+	// candidate pool; capability detection must not require mixed scheduling.
+	if a.IsOpenCode() {
+		return capability == OpenAIEndpointCapabilityChatCompletions || capability == OpenAIEndpointCapabilityResponses
+	}
 	if !a.IsOpenAICompatible() {
-		if a.IsOpenCode() && a.IsMixedSchedulingEnabled() {
-			return capability == OpenAIEndpointCapabilityChatCompletions || capability == OpenAIEndpointCapabilityResponses
-		}
 		if IsMixedSchedulingCapablePlatform(a.Platform) && a.IsMixedSchedulingEnabled() {
 			return capability == OpenAIEndpointCapabilityChatCompletions
 		}

@@ -192,10 +192,12 @@ func (s *OpenAIGatewayService) SelectAccountForModelWithExclusions(ctx context.C
 // noAvailableOpenAISelectionError builds the standard "no account available" error
 // while preserving the compact-specific error when applicable.
 func normalizeOpenAICompatiblePlatform(platform string) string {
-	if platform == PlatformGrok {
-		return PlatformGrok
+	switch platform {
+	case PlatformGrok, PlatformOpenCode:
+		return platform
+	default:
+		return PlatformOpenAI
 	}
-	return PlatformOpenAI
 }
 
 func (s *OpenAIGatewayService) withCrossProviderCompatibilityContext(ctx context.Context) context.Context {
@@ -300,7 +302,7 @@ func openAIPlatformAllowedForContext(ctx context.Context, account *Account, plat
 		})
 	}
 
-	if account.Platform == platform && account.IsOpenAICompatible() {
+	if account.Platform == platform && (account.IsOpenAICompatible() || account.IsOpenCode()) {
 		return true
 	}
 	return openAIPlatformAllowed(account, platform)
@@ -353,7 +355,7 @@ func openAIPlatformAllowed(account *Account, platform string) bool {
 		return false
 	}
 	platform = normalizeOpenAICompatiblePlatform(platform)
-	if account.Platform == platform && account.IsOpenAICompatible() {
+	if account.Platform == platform && (account.IsOpenAICompatible() || account.IsOpenCode()) {
 		return true
 	}
 	return IsMixedSchedulingCapablePlatform(account.Platform) && account.IsMixedSchedulingEnabled()
@@ -1621,7 +1623,18 @@ func (s *OpenAIGatewayService) ResolveEffectiveGroupBinding(ctx context.Context,
 		}
 		gid := b.GroupID
 		probeCtx := context.WithValue(ctx, ctxkey.Group, b.Group)
-		if _, err := s.SelectAccountForModelWithExclusions(probeCtx, &gid, "", requestedModel, nil); err == nil {
+		if _, err := s.selectAccountForModelWithExclusions(
+			s.withOpenAIQuotaAutoPauseContext(probeCtx),
+			&gid,
+			b.Group.Platform,
+			"",
+			requestedModel,
+			nil,
+			false,
+			0,
+			"",
+			false,
+		); err == nil {
 			return b.Group
 		}
 	}

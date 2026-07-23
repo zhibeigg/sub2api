@@ -2200,6 +2200,38 @@ func TestMultiGroupResolutionHonorsCustomModelsList(t *testing.T) {
 	})
 }
 
+func TestOpenAIMultiGroupResolutionProbesOpenCodePlatform(t *testing.T) {
+	openCodeGroup := &Group{
+		ID:       33,
+		Platform: PlatformOpenCode,
+		Status:   StatusActive,
+		ModelsListConfig: GroupModelsListConfig{
+			Enabled: true,
+			Models:  []string{"mimo-v2.5-pro"},
+		},
+	}
+	openAIGroup := &Group{
+		ID:       24,
+		Platform: PlatformOpenAI,
+		Status:   StatusActive,
+		ModelsListConfig: GroupModelsListConfig{
+			Enabled: true,
+			Models:  []string{"mimo-v2.5-pro"},
+		},
+	}
+	apiKey := &APIKey{GroupBindings: []APIKeyGroupBinding{
+		{GroupID: openCodeGroup.ID, Priority: 0, Group: openCodeGroup},
+		{GroupID: openAIGroup.ID, Priority: 1, Group: openAIGroup},
+	}}
+	repo := schedulerGroupAwareOpenAIAccountRepo{schedulerTestOpenAIAccountRepo{accounts: []Account{
+		{ID: 1, Platform: PlatformOpenCode, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, GroupIDs: []int64{openCodeGroup.ID}},
+		{ID: 2, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, GroupIDs: []int64{openAIGroup.ID}},
+	}}}
+	svc := &OpenAIGatewayService{accountRepo: repo}
+
+	require.Same(t, openCodeGroup, svc.ResolveEffectiveGroupBinding(context.Background(), apiKey, "mimo-v2.5-pro"))
+}
+
 func TestMultiGroupResolutionKeepsModelCompatibleFallbackWithoutCapacity(t *testing.T) {
 	gptGroup := &Group{
 		ID:       24,

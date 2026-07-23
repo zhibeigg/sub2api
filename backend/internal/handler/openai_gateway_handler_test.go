@@ -27,6 +27,14 @@ import (
 	"github.com/tidwall/sjson"
 )
 
+func TestOpenAICompatibleRequestPlatformPreservesOpenCode(t *testing.T) {
+	apiKey := &service.APIKey{Group: &service.Group{Platform: service.PlatformOpenCode}}
+	require.Equal(t, service.PlatformOpenCode, openAICompatibleRequestPlatform(context.Background(), apiKey))
+
+	ctx := service.WithResolvedTargetPlatform(context.Background(), service.PlatformOpenCode)
+	require.Equal(t, service.PlatformOpenCode, openAICompatibleRequestPlatform(ctx, nil))
+}
+
 func TestOpenAIHandleStreamingAwareError_JSONEscaping(t *testing.T) {
 	tests := []struct {
 		name    string
