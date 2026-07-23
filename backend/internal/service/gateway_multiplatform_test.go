@@ -2142,6 +2142,103 @@ func TestExplicitGroupSelectionBypassesAutomaticMultiGroupResolution(t *testing.
 	require.Len(t, apiKey.GroupBindings, 1, "explicit routing must preserve the original binding context")
 }
 
+func TestMultiGroupResolutionHonorsCustomModelsList(t *testing.T) {
+	gptGroup := &Group{
+		ID:       24,
+		Name:     "gpt",
+		Platform: PlatformOpenAI,
+		Status:   StatusActive,
+		ModelsListConfig: GroupModelsListConfig{
+			Enabled: true,
+			Models:  []string{"gpt-5.6-sol"},
+		},
+	}
+	mimoGroup := &Group{
+		ID:       33,
+		Name:     "mimo",
+		Platform: PlatformOpenAI,
+		Status:   StatusActive,
+		ModelsListConfig: GroupModelsListConfig{
+			Enabled: true,
+			Models:  []string{"mimo-v2.5-pro"},
+		},
+	}
+	apiKey := &APIKey{GroupBindings: []APIKeyGroupBinding{
+		{GroupID: gptGroup.ID, Priority: 0, Group: gptGroup},
+		{GroupID: mimoGroup.ID, Priority: 1, Group: mimoGroup},
+	}}
+
+	t.Run("gateway service skips higher priority model mismatch", func(t *testing.T) {
+		repo := &mockAccountRepoForPlatform{
+			accounts: []Account{{
+				ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+				Status: StatusActive, Schedulable: true,
+			}},
+			accountsByID: map[int64]*Account{},
+		}
+		svc := &GatewayService{
+			accountRepo: repo,
+			groupRepo: &mockGroupRepoForGateway{groups: map[int64]*Group{
+				gptGroup.ID:  gptGroup,
+				mimoGroup.ID: mimoGroup,
+			}},
+			cache: &mockGatewayCacheForPlatform{},
+			cfg:   testConfig(),
+		}
+
+		require.Same(t, mimoGroup, svc.ResolveEffectiveGroupBinding(context.Background(), apiKey, "mimo-v2.5-pro"))
+	})
+
+	t.Run("openai service skips higher priority model mismatch", func(t *testing.T) {
+		repo := schedulerGroupAwareOpenAIAccountRepo{schedulerTestOpenAIAccountRepo{accounts: []Account{
+			{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, GroupIDs: []int64{gptGroup.ID}},
+			{ID: 2, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, GroupIDs: []int64{mimoGroup.ID}},
+		}}}
+		svc := &OpenAIGatewayService{accountRepo: repo}
+
+		require.Same(t, mimoGroup, svc.ResolveEffectiveGroupBinding(context.Background(), apiKey, "mimo-v2.5-pro"))
+	})
+}
+
+func TestMultiGroupResolutionKeepsModelCompatibleFallbackWithoutCapacity(t *testing.T) {
+	gptGroup := &Group{
+		ID:       24,
+		Platform: PlatformOpenAI,
+		Status:   StatusActive,
+		ModelsListConfig: GroupModelsListConfig{
+			Enabled: true,
+			Models:  []string{"gpt-5.6-sol"},
+		},
+	}
+	mimoGroup := &Group{
+		ID:       33,
+		Platform: PlatformOpenAI,
+		Status:   StatusActive,
+		ModelsListConfig: GroupModelsListConfig{
+			Enabled: true,
+			Models:  []string{"mimo-v2.5-pro"},
+		},
+	}
+	apiKey := &APIKey{GroupBindings: []APIKeyGroupBinding{
+		{GroupID: gptGroup.ID, Priority: 0, Group: gptGroup},
+		{GroupID: mimoGroup.ID, Priority: 1, Group: mimoGroup},
+	}}
+
+	gateway := &GatewayService{
+		accountRepo: &mockAccountRepoForPlatform{accountsByID: map[int64]*Account{}},
+		groupRepo: &mockGroupRepoForGateway{groups: map[int64]*Group{
+			gptGroup.ID:  gptGroup,
+			mimoGroup.ID: mimoGroup,
+		}},
+		cache: &mockGatewayCacheForPlatform{},
+		cfg:   testConfig(),
+	}
+	require.Same(t, mimoGroup, gateway.ResolveEffectiveGroupBinding(context.Background(), apiKey, "mimo-v2.5-pro"))
+
+	openAI := &OpenAIGatewayService{accountRepo: schedulerGroupAwareOpenAIAccountRepo{schedulerTestOpenAIAccountRepo{}}}
+	require.Same(t, mimoGroup, openAI.ResolveEffectiveGroupBinding(context.Background(), apiKey, "mimo-v2.5-pro"))
+}
+
 func TestGatewayMultiGroupResolutionSkipsRestrictedStandardGroups(t *testing.T) {
 	blocked := &Group{ID: 10, Name: "blocked", Platform: PlatformAntigravity, Status: StatusActive, Hydrated: true, SubscriptionType: SubscriptionTypeStandard}
 	allowed := &Group{ID: 20, Name: "allowed", Platform: PlatformAntigravity, Status: StatusActive, Hydrated: true, SubscriptionType: SubscriptionTypeStandard}

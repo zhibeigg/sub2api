@@ -2620,6 +2620,7 @@ func (s *GatewayService) ResolveEffectiveGroupBinding(ctx context.Context, apiKe
 		return nil
 	}
 	var firstGroup *Group
+	var firstModelGroup *Group
 	for i := range apiKey.GroupBindings {
 		b := apiKey.GroupBindings[i]
 		if b.Group == nil || !apiKey.AllowsGroupByUserRestriction(b.Group) {
@@ -2631,6 +2632,12 @@ func (s *GatewayService) ResolveEffectiveGroupBinding(ctx context.Context, apiKe
 		if firstGroup == nil {
 			firstGroup = b.Group
 		}
+		if !groupAllowsRequestedModel(b.Group, requestedModel) {
+			continue
+		}
+		if firstModelGroup == nil {
+			firstModelGroup = b.Group
+		}
 		gid := b.GroupID
 		probeCtx := context.WithValue(ctx, ctxkey.Group, b.Group)
 		// Probe availability without a sticky session and without mutating any
@@ -2638,6 +2645,9 @@ func (s *GatewayService) ResolveEffectiveGroupBinding(ctx context.Context, apiKe
 		if _, err := s.SelectAccountForModelWithExclusions(probeCtx, &gid, "", requestedModel, nil); err == nil {
 			return b.Group
 		}
+	}
+	if firstModelGroup != nil {
+		return firstModelGroup
 	}
 	return firstGroup
 }

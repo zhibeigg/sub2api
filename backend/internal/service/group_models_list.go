@@ -30,3 +30,16 @@ func normalizeGroupModelsListConfig(cfg GroupModelsListConfig) GroupModelsListCo
 func (g *Group) CustomModelsListEnabled() bool {
 	return g != nil && g.ModelsListConfig.Enabled && len(g.ModelsListConfig.Models) > 0
 }
+
+func groupAllowsRequestedModel(group *Group, requestedModel string) bool {
+	requestedModel = strings.TrimSpace(requestedModel)
+	if requestedModel == "" || group == nil || !group.CustomModelsListEnabled() {
+		return true
+	}
+	for _, model := range group.ModelsListConfig.Models {
+		if strings.TrimSpace(model) == requestedModel {
+			return true
+		}
+	}
+	return false
+}
