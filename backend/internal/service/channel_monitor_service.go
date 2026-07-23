@@ -441,7 +441,9 @@ func (s *ChannelMonitorService) RunCheck(ctx context.Context, id int64) ([]*Chec
 }
 
 // persistCheckResults 写入本次检测的历史记录并更新 last_checked_at。
-// 任一写库失败都只记日志，不影响调用方拿到 results（与 MVP 期望一致：宁可漏记历史也要先返回结果）。
+// HTTP 客户端在检测完成后断开连接，不应撤销已经产生的检测事实；因此数据库写入
+// 脱离调用方的取消信号，但每个操作仍受 monitorPersistenceTimeout 严格限制。
+// 任一写库失败都只记日志，不影响调用方拿到 results。
 func (s *ChannelMonitorService) persistCheckResults(ctx context.Context, m *ChannelMonitor, results []*CheckResult) {
 	rows := make([]*ChannelMonitorHistoryRow, 0, len(results))
 	for _, r := range results {
@@ -455,14 +457,28 @@ func (s *ChannelMonitorService) persistCheckResults(ctx context.Context, m *Chan
 			CheckedAt:     r.CheckedAt,
 		})
 	}
-	if err := s.repo.InsertHistoryBatch(ctx, rows); err != nil {
+
+	insertCtx, cancelInsert := channelMonitorPersistenceContext(ctx)
+	if err := s.repo.InsertHistoryBatch(insertCtx, rows); err != nil {
 		slog.Error("channel_monitor: insert history failed",
 			"monitor_id", m.ID, "name", m.Name, "error", err)
 	}
-	if err := s.repo.MarkChecked(ctx, m.ID, time.Now()); err != nil {
+	cancelInsert()
+
+	markCtx, cancelMark := channelMonitorPersistenceContext(ctx)
+	if err := s.repo.MarkChecked(markCtx, m.ID, time.Now()); err != nil {
 		slog.Error("channel_monitor: mark checked failed",
 			"monitor_id", m.ID, "error", err)
 	}
+	cancelMark()
+}
+
+func channelMonitorPersistenceContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	base := context.Background()
+	if ctx != nil {
+		base = context.WithoutCancel(ctx)
+	}
+	return context.WithTimeout(base, monitorPersistenceTimeout)
 }
 
 // runChecksConcurrent 对 primary + extra 模型并发执行检测。

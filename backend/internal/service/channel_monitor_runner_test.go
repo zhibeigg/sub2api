@@ -343,6 +343,94 @@ func TestInFlight_AcquireReleaseSymmetric(t *testing.T) {
 	r.releaseInFlight(42)
 }
 
+func TestStart_LoadedMonitorsWaitForStartupGrace(t *testing.T) {
+	svc := &stubMonitorSvc{
+		enabled:   []*ChannelMonitor{{ID: 13, Name: "startup", Enabled: true, IntervalSeconds: 60}},
+		runCalled: make(chan int64, 1),
+	}
+	r := newRunnerForTest(svc)
+	r.startupDelay = 80 * time.Millisecond
+	r.Start()
+
+	select {
+	case id := <-svc.runCalled:
+		t.Fatalf("startup-loaded monitor fired before grace period: id=%d", id)
+	case <-time.After(25 * time.Millisecond):
+	}
+
+	select {
+	case id := <-svc.runCalled:
+		if id != 13 {
+			t.Fatalf("expected startup monitor id=13, got %d", id)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("startup-loaded monitor did not fire after grace period")
+	}
+
+	stoppedWithin(t, r, 3*time.Second)
+}
+
+type canceledPersistenceRepoStub struct {
+	ChannelMonitorRepository
+	insertCalled      bool
+	insertContextErr  error
+	insertHasDeadline bool
+	insertRows        []*ChannelMonitorHistoryRow
+	markCalled        bool
+	markContextErr    error
+	markHasDeadline   bool
+	markedMonitorID   int64
+	markedCheckedAt   time.Time
+}
+
+func (r *canceledPersistenceRepoStub) InsertHistoryBatch(ctx context.Context, rows []*ChannelMonitorHistoryRow) error {
+	r.insertCalled = true
+	r.insertContextErr = ctx.Err()
+	_, r.insertHasDeadline = ctx.Deadline()
+	r.insertRows = rows
+	return nil
+}
+
+func (r *canceledPersistenceRepoStub) MarkChecked(ctx context.Context, id int64, checkedAt time.Time) error {
+	r.markCalled = true
+	r.markContextErr = ctx.Err()
+	_, r.markHasDeadline = ctx.Deadline()
+	r.markedMonitorID = id
+	r.markedCheckedAt = checkedAt
+	return nil
+}
+
+func TestPersistCheckResultsSurvivesCallerCancellation(t *testing.T) {
+	repo := &canceledPersistenceRepoStub{}
+	svc := NewChannelMonitorService(repo, nil)
+	requestCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	checkedAt := time.Date(2026, time.July, 23, 17, 44, 19, 0, time.UTC)
+	latencyMs := 3089
+
+	svc.persistCheckResults(requestCtx, &ChannelMonitor{ID: 10, Name: "Cursor Ultra"}, []*CheckResult{{
+		Model:     "grok-4.5",
+		Status:    MonitorStatusOperational,
+		LatencyMs: &latencyMs,
+		CheckedAt: checkedAt,
+	}})
+
+	if !repo.insertCalled || repo.insertContextErr != nil || !repo.insertHasDeadline {
+		t.Fatalf("history persistence must ignore caller cancellation with a bounded context: called=%v err=%v deadline=%v",
+			repo.insertCalled, repo.insertContextErr, repo.insertHasDeadline)
+	}
+	if len(repo.insertRows) != 1 || repo.insertRows[0].CheckedAt != checkedAt {
+		t.Fatalf("unexpected persisted rows: %#v", repo.insertRows)
+	}
+	if !repo.markCalled || repo.markContextErr != nil || !repo.markHasDeadline {
+		t.Fatalf("last_checked persistence must ignore caller cancellation with a bounded context: called=%v err=%v deadline=%v",
+			repo.markCalled, repo.markContextErr, repo.markHasDeadline)
+	}
+	if repo.markedMonitorID != 10 || repo.markedCheckedAt.IsZero() {
+		t.Fatalf("unexpected mark checked call: id=%d checked_at=%v", repo.markedMonitorID, repo.markedCheckedAt)
+	}
+}
+
 // stoppedWithin 在 timeout 内并行调用 Stop，超时则 Fatal。验证 Stop 不会阻塞。
 func stoppedWithin(t *testing.T, r *ChannelMonitorRunner, timeout time.Duration) {
 	t.Helper()

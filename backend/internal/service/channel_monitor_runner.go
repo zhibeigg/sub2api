@@ -52,6 +52,7 @@ type ChannelMonitorRunner struct {
 	pool         pond.Pool
 	parentCtx    context.Context
 	parentCancel context.CancelFunc
+	startupDelay time.Duration
 
 	mu      sync.Mutex
 	tasks   map[int64]*scheduledMonitor
@@ -67,11 +68,12 @@ type ChannelMonitorRunner struct {
 
 // scheduledMonitor 单个监控的运行时上下文。
 type scheduledMonitor struct {
-	id       int64
-	name     string
-	interval time.Duration
-	jitter   time.Duration // 每轮 ± [0, jitter] 的均匀随机偏移；0 = 固定间隔
-	cancel   context.CancelFunc
+	id         int64
+	name       string
+	interval   time.Duration
+	jitter     time.Duration // 每轮 ± [0, jitter] 的均匀随机偏移；0 = 固定间隔
+	firstDelay time.Duration // 启动加载的任务等待健康宽限；CRUD 新建/更新保持立即检测
+	cancel     context.CancelFunc
 }
 
 // nextDelay 计算下一次触发的等待时长：interval ± [0, jitter] 的均匀随机偏移。
@@ -107,6 +109,7 @@ func newChannelMonitorRunner(svc monitorRunnerSvc, settingService *SettingServic
 		pool:           pond.NewPool(monitorWorkerConcurrency),
 		parentCtx:      ctx,
 		parentCancel:   cancel,
+		startupDelay:   monitorStartupGracePeriod,
 		tasks:          make(map[int64]*scheduledMonitor),
 		inFlight:       make(map[int64]struct{}),
 	}
@@ -134,16 +137,24 @@ func (r *ChannelMonitorRunner) Start() {
 		return
 	}
 	for _, m := range enabled {
-		r.Schedule(m)
+		r.schedule(m, r.startupDelay)
 	}
-	slog.Info("channel_monitor: runner started", "scheduled_tasks", len(enabled))
+	slog.Info("channel_monitor: runner started",
+		"scheduled_tasks", len(enabled),
+		"initial_check_delay", r.startupDelay)
 }
 
-// Schedule 为指定监控创建（或重置）独立定时任务。
+// Schedule 为运行期新建或更新的监控创建（或重置）独立定时任务。
+// 运行期配置变更需要立即验证，因此首次检测不使用启动宽限。
+func (r *ChannelMonitorRunner) Schedule(m *ChannelMonitor) {
+	r.schedule(m, 0)
+}
+
+// schedule 建立调度任务。Start 加载的存量监控传入启动宽限，避免服务自身经公网
+// 回调时撞上容器已启动但反向代理尚未恢复的窗口；运行期 CRUD 传 0 保持立即检测。
 //   - m.Enabled=false 或 APIKeyDecryptFailed=true → 等同于 Unschedule(m.ID)
 //   - 已存在的任务会先被取消再重建（适用于 IntervalSeconds 变更场景）
-//   - 新任务立即触发首次检测，之后按 IntervalSeconds 周期触发
-func (r *ChannelMonitorRunner) Schedule(m *ChannelMonitor) {
+func (r *ChannelMonitorRunner) schedule(m *ChannelMonitor, firstDelay time.Duration) {
 	if r == nil || m == nil {
 		return
 	}
@@ -162,6 +173,9 @@ func (r *ChannelMonitorRunner) Schedule(m *ChannelMonitor) {
 	jitter := time.Duration(m.JitterSeconds) * time.Second
 	if jitter < 0 {
 		jitter = 0
+	}
+	if firstDelay < 0 {
+		firstDelay = 0
 	}
 
 	r.mu.Lock()
@@ -184,11 +198,12 @@ func (r *ChannelMonitorRunner) Schedule(m *ChannelMonitor) {
 	}
 	ctx, cancel := context.WithCancel(r.parentCtx)
 	task := &scheduledMonitor{
-		id:       m.ID,
-		name:     m.Name,
-		interval: interval,
-		jitter:   jitter,
-		cancel:   cancel,
+		id:         m.ID,
+		name:       m.Name,
+		interval:   interval,
+		jitter:     jitter,
+		firstDelay: firstDelay,
+		cancel:     cancel,
 	}
 	r.tasks[m.ID] = task
 	r.wg.Add(1)
@@ -233,12 +248,23 @@ func (r *ChannelMonitorRunner) Stop() {
 	r.pool.StopAndWait()
 }
 
-// runScheduled 单个监控的循环：立即触发首次（满足"新建/启用即跑"），
-// 之后按 interval ± jitter 周期触发；ctx 取消即退出。
-// 用 timer 而非 ticker：jitter > 0 时每轮等待时长都需要重新随机化。
+// runScheduled 单个监控的循环：启动加载的存量任务先等待 firstDelay，运行期
+// 新建/启用任务的 firstDelay=0，仍立即触发。之后按 interval ± jitter 周期触发；
+// ctx 取消即退出。用 timer 而非 ticker：jitter > 0 时每轮等待时长都需要重新随机化。
 func (r *ChannelMonitorRunner) runScheduled(ctx context.Context, task *scheduledMonitor) {
 	defer r.wg.Done()
 
+	if task.firstDelay > 0 {
+		startupTimer := time.NewTimer(task.firstDelay)
+		select {
+		case <-ctx.Done():
+			if !startupTimer.Stop() {
+				<-startupTimer.C
+			}
+			return
+		case <-startupTimer.C:
+		}
+	}
 	r.fire(ctx, task)
 
 	timer := time.NewTimer(task.nextDelay())

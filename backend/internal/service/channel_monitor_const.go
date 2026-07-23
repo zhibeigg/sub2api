@@ -30,6 +30,12 @@ const (
 	monitorWorkerConcurrency = 5
 	// monitorStartupLoadTimeout Start 时一次性加载所有 enabled monitor 的总超时。
 	monitorStartupLoadTimeout = 10 * time.Second
+	// monitorStartupGracePeriod 服务启动后首轮自动检测的宽限期。
+	// 避免监控经公网回调本服务时撞上容器已启动但反向代理尚未恢复的短暂 502 窗口。
+	monitorStartupGracePeriod = 30 * time.Second
+	// monitorPersistenceTimeout 检测完成后写历史与更新时间的单次数据库超时。
+	// 持久化使用脱离客户端取消信号的上下文，但仍必须有明确上限。
+	monitorPersistenceTimeout = 5 * time.Second
 	// monitorMinIntervalSeconds / monitorMaxIntervalSeconds 用户配置的检测间隔上下限。
 	monitorMinIntervalSeconds = 15
 	monitorMaxIntervalSeconds = 3600
