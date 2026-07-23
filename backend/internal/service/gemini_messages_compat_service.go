@@ -447,6 +447,64 @@ func (s *GeminiMessagesCompatService) listSchedulableAccountsOnce(ctx context.Co
 		accounts, _, err := s.schedulerSnapshot.ListSchedulableAccounts(ctx, groupID, platform, hasForcePlatform)
 		return accounts, err
 	}
+	if protocol, ok := EndpointProtocolFromContext(ctx); ok && s.cfg != nil && s.cfg.Gateway.GroupEndpointRoutingEnabled {
+		forcedPlatform := ""
+		if hasForcePlatform {
+			forcedPlatform = platform
+		}
+		request := RequestDescriptor{Protocol: protocol, ForcedPlatform: forcedPlatform}
+		platforms := CandidateAccountPlatforms(protocol, forcedPlatform)
+		if len(platforms) == 0 {
+			return []Account{}, nil
+		}
+		resolvedGroupID := int64(0)
+		if groupID != nil && *groupID > 0 && s.cfg.RunMode != config.RunModeSimple {
+			resolvedGroupID = *groupID
+		}
+		var accounts []Account
+		var err error
+		if resolvedGroupID > 0 {
+			accounts, err = s.accountRepo.ListSchedulableByGroupIDAndPlatforms(ctx, resolvedGroupID, platforms)
+		} else if s.cfg.RunMode == config.RunModeSimple {
+			accounts, err = s.accountRepo.ListSchedulableByPlatforms(ctx, platforms)
+		} else {
+			accounts, err = s.accountRepo.ListSchedulableUngroupedByPlatforms(ctx, platforms)
+		}
+		if err != nil {
+			return nil, err
+		}
+		group, _ := ctx.Value(ctxkey.Group).(*Group)
+		if resolvedGroupID > 0 && (group == nil || group.ID != resolvedGroupID) {
+			if s.groupRepo == nil {
+				return nil, ErrSchedulerCacheNotReady
+			}
+			group, err = s.groupRepo.GetByIDLite(ctx, resolvedGroupID)
+			if err != nil {
+				return nil, err
+			}
+		}
+		groupPlatform := platform
+		allowLegacyMixed := GroupPlatformSupportsMixedScheduling(platform)
+		if group != nil {
+			groupPlatform = group.Platform
+			allowLegacyMixed = GroupPlatformSupportsMixedScheduling(group.Platform)
+		} else if forcedPlatform != "" {
+			groupPlatform = forcedPlatform
+		} else if groupPlatform == "" {
+			groupPlatform = legacyGroupPlatformForEndpointProtocol(protocol)
+			allowLegacyMixed = true
+		}
+		return filterAccountsCompatibleForScheduler(
+			ctx,
+			accounts,
+			group,
+			resolvedGroupID,
+			groupPlatform,
+			request,
+			s.cfg.Gateway.CrossProviderCompatibilityEnabled,
+			allowLegacyMixed,
+		), nil
+	}
 
 	useMixedScheduling := platform == PlatformGemini && !hasForcePlatform
 	queryPlatforms := []string{platform}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/stretchr/testify/require"
 )
 
@@ -296,6 +297,67 @@ func (s *openAISnapshotCacheStub) GetAccount(ctx context.Context, accountID int6
 	}
 	cloned := *account
 	return &cloned, nil
+}
+
+func TestOpenAIAdvancedSchedulerDBRecheckUsesFullRequestDescriptor(t *testing.T) {
+	groupID := int64(290)
+	group := &Group{
+		ID:                groupID,
+		Platform:          PlatformOpenAI,
+		Status:            StatusActive,
+		Hydrated:          true,
+		EndpointProtocols: []string{string(EndpointProtocolOpenAIResponses)},
+	}
+	stale := &Account{
+		ID:          2901,
+		Platform:    PlatformOpenCode,
+		Type:        AccountTypeAPIKey,
+		Status:      StatusActive,
+		Schedulable: true,
+		AccountGroups: []AccountGroup{{
+			AccountID:                    2901,
+			GroupID:                      groupID,
+			EndpointCompatibilityEnabled: true,
+		}},
+	}
+	latest := *stale
+	latest.AccountGroups = []AccountGroup{{
+		AccountID:                    2901,
+		GroupID:                      groupID,
+		EndpointCompatibilityEnabled: false,
+	}}
+	svc := &OpenAIGatewayService{
+		accountRepo:       schedulerTestOpenAIAccountRepo{accounts: []Account{latest}},
+		schedulerSnapshot: &SchedulerSnapshotService{cache: &openAISnapshotCacheStub{accountsByID: map[int64]*Account{stale.ID: stale}}},
+	}
+	ctx := WithEndpointProtocol(context.Background(), EndpointProtocolOpenAIResponses)
+	ctx = WithCrossProviderCompatibilityEnabled(ctx, true)
+	ctx = context.WithValue(ctx, ctxkey.Group, group)
+	request := RequestDescriptor{
+		Protocol:       EndpointProtocolOpenAIResponses,
+		ForcedPlatform: PlatformOpenCode,
+	}
+
+	require.Nil(t, svc.recheckSelectedOpenAIAccountFromDBForRequest(
+		ctx,
+		stale,
+		&groupID,
+		PlatformOpenAI,
+		request,
+		false,
+		"",
+	), "fresh DB relation policy must override a stale cache candidate")
+
+	svc.accountRepo = schedulerTestOpenAIAccountRepo{accounts: []Account{*stale}}
+	require.NotNil(t, svc.recheckSelectedOpenAIAccountFromDBForRequest(
+		ctx,
+		stale,
+		&groupID,
+		PlatformOpenAI,
+		request,
+		false,
+		"",
+	))
 }
 
 func TestOpenAIGatewayService_OpenAIAdvancedSchedulerRuntimeSettings_DBOverridesConfig(t *testing.T) {

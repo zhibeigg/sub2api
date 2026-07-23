@@ -1466,31 +1466,6 @@ func (s *adminServiceImpl) checkMixedChannelRisk(ctx context.Context, currentAcc
 	return nil
 }
 
-// validateAccountGroupPlatform 验证账号平台与分组平台是否兼容。
-// 独立平台账号通常只能绑定同平台分组；开启混合调度的 Cursor 账号还可以
-// 按模型产品族绑定 Anthropic、Gemini、OpenAI 与 Grok 分组。
-func (s *adminServiceImpl) validateAccountGroupPlatform(ctx context.Context, platform string, groupIDs []int64, mixedScheduling bool) error {
-	for _, groupID := range groupIDs {
-		group, err := s.groupRepo.GetByID(ctx, groupID)
-		if err != nil {
-			return err
-		}
-		compatible := group.Platform == platform ||
-			(platform == PlatformCursor && mixedScheduling && CursorSupportsGroupPlatform(group.Platform))
-		if !compatible {
-			return infraerrors.Newf(
-				http.StatusBadRequest,
-				"ACCOUNT_GROUP_PLATFORM_MISMATCH",
-				"account platform %q cannot be bound to group %d with platform %q",
-				platform,
-				groupID,
-				group.Platform,
-			)
-		}
-	}
-	return nil
-}
-
 func (s *adminServiceImpl) validateGroupIDsExist(ctx context.Context, groupIDs []int64) error {
 	if len(groupIDs) == 0 {
 		return nil

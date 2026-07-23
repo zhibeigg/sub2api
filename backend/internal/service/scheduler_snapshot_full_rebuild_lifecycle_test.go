@@ -261,6 +261,41 @@ func newFullRebuildLifecycleService(
 	return NewSchedulerSnapshotService(cache, outbox, accounts, groups, &config.Config{RunMode: runMode})
 }
 
+func TestSchedulerProtocolFullRebuildRetiresObsoleteGroupBuckets(t *testing.T) {
+	const groupID int64 = 100
+	obsolete, ok := NewSchedulerBucket(groupID, EndpointProtocolOpenAIResponses, "")
+	require.True(t, ok)
+	group := &Group{
+		ID:                groupID,
+		Platform:          PlatformOpenAI,
+		Status:            StatusActive,
+		Hydrated:          true,
+		EndpointProtocols: []string{string(EndpointProtocolOpenAIEmbeddings)},
+	}
+	current := schedulerProtocolBucketsForActiveGroup(group)
+	require.Len(t, current, 2)
+	cache := newFullRebuildLifecycleCache(obsolete)
+	groups := &fullRebuildLifecycleGroupRepo{
+		activeIDs: []int64{groupID},
+		fresh:     map[int64]*Group{groupID: group},
+		freshErr:  make(map[int64]error),
+	}
+	accounts := &fullRebuildAccountRepo{}
+	svc := NewSchedulerSnapshotService(cache, nil, accounts, groups, &config.Config{
+		RunMode: config.RunModeStandard,
+		Gateway: config.GatewayConfig{GroupEndpointRoutingEnabled: true},
+	})
+
+	require.NoError(t, svc.rebuildFullSnapshot(context.Background(), "protocol-test"))
+	require.Contains(t, bucketStrings(cache.retiredBuckets()), obsolete.String())
+	for _, bucket := range current {
+		_, published := cache.counts(bucket)
+		require.Equal(t, 1, published, bucket.String())
+	}
+	_, _, freshCalls := groups.stats()
+	require.Equal(t, []int64{groupID, groupID}, freshCalls, "active metadata read and leased lifecycle read must both occur")
+}
+
 func TestSchedulerFullRebuildActiveTombstoneDoesNotBlockFollowingGroupEvent(t *testing.T) {
 	const groupID int64 = 101
 	canonical := schedulerBucketsForGroup(groupID)

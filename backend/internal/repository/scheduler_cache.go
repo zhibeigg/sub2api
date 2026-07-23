@@ -15,17 +15,18 @@ import (
 )
 
 const (
-	schedulerBucketSetKey       = "sched:buckets"
-	schedulerOutboxWatermarkKey = "sched:outbox:watermark"
-	schedulerAccountPrefix      = "sched:acc:"
-	schedulerAccountMetaPrefix  = "sched:meta:"
-	schedulerActivePrefix       = "sched:active:"
-	schedulerReadyPrefix        = "sched:ready:"
-	schedulerVersionPrefix      = "sched:ver:"
-	schedulerEpochPrefix        = "sched:epoch:"
-	schedulerRetiredPrefix      = "sched:retired:"
-	schedulerSnapshotPrefix     = "sched:"
-	schedulerLockPrefix         = "sched:lock:"
+	schedulerBucketSetKey       = "sched:v2:buckets"
+	schedulerOutboxWatermarkKey = "sched:v2:outbox:watermark"
+	schedulerAccountPrefix      = "sched:v2:acc:"
+	schedulerAccountMetaPrefix  = "sched:v2:meta:"
+	schedulerActivePrefix       = "sched:v2:active:"
+	schedulerReadyPrefix        = "sched:v2:ready:"
+	schedulerVersionPrefix      = "sched:v2:ver:"
+	schedulerEpochPrefix        = "sched:v2:epoch:"
+	schedulerRetiredPrefix      = "sched:v2:retired:"
+	schedulerSnapshotPrefix     = "sched:v2:snapshot:"
+	schedulerLockPrefix         = "sched:v2:lock:"
+	schedulerEmptySnapshotID    = "__scheduler_empty_v2__"
 
 	defaultSchedulerSnapshotMGetChunkSize  = 128
 	defaultSchedulerSnapshotWriteChunkSize = 256
@@ -36,7 +37,7 @@ const (
 )
 
 const (
-	schedulerGroupLifecycleLockPrefix      = "sched:group:lifecycle-lock:"
+	schedulerGroupLifecycleLockPrefix      = "sched:v2:group:lifecycle-lock:"
 	schedulerGroupLifecycleOwnerTokenBytes = 16
 )
 
@@ -250,13 +251,17 @@ func (c *schedulerCache) GetSnapshot(ctx context.Context, bucket service.Schedul
 		return nil, false, err
 	}
 	if len(ids) == 0 {
-		// 空快照视为缓存未命中，触发数据库回退查询
-		// 这解决了新分组创建后立即绑定账号时的竞态条件问题
 		return nil, false, nil
+	}
+	if len(ids) == 1 && ids[0] == schedulerEmptySnapshotID {
+		return []*service.Account{}, true, nil
 	}
 
 	keys := make([]string, 0, len(ids))
 	for _, id := range ids {
+		if id == schedulerEmptySnapshotID {
+			return nil, false, nil
+		}
 		keys = append(keys, schedulerAccountMetaKey(id))
 	}
 	values, err := c.mgetChunked(ctx, keys)
@@ -294,7 +299,7 @@ func (c *schedulerCache) CaptureBucketWriteToken(ctx context.Context, bucket ser
 }
 
 func (c *schedulerCache) RetireBucket(ctx context.Context, bucket service.SchedulerBucket) error {
-	snapshotKeyPrefix := fmt.Sprintf("%s%d:%s:%s:v", schedulerSnapshotPrefix, bucket.GroupID, bucket.Platform, bucket.Mode)
+	snapshotKeyPrefix := schedulerSnapshotKeyPrefix(bucket)
 	result, err := retireBucketScript.Run(ctx, c.rdb, []string{
 		schedulerBucketKey(schedulerEpochPrefix, bucket),
 		schedulerBucketKey(schedulerRetiredPrefix, bucket),
@@ -312,7 +317,7 @@ func (c *schedulerCache) RetireBucket(ctx context.Context, bucket service.Schedu
 }
 
 func (c *schedulerCache) ReopenBucket(ctx context.Context, bucket service.SchedulerBucket) (service.SchedulerBucketWriteToken, error) {
-	snapshotKeyPrefix := fmt.Sprintf("%s%d:%s:%s:v", schedulerSnapshotPrefix, bucket.GroupID, bucket.Platform, bucket.Mode)
+	snapshotKeyPrefix := schedulerSnapshotKeyPrefix(bucket)
 	result, err := reopenBucketScript.Run(ctx, c.rdb, []string{
 		schedulerBucketKey(schedulerEpochPrefix, bucket),
 		schedulerBucketKey(schedulerRetiredPrefix, bucket),
@@ -468,7 +473,7 @@ func (c *schedulerCache) writeSnapshotVersionAndReturnAccountIDs(ctx context.Con
 
 func (c *schedulerCache) writeSnapshotAccounts(ctx context.Context, bucket service.SchedulerBucket, version string, accounts []service.Account) error {
 	if len(accounts) == 0 {
-		return nil
+		return c.writeSnapshotMembers(ctx, bucket, version, []redis.Z{{Score: 0, Member: schedulerEmptySnapshotID}})
 	}
 	members := make([]redis.Z, 0, len(accounts))
 	for idx, account := range accounts {
@@ -487,7 +492,7 @@ func (c *schedulerCache) writeSnapshotAccountIDs(ctx context.Context, bucket ser
 
 func schedulerSnapshotMembers(accountIDs []int64) []redis.Z {
 	if len(accountIDs) == 0 {
-		return nil
+		return []redis.Z{{Score: 0, Member: schedulerEmptySnapshotID}}
 	}
 	// 使用序号作为 score，保持数据库返回的排序语义；重复 ID 继续交由 Redis ZADD
 	// 按最后一个 score 覆盖，与直接从账号切片构造成员时的行为一致。
@@ -526,7 +531,7 @@ func (c *schedulerCache) activateSnapshotVersion(ctx context.Context, bucket ser
 	// 旧快照使用 EXPIRE 宽限期而非立即 DEL，避免 reader 竞态。
 	activeKey := schedulerBucketKey(schedulerActivePrefix, bucket)
 	readyKey := schedulerBucketKey(schedulerReadyPrefix, bucket)
-	snapshotKeyPrefix := fmt.Sprintf("%s%d:%s:%s:v", schedulerSnapshotPrefix, bucket.GroupID, bucket.Platform, bucket.Mode)
+	snapshotKeyPrefix := schedulerSnapshotKeyPrefix(bucket)
 
 	keys := []string{
 		activeKey,
@@ -679,15 +684,19 @@ func (c *schedulerCache) SetOutboxWatermark(ctx context.Context, id int64) error
 }
 
 func schedulerBucketKey(prefix string, bucket service.SchedulerBucket) string {
-	return fmt.Sprintf("%s%d:%s:%s", prefix, bucket.GroupID, bucket.Platform, bucket.Mode)
+	return prefix + bucket.String()
 }
 
 func schedulerGroupLifecycleLockKey(groupID int64) string {
 	return schedulerGroupLifecycleLockPrefix + strconv.FormatInt(groupID, 10)
 }
 
+func schedulerSnapshotKeyPrefix(bucket service.SchedulerBucket) string {
+	return schedulerSnapshotPrefix + bucket.String() + ":v"
+}
+
 func schedulerSnapshotKey(bucket service.SchedulerBucket, version string) string {
-	return fmt.Sprintf("%s%d:%s:%s:v%s", schedulerSnapshotPrefix, bucket.GroupID, bucket.Platform, bucket.Mode, version)
+	return schedulerSnapshotKeyPrefix(bucket) + version
 }
 
 func schedulerAccountKey(id string) string {
@@ -917,7 +926,16 @@ func filterSchedulerCredentials(credentials map[string]any) map[string]any {
 	if len(credentials) == 0 {
 		return nil
 	}
-	keys := []string{"model_mapping", "compact_model_mapping", "api_key", "project_id", "oauth_type", "plan_type"}
+	keys := []string{
+		"model_mapping",
+		"compact_model_mapping",
+		"model_protocols",
+		"openai_capabilities",
+		"api_key",
+		"project_id",
+		"oauth_type",
+		"plan_type",
+	}
 	filtered := make(map[string]any)
 	for _, key := range keys {
 		if value, ok := credentials[key]; ok && value != nil {

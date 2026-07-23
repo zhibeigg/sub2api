@@ -59,6 +59,14 @@ func (s *accountRepoStubForBulkUpdate) BindGroups(_ context.Context, accountID i
 	return nil
 }
 
+func (s *accountRepoStubForBulkUpdate) BindAccountGroups(_ context.Context, accountID int64, _ []AccountGroup) error {
+	s.bindGroupsCalls = append(s.bindGroupsCalls, accountID)
+	if err, ok := s.bindGroupErrByID[accountID]; ok {
+		return err
+	}
+	return nil
+}
+
 func (s *accountRepoStubForBulkUpdate) GetByIDs(_ context.Context, ids []int64) ([]*Account, error) {
 	s.getByIDsCalled = true
 	s.getByIDsIDs = append([]int64{}, ids...)
@@ -138,10 +146,20 @@ func TestAdminService_BulkUpdateAccounts_PartialFailureIDs(t *testing.T) {
 		bindGroupErrByID: map[int64]error{
 			2: errors.New("bind failed"),
 		},
+		getByIDAccounts: map[int64]*Account{
+			1: {ID: 1, Platform: PlatformAnthropic, Type: AccountTypeAPIKey, Status: StatusActive},
+			2: {ID: 2, Platform: PlatformAnthropic, Type: AccountTypeAPIKey, Status: StatusActive},
+			3: {ID: 3, Platform: PlatformAnthropic, Type: AccountTypeAPIKey, Status: StatusActive},
+		},
 	}
 	svc := &adminServiceImpl{
 		accountRepo: repo,
-		groupRepo:   &groupRepoStubForAdmin{getByID: &Group{ID: 10, Name: "g10"}},
+		groupRepo: &groupRepoStubForAdmin{getByID: &Group{
+			ID:                10,
+			Name:              "g10",
+			Platform:          PlatformAnthropic,
+			EndpointProtocols: []string{string(EndpointProtocolAnthropicMessages)},
+		}},
 	}
 
 	groupIDs := []int64{10}

@@ -199,7 +199,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 		return nil, err
 	}
 	preferOAuth := platform == PlatformGemini
-	if s.debugModelRoutingEnabled() && platform == PlatformAnthropic && requestedModel != "" {
+	if s.debugModelRoutingEnabled() && requestedModel != "" {
 		logger.LegacyPrintf("service.gateway", "[ModelRoutingDebug] load-aware enabled: group_id=%v model=%s session=%s platform=%s", derefGroupID(groupID), requestedModel, shortSessionHash(sessionHash), platform)
 	}
 
@@ -226,9 +226,10 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 		return excluded
 	}
 
-	// 获取模型路由配置（仅 anthropic 平台）
+	// 获取模型路由配置。协议化调度下所有启用该能力的分组都可使用，
+	// 路由账号仍必须通过下方统一的端点、模型和绑定兼容门禁。
 	var routingAccountIDs []int64
-	if group != nil && requestedModel != "" && group.Platform == PlatformAnthropic {
+	if group != nil && requestedModel != "" && group.ModelRoutingEnabled {
 		routingAccountIDs = group.GetRoutingAccountIDs(requestedModel)
 		if s.debugModelRoutingEnabled() {
 			logger.LegacyPrintf("service.gateway", "[ModelRoutingDebug] context group routing: group_id=%d model=%s enabled=%v rules=%d matched_ids=%v session=%s sticky_account=%d",
@@ -812,20 +813,13 @@ func (s *GatewayService) ResolveGroupByID(ctx context.Context, groupID int64) (*
 }
 
 func (s *GatewayService) routingAccountIDsForRequest(ctx context.Context, groupID *int64, requestedModel string, platform string) []int64 {
-	if groupID == nil || requestedModel == "" || platform != PlatformAnthropic {
+	if groupID == nil || requestedModel == "" {
 		return nil
 	}
 	group, err := s.resolveGroupByID(ctx, *groupID)
 	if err != nil || group == nil {
 		if s.debugModelRoutingEnabled() {
 			logger.LegacyPrintf("service.gateway", "[ModelRoutingDebug] resolve group failed: group_id=%v model=%s platform=%s err=%v", derefGroupID(groupID), requestedModel, platform, err)
-		}
-		return nil
-	}
-	// Preserve existing behavior: model routing only applies to anthropic groups.
-	if group.Platform != PlatformAnthropic {
-		if s.debugModelRoutingEnabled() {
-			logger.LegacyPrintf("service.gateway", "[ModelRoutingDebug] skip: non-anthropic group platform: group_id=%d group_platform=%s model=%s", group.ID, group.Platform, requestedModel)
 		}
 		return nil
 	}
@@ -929,6 +923,9 @@ func (s *GatewayService) listSchedulableAccounts(ctx context.Context, groupID *i
 		}
 		return accounts, useMixed, err
 	}
+	if protocol, ok := EndpointProtocolFromContext(ctx); ok && s.cfg != nil && s.cfg.Gateway.GroupEndpointRoutingEnabled {
+		return s.listProtocolSchedulableAccountsFromDB(ctx, groupID, platform, hasForcePlatform, protocol)
+	}
 	useMixed := GroupPlatformSupportsMixedScheduling(platform) && !hasForcePlatform
 	if useMixed {
 		platforms := MixedSchedulingCandidatePlatforms(platform)
@@ -1007,6 +1004,73 @@ func (s *GatewayService) listSchedulableAccounts(ctx context.Context, groupID *i
 		}
 	}
 	return accounts, useMixed, nil
+}
+
+func (s *GatewayService) listProtocolSchedulableAccountsFromDB(
+	ctx context.Context,
+	groupID *int64,
+	platform string,
+	hasForcePlatform bool,
+	protocol EndpointProtocol,
+) ([]Account, bool, error) {
+	forcedPlatform := ""
+	if hasForcePlatform {
+		forcedPlatform = platform
+	}
+	request := RequestDescriptor{Protocol: protocol, ForcedPlatform: forcedPlatform}
+	platforms := CandidateAccountPlatforms(protocol, forcedPlatform)
+	useMixed := forcedPlatform == "" && len(platforms) > 1
+	if len(platforms) == 0 {
+		return []Account{}, useMixed, nil
+	}
+
+	resolvedGroupID := int64(0)
+	if groupID != nil && *groupID > 0 && (s.cfg == nil || s.cfg.RunMode != config.RunModeSimple) {
+		resolvedGroupID = *groupID
+	}
+	var accounts []Account
+	var err error
+	if resolvedGroupID > 0 {
+		accounts, err = s.accountRepo.ListSchedulableByGroupIDAndPlatforms(ctx, resolvedGroupID, platforms)
+	} else if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
+		accounts, err = s.accountRepo.ListSchedulableByPlatforms(ctx, platforms)
+	} else {
+		accounts, err = s.accountRepo.ListSchedulableUngroupedByPlatforms(ctx, platforms)
+	}
+	if err != nil {
+		return nil, useMixed, err
+	}
+
+	group, _ := ctx.Value(ctxkey.Group).(*Group)
+	if resolvedGroupID > 0 && (group == nil || group.ID != resolvedGroupID) {
+		group, err = s.resolveGroupByID(ctx, resolvedGroupID)
+		if err != nil {
+			return nil, useMixed, err
+		}
+	}
+	groupPlatform := ""
+	allowLegacyMixed := false
+	if group != nil {
+		groupPlatform = group.Platform
+		allowLegacyMixed = GroupPlatformSupportsMixedScheduling(group.Platform)
+	} else if forcedPlatform != "" {
+		groupPlatform = forcedPlatform
+	} else {
+		groupPlatform = legacyGroupPlatformForEndpointProtocol(protocol)
+		allowLegacyMixed = true
+	}
+	crossProviderEnabled := s.cfg != nil && s.cfg.Gateway.CrossProviderCompatibilityEnabled
+	filtered := filterAccountsCompatibleForScheduler(
+		ctx,
+		accounts,
+		group,
+		resolvedGroupID,
+		groupPlatform,
+		request,
+		crossProviderEnabled,
+		allowLegacyMixed,
+	)
+	return filtered, useMixed, nil
 }
 
 // IsSingleAntigravityAccountGroup 检查指定分组是否只有一个 antigravity 平台的可调度账号。

@@ -740,6 +740,43 @@ func (r *groupRepository) ListActive(ctx context.Context) ([]service.Group, erro
 	return outGroups, nil
 }
 
+// ListActiveSchedulerGroups returns the minimal authoritative group projection
+// needed to enumerate protocol scheduler buckets without an N+1 GetByIDLite loop.
+func (r *groupRepository) ListActiveSchedulerGroups(ctx context.Context) ([]service.Group, error) {
+	groups, err := r.client.Group.Query().
+		Where(group.StatusEQ(service.StatusActive)).
+		Select(
+			group.FieldID,
+			group.FieldPlatform,
+			group.FieldEndpointProtocols,
+			group.FieldQuotaPlatform,
+			group.FieldStatus,
+			group.FieldRequireOauthOnly,
+			group.FieldRequirePrivacySet,
+			group.FieldSortOrder,
+		).
+		Order(dbent.Asc(group.FieldSortOrder), dbent.Asc(group.FieldID)).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]service.Group, 0, len(groups))
+	for _, entity := range groups {
+		out = append(out, service.Group{
+			ID:                entity.ID,
+			Platform:          entity.Platform,
+			EndpointProtocols: append([]string(nil), entity.EndpointProtocols...),
+			QuotaPlatform:     entity.QuotaPlatform,
+			Status:            entity.Status,
+			Hydrated:          true,
+			RequireOAuthOnly:  entity.RequireOauthOnly,
+			RequirePrivacySet: entity.RequirePrivacySet,
+			SortOrder:         entity.SortOrder,
+		})
+	}
+	return out, nil
+}
+
 func (r *groupRepository) ListActiveIDs(ctx context.Context) ([]int64, error) {
 	if r.sql != nil {
 		rows, err := r.sql.QueryContext(ctx, `

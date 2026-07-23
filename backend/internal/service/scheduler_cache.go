@@ -44,18 +44,90 @@ func (l SchedulerGroupLifecycleLease) ValidFor(groupID int64) bool {
 	return groupID > 0 && l.GroupID == groupID && l.OwnerToken != ""
 }
 
+const SchedulerBucketSchemaVersion = 2
+
+// SchedulerBucket identifies one provider-independent scheduler candidate set.
+// Protocol buckets are keyed by ingress protocol plus an optional exact account
+// provider restriction. Platform is retained only for legacy callers that do not
+// carry an endpoint protocol in context; new gateway paths must use Protocol.
 type SchedulerBucket struct {
-	GroupID  int64
-	Platform string
-	Mode     string
+	GroupID        int64
+	Protocol       EndpointProtocol
+	ForcedPlatform string
+	Mode           string
+	Platform       string
+}
+
+func NewSchedulerBucket(groupID int64, protocol EndpointProtocol, forcedPlatform string) (SchedulerBucket, bool) {
+	protocol = NormalizeEndpointProtocol(protocol)
+	if !IsValidEndpointProtocol(protocol) {
+		return SchedulerBucket{}, false
+	}
+	forcedPlatform = NormalizePlatform(forcedPlatform)
+	if forcedPlatform != "" && !IsValidPlatform(forcedPlatform) {
+		return SchedulerBucket{}, false
+	}
+	mode := SchedulerModeMixed
+	candidatePlatforms := CandidateAccountPlatforms(protocol, forcedPlatform)
+	if len(candidatePlatforms) == 0 {
+		return SchedulerBucket{}, false
+	}
+	if forcedPlatform != "" {
+		mode = SchedulerModeForced
+	} else if len(candidatePlatforms) == 1 {
+		mode = SchedulerModeSingle
+	}
+	return SchedulerBucket{
+		GroupID:        groupID,
+		Protocol:       protocol,
+		ForcedPlatform: forcedPlatform,
+		Mode:           mode,
+	}, true
+}
+
+func (b SchedulerBucket) IsProtocolBucket() bool {
+	return IsValidEndpointProtocol(b.Protocol)
+}
+
+func (b SchedulerBucket) RequestDescriptor() RequestDescriptor {
+	return RequestDescriptor{
+		Protocol:       NormalizeEndpointProtocol(b.Protocol),
+		ForcedPlatform: NormalizePlatform(b.ForcedPlatform),
+	}
 }
 
 func (b SchedulerBucket) String() string {
-	return fmt.Sprintf("%d:%s:%s", b.GroupID, b.Platform, b.Mode)
+	if b.IsProtocolBucket() {
+		forcedPlatform := NormalizePlatform(b.ForcedPlatform)
+		if forcedPlatform == "" {
+			forcedPlatform = "-"
+		}
+		return fmt.Sprintf("v%d:%d:%s:%s:%s", SchedulerBucketSchemaVersion, b.GroupID, NormalizeEndpointProtocol(b.Protocol), forcedPlatform, b.Mode)
+	}
+	return fmt.Sprintf("%d:%s:%s", b.GroupID, NormalizePlatform(b.Platform), b.Mode)
 }
 
 func ParseSchedulerBucket(raw string) (SchedulerBucket, bool) {
 	parts := strings.Split(raw, ":")
+	if len(parts) == 5 && parts[0] == fmt.Sprintf("v%d", SchedulerBucketSchemaVersion) {
+		groupID, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil {
+			return SchedulerBucket{}, false
+		}
+		protocol := NormalizeEndpointProtocol(EndpointProtocol(parts[2]))
+		if !IsValidEndpointProtocol(protocol) {
+			return SchedulerBucket{}, false
+		}
+		forcedPlatform := parts[3]
+		if forcedPlatform == "-" {
+			forcedPlatform = ""
+		}
+		bucket, ok := NewSchedulerBucket(groupID, protocol, forcedPlatform)
+		if !ok || bucket.Mode != parts[4] {
+			return SchedulerBucket{}, false
+		}
+		return bucket, true
+	}
 	if len(parts) != 3 {
 		return SchedulerBucket{}, false
 	}
@@ -63,12 +135,13 @@ func ParseSchedulerBucket(raw string) (SchedulerBucket, bool) {
 	if err != nil {
 		return SchedulerBucket{}, false
 	}
-	if parts[1] == "" || parts[2] == "" {
+	platform := NormalizePlatform(parts[1])
+	if platform == "" || parts[2] == "" {
 		return SchedulerBucket{}, false
 	}
 	return SchedulerBucket{
 		GroupID:  groupID,
-		Platform: parts[1],
+		Platform: platform,
 		Mode:     parts[2],
 	}, true
 }

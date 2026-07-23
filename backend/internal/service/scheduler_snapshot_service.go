@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 )
 
@@ -33,11 +34,13 @@ const (
 	outboxMaxIDErrorLogSampleInterval     = time.Minute
 )
 
-// batchSeenKey tracks completed per-platform rebuilds and group lifecycle work
-// within one pollOutbox call.
+// batchSeenKey tracks completed canonical rebuilds and group lifecycle work
+// within one pollOutbox call. platform remains as a legacy test/compatibility
+// marker while protocol buckets are rebuilt as one authoritative group set.
 type batchSeenKey struct {
 	groupID   int64
 	platform  string
+	canonical bool
 	lifecycle bool
 }
 
@@ -47,17 +50,22 @@ type schedulerBucketWriteTask struct {
 }
 
 type schedulerAccountQueryKey struct {
-	groupID  int64
-	platform string
+	groupID        int64
+	protocol       EndpointProtocol
+	forcedPlatform string
+	platform       string
 }
 
-// 查询结果只在一次 rebuild batch 内，按原始 groupID+platform 复用成功的 single/forced 查询；
-// mixed 与历史模式保持独立。每个 task 都用 defer 消费 remaining，最后一个消费者会立即释放结果，
-// 避免把账号切片的生命周期扩大到整轮 full rebuild。
+// 查询结果只在一次 rebuild batch 内复用。协议桶按完整的 protocol +
+// forced account platform 身份隔离；旧 single/forced 平台桶继续按
+// groupID+platform 复用。每个 task 都用 defer 消费 remaining，最后一个
+// 消费者会立即释放结果，避免把账号切片生命周期扩大到整轮 full rebuild。
 type schedulerAccountQueryCache struct {
 	remaining          map[schedulerAccountQueryKey]int
 	accounts           map[schedulerAccountQueryKey][]Account
 	snapshotAccountIDs map[schedulerAccountQueryKey][]int64
+	groups             map[int64]*Group
+	groupLoaded        map[int64]bool
 }
 
 // schedulerSnapshotAccountIDWriter 是 SchedulerCache 的可选批次优化能力。
@@ -73,6 +81,8 @@ func newSchedulerAccountQueryCache(taskSets ...[]schedulerBucketWriteTask) *sche
 		remaining:          make(map[schedulerAccountQueryKey]int),
 		accounts:           make(map[schedulerAccountQueryKey][]Account),
 		snapshotAccountIDs: make(map[schedulerAccountQueryKey][]int64),
+		groups:             make(map[int64]*Group),
+		groupLoaded:        make(map[int64]bool),
 	}
 	for _, tasks := range taskSets {
 		for _, task := range tasks {
@@ -84,11 +94,28 @@ func newSchedulerAccountQueryCache(taskSets ...[]schedulerBucketWriteTask) *sche
 	return queries
 }
 
+func (c *schedulerAccountQueryCache) seedGroup(group *Group) {
+	if c == nil || group == nil || group.ID <= 0 {
+		return
+	}
+	copyGroup := *group
+	copyGroup.EndpointProtocols = append([]string(nil), group.EndpointProtocols...)
+	c.groups[group.ID] = &copyGroup
+	c.groupLoaded[group.ID] = true
+}
+
 func schedulerAccountQueryKeyForBucket(bucket SchedulerBucket) (schedulerAccountQueryKey, bool) {
+	if bucket.IsProtocolBucket() {
+		return schedulerAccountQueryKey{
+			groupID:        bucket.GroupID,
+			protocol:       NormalizeEndpointProtocol(bucket.Protocol),
+			forcedPlatform: NormalizePlatform(bucket.ForcedPlatform),
+		}, true
+	}
 	if bucket.Mode != SchedulerModeSingle && bucket.Mode != SchedulerModeForced {
 		return schedulerAccountQueryKey{}, false
 	}
-	return schedulerAccountQueryKey{groupID: bucket.GroupID, platform: bucket.Platform}, true
+	return schedulerAccountQueryKey{groupID: bucket.GroupID, platform: NormalizePlatform(bucket.Platform)}, true
 }
 
 func (c *schedulerAccountQueryCache) release(bucket SchedulerBucket) {
@@ -111,11 +138,16 @@ func (c *schedulerAccountQueryCache) release(bucket SchedulerBucket) {
 
 type schedulerGroupLifecyclePlan struct {
 	active bool
+	group  *Group
 	tasks  []schedulerBucketWriteTask
 }
 
 type schedulerActiveGroupIDLister interface {
 	ListActiveIDs(ctx context.Context) ([]int64, error)
+}
+
+type schedulerActiveGroupLister interface {
+	ListActiveSchedulerGroups(ctx context.Context) ([]Group, error)
 }
 
 type SchedulerSnapshotService struct {
@@ -208,9 +240,28 @@ func (s *SchedulerSnapshotService) Stop() {
 }
 
 func (s *SchedulerSnapshotService) ListSchedulableAccounts(ctx context.Context, groupID *int64, platform string, hasForcePlatform bool) ([]Account, bool, error) {
-	useMixed := (GroupPlatformSupportsMixedScheduling(platform)) && !hasForcePlatform
-	mode := s.resolveMode(platform, hasForcePlatform)
-	bucket := s.bucketFor(groupID, platform, mode)
+	normalizedGroupID := s.normalizeGroupID(groupID)
+	protocol, hasProtocol := EndpointProtocolFromContext(ctx)
+	hasProtocol = hasProtocol && s.protocolBucketsEnabled()
+	forcedPlatform := ""
+	if hasForcePlatform {
+		forcedPlatform = platform
+	}
+
+	var bucket SchedulerBucket
+	var useMixed bool
+	if hasProtocol {
+		var ok bool
+		bucket, ok = NewSchedulerBucket(normalizedGroupID, protocol, forcedPlatform)
+		if !ok {
+			return nil, false, fmt.Errorf("invalid scheduler request bucket: group=%d protocol=%s forced_platform=%s", normalizedGroupID, protocol, forcedPlatform)
+		}
+		useMixed = bucket.Mode == SchedulerModeMixed
+	} else {
+		useMixed = GroupPlatformSupportsMixedScheduling(platform) && !hasForcePlatform
+		bucket = s.bucketFor(groupID, platform, s.resolveMode(platform, hasForcePlatform))
+	}
+
 	var writeToken SchedulerBucketWriteToken
 	canPublish := false
 
@@ -240,8 +291,12 @@ func (s *SchedulerSnapshotService) ListSchedulableAccounts(ctx context.Context, 
 
 	fallbackCtx, cancel := s.withFallbackTimeout(ctx)
 	defer cancel()
+	queries := newSchedulerAccountQueryCache()
+	if group, ok := ctx.Value(ctxkey.Group).(*Group); ok && group != nil && group.ID == normalizedGroupID {
+		queries.seedGroup(group)
+	}
 
-	accounts, err := s.loadAccountsFromDB(fallbackCtx, bucket, useMixed)
+	accounts, err := s.loadAccountsFromDB(fallbackCtx, bucket, queries)
 	if err != nil {
 		return nil, useMixed, err
 	}
@@ -557,6 +612,9 @@ func (s *SchedulerSnapshotService) handleBulkAccountEvent(ctx context.Context, p
 	for gid := range rebuildGroupSet {
 		rebuildGroupIDs = append(rebuildGroupIDs, gid)
 	}
+	if s.protocolBucketsEnabled() {
+		return s.rebuildByGroupIDs(ctx, rebuildGroupIDs, "account_bulk_change", seen)
+	}
 
 	// 缺失账户无法确定原平台，保留五平台重建以避免遗留旧快照。
 	if !allAccountsFound {
@@ -675,6 +733,7 @@ func (s *SchedulerSnapshotService) reconcileGroupLifecycle(ctx context.Context, 
 	}
 	if plan.active {
 		queries := newSchedulerAccountQueryCache(plan.tasks)
+		queries.seedGroup(plan.group)
 		for _, task := range plan.tasks {
 			if err := s.rebuildBucketWithTokenPolicyAndQueryCache(ctx, task, "group_change", true, queries); err != nil {
 				return err
@@ -721,26 +780,42 @@ func (s *SchedulerSnapshotService) prepareGroupLifecycle(ctx context.Context, gr
 		return schedulerGroupLifecyclePlan{}, fmt.Errorf("untrusted scheduler group lifecycle state: group=%d", groupID)
 	}
 
-	plan = schedulerGroupLifecyclePlan{active: !missing && group.IsActive()}
+	plan = schedulerGroupLifecyclePlan{active: !missing && group.IsActive(), group: group}
+	registered := knownHistorical
+	if (!plan.active || s.protocolBucketsEnabled()) && registered == nil {
+		registered, err = s.cache.ListBuckets(lifecycleCtx)
+		if err != nil {
+			return schedulerGroupLifecyclePlan{}, err
+		}
+	}
+
 	if plan.active {
-		buckets := schedulerBucketsForGroup(groupID)
+		buckets := s.canonicalBucketsForActiveGroup(group)
+		current := make(map[SchedulerBucket]struct{}, len(buckets))
 		plan.tasks = make([]schedulerBucketWriteTask, 0, len(buckets))
 		for _, bucket := range buckets {
+			current[bucket] = struct{}{}
 			token, err := s.cache.ReopenBucket(lifecycleCtx, bucket)
 			if err != nil {
 				return schedulerGroupLifecyclePlan{}, err
 			}
 			plan.tasks = append(plan.tasks, schedulerBucketWriteTask{bucket: bucket, token: token})
 		}
-	} else {
-		registered := knownHistorical
-		if registered == nil {
-			registered, err = s.cache.ListBuckets(lifecycleCtx)
-			if err != nil {
-				return schedulerGroupLifecyclePlan{}, err
+		if s.protocolBucketsEnabled() {
+			for _, bucket := range dedupeBuckets(registered) {
+				if bucket.GroupID != groupID {
+					continue
+				}
+				if _, ok := current[bucket]; ok {
+					continue
+				}
+				if err := s.cache.RetireBucket(lifecycleCtx, bucket); err != nil {
+					return schedulerGroupLifecyclePlan{}, err
+				}
 			}
 		}
-		buckets := schedulerBucketsForGroup(groupID)
+	} else {
+		buckets := s.canonicalBuckets(groupID)
 		for _, bucket := range registered {
 			if bucket.GroupID == groupID {
 				buckets = append(buckets, bucket)
@@ -773,6 +848,7 @@ func markGroupLifecycleSeen(seen map[batchSeenKey]struct{}, groupID int64) {
 		return
 	}
 	seen[batchSeenKey{groupID: groupID, lifecycle: true}] = struct{}{}
+	seen[batchSeenKey{groupID: groupID, canonical: true}] = struct{}{}
 	for _, platform := range schedulerSnapshotPlatforms() {
 		seen[batchSeenKey{groupID: groupID, platform: platform}] = struct{}{}
 	}
@@ -782,28 +858,35 @@ func (s *SchedulerSnapshotService) rebuildByAccount(ctx context.Context, account
 	if account == nil {
 		return nil
 	}
-	groupIDs = s.normalizeGroupIDs(groupIDs)
-	if len(groupIDs) == 0 {
-		return nil
-	}
-
-	buckets := s.bucketsForPlatform(account.Platform, groupIDs, seen)
-	if IsMixedSchedulingCapablePlatform(account.Platform) && account.IsMixedSchedulingEnabled() {
-		for _, groupPlatform := range schedulerSnapshotPlatforms() {
-			if !GroupPlatformSupportsMixedScheduling(groupPlatform) {
-				continue
-			}
-			for _, candidatePlatform := range MixedSchedulingCandidatePlatforms(groupPlatform) {
-				if candidatePlatform == account.Platform {
-					buckets = append(buckets, s.bucketsForPlatform(groupPlatform, groupIDs, seen)...)
-					break
+	if !s.protocolBucketsEnabled() {
+		groupIDs = s.normalizeGroupIDs(groupIDs)
+		if len(groupIDs) == 0 {
+			return nil
+		}
+		buckets := s.bucketsForPlatform(account.Platform, groupIDs, seen)
+		if IsMixedSchedulingCapablePlatform(account.Platform) && account.IsMixedSchedulingEnabled() {
+			for _, groupPlatform := range schedulerSnapshotPlatforms() {
+				if !GroupPlatformSupportsMixedScheduling(groupPlatform) {
+					continue
+				}
+				for _, candidatePlatform := range MixedSchedulingCandidatePlatforms(groupPlatform) {
+					if candidatePlatform == account.Platform {
+						buckets = append(buckets, s.bucketsForPlatform(groupPlatform, groupIDs, seen)...)
+						break
+					}
 				}
 			}
 		}
+		return s.rebuildBuckets(ctx, buckets, reason)
 	}
-	return s.rebuildBuckets(ctx, buckets, reason)
+	// Account platform/capability changes can remove an account from protocols it
+	// used to support. Rebuild every current canonical bucket for the affected
+	// groups so stale protocol snapshots are cleared as well as newly populated.
+	return s.rebuildByGroupIDs(ctx, groupIDs, reason, seen)
 }
 
+// schedulerSnapshotPlatforms remains the canonical legacy provider order for
+// callers without endpoint protocol context and compatibility tests.
 func schedulerSnapshotPlatforms() [9]string {
 	return [9]string{PlatformAnthropic, PlatformGemini, PlatformOpenAI, PlatformAntigravity, PlatformGrok, PlatformAdobe, PlatformCursor, PlatformKiro, PlatformOpenCode}
 }
@@ -816,6 +899,8 @@ func schedulerBucketsForGroup(groupID int64) []SchedulerBucket {
 	return schedulerCanonicalBuckets(groupID)
 }
 
+// schedulerCanonicalBuckets is the legacy platform-bucket canonical set kept
+// for the emergency rollback path and existing compatibility tests.
 func schedulerCanonicalBuckets(groupID int64) []SchedulerBucket {
 	platforms := schedulerSnapshotPlatforms()
 	buckets := make([]SchedulerBucket, 0, len(platforms)*3)
@@ -831,7 +916,126 @@ func schedulerCanonicalBuckets(groupID int64) []SchedulerBucket {
 	return buckets
 }
 
+func schedulerProtocolCanonicalBuckets(groupID int64) []SchedulerBucket {
+	return schedulerBucketsForProtocols(groupID, protocolStrings(AllEndpointProtocols()))
+}
+
+func schedulerProtocolBucketsForActiveGroup(group *Group) []SchedulerBucket {
+	if group == nil || group.ID <= 0 || !group.IsActive() {
+		return nil
+	}
+	protocols := GroupEndpointProtocols(group)
+	// Synthetic test doubles and pre-migration in-memory groups can omit both
+	// platform and protocols. A persisted group always has a platform, so this
+	// fallback cannot broaden a malformed real group with an explicit platform.
+	if len(protocols) == 0 && NormalizePlatform(group.Platform) == "" {
+		protocols = protocolStrings(AllEndpointProtocols())
+	}
+	return schedulerBucketsForProtocols(group.ID, protocols)
+}
+
+func (s *SchedulerSnapshotService) protocolBucketsEnabled() bool {
+	return s != nil && s.cfg != nil && s.cfg.Gateway.GroupEndpointRoutingEnabled
+}
+
+func (s *SchedulerSnapshotService) canonicalBuckets(groupID int64) []SchedulerBucket {
+	if s.protocolBucketsEnabled() {
+		return schedulerProtocolCanonicalBuckets(groupID)
+	}
+	return schedulerCanonicalBuckets(groupID)
+}
+
+func (s *SchedulerSnapshotService) canonicalBucketsForActiveGroup(group *Group) []SchedulerBucket {
+	if s.protocolBucketsEnabled() {
+		return schedulerProtocolBucketsForActiveGroup(group)
+	}
+	if group == nil || group.ID <= 0 || !group.IsActive() {
+		return nil
+	}
+	return schedulerCanonicalBuckets(group.ID)
+}
+
+func schedulerBucketsForProtocols(groupID int64, protocols []string) []SchedulerBucket {
+	normalized, err := NormalizeEndpointProtocolsAllowEmpty(protocols)
+	if err != nil || len(normalized) == 0 {
+		return nil
+	}
+	buckets := make([]SchedulerBucket, 0, len(normalized)*4)
+	for _, rawProtocol := range normalized {
+		protocol := NormalizeEndpointProtocol(EndpointProtocol(rawProtocol))
+		if bucket, ok := NewSchedulerBucket(groupID, protocol, ""); ok {
+			buckets = append(buckets, bucket)
+		}
+		for _, forcedPlatform := range CandidateAccountPlatforms(protocol) {
+			if bucket, ok := NewSchedulerBucket(groupID, protocol, forcedPlatform); ok {
+				buckets = append(buckets, bucket)
+			}
+		}
+	}
+	return dedupeBuckets(buckets)
+}
+
 func (s *SchedulerSnapshotService) rebuildByGroupIDs(ctx context.Context, groupIDs []int64, reason string, seen map[batchSeenKey]struct{}) error {
+	if !s.protocolBucketsEnabled() {
+		return s.rebuildByGroupIDsLegacy(ctx, groupIDs, reason, seen)
+	}
+	groupIDs = s.normalizeGroupIDs(groupIDs)
+	if len(groupIDs) == 0 {
+		return nil
+	}
+
+	buckets := make([]SchedulerBucket, 0)
+	groups := make(map[int64]*Group)
+	markCanonical := make([]int64, 0, len(groupIDs))
+	for _, groupID := range groupIDs {
+		if seen != nil {
+			if _, ok := seen[batchSeenKey{groupID: groupID, lifecycle: true}]; ok {
+				continue
+			}
+			if _, ok := seen[batchSeenKey{groupID: groupID, canonical: true}]; ok {
+				continue
+			}
+		}
+
+		if groupID == 0 {
+			buckets = append(buckets, s.canonicalBuckets(0)...)
+			markCanonical = append(markCanonical, groupID)
+			continue
+		}
+		if s.groupRepo == nil {
+			return ErrSchedulerCacheNotReady
+		}
+		group, err := s.groupRepo.GetByIDLite(ctx, groupID)
+		if errors.Is(err, ErrGroupNotFound) || (err == nil && (group == nil || !group.IsActive())) {
+			if _, lifecycleErr := s.prepareGroupLifecycle(ctx, groupID, nil); lifecycleErr != nil {
+				return lifecycleErr
+			}
+			markGroupLifecycleSeen(seen, groupID)
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if group.ID != groupID || !group.Hydrated {
+			return fmt.Errorf("untrusted scheduler group rebuild state: group=%d", groupID)
+		}
+		groups[groupID] = group
+		buckets = append(buckets, s.canonicalBucketsForActiveGroup(group)...)
+		markCanonical = append(markCanonical, groupID)
+	}
+
+	if err := s.rebuildBucketsWithGroups(ctx, buckets, groups, reason); err != nil {
+		return err
+	}
+	if seen != nil {
+		for _, groupID := range markCanonical {
+			seen[batchSeenKey{groupID: groupID, canonical: true}] = struct{}{}
+		}
+	}
+	return nil
+}
+
+func (s *SchedulerSnapshotService) rebuildByGroupIDsLegacy(ctx context.Context, groupIDs []int64, reason string, seen map[batchSeenKey]struct{}) error {
 	groupIDs = s.normalizeGroupIDs(groupIDs)
 	if len(groupIDs) == 0 {
 		return nil
@@ -850,10 +1054,6 @@ func (s *SchedulerSnapshotService) bucketsForPlatform(platform string, groupIDs 
 	}
 	buckets := make([]SchedulerBucket, 0, len(groupIDs)*3)
 	for _, gid := range groupIDs {
-		// Within a single poll batch, skip (groupID, platform) pairs that were
-		// already rebuilt. The first rebuild loads fresh DB data for all accounts
-		// in the group, so subsequent rebuilds for the same group+platform within
-		// the same batch are redundant.
 		if seen != nil {
 			key := batchSeenKey{groupID: gid, platform: platform}
 			if _, exists := seen[key]; exists {
@@ -871,8 +1071,15 @@ func (s *SchedulerSnapshotService) bucketsForPlatform(platform string, groupIDs 
 }
 
 func (s *SchedulerSnapshotService) rebuildBuckets(ctx context.Context, buckets []SchedulerBucket, reason string) error {
+	return s.rebuildBucketsWithGroups(ctx, buckets, nil, reason)
+}
+
+func (s *SchedulerSnapshotService) rebuildBucketsWithGroups(ctx context.Context, buckets []SchedulerBucket, groups map[int64]*Group, reason string) error {
 	tasks, firstErr := s.prepareBucketWriteTasks(ctx, buckets)
 	queries := newSchedulerAccountQueryCache(tasks)
+	for _, group := range groups {
+		queries.seedGroup(group)
+	}
 	if err := s.rebuildPreparedBucketTasks(ctx, tasks, reason, false, queries); err != nil && firstErr == nil {
 		firstErr = err
 	}
@@ -1016,9 +1223,8 @@ func (s *SchedulerSnapshotService) rebuildFullSnapshot(ctx context.Context, reas
 		return ErrSchedulerCacheNotReady
 	}
 
-	// 当前模式所需的全局读取必须先成功：桶注册表始终必需，standard 还需活跃分组 ID；
+	// 当前模式所需的全局读取必须先成功：桶注册表始终必需，standard 还需活跃分组配置；
 	// 失败时不执行 Capture/Retire/Reopen 或 DB 查询。
-	// simple 模式不获取分组生命周期权威；standard 的 stale candidate 仍须在租约内 fresh 确认后才能退休。
 	registered, err := s.cache.ListBuckets(ctx)
 	if err != nil {
 		return err
@@ -1026,22 +1232,25 @@ func (s *SchedulerSnapshotService) rebuildFullSnapshot(ctx context.Context, reas
 	registered = dedupeBuckets(registered)
 
 	if s.isRunModeSimple() {
-		canonical := schedulerCanonicalBuckets(0)
+		canonical := s.canonicalBuckets(0)
 		captured, err := s.captureFullRebuildCanonicalTasks(ctx, canonical)
 		if err != nil {
 			return err
 		}
 		ordinary := appendBucketsExcept(nil, registered, canonical)
-		return s.prepareAndRebuildFullSnapshot(ctx, captured, nil, ordinary, reason)
+		return s.prepareAndRebuildFullSnapshot(ctx, captured, nil, ordinary, nil, reason)
 	}
 
-	activeGroupIDs, err := s.listActiveSchedulerGroupIDs(ctx)
+	activeGroupList, err := s.listActiveSchedulerGroups(ctx)
 	if err != nil {
 		return err
 	}
-	activeGroups := make(map[int64]struct{}, len(activeGroupIDs))
-	for _, groupID := range activeGroupIDs {
-		activeGroups[groupID] = struct{}{}
+	activeGroups := make(map[int64]*Group, len(activeGroupList))
+	queryGroups := make(map[int64]*Group, len(activeGroupList))
+	for i := range activeGroupList {
+		group := &activeGroupList[i]
+		activeGroups[group.ID] = group
+		queryGroups[group.ID] = group
 	}
 
 	registeredByGroup := make(map[int64][]SchedulerBucket)
@@ -1049,7 +1258,7 @@ func (s *SchedulerSnapshotService) rebuildFullSnapshot(ctx context.Context, reas
 		registeredByGroup[bucket.GroupID] = append(registeredByGroup[bucket.GroupID], bucket)
 	}
 
-	groupZeroCanonical := schedulerCanonicalBuckets(0)
+	groupZeroCanonical := s.canonicalBuckets(0)
 	capturedTasks, err := s.captureFullRebuildCanonicalTasks(ctx, groupZeroCanonical)
 	if err != nil {
 		return err
@@ -1062,21 +1271,26 @@ func (s *SchedulerSnapshotService) rebuildFullSnapshot(ctx context.Context, reas
 	}
 
 	reopenedTasks := make([]schedulerBucketWriteTask, 0)
-	for _, groupID := range activeGroupIDs {
-		canonical := schedulerBucketsForGroup(groupID)
+	for i := range activeGroupList {
+		group := &activeGroupList[i]
+		groupID := group.ID
+		canonical := s.canonicalBucketsForActiveGroup(group)
 		canonicalTasks, captureErr := s.captureFullRebuildCanonicalTasks(ctx, canonical)
-		if captureErr == nil {
+		obsolete := appendBucketsExcept(nil, registeredByGroup[groupID], canonical)
+		needsLifecycle := s.protocolBucketsEnabled() && len(obsolete) > 0
+		if captureErr == nil && !needsLifecycle {
 			capturedTasks = append(capturedTasks, canonicalTasks...)
-			ordinaryBuckets = appendBucketsExcept(ordinaryBuckets, registeredByGroup[groupID], canonical)
+			if !s.protocolBucketsEnabled() {
+				ordinaryBuckets = append(ordinaryBuckets, obsolete...)
+			}
 			continue
 		}
-		if !errors.Is(captureErr, ErrSchedulerBucketRetired) && !errors.Is(captureErr, ErrSchedulerBucketWriteFenced) {
+		if captureErr != nil && !errors.Is(captureErr, ErrSchedulerBucketRetired) && !errors.Is(captureErr, ErrSchedulerBucketWriteFenced) {
 			return captureErr
 		}
 
-		// A prior full_rebuild event can observe the active state committed for a
-		// later group_changed event. Recover here under fresh authority so the
-		// earlier event cannot block the outbox watermark before that event runs.
+		// A tombstone or obsolete protocol bucket requires a fresh authority check
+		// under the group lifecycle lease. Captured pre-check tokens are discarded.
 		knownHistorical := registeredByGroup[groupID]
 		if knownHistorical == nil {
 			knownHistorical = []SchedulerBucket{}
@@ -1087,7 +1301,14 @@ func (s *SchedulerSnapshotService) rebuildFullSnapshot(ctx context.Context, reas
 		}
 		if plan.active {
 			reopenedTasks = append(reopenedTasks, plan.tasks...)
-			ordinaryBuckets = appendBucketsExcept(ordinaryBuckets, registeredByGroup[groupID], canonical)
+			queryGroups[groupID] = plan.group
+			if !s.protocolBucketsEnabled() {
+				current := make([]SchedulerBucket, 0, len(plan.tasks))
+				for _, task := range plan.tasks {
+					current = append(current, task.bucket)
+				}
+				ordinaryBuckets = appendBucketsExcept(ordinaryBuckets, registeredByGroup[groupID], current)
+			}
 		}
 	}
 
@@ -1109,50 +1330,89 @@ func (s *SchedulerSnapshotService) rebuildFullSnapshot(ctx context.Context, reas
 		}
 		if plan.active {
 			reopenedTasks = append(reopenedTasks, plan.tasks...)
-			ordinaryBuckets = appendBucketsExcept(ordinaryBuckets, registeredByGroup[groupID], schedulerBucketsForGroup(groupID))
+			queryGroups[groupID] = plan.group
+			if !s.protocolBucketsEnabled() {
+				current := make([]SchedulerBucket, 0, len(plan.tasks))
+				for _, task := range plan.tasks {
+					current = append(current, task.bucket)
+				}
+				ordinaryBuckets = appendBucketsExcept(ordinaryBuckets, registeredByGroup[groupID], current)
+			}
 		}
 	}
 
-	return s.prepareAndRebuildFullSnapshot(ctx, capturedTasks, reopenedTasks, ordinaryBuckets, reason)
+	return s.prepareAndRebuildFullSnapshot(ctx, capturedTasks, reopenedTasks, ordinaryBuckets, queryGroups, reason)
 }
 
-func (s *SchedulerSnapshotService) listActiveSchedulerGroupIDs(ctx context.Context) ([]int64, error) {
+func (s *SchedulerSnapshotService) listActiveSchedulerGroups(ctx context.Context) ([]Group, error) {
 	if s.groupRepo == nil {
 		return nil, ErrSchedulerCacheNotReady
 	}
 
-	// 轻量接口一旦实现，其错误直接失败；只有仓储不支持该接口时才回退完整 ListActive。
-	var groupIDs []int64
-	if lister, ok := s.groupRepo.(schedulerActiveGroupIDLister); ok {
-		ids, err := lister.ListActiveIDs(ctx)
+	var groups []Group
+	switch repo := s.groupRepo.(type) {
+	case schedulerActiveGroupLister:
+		listed, err := repo.ListActiveSchedulerGroups(ctx)
 		if err != nil {
 			return nil, err
 		}
-		groupIDs = ids
-	} else {
-		groups, err := s.groupRepo.ListActive(ctx)
+		groups = listed
+	case schedulerActiveGroupIDLister:
+		ids, err := repo.ListActiveIDs(ctx)
 		if err != nil {
 			return nil, err
 		}
-		groupIDs = make([]int64, 0, len(groups))
-		for _, group := range groups {
-			groupIDs = append(groupIDs, group.ID)
+		seenIDs := make(map[int64]struct{}, len(ids))
+		for _, groupID := range ids {
+			if groupID <= 0 {
+				continue
+			}
+			if _, ok := seenIDs[groupID]; ok {
+				continue
+			}
+			seenIDs[groupID] = struct{}{}
+			if !s.protocolBucketsEnabled() {
+				groups = append(groups, Group{ID: groupID, Status: StatusActive, Hydrated: true})
+				continue
+			}
+			group, err := s.groupRepo.GetByIDLite(ctx, groupID)
+			if errors.Is(err, ErrGroupNotFound) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			if group == nil || group.ID != groupID || !group.Hydrated {
+				return nil, fmt.Errorf("untrusted active scheduler group state: group=%d", groupID)
+			}
+			if group.IsActive() {
+				groups = append(groups, *group)
+			}
 		}
+	default:
+		listed, err := s.groupRepo.ListActive(ctx)
+		if err != nil {
+			return nil, err
+		}
+		groups = listed
 	}
 
-	seen := make(map[int64]struct{}, len(groupIDs))
-	normalized := make([]int64, 0, len(groupIDs))
-	for _, groupID := range groupIDs {
-		if groupID <= 0 {
+	byID := make(map[int64]Group, len(groups))
+	for i := range groups {
+		group := groups[i]
+		if group.ID <= 0 || !group.IsActive() {
 			continue
 		}
-		if _, ok := seen[groupID]; ok {
-			continue
-		}
-		seen[groupID] = struct{}{}
-		normalized = append(normalized, groupID)
+		// ListActive-style repository methods are full projections by contract.
+		group.Hydrated = true
+		group.EndpointProtocols = append([]string(nil), group.EndpointProtocols...)
+		byID[group.ID] = group
 	}
-	sort.Slice(normalized, func(i, j int) bool { return normalized[i] < normalized[j] })
+	normalized := make([]Group, 0, len(byID))
+	for _, group := range byID {
+		normalized = append(normalized, group)
+	}
+	sort.Slice(normalized, func(i, j int) bool { return normalized[i].ID < normalized[j].ID })
 	return normalized, nil
 }
 
@@ -1161,6 +1421,7 @@ func (s *SchedulerSnapshotService) prepareAndRebuildFullSnapshot(
 	captured []schedulerBucketWriteTask,
 	reopened []schedulerBucketWriteTask,
 	ordinaryBuckets []SchedulerBucket,
+	groups map[int64]*Group,
 	reason string,
 ) error {
 	// 首个 DB 查询前必须完成全部普通 bucket 的 token 预备；任何预备错误都不会留下部分发布。
@@ -1186,6 +1447,9 @@ func (s *SchedulerSnapshotService) prepareAndRebuildFullSnapshot(
 	}
 	captured = append(captured, ordinary...)
 	queries := newSchedulerAccountQueryCache(reopened, captured)
+	for _, group := range groups {
+		queries.seedGroup(group)
+	}
 	if err := s.rebuildPreparedBucketTasks(ctx, reopened, reason, true, queries); err != nil {
 		firstErr = err
 	}
@@ -1436,7 +1700,7 @@ func (s *SchedulerSnapshotService) shouldLogOutboxLagWarning(active bool) bool {
 	return shouldLog
 }
 
-func (s *SchedulerSnapshotService) loadAccountsFromDB(ctx context.Context, bucket SchedulerBucket, useMixed bool) ([]Account, error) {
+func (s *SchedulerSnapshotService) loadAccountsFromDB(ctx context.Context, bucket SchedulerBucket, queries *schedulerAccountQueryCache) ([]Account, error) {
 	if s.accountRepo == nil {
 		return nil, ErrSchedulerCacheNotReady
 	}
@@ -1444,65 +1708,40 @@ func (s *SchedulerSnapshotService) loadAccountsFromDB(ctx context.Context, bucke
 	if s.isRunModeSimple() {
 		groupID = 0
 	}
+	if bucket.IsProtocolBucket() {
+		return s.loadProtocolAccountsFromDB(ctx, groupID, bucket, queries)
+	}
 
+	useMixed := bucket.Mode == SchedulerModeMixed
 	if useMixed {
 		platforms := MixedSchedulingCandidatePlatforms(bucket.Platform)
-		var accounts []Account
-		var err error
-		if groupID > 0 {
-			accounts, err = s.accountRepo.ListSchedulableByGroupIDAndPlatforms(ctx, groupID, platforms)
-		} else if s.isRunModeSimple() {
-			accounts, err = s.accountRepo.ListSchedulableByPlatforms(ctx, platforms)
-		} else {
-			accounts, err = s.accountRepo.ListSchedulableUngroupedByPlatforms(ctx, platforms)
-		}
+		accounts, err := s.querySchedulableAccountsByPlatforms(ctx, groupID, platforms)
 		if err != nil {
 			return nil, err
 		}
-		var groupPlatform string
-		if groupID > 0 && s.groupRepo != nil {
-			if group, groupErr := s.groupRepo.GetByIDLite(ctx, groupID); groupErr == nil && group != nil {
-				groupPlatform = NormalizePlatform(group.Platform)
-			}
+		group, _ := s.schedulerGroupForQuery(ctx, groupID, queries)
+		groupPlatform := ""
+		if group != nil {
+			groupPlatform = NormalizePlatform(group.Platform)
 		}
 		filtered := make([]Account, 0, len(accounts))
 		crossProviderEnabled := s != nil && s.cfg != nil && s.cfg.Gateway.CrossProviderCompatibilityEnabled
 		for _, acc := range accounts {
-			// A provider-native binding remains valid even when this snapshot is
-			// built under a compatibility execution bucket (for example an
-			// opencode group routed through the OpenAI-compatible coordinator).
+			if NormalizePlatform(acc.Platform) == NormalizePlatform(bucket.Platform) {
+				filtered = append(filtered, acc)
+				continue
+			}
 			if groupPlatform != "" && NormalizePlatform(acc.Platform) == groupPlatform {
 				filtered = append(filtered, acc)
 				continue
 			}
-
-			hasBinding := false
-			compatibilityEnabled := false
-			for i := range acc.AccountGroups {
-				if acc.AccountGroups[i].GroupID == groupID {
-					hasBinding = true
-					compatibilityEnabled = acc.AccountGroups[i].EndpointCompatibilityEnabled
-					break
-				}
-			}
-			if !hasBinding && groupID > 0 {
-				for _, boundGroupID := range acc.GroupIDs {
-					if boundGroupID == groupID {
-						hasBinding = true
-						break
-					}
-				}
-			}
+			hasBinding, compatibilityEnabled := accountGroupCompatibilityForScheduler(&acc, groupID)
 			if hasBinding {
 				if compatibilityEnabled && crossProviderEnabled {
 					filtered = append(filtered, acc)
 				}
 				continue
 			}
-
-			// Legacy account-level mixed scheduling is retained only when there is
-			// no concrete account_groups relation whose disabled policy could be
-			// bypassed (primarily ungrouped/simple mode).
 			if IsMixedSchedulingCapablePlatform(acc.Platform) && acc.IsMixedSchedulingEnabled() {
 				filtered = append(filtered, acc)
 			}
@@ -1510,13 +1749,87 @@ func (s *SchedulerSnapshotService) loadAccountsFromDB(ctx context.Context, bucke
 		return filtered, nil
 	}
 
+	platform := NormalizePlatform(bucket.Platform)
 	if groupID > 0 {
-		return s.accountRepo.ListSchedulableByGroupIDAndPlatform(ctx, groupID, bucket.Platform)
+		return s.accountRepo.ListSchedulableByGroupIDAndPlatform(ctx, groupID, platform)
 	}
 	if s.isRunModeSimple() {
-		return s.accountRepo.ListSchedulableByPlatform(ctx, bucket.Platform)
+		return s.accountRepo.ListSchedulableByPlatform(ctx, platform)
 	}
-	return s.accountRepo.ListSchedulableUngroupedByPlatform(ctx, bucket.Platform)
+	return s.accountRepo.ListSchedulableUngroupedByPlatform(ctx, platform)
+}
+
+func (s *SchedulerSnapshotService) loadProtocolAccountsFromDB(ctx context.Context, groupID int64, bucket SchedulerBucket, queries *schedulerAccountQueryCache) ([]Account, error) {
+	request := bucket.RequestDescriptor()
+	platforms := CandidateAccountPlatforms(request.Protocol, request.ForcedPlatform)
+	if len(platforms) == 0 {
+		return []Account{}, nil
+	}
+	accounts, err := s.querySchedulableAccountsByPlatforms(ctx, groupID, platforms)
+	if err != nil {
+		return nil, err
+	}
+
+	group, err := s.schedulerGroupForQuery(ctx, groupID, queries)
+	if err != nil {
+		return nil, err
+	}
+	groupPlatform := ""
+	allowLegacyMixed := false
+	if group != nil {
+		groupPlatform = group.Platform
+		allowLegacyMixed = GroupPlatformSupportsMixedScheduling(group.Platform)
+	} else if request.ForcedPlatform != "" {
+		groupPlatform = request.ForcedPlatform
+	} else {
+		groupPlatform = legacyGroupPlatformForEndpointProtocol(request.Protocol)
+		allowLegacyMixed = true
+	}
+	crossProviderEnabled := s != nil && s.cfg != nil && s.cfg.Gateway.CrossProviderCompatibilityEnabled
+	return filterAccountsCompatibleForScheduler(
+		ctx,
+		accounts,
+		group,
+		groupID,
+		groupPlatform,
+		request,
+		crossProviderEnabled,
+		allowLegacyMixed,
+	), nil
+}
+
+func (s *SchedulerSnapshotService) querySchedulableAccountsByPlatforms(ctx context.Context, groupID int64, platforms []string) ([]Account, error) {
+	if groupID > 0 {
+		return s.accountRepo.ListSchedulableByGroupIDAndPlatforms(ctx, groupID, platforms)
+	}
+	if s.isRunModeSimple() {
+		return s.accountRepo.ListSchedulableByPlatforms(ctx, platforms)
+	}
+	return s.accountRepo.ListSchedulableUngroupedByPlatforms(ctx, platforms)
+}
+
+func (s *SchedulerSnapshotService) schedulerGroupForQuery(ctx context.Context, groupID int64, queries *schedulerAccountQueryCache) (*Group, error) {
+	if groupID <= 0 {
+		return nil, nil
+	}
+	if queries != nil && queries.groupLoaded[groupID] {
+		return queries.groups[groupID], nil
+	}
+	if s.groupRepo == nil {
+		return nil, ErrSchedulerCacheNotReady
+	}
+	group, err := s.groupRepo.GetByIDLite(ctx, groupID)
+	if err != nil {
+		return nil, err
+	}
+	if group == nil || group.ID != groupID || !group.Hydrated {
+		return nil, fmt.Errorf("untrusted scheduler group query state: group=%d", groupID)
+	}
+	if queries != nil {
+		queries.seedGroup(group)
+		return queries.groups[groupID], nil
+	}
+	return group, nil
 }
 
 func (s *SchedulerSnapshotService) loadAccountsForRebuild(
@@ -1526,16 +1839,16 @@ func (s *SchedulerSnapshotService) loadAccountsForRebuild(
 ) ([]Account, error) {
 	key, cacheable := schedulerAccountQueryKeyForBucket(bucket)
 	if queries == nil || !cacheable {
-		return s.loadAccountsFromDB(ctx, bucket, bucket.Mode == SchedulerModeMixed)
+		return s.loadAccountsFromDB(ctx, bucket, queries)
 	}
 
 	if accounts, ok := queries.accounts[key]; ok {
 		return accounts, nil
 	}
 	if queries.remaining[key] <= 1 {
-		return s.loadAccountsFromDB(ctx, bucket, false)
+		return s.loadAccountsFromDB(ctx, bucket, queries)
 	}
-	accounts, err := s.loadAccountsFromDB(ctx, bucket, false)
+	accounts, err := s.loadAccountsFromDB(ctx, bucket, queries)
 	if err != nil {
 		return nil, err
 	}

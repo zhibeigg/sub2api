@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -66,6 +67,7 @@ var openAIAdvancedSchedulerSettingCache atomic.Value // *cachedOpenAIAdvancedSch
 var openAIAdvancedSchedulerSettingSF singleflight.Group
 
 type OpenAIAccountScheduleRequest struct {
+	Request                 RequestDescriptor
 	GroupID                 *int64
 	Platform                string
 	SessionHash             string
@@ -84,6 +86,30 @@ type OpenAIAccountScheduleRequest struct {
 	ImageEndpoint           string
 	RequireCompact          bool
 	ExcludedIDs             map[int64]struct{}
+}
+
+func (r OpenAIAccountScheduleRequest) requestDescriptor(ctx context.Context) RequestDescriptor {
+	descriptor := r.Request
+	if !IsValidEndpointProtocol(descriptor.Protocol) {
+		if protocol, ok := EndpointProtocolFromContext(ctx); ok {
+			descriptor.Protocol = protocol
+		}
+	}
+	if strings.TrimSpace(descriptor.Model) == "" {
+		descriptor.Model = strings.TrimSpace(r.RequestedModel)
+	}
+	if NormalizePlatform(descriptor.ForcedPlatform) == "" {
+		if forcedPlatform, ok := ctx.Value(ctxkey.ForcePlatform).(string); ok {
+			descriptor.ForcedPlatform = NormalizePlatform(forcedPlatform)
+		}
+	}
+	if strings.TrimSpace(descriptor.EndpointPath) == "" {
+		descriptor.EndpointPath = strings.TrimSpace(r.ImageEndpoint)
+	}
+	if descriptor.OpenAIImageCapability == "" {
+		descriptor.OpenAIImageCapability = r.RequiredImageCapability
+	}
+	return descriptor
 }
 
 type OpenAIAccountScheduleDecision struct {
@@ -483,7 +509,7 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 		_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
 		return nil, false, nil
 	}
-	if shouldClearStickySession(account, req.RequestedModel) || !openAIPlatformAllowed(account, req.Platform) || !account.IsSchedulable() {
+	if shouldClearStickySession(account, req.RequestedModel) || !account.IsSchedulable() {
 		_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
 		return nil, false, nil
 	}
@@ -494,7 +520,7 @@ func (s *defaultOpenAIAccountScheduler) selectBySessionHash(
 		_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
 		return nil, false, nil
 	}
-	account = s.service.recheckSelectedOpenAIAccountFromDB(ctx, account, req.GroupID, req.Platform, req.RequestedModel, req.RequireCompact, req.RequiredCapability)
+	account = s.service.recheckSelectedOpenAIAccountFromDBForRequest(ctx, account, req.GroupID, req.Platform, req.requestDescriptor(ctx), req.RequireCompact, req.RequiredCapability)
 	if account == nil || !s.service.openAIAccountMatchesSchedulingGroup(account, req.GroupID) || !s.isAccountTransportCompatible(account, req.RequiredTransport) {
 		_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, sessionHash)
 		return nil, false, nil
@@ -1143,7 +1169,7 @@ func (s *defaultOpenAIAccountScheduler) tryAcquireOpenAISelectionOrderWithBudget
 			release(result)
 			break
 		}
-		fresh = s.service.recheckSelectedOpenAIAccountFromDB(ctx, fresh, req.GroupID, req.Platform, req.RequestedModel, false, req.RequiredCapability)
+		fresh = s.service.recheckSelectedOpenAIAccountFromDBForRequest(ctx, fresh, req.GroupID, req.Platform, req.requestDescriptor(ctx), false, req.RequiredCapability)
 		if fresh == nil || !s.isAccountTransportCompatible(fresh, req.RequiredTransport) || !s.isAccountRequestCompatible(ctx, fresh, req) {
 			release(result)
 			continue
@@ -1222,7 +1248,7 @@ func (s *defaultOpenAIAccountScheduler) tryFallbackToWeightedSticky(
 		if !s.isAccountRequestCompatible(ctx, account, req) || !s.isAccountTransportCompatible(account, req.RequiredTransport) {
 			continue
 		}
-		account = s.service.recheckSelectedOpenAIAccountFromDB(ctx, account, req.GroupID, req.Platform, req.RequestedModel, req.RequireCompact, req.RequiredCapability)
+		account = s.service.recheckSelectedOpenAIAccountFromDBForRequest(ctx, account, req.GroupID, req.Platform, req.requestDescriptor(ctx), req.RequireCompact, req.RequiredCapability)
 		if account == nil {
 			if accountID == req.StickyAccountID && strings.TrimSpace(req.SessionHash) != "" {
 				_ = s.service.deleteStickySessionAccountID(ctx, req.GroupID, req.SessionHash)
@@ -1555,7 +1581,7 @@ func (s *defaultOpenAIAccountScheduler) finishLoadBalanceSelectionFallback(
 			if !s.consumeOpenAISelectionDBRecheck(budget) {
 				return nil, candidateCount, topK, loadSkew, noAvailableOpenAISelectionError(req.RequestedModel, compactBlocked)
 			}
-			fresh = s.service.recheckSelectedOpenAIAccountFromDB(ctx, fresh, req.GroupID, req.Platform, req.RequestedModel, false, req.RequiredCapability)
+			fresh = s.service.recheckSelectedOpenAIAccountFromDBForRequest(ctx, fresh, req.GroupID, req.Platform, req.requestDescriptor(ctx), false, req.RequiredCapability)
 			if fresh == nil || !s.isAccountTransportCompatible(fresh, req.RequiredTransport) || !s.isAccountRequestCompatible(ctx, fresh, req) {
 				continue
 			}
@@ -1608,7 +1634,9 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatible(ctx context.C
 	if account == nil {
 		return false
 	}
-	if s != nil && s.service != nil && s.service.isOpenAIAccountRequestRuntimeBlocked(account, req.RequestedModel) {
+	descriptor := req.requestDescriptor(ctx)
+	requestedModel := descriptor.Model
+	if s != nil && s.service != nil && s.service.isOpenAIAccountRequestRuntimeBlocked(account, requestedModel) {
 		return false
 	}
 	// Quota auto-pause must be evaluated during the initial filter too. Without it the
@@ -1626,15 +1654,24 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatible(ctx context.C
 	}) {
 		return false
 	}
-	if req.RequestedModel != "" && !account.IsModelSupported(req.RequestedModel) {
+	if requestedModel != "" {
+		if account.IsOpenCode() {
+			if !account.IsOpenCodeModelSupported(requestedModel) {
+				return false
+			}
+		} else if !account.IsModelSupported(requestedModel) {
+			return false
+		}
+	}
+	if !openAIRequestDescriptorAllowedForContext(ctx, account, req.Platform, descriptor) {
 		return false
 	}
 	if req.GroupID != nil && s != nil && s.service != nil &&
 		s.service.needsUpstreamChannelRestrictionCheck(ctx, req.GroupID) &&
-		s.service.isUpstreamModelRestrictedByChannel(ctx, *req.GroupID, account, req.RequestedModel, req.RequireCompact) {
+		s.service.isUpstreamModelRestrictedByChannel(ctx, *req.GroupID, account, requestedModel, req.RequireCompact) {
 		return false
 	}
-	return accountSupportsOpenAICapabilities(account, req.RequiredCapability, req.RequiredImageCapability, req.RequestedModel, req.ImageEndpoint)
+	return accountSupportsOpenAICapabilities(account, req.RequiredCapability, descriptor.OpenAIImageCapability, requestedModel, descriptor.EndpointPath)
 }
 
 func (s *defaultOpenAIAccountScheduler) ReportResult(accountID int64, success bool, firstTokenMs *int) {
@@ -2056,7 +2093,20 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 		stickyPreviousAccountID = s.ResolveAccountIDByPreviousResponseIDForScheduler(ctx, groupID, previousResponseID, requestedModel, excludedIDs, requiredCapability, requireCompact)
 	}
 
+	requestDescriptor := RequestDescriptor{
+		Model:                 requestedModel,
+		EndpointPath:          openAIImageEndpointFromContext(ctx),
+		OpenAIImageCapability: requiredImageCapability,
+	}
+	if protocol, ok := EndpointProtocolFromContext(ctx); ok {
+		requestDescriptor.Protocol = protocol
+	}
+	if forcedPlatform, ok := ctx.Value(ctxkey.ForcePlatform).(string); ok {
+		requestDescriptor.ForcedPlatform = forcedPlatform
+	}
+
 	return scheduler.Select(ctx, OpenAIAccountScheduleRequest{
+		Request:                 requestDescriptor,
 		GroupID:                 groupID,
 		Platform:                platform,
 		SessionHash:             sessionHash,

@@ -144,7 +144,7 @@ func TestSchedulerCacheSnapshotAccountIDReusePreservesPayloadAndMembers(t *testi
 	require.Nil(t, missing)
 }
 
-func TestSchedulerCacheSnapshotAccountIDReuseKeepsEmptySnapshotSemantics(t *testing.T) {
+func TestSchedulerCacheSnapshotAccountIDReusePublishesEmptySnapshotHit(t *testing.T) {
 	ctx := context.Background()
 	cache := newSchedulerCacheUnit(t)
 	invalidTime := time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -168,8 +168,8 @@ func TestSchedulerCacheSnapshotAccountIDReuseKeepsEmptySnapshotSemantics(t *test
 		require.Equal(t, "1", ready)
 		snapshot, hit, err := cache.GetSnapshot(ctx, bucket)
 		require.NoError(t, err)
-		require.False(t, hit, bucket.String())
-		require.Nil(t, snapshot)
+		require.True(t, hit, bucket.String())
+		require.Empty(t, snapshot)
 	}
 }
 
@@ -247,6 +247,39 @@ func TestMarshalSchedulerCacheAccountKeepsEncodingJSONWireFormat(t *testing.T) {
 			require.Equal(t, wantMeta, meta)
 		})
 	}
+}
+
+func TestSchedulerCacheV2KeyNamespaceSeparatesProtocolBuckets(t *testing.T) {
+	regular, ok := service.NewSchedulerBucket(42, service.EndpointProtocolOpenAIResponses, "")
+	require.True(t, ok)
+	forced, ok := service.NewSchedulerBucket(42, service.EndpointProtocolOpenAIResponses, service.PlatformOpenCode)
+	require.True(t, ok)
+	legacy := service.SchedulerBucket{GroupID: 42, Platform: service.PlatformOpenAI, Mode: service.SchedulerModeMixed}
+
+	regularKey := schedulerBucketKey(schedulerActivePrefix, regular)
+	forcedKey := schedulerBucketKey(schedulerActivePrefix, forced)
+	legacyKey := schedulerBucketKey(schedulerActivePrefix, legacy)
+	require.Contains(t, regularKey, "sched:v2:active:v2:42:openai_responses:-:")
+	require.NotEqual(t, regularKey, forcedKey)
+	require.NotEqual(t, regularKey, legacyKey)
+}
+
+func TestBuildSchedulerMetadataAccount_KeepsProtocolCapabilities(t *testing.T) {
+	account := service.Account{
+		ID:       41,
+		Platform: service.PlatformOpenCode,
+		Credentials: map[string]any{
+			"model_mapping":       map[string]any{"alias": "upstream"},
+			"model_protocols":     map[string]any{"alias": "chat_completions"},
+			"openai_capabilities": []string{"chat_completions", "embeddings"},
+			"unused_secret":       "drop-me",
+		},
+	}
+
+	got := buildSchedulerMetadataAccount(account)
+	require.Equal(t, account.Credentials["model_protocols"], got.Credentials["model_protocols"])
+	require.Equal(t, account.Credentials["openai_capabilities"], got.Credentials["openai_capabilities"])
+	require.Nil(t, got.Credentials["unused_secret"])
 }
 
 func TestBuildSchedulerMetadataAccount_KeepsOpenAIWSFlags(t *testing.T) {

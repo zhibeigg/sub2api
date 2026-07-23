@@ -605,6 +605,7 @@ func TestSchedulerFullRebuildSharesSuccessfulQueryAcrossStrictAndOrdinarySegment
 		[]schedulerBucketWriteTask{{bucket: forced, token: forcedToken}},
 		[]schedulerBucketWriteTask{{bucket: single, token: singleToken}},
 		nil,
+		nil,
 		"test",
 	)
 	require.ErrorIs(t, err, ErrSchedulerBucketWriteFenced)
@@ -615,6 +616,85 @@ func TestSchedulerFullRebuildSharesSuccessfulQueryAcrossStrictAndOrdinarySegment
 	require.Zero(t, singleVersion)
 	require.Equal(t, 1, forcedAttempts)
 	require.Equal(t, 1, forcedVersion)
+}
+
+func TestSchedulerProtocolBucketsFilterBindingsAndForcedProviderIndependently(t *testing.T) {
+	const groupID int64 = 220
+	group := &Group{
+		ID:                groupID,
+		Platform:          PlatformOpenAI,
+		Status:            StatusActive,
+		Hydrated:          true,
+		EndpointProtocols: []string{string(EndpointProtocolOpenAIResponses)},
+	}
+	accounts := []Account{
+		{
+			ID:          2201,
+			Platform:    PlatformOpenAI,
+			Type:        AccountTypeOAuth,
+			Status:      StatusActive,
+			Schedulable: true,
+			AccountGroups: []AccountGroup{{
+				AccountID: 2201,
+				GroupID:   groupID,
+			}},
+		},
+		{
+			ID:          2202,
+			Platform:    PlatformOpenCode,
+			Type:        AccountTypeAPIKey,
+			Status:      StatusActive,
+			Schedulable: true,
+			AccountGroups: []AccountGroup{{
+				AccountID:                    2202,
+				GroupID:                      groupID,
+				EndpointCompatibilityEnabled: true,
+			}},
+		},
+		{
+			ID:          2203,
+			Platform:    PlatformCursor,
+			Type:        AccountTypeAPIKey,
+			Status:      StatusActive,
+			Schedulable: true,
+			AccountGroups: []AccountGroup{{
+				AccountID:                    2203,
+				GroupID:                      groupID,
+				EndpointCompatibilityEnabled: false,
+			}},
+		},
+	}
+
+	regular, ok := NewSchedulerBucket(groupID, EndpointProtocolOpenAIResponses, "")
+	require.True(t, ok)
+	forced, ok := NewSchedulerBucket(groupID, EndpointProtocolOpenAIResponses, PlatformOpenCode)
+	require.True(t, ok)
+	cache := newBatchSnapshotCache()
+	repo := newBatchAccountQueryRepo()
+	repo.results[batchAccountQueryKey{groupID: groupID, platform: PlatformAnthropic, mixed: true}] = []batchAccountQueryResult{{accounts: accounts}}
+	repo.results[batchAccountQueryKey{groupID: groupID, platform: PlatformOpenCode, mixed: true}] = []batchAccountQueryResult{{accounts: accounts}}
+	svc := NewSchedulerSnapshotService(cache, nil, repo, nil, &config.Config{
+		RunMode: config.RunModeStandard,
+		Gateway: config.GatewayConfig{
+			GroupEndpointRoutingEnabled:       true,
+			CrossProviderCompatibilityEnabled: true,
+		},
+	})
+
+	require.NoError(t, svc.rebuildBucketsWithGroups(
+		context.Background(),
+		[]SchedulerBucket{regular, forced},
+		map[int64]*Group{groupID: group},
+		"protocol-test",
+	))
+
+	_, _, _, regularWrites := cache.bucketState(regular)
+	require.Len(t, regularWrites, 1)
+	require.Equal(t, []int64{2201, 2202}, []int64{regularWrites[0].accounts[0].ID, regularWrites[0].accounts[1].ID})
+	_, _, _, forcedWrites := cache.bucketState(forced)
+	require.Len(t, forcedWrites, 1)
+	require.Len(t, forcedWrites[0].accounts, 1)
+	require.Equal(t, int64(2202), forcedWrites[0].accounts[0].ID)
 }
 
 func TestSchedulerRebuildBatchPreservesLockBusyAndFencingPolicy(t *testing.T) {
@@ -651,6 +731,7 @@ func TestSchedulerRebuildBatchPreservesLockBusyAndFencingPolicy(t *testing.T) {
 			context.Background(),
 			[]schedulerBucketWriteTask{{bucket: forced, token: forcedToken}},
 			[]schedulerBucketWriteTask{{bucket: single, token: singleToken}},
+			nil,
 			nil,
 			"test",
 		)

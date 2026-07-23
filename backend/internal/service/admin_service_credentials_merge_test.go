@@ -13,6 +13,8 @@ type updateAccountCredsRepoStub struct {
 	mockAccountRepoForGemini
 	account     *Account
 	updateCalls int
+	boundGroups []AccountGroup
+	bindErr     error
 }
 
 func (r *updateAccountCredsRepoStub) GetByID(ctx context.Context, id int64) (*Account, error) {
@@ -23,6 +25,11 @@ func (r *updateAccountCredsRepoStub) Update(ctx context.Context, account *Accoun
 	r.updateCalls++
 	r.account = account
 	return nil
+}
+
+func (r *updateAccountCredsRepoStub) BindAccountGroups(_ context.Context, _ int64, groups []AccountGroup) error {
+	r.boundGroups = append([]AccountGroup(nil), groups...)
+	return r.bindErr
 }
 
 func TestUpdateAccount_PreservesSensitiveCredsWhenIncomingOmits(t *testing.T) {

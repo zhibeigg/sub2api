@@ -383,6 +383,73 @@ func TestIsAccountCompatibleForRequestForcedProvider(t *testing.T) {
 	require.False(t, IsAccountCompatibleForRequest(account, request, AccountGroupCompatibilityOptions{}))
 }
 
+func TestIsAccountCompatibleForRequestForcedCrossProviderStillRequiresBindingPolicy(t *testing.T) {
+	t.Parallel()
+
+	group := &Group{
+		ID:                91,
+		Platform:          PlatformOpenAI,
+		EndpointProtocols: []string{string(EndpointProtocolOpenAIResponses)},
+	}
+	account := schedulableProtocolAccount(PlatformOpenCode, AccountTypeAPIKey)
+	request := RequestDescriptor{
+		Protocol:       EndpointProtocolOpenAIResponses,
+		ForcedPlatform: PlatformOpenCode,
+	}
+	options := AccountGroupCompatibilityOptions{
+		Group:                  group,
+		HasAccountGroupBinding: true,
+	}
+	require.False(t, IsAccountCompatibleForRequest(account, request, options), "forced provider must not bypass a disabled cross-provider relation")
+
+	options.EndpointCompatibilityEnabled = true
+	require.True(t, IsAccountCompatibleForRequest(account, request, options))
+}
+
+func TestSchedulerBucketV2IdentityRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	regular, ok := NewSchedulerBucket(42, EndpointProtocolOpenAIResponses, "")
+	require.True(t, ok)
+	forced, ok := NewSchedulerBucket(42, EndpointProtocolOpenAIResponses, PlatformOpenCode)
+	require.True(t, ok)
+	embeddings, ok := NewSchedulerBucket(42, EndpointProtocolOpenAIEmbeddings, "")
+	require.True(t, ok)
+
+	require.NotEqual(t, regular.String(), forced.String())
+	require.NotEqual(t, regular.String(), embeddings.String())
+	require.Contains(t, regular.String(), "v2:42:openai_responses:-:")
+
+	parsed, ok := ParseSchedulerBucket(forced.String())
+	require.True(t, ok)
+	require.Equal(t, forced, parsed)
+	require.Equal(t, RequestDescriptor{
+		Protocol:       EndpointProtocolOpenAIResponses,
+		ForcedPlatform: PlatformOpenCode,
+	}, parsed.RequestDescriptor())
+
+	_, ok = ParseSchedulerBucket("v2:42:openai_responses:-:forced")
+	require.False(t, ok, "mode/forced-platform mismatch must fail closed")
+}
+
+func TestSchedulerProtocolBucketsFollowGroupEndpointSet(t *testing.T) {
+	t.Parallel()
+
+	group := &Group{
+		ID:                77,
+		Platform:          PlatformOpenAI,
+		Status:            StatusActive,
+		Hydrated:          true,
+		EndpointProtocols: []string{string(EndpointProtocolOpenAIEmbeddings)},
+	}
+	buckets := schedulerProtocolBucketsForActiveGroup(group)
+	require.Len(t, buckets, 2, "embeddings has one regular and one forced OpenAI bucket")
+	for _, bucket := range buckets {
+		require.Equal(t, EndpointProtocolOpenAIEmbeddings, bucket.Protocol)
+		require.NotContains(t, bucket.String(), string(EndpointProtocolOpenAIResponses))
+	}
+}
+
 func TestEndpointProtocolContextAndPathMapping(t *testing.T) {
 	t.Parallel()
 

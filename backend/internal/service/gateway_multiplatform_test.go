@@ -344,6 +344,71 @@ func ptr[T any](v T) *T {
 }
 
 // TestGatewayService_SelectAccountForModelWithPlatform_Anthropic 测试 anthropic 单平台选择
+func TestGatewayService_ListSchedulableAccountsProtocolFallbackMatchesBindingPolicy(t *testing.T) {
+	groupID := int64(301)
+	group := &Group{
+		ID:                groupID,
+		Platform:          PlatformOpenAI,
+		Status:            StatusActive,
+		Hydrated:          true,
+		EndpointProtocols: []string{string(EndpointProtocolOpenAIResponses)},
+	}
+	repo := &mockAccountRepoForPlatform{accounts: []Account{
+		{
+			ID:          3011,
+			Platform:    PlatformOpenAI,
+			Type:        AccountTypeOAuth,
+			Status:      StatusActive,
+			Schedulable: true,
+			AccountGroups: []AccountGroup{{
+				AccountID: 3011,
+				GroupID:   groupID,
+			}},
+		},
+		{
+			ID:          3012,
+			Platform:    PlatformOpenCode,
+			Type:        AccountTypeAPIKey,
+			Status:      StatusActive,
+			Schedulable: true,
+			AccountGroups: []AccountGroup{{
+				AccountID:                    3012,
+				GroupID:                      groupID,
+				EndpointCompatibilityEnabled: true,
+			}},
+		},
+		{
+			ID:          3013,
+			Platform:    PlatformCursor,
+			Type:        AccountTypeAPIKey,
+			Status:      StatusActive,
+			Schedulable: true,
+			AccountGroups: []AccountGroup{{
+				AccountID:                    3013,
+				GroupID:                      groupID,
+				EndpointCompatibilityEnabled: false,
+			}},
+		},
+	}}
+	svc := &GatewayService{
+		accountRepo: repo,
+		cfg: &config.Config{
+			RunMode: config.RunModeStandard,
+			Gateway: config.GatewayConfig{
+				GroupEndpointRoutingEnabled:       true,
+				CrossProviderCompatibilityEnabled: true,
+			},
+		},
+	}
+	ctx := WithEndpointProtocol(context.Background(), EndpointProtocolOpenAIResponses)
+	ctx = context.WithValue(ctx, ctxkey.Group, group)
+
+	accounts, useMixed, err := svc.listSchedulableAccounts(ctx, &groupID, PlatformOpenAI, false)
+	require.NoError(t, err)
+	require.True(t, useMixed)
+	require.Equal(t, []int64{3011, 3012}, []int64{accounts[0].ID, accounts[1].ID})
+}
+
 func TestGatewayService_SelectAccountForModelWithPlatform_Anthropic(t *testing.T) {
 	ctx := context.Background()
 
@@ -740,6 +805,31 @@ func TestGatewayService_SelectAccountForModelWithExclusions_ForcePlatform(t *tes
 	require.NotNil(t, acc)
 	require.Equal(t, int64(2), acc.ID)
 	require.Equal(t, PlatformAntigravity, acc.Platform)
+}
+
+func TestGatewayService_RoutingAccountIDsForRequest_AppliesToNonAnthropicGroups(t *testing.T) {
+	groupID := int64(9)
+	requestedModel := "gpt-5.4"
+	svc := &GatewayService{
+		groupRepo: &mockGroupRepoForGateway{
+			groups: map[int64]*Group{
+				groupID: {
+					ID:                  groupID,
+					Name:                "openai-route-group",
+					Platform:            PlatformOpenAI,
+					Status:              StatusActive,
+					Hydrated:            true,
+					ModelRoutingEnabled: true,
+					ModelRouting: map[string][]int64{
+						requestedModel: {2, 3},
+					},
+				},
+			},
+		},
+	}
+
+	ids := svc.routingAccountIDsForRequest(context.Background(), &groupID, requestedModel, PlatformOpenAI)
+	require.Equal(t, []int64{2, 3}, ids)
 }
 
 func TestGatewayService_SelectAccountForModelWithPlatform_RoutedStickySessionClears(t *testing.T) {

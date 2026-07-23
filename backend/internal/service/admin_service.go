@@ -261,7 +261,7 @@ type CreateGroupInput struct {
 	FallbackGroupID       *int64 // 降级分组 ID
 	// 无效请求兜底分组 ID（仅 anthropic 平台使用）
 	FallbackGroupIDOnInvalidRequest *int64
-	// 模型路由配置（仅 anthropic 平台使用）
+	// 模型路由配置（所有分组可用，最终候选仍需通过端点与模型兼容校验）
 	ModelRouting        map[string][]int64
 	ModelRoutingEnabled bool // 是否启用模型路由
 	MCPXMLInject        *bool
@@ -325,7 +325,7 @@ type UpdateGroupInput struct {
 	FallbackGroupID       *int64 // 降级分组 ID
 	// 无效请求兜底分组 ID（仅 anthropic 平台使用）
 	FallbackGroupIDOnInvalidRequest *int64
-	// 模型路由配置（仅 anthropic 平台使用）
+	// 模型路由配置（所有分组可用，最终候选仍需通过端点与模型兼容校验）
 	ModelRouting        map[string][]int64
 	ModelRoutingEnabled *bool // 是否启用模型路由
 	MCPXMLInject        *bool

@@ -262,6 +262,46 @@ func openAIPlatformAllowedForContext(ctx context.Context, account *Account, plat
 	return openAIPlatformAllowed(account, platform)
 }
 
+func openAIRequestDescriptorAllowedForContext(ctx context.Context, account *Account, platform string, request RequestDescriptor) bool {
+	if account == nil {
+		return false
+	}
+	platform = normalizeOpenAICompatiblePlatform(platform)
+	request.Protocol = NormalizeEndpointProtocol(request.Protocol)
+	request.ForcedPlatform = NormalizePlatform(request.ForcedPlatform)
+	if !IsValidEndpointProtocol(request.Protocol) {
+		if request.ForcedPlatform != "" && NormalizePlatform(account.Platform) != request.ForcedPlatform {
+			return false
+		}
+		return openAIPlatformAllowedForContext(ctx, account, platform)
+	}
+
+	group, _ := ctx.Value(ctxkey.Group).(*Group)
+	groupID := int64(0)
+	groupPlatform := platform
+	allowLegacyMixed := GroupPlatformSupportsMixedScheduling(platform)
+	if group != nil {
+		groupID = group.ID
+		groupPlatform = group.Platform
+		allowLegacyMixed = GroupPlatformSupportsMixedScheduling(group.Platform)
+	} else if request.ForcedPlatform != "" {
+		groupPlatform = request.ForcedPlatform
+	}
+	hasBinding, compatibilityEnabled := accountGroupCompatibilityForScheduler(account, groupID)
+	return IsAccountCompatibleForRequest(account, request, AccountGroupCompatibilityOptions{
+		Context:                      ctx,
+		Group:                        group,
+		GroupPlatform:                groupPlatform,
+		ForcedPlatform:               request.ForcedPlatform,
+		AllowMixedScheduling:         allowLegacyMixed,
+		HasAccountGroupBinding:       hasBinding,
+		EndpointCompatibilityEnabled: compatibilityEnabled && CrossProviderCompatibilityEnabledFromContext(ctx),
+		RequireOAuthOnly:             group != nil && group.RequireOAuthOnly,
+		RequirePrivacySet:            group != nil && group.RequirePrivacySet,
+		SkipSchedulabilityChecks:     true,
+	})
+}
+
 // openAIPlatformAllowed 保留无 context 的旧调度器接口。端点协议尚未写入
 // context 的内部探测继续沿用原生平台或 mixed_scheduling 判定。
 func openAIPlatformAllowed(account *Account, platform string) bool {
@@ -1222,6 +1262,9 @@ func (s *OpenAIGatewayService) listSchedulableAccounts(ctx context.Context, grou
 		accounts, _, err := s.schedulerSnapshot.ListSchedulableAccounts(ctx, groupID, platform, false)
 		return accounts, err
 	}
+	if protocol, ok := EndpointProtocolFromContext(ctx); ok && s.cfg != nil && s.cfg.Gateway.GroupEndpointRoutingEnabled {
+		return s.listProtocolSchedulableAccountsFromDB(ctx, groupID, platform, protocol)
+	}
 
 	// Keep the database fallback semantically identical to Scheduler Snapshot.
 	// OpenAI-compatible groups can contain explicitly mixed Cursor/Kiro/OpenCode
@@ -1254,6 +1297,60 @@ func (s *OpenAIGatewayService) listSchedulableAccounts(ctx context.Context, grou
 		return nil, fmt.Errorf("query accounts failed: %w", err)
 	}
 	return accounts, nil
+}
+
+func (s *OpenAIGatewayService) listProtocolSchedulableAccountsFromDB(ctx context.Context, groupID *int64, platform string, protocol EndpointProtocol) ([]Account, error) {
+	forcedPlatform, _ := ctx.Value(ctxkey.ForcePlatform).(string)
+	forcedPlatform = NormalizePlatform(forcedPlatform)
+	request := RequestDescriptor{Protocol: protocol, ForcedPlatform: forcedPlatform}
+	platforms := CandidateAccountPlatforms(protocol, forcedPlatform)
+	if len(platforms) == 0 {
+		return []Account{}, nil
+	}
+
+	resolvedGroupID := int64(0)
+	if groupID != nil && *groupID > 0 && (s.cfg == nil || s.cfg.RunMode != config.RunModeSimple) {
+		resolvedGroupID = *groupID
+	}
+	var accounts []Account
+	var err error
+	if resolvedGroupID > 0 {
+		accounts, err = s.accountRepo.ListSchedulableByGroupIDAndPlatforms(ctx, resolvedGroupID, platforms)
+	} else if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
+		accounts, err = s.accountRepo.ListSchedulableByPlatforms(ctx, platforms)
+	} else {
+		accounts, err = s.accountRepo.ListSchedulableUngroupedByPlatforms(ctx, platforms)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query accounts failed: %w", err)
+	}
+
+	group, _ := ctx.Value(ctxkey.Group).(*Group)
+	if group != nil && resolvedGroupID > 0 && group.ID != resolvedGroupID {
+		group = nil
+	}
+	groupPlatform := platform
+	allowLegacyMixed := GroupPlatformSupportsMixedScheduling(platform)
+	if group != nil {
+		groupPlatform = group.Platform
+		allowLegacyMixed = GroupPlatformSupportsMixedScheduling(group.Platform)
+	} else if forcedPlatform != "" {
+		groupPlatform = forcedPlatform
+	} else if groupPlatform == "" {
+		groupPlatform = legacyGroupPlatformForEndpointProtocol(protocol)
+		allowLegacyMixed = true
+	}
+	crossProviderEnabled := s.cfg != nil && s.cfg.Gateway.CrossProviderCompatibilityEnabled
+	return filterAccountsCompatibleForScheduler(
+		ctx,
+		accounts,
+		group,
+		resolvedGroupID,
+		groupPlatform,
+		request,
+		crossProviderEnabled,
+		allowLegacyMixed,
+	), nil
 }
 
 func (s *OpenAIGatewayService) tryAcquireAccountSlot(ctx context.Context, accountID int64, maxConcurrency int) (*AcquireResult, error) {
@@ -1305,15 +1402,48 @@ func (s *OpenAIGatewayService) parentAccountLookup(ctx context.Context) func(int
 }
 
 func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDB(ctx context.Context, account *Account, groupID *int64, platform string, requestedModel string, requireCompact bool, requiredCapability OpenAIEndpointCapability) *Account {
+	request := RequestDescriptor{Model: requestedModel, EndpointPath: openAIImageEndpointFromContext(ctx)}
+	if protocol, ok := EndpointProtocolFromContext(ctx); ok {
+		request.Protocol = protocol
+	}
+	if forcedPlatform, ok := ctx.Value(ctxkey.ForcePlatform).(string); ok {
+		request.ForcedPlatform = forcedPlatform
+	}
+	return s.recheckSelectedOpenAIAccountFromDBForRequest(ctx, account, groupID, platform, request, requireCompact, requiredCapability)
+}
+
+func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDBForRequest(
+	ctx context.Context,
+	account *Account,
+	groupID *int64,
+	platform string,
+	request RequestDescriptor,
+	requireCompact bool,
+	requiredCapability OpenAIEndpointCapability,
+) *Account {
 	if account == nil {
 		return nil
 	}
 	platform = normalizeOpenAICompatiblePlatform(platform)
-	if s.schedulerSnapshot == nil || s.accountRepo == nil {
-		if !isOpenAICompatibleAccountEligibleForRequest(ctx, account, platform, requestedModel, requireCompact, requiredCapability) {
-			return nil
+	request.Model = strings.TrimSpace(request.Model)
+	eligible := func(candidate *Account) bool {
+		if !isOpenAICompatibleAccountEligibleForRequest(ctx, candidate, platform, request.Model, requireCompact, requiredCapability) {
+			return false
 		}
-		if !parentHealthyForShadow(account, s.parentAccountLookup(ctx)) {
+		if !openAIRequestDescriptorAllowedForContext(ctx, candidate, platform, request) {
+			return false
+		}
+		if !accountSupportsOpenAICapabilities(candidate, requiredCapability, request.OpenAIImageCapability, request.Model, request.EndpointPath) {
+			return false
+		}
+		if !parentHealthyForShadow(candidate, s.parentAccountLookup(ctx)) {
+			return false
+		}
+		return !s.isOpenAIAccountRequestRuntimeBlocked(candidate, request.Model)
+	}
+
+	if s.schedulerSnapshot == nil || s.accountRepo == nil {
+		if !eligible(account) {
 			return nil
 		}
 		return account
@@ -1323,16 +1453,7 @@ func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDB(ctx context.Co
 	if err != nil || latest == nil {
 		return nil
 	}
-	if !s.openAIAccountMatchesSchedulingGroup(latest, groupID) {
-		return nil
-	}
-	if !isOpenAICompatibleAccountEligibleForRequest(ctx, latest, platform, requestedModel, requireCompact, requiredCapability) {
-		return nil
-	}
-	if !parentHealthyForShadow(latest, s.parentAccountLookup(ctx)) {
-		return nil
-	}
-	if s.isOpenAIAccountRequestRuntimeBlocked(latest, requestedModel) {
+	if !s.openAIAccountMatchesSchedulingGroup(latest, groupID) || !eligible(latest) {
 		return nil
 	}
 	return latest
@@ -1472,14 +1593,15 @@ func (s *OpenAIGatewayService) ResolveEffectiveImageGroupBinding(ctx context.Con
 			continue
 		}
 		groupID := binding.GroupID
-		accounts, err := s.listSchedulableAccounts(ctx, &groupID, PlatformOpenAI)
+		probeCtx := context.WithValue(ctx, ctxkey.Group, group)
+		accounts, err := s.listSchedulableAccounts(probeCtx, &groupID, PlatformOpenAI)
 		if err != nil {
 			continue
 		}
-		parentLookup := s.parentAccountLookup(ctx)
+		parentLookup := s.parentAccountLookup(probeCtx)
 		for accountIndex := range accounts {
 			account := &accounts[accountIndex]
-			if !isOpenAICompatibleAccountEligibleForRequest(ctx, account, PlatformOpenAI, requestedModel, false, "") ||
+			if !isOpenAICompatibleAccountEligibleForRequest(probeCtx, account, PlatformOpenAI, requestedModel, false, "") ||
 				!account.SupportsOpenAIImageRequest(requestedModel, endpoint, capability) ||
 				!parentHealthyForShadow(account, parentLookup) ||
 				s.isOpenAIAccountRuntimeBlocked(account) {

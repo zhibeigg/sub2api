@@ -5,7 +5,6 @@ package service
 import (
 	"context"
 	"math"
-	"net/http"
 	"testing"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -158,54 +157,63 @@ func TestAdminService_UpdateAccount_CursorMixedSchedulingAllowsAnthropicGroup(t 
 	require.NotNil(t, updated)
 	require.Equal(t, 1, accountRepo.updateCalls)
 	require.True(t, updated.IsMixedSchedulingEnabled())
+	require.Len(t, accountRepo.boundGroups, 1)
+	require.True(t, accountRepo.boundGroups[0].EndpointCompatibilityEnabled)
 }
 
-func TestAdminService_ValidateAccountGroupPlatform_CursorMixedSchedulingAllowsModelPlatforms(t *testing.T) {
-	for _, platform := range []string{PlatformAnthropic, PlatformGemini, PlatformOpenAI, PlatformGrok, PlatformCursor} {
-		t.Run(platform, func(t *testing.T) {
-			repo := &groupRepoStubForAdmin{
-				getByID: &Group{ID: 26, Name: platform + "-models", Platform: platform},
-			}
-			svc := &adminServiceImpl{groupRepo: repo}
+func TestBuildCompatibleAccountGroupBindings_CursorSupportsEndpointCompatibleGroups(t *testing.T) {
+	account := &Account{
+		ID:       25,
+		Platform: PlatformCursor,
+		Type:     AccountTypeAPIKey,
+		Status:   StatusActive,
+	}
+	tests := []struct {
+		platform string
+		protocol EndpointProtocol
+	}{
+		{platform: PlatformAnthropic, protocol: EndpointProtocolAnthropicMessages},
+		{platform: PlatformGemini, protocol: EndpointProtocolOpenAIChatCompletions},
+		{platform: PlatformOpenAI, protocol: EndpointProtocolOpenAIResponses},
+		{platform: PlatformGrok, protocol: EndpointProtocolOpenAIChatCompletions},
+		{platform: PlatformCursor, protocol: EndpointProtocolOpenAIResponses},
+	}
 
-			err := svc.validateAccountGroupPlatform(context.Background(), PlatformCursor, []int64{26}, true)
+	for _, tt := range tests {
+		t.Run(tt.platform, func(t *testing.T) {
+			repo := &groupRepoStubForAdmin{getByID: &Group{
+				ID:                26,
+				Name:              tt.platform + "-endpoint",
+				Platform:          tt.platform,
+				EndpointProtocols: []string{string(tt.protocol)},
+			}}
+
+			bindings, err := BuildCompatibleAccountGroupBindings(context.Background(), repo, account, []int64{26})
 			require.NoError(t, err)
+			require.Len(t, bindings, 1)
+			require.Equal(t, tt.platform != PlatformCursor, bindings[0].EndpointCompatibilityEnabled)
 		})
 	}
 }
 
-func TestAdminService_ValidateAccountGroupPlatform_CursorWithoutMixedSchedulingRejectsAnthropic(t *testing.T) {
-	repo := &groupRepoStubForAdmin{
-		getByID: &Group{ID: 26, Name: "anthropic-messages", Platform: PlatformAnthropic},
+func TestBuildCompatibleAccountGroupBindings_CursorRejectsUnsupportedMediaEndpoint(t *testing.T) {
+	account := &Account{
+		ID:       25,
+		Platform: PlatformCursor,
+		Type:     AccountTypeAPIKey,
+		Status:   StatusActive,
 	}
-	svc := &adminServiceImpl{groupRepo: repo}
+	repo := &groupRepoStubForAdmin{getByID: &Group{
+		ID:                27,
+		Name:              "adobe-images",
+		Platform:          PlatformAdobe,
+		EndpointProtocols: []string{string(EndpointProtocolOpenAIImages)},
+	}}
 
-	err := svc.validateAccountGroupPlatform(context.Background(), PlatformCursor, []int64{26}, false)
+	bindings, err := BuildCompatibleAccountGroupBindings(context.Background(), repo, account, []int64{27})
+	require.Nil(t, bindings)
 	require.Error(t, err)
-	require.Equal(t, http.StatusBadRequest, infraerrors.Code(err))
-	require.Equal(t, "ACCOUNT_GROUP_PLATFORM_MISMATCH", infraerrors.Reason(err))
-	require.Contains(t, infraerrors.Message(err), `account platform "cursor"`)
-}
-
-func TestAdminService_ValidateAccountGroupPlatform_CursorMixedSchedulingRejectsUnsupportedPlatforms(t *testing.T) {
-	repo := &groupRepoStubForAdmin{
-		getByID: &Group{ID: 27, Name: "adobe", Platform: PlatformAdobe},
-	}
-	svc := &adminServiceImpl{groupRepo: repo}
-
-	err := svc.validateAccountGroupPlatform(context.Background(), PlatformCursor, []int64{27}, true)
-	require.Error(t, err)
-	require.Equal(t, http.StatusBadRequest, infraerrors.Code(err))
-}
-
-func TestAdminService_ValidateAccountGroupPlatform_SamePlatformAllowed(t *testing.T) {
-	repo := &groupRepoStubForAdmin{
-		getByID: &Group{ID: 28, Name: "cursor", Platform: PlatformCursor},
-	}
-	svc := &adminServiceImpl{groupRepo: repo}
-
-	err := svc.validateAccountGroupPlatform(context.Background(), PlatformCursor, []int64{28}, false)
-	require.NoError(t, err)
+	require.Equal(t, "ACCOUNT_GROUP_ENDPOINT_MISMATCH", infraerrors.Reason(err))
 }
 
 func TestAdminService_ListGroups_PassesSortParams(t *testing.T) {

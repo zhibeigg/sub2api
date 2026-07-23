@@ -316,6 +316,24 @@ var endpointProtocolCandidatePlatformOrder = []string{
 
 // CandidateAccountPlatforms returns provider platforms that have an adapter for
 // the ingress protocol. A forced platform is an exact restriction, not a hint.
+func legacyGroupPlatformForEndpointProtocol(protocol EndpointProtocol) string {
+	switch NormalizeEndpointProtocol(protocol) {
+	case EndpointProtocolAnthropicMessages:
+		return PlatformAnthropic
+	case EndpointProtocolGeminiGenerateContent:
+		return PlatformGemini
+	case EndpointProtocolOpenAIChatCompletions,
+		EndpointProtocolOpenAIResponses,
+		EndpointProtocolOpenAIEmbeddings,
+		EndpointProtocolOpenAIAlphaSearch,
+		EndpointProtocolOpenAIImages,
+		EndpointProtocolOpenAIVideos:
+		return PlatformOpenAI
+	default:
+		return ""
+	}
+}
+
 func CandidateAccountPlatforms(protocol EndpointProtocol, forcedPlatform ...string) []string {
 	protocol = NormalizeEndpointProtocol(protocol)
 	if !IsValidEndpointProtocol(protocol) {
@@ -360,6 +378,7 @@ type AccountGroupCompatibilityOptions struct {
 	RequireOAuthOnly             bool
 	RequirePrivacySet            bool
 	SkipSchedulabilityChecks     bool
+	SkipModelCapabilityChecks    bool
 }
 
 // AccountGroupCompatibilityOptionsFrom projects the association flag without
@@ -373,6 +392,63 @@ func AccountGroupCompatibilityOptionsFrom(accountGroup *AccountGroup) AccountGro
 		HasAccountGroupBinding:       true,
 		EndpointCompatibilityEnabled: accountGroup.EndpointCompatibilityEnabled,
 	}
+}
+
+func accountGroupCompatibilityForScheduler(account *Account, groupID int64) (hasBinding bool, endpointCompatibilityEnabled bool) {
+	if account == nil || groupID <= 0 {
+		return false, false
+	}
+	for i := range account.AccountGroups {
+		binding := &account.AccountGroups[i]
+		if binding.GroupID == groupID {
+			return true, binding.EndpointCompatibilityEnabled
+		}
+	}
+	for _, boundGroupID := range account.GroupIDs {
+		if boundGroupID == groupID {
+			return true, false
+		}
+	}
+	return false, false
+}
+
+// filterAccountsCompatibleForScheduler builds the model-independent candidate
+// superset shared by snapshot population and direct database fallback. Concrete
+// model, media endpoint and dynamic quota checks remain request-time gates.
+func filterAccountsCompatibleForScheduler(
+	ctx context.Context,
+	accounts []Account,
+	group *Group,
+	groupID int64,
+	groupPlatform string,
+	request RequestDescriptor,
+	crossProviderEnabled bool,
+	allowLegacyMixed bool,
+) []Account {
+	filtered := make([]Account, 0, len(accounts))
+	for i := range accounts {
+		account := &accounts[i]
+		hasBinding, compatibilityEnabled := accountGroupCompatibilityForScheduler(account, groupID)
+		options := AccountGroupCompatibilityOptions{
+			Context:                      ctx,
+			Group:                        group,
+			GroupPlatform:                groupPlatform,
+			ForcedPlatform:               request.ForcedPlatform,
+			AllowMixedScheduling:         allowLegacyMixed,
+			HasAccountGroupBinding:       hasBinding,
+			EndpointCompatibilityEnabled: compatibilityEnabled && crossProviderEnabled,
+			SkipSchedulabilityChecks:     true,
+			SkipModelCapabilityChecks:    true,
+		}
+		if group != nil {
+			options.RequireOAuthOnly = group.RequireOAuthOnly
+			options.RequirePrivacySet = group.RequirePrivacySet
+		}
+		if IsAccountCompatibleForRequest(account, request, options) {
+			filtered = append(filtered, *account)
+		}
+	}
+	return filtered
 }
 
 // IsAccountCompatibleForRequest is the common provider-independent eligibility
@@ -411,9 +487,6 @@ func IsAccountCompatibleForRequest(account *Account, request RequestDescriptor, 
 	groupPlatform := NormalizePlatform(options.GroupPlatform)
 	if groupPlatform == "" && options.Group != nil {
 		groupPlatform = NormalizePlatform(options.Group.Platform)
-	}
-	if forcedPlatform != "" {
-		groupPlatform = forcedPlatform
 	}
 	if groupPlatform != "" && NormalizePlatform(account.Platform) != groupPlatform {
 		if options.HasAccountGroupBinding || options.EndpointCompatibilityEnabled {
@@ -471,8 +544,14 @@ func IsAccountCompatibleForRequest(account *Account, request RequestDescriptor, 
 	case EndpointProtocolOpenAIAlphaSearch:
 		return account.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityAlphaSearch)
 	case EndpointProtocolOpenAIImages:
+		if model == "" && options.SkipModelCapabilityChecks {
+			return true
+		}
 		return accountCompatibleWithImageRequest(account, model, request)
 	case EndpointProtocolOpenAIVideos:
+		if model == "" && options.SkipModelCapabilityChecks {
+			return true
+		}
 		return accountCompatibleWithVideoRequest(account, model)
 	default:
 		return false

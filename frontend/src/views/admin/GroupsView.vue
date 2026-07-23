@@ -2027,8 +2027,8 @@
           </p>
         </div>
 
-        <!-- 模型路由配置（仅 anthropic 平台） -->
-        <div v-if="usesLegacyRuntimeProfile(createForm, 'anthropic')" class="border-t pt-4">
+        <!-- 模型路由配置（所有分组可用） -->
+        <div class="border-t pt-4">
           <div class="mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.modelRouting.title") }}
@@ -3826,8 +3826,8 @@
           </p>
         </div>
 
-        <!-- 模型路由配置（仅 anthropic 平台） -->
-        <div v-if="usesLegacyRuntimeProfile(editForm, 'anthropic')" class="border-t pt-4">
+        <!-- 模型路由配置（所有分组可用） -->
+        <div class="border-t pt-4">
           <div class="mb-1.5 flex items-center gap-1">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
               {{ t("admin.groups.modelRouting.title") }}
