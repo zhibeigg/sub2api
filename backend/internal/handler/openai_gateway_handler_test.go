@@ -821,6 +821,30 @@ func TestOpenAIResponses_SetsClientTransportHTTP(t *testing.T) {
 	require.Equal(t, service.OpenAIClientTransportHTTP, service.GetOpenAIClientTransport(c))
 }
 
+func TestHandleFailoverExhaustedReturnsRequestScopedError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+	h := &OpenAIGatewayHandler{}
+	h.handleFailoverExhausted(c, &service.UpstreamFailoverError{
+		StatusCode:        http.StatusBadRequest,
+		ResponseBody:      []byte("cursor parse failure with sensitive request detail"),
+		Scope:             service.GatewayFailureScopeRequest,
+		NextAccountAction: service.NextAccountStop,
+		ClientStatusCode:  http.StatusBadRequest,
+		ClientMessage:     "Invalid Cursor request",
+	}, false)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.Equal(t, "invalid_request_error", gjson.Get(w.Body.String(), "error.type").String())
+	require.Contains(t, gjson.Get(w.Body.String(), "error.message").String(), "[PokeAPI]")
+	require.Contains(t, gjson.Get(w.Body.String(), "error.message").String(), "model request is invalid")
+	require.NotContains(t, w.Body.String(), "sensitive request detail")
+	require.Equal(t, http.StatusBadRequest, c.GetInt(service.OpsUpstreamStatusCodeKey))
+}
+
 func TestHandleAnthropicFailoverExhaustedReturnsRequestScopedError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

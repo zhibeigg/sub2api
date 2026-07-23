@@ -2348,6 +2348,11 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
 		h.handleStreamingAwareError(c, status, "upstream_error", message, streamStarted)
 		return
 	}
+	if status, message, ok := requestScopedFailoverClientError(failoverErr, "Upstream rejected the request"); ok {
+		setOpsUpstreamErrorFallback(c, failoverErr.StatusCode, message)
+		h.handleStreamingAwareError(c, status, "invalid_request_error", message, streamStarted)
+		return
+	}
 	statusCode := failoverErr.StatusCode
 	responseBody := failoverErr.ResponseBody
 	if service.IsOpenAISilentRefusalErrorBody(responseBody) {
