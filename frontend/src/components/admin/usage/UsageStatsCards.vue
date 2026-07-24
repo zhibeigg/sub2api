@@ -1,89 +1,95 @@
 <template>
-  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
-    <div class="card p-4 flex items-center gap-3">
-      <div class="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/30 text-blue-600">
-        <Icon name="document" size="md" />
-      </div>
-      <div>
-        <p class="text-xs font-medium text-gray-500">{{ t('usage.totalRequests') }}</p>
-        <p class="text-xl font-bold">{{ stats?.total_requests?.toLocaleString() || '0' }}</p>
-        <p class="text-xs text-gray-400">{{ t('usage.inSelectedRange') }}</p>
-      </div>
+  <dl class="usage-summary" data-testid="usage-summary">
+    <div class="usage-summary__item usage-summary__requests" data-testid="usage-stat-requests">
+      <dt class="usage-summary__label">{{ t('usage.totalRequests') }}</dt>
+      <dd class="usage-summary__value">
+        {{ stats?.total_requests?.toLocaleString() || '0' }}
+      </dd>
+      <dd class="usage-summary__meta">{{ t('usage.inSelectedRange') }}</dd>
     </div>
-    <div class="card token-summary-card p-4">
-      <div class="flex items-start gap-3">
-        <div class="shrink-0 rounded-lg bg-amber-100 p-2 text-amber-600 dark:bg-amber-900/30">
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
-          </svg>
-        </div>
-        <div class="min-w-0 flex-1">
-          <p class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('usage.totalTokens') }}</p>
-          <p class="mt-0.5 text-xl font-bold tracking-tight text-gray-900 tabular-nums dark:text-white">
-            {{ formatTokens(totalTokens) }}
-          </p>
 
-          <div class="token-metric-grid mt-3 border-t border-gray-100 pt-3 dark:border-dark-700" data-testid="token-breakdown">
-            <div class="min-w-0">
-              <p class="text-[11px] leading-4 text-gray-500 dark:text-gray-400">{{ t('usage.in') }}</p>
-              <p class="truncate text-sm font-semibold tabular-nums text-blue-700 dark:text-blue-300">{{ formatTokens(inputTokens) }}</p>
-            </div>
-            <div class="min-w-0">
-              <p class="text-[11px] leading-4 text-gray-500 dark:text-gray-400">{{ t('usage.out') }}</p>
-              <p class="truncate text-sm font-semibold tabular-nums text-violet-700 dark:text-violet-300">{{ formatTokens(outputTokens) }}</p>
-            </div>
-            <div class="min-w-0">
-              <p class="text-[11px] leading-4 text-gray-500 dark:text-gray-400">{{ t('usage.cacheHit') }}</p>
-              <p class="truncate text-sm font-semibold tabular-nums text-sky-700 dark:text-sky-300">{{ formatTokens(cacheReadTokens) }}</p>
-            </div>
-            <div class="min-w-0">
-              <p class="text-[11px] leading-4 text-gray-500 dark:text-gray-400">{{ t('usage.cacheCreate') }}</p>
-              <p class="truncate text-sm font-semibold tabular-nums text-amber-700 dark:text-amber-300">{{ formatTokens(cacheCreationTokens) }}</p>
-            </div>
-          </div>
+    <div class="usage-summary__item token-summary-card" data-testid="usage-stat-tokens">
+      <dt class="usage-summary__label">{{ t('usage.totalTokens') }}</dt>
+      <dd class="usage-summary__value">
+        {{ formatTokens(totalTokens) }}
+      </dd>
 
-          <div
-            v-if="cacheHitRate != null"
-            class="mt-3 flex items-center justify-between gap-3 text-xs"
-            data-testid="cache-hit-rate"
-          >
-            <span class="text-gray-500 dark:text-gray-400">{{ t('usage.cacheHitRate') }}</span>
-            <span class="flex min-w-0 items-center gap-1.5 whitespace-nowrap tabular-nums">
-              <span class="text-gray-400 dark:text-gray-500">{{ formatTokens(cacheReadTokens) }} / {{ formatTokens(promptTokens) }}</span>
-              <span class="font-semibold text-sky-700 dark:text-sky-300">{{ cacheHitRate }}</span>
-            </span>
+      <dd
+        v-if="cacheHitRate != null"
+        class="usage-cache-rate"
+        data-testid="cache-hit-rate"
+      >
+        <span class="usage-cache-rate__label">{{ t('usage.cacheHitRate') }}</span>
+        <span class="usage-cache-rate__value">{{ cacheHitRate }}</span>
+        <span class="usage-cache-rate__formula">
+          {{ formatTokens(cacheReadTokens) }} / {{ formatTokens(promptTokens) }}
+        </span>
+      </dd>
+
+      <dd class="token-summary-card__breakdown">
+        <dl class="token-metric-grid" data-testid="token-breakdown">
+          <div class="min-w-0">
+            <dt class="usage-token-label">{{ t('usage.in') }}</dt>
+            <dd class="usage-token-value text-blue-700 dark:text-blue-300">
+              {{ formatTokens(inputTokens) }}
+            </dd>
           </div>
-        </div>
-      </div>
+          <div class="min-w-0">
+            <dt class="usage-token-label">{{ t('usage.out') }}</dt>
+            <dd class="usage-token-value text-violet-700 dark:text-violet-300">
+              {{ formatTokens(outputTokens) }}
+            </dd>
+          </div>
+          <div class="min-w-0">
+            <dt class="usage-token-label">{{ t('usage.cacheHit') }}</dt>
+            <dd class="usage-token-value text-sky-700 dark:text-sky-300">
+              {{ formatTokens(cacheReadTokens) }}
+            </dd>
+          </div>
+          <div class="min-w-0">
+            <dt class="usage-token-label">{{ t('usage.cacheCreate') }}</dt>
+            <dd class="usage-token-value text-amber-700 dark:text-amber-300">
+              {{ formatTokens(cacheCreationTokens) }}
+            </dd>
+          </div>
+        </dl>
+      </dd>
     </div>
-    <div class="card p-4 flex items-center gap-3">
-      <div class="rounded-lg bg-green-100 p-2 dark:bg-green-900/30 text-green-600">
-        <Icon name="dollar" size="md" />
-      </div>
-      <div class="min-w-0 flex-1">
-        <p class="text-xs font-medium text-gray-500">{{ t('usage.totalCost') }}</p>
-        <p class="text-xl font-bold text-green-600">
-          ${{ (stats?.total_actual_cost || 0).toFixed(4) }}
-        </p>
-        <p class="text-xs text-gray-400">
-          <template v-if="showAccountCost && totalAccountCost != null">
-            <span class="text-orange-500">{{ t('usage.accountCost') }} ${{ totalAccountCost.toFixed(4) }}</span>
-            <span> · </span>
-          </template>
-          <span>
-            {{ t('usage.standardCost') }}
-            <span :class="{ 'line-through': strikeStandardCost }">${{ (stats?.total_cost || 0).toFixed(4) }}</span>
+
+    <div class="usage-summary__item usage-summary__cost" data-testid="usage-stat-cost">
+      <dt class="usage-summary__label">{{ t('usage.totalCost') }}</dt>
+      <dd class="usage-summary__value text-emerald-700 dark:text-emerald-300">
+        ${{ (stats?.total_actual_cost || 0).toFixed(4) }}
+      </dd>
+      <dd class="usage-cost-detail">
+        <span v-if="showAccountCost && totalAccountCost != null" data-testid="account-cost">
+          <span class="usage-cost-detail__label">{{ t('usage.accountCost') }}</span>
+          <span class="font-medium tabular-nums text-amber-700 dark:text-amber-300">
+            ${{ totalAccountCost.toFixed(4) }}
           </span>
-        </p>
-      </div>
+          <span class="usage-cost-detail__separator" aria-hidden="true">·</span>
+        </span>
+        <span>
+          <span class="usage-cost-detail__label">{{ t('usage.standardCost') }}</span>
+          <span
+            data-testid="standard-cost"
+            class="font-medium tabular-nums text-gray-500 dark:text-gray-300"
+            :class="{ 'line-through': strikeStandardCost }"
+          >
+            ${{ (stats?.total_cost || 0).toFixed(4) }}
+          </span>
+        </span>
+      </dd>
     </div>
-    <div class="card p-4 flex items-center gap-3">
-      <div class="rounded-lg bg-purple-100 p-2 dark:bg-purple-900/30 text-purple-600">
-        <Icon name="clock" size="md" />
-      </div>
-      <div><p class="text-xs font-medium text-gray-500">{{ t('usage.avgDuration') }}</p><p class="text-xl font-bold">{{ formatDuration(stats?.average_duration_ms || 0) }}</p></div>
+
+    <div class="usage-summary__item usage-summary__duration" data-testid="usage-stat-duration">
+      <dt class="usage-summary__label">{{ t('usage.avgDuration') }}</dt>
+      <dd class="usage-summary__value">
+        {{ formatDuration(stats?.average_duration_ms || 0) }}
+      </dd>
+      <dd class="usage-summary__meta">{{ t('usage.perRequest') }}</dd>
     </div>
-  </div>
+  </dl>
 </template>
 
 <script setup lang="ts">
@@ -91,7 +97,6 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { AdminUsageStatsResponse } from '@/api/admin/usage'
 import type { UsageStatsResponse } from '@/types'
-import Icon from '@/components/icons/Icon.vue'
 
 const props = withDefaults(defineProps<{
   stats: (AdminUsageStatsResponse | UsageStatsResponse) | null
@@ -134,19 +139,170 @@ const formatTokens = (value: number) => {
 </script>
 
 <style scoped>
+.usage-summary {
+  @apply grid overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-card;
+  @apply dark:border-dark-700 dark:bg-dark-800/70;
+}
+
+.usage-summary__item {
+  @apply min-w-0 border-t border-gray-100 px-5 py-5 dark:border-dark-700;
+}
+
+.usage-summary__item:first-child {
+  border-top: 0;
+}
+
+.usage-summary__label {
+  @apply text-xs font-medium tracking-wide text-gray-500 dark:text-gray-400;
+}
+
+.usage-summary__value {
+  @apply mt-1 text-2xl font-semibold leading-tight tracking-tight text-gray-900 tabular-nums dark:text-white;
+}
+
+.usage-summary__meta {
+  @apply mt-2 text-xs text-gray-500 dark:text-gray-400;
+}
+
 .token-summary-card {
   container-type: inline-size;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  align-items: start;
+}
+
+.token-summary-card > .usage-summary__label,
+.token-summary-card > .usage-summary__value,
+.token-summary-card > .usage-cache-rate {
+  grid-column: 1;
+}
+
+.token-summary-card > .usage-cache-rate {
+  justify-self: start;
+  margin-top: 0.75rem;
+  text-align: left;
+}
+
+.token-summary-card__breakdown {
+  grid-column: 1 / -1;
+  margin-top: 1rem;
 }
 
 .token-metric-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem 0.75rem;
+  @apply grid grid-cols-2 gap-x-5 gap-y-3 border-t border-gray-100 pt-4 dark:border-dark-700;
 }
 
-@container (min-width: 34rem) {
+.usage-token-label {
+  @apply text-xs leading-4 text-gray-500 dark:text-gray-400;
+}
+
+.usage-token-value {
+  @apply mt-0.5 truncate text-sm font-semibold tabular-nums;
+}
+
+.usage-cache-rate {
+  @apply grid shrink-0 grid-cols-[auto_auto] items-baseline gap-x-2 rounded-lg bg-sky-50 px-3 py-2;
+  @apply dark:bg-sky-950/40;
+}
+
+.usage-cache-rate__label {
+  @apply text-xs text-sky-800 dark:text-sky-300;
+}
+
+.usage-cache-rate__value {
+  @apply text-sm font-semibold tabular-nums text-sky-800 dark:text-sky-200;
+}
+
+.usage-cache-rate__formula {
+  @apply col-span-2 mt-0.5 text-xs tabular-nums text-sky-700/70 dark:text-sky-300/70;
+}
+
+.usage-cost-detail {
+  @apply mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-gray-500 dark:text-gray-400;
+}
+
+.usage-cost-detail__label {
+  @apply mr-1 text-gray-500 dark:text-gray-400;
+}
+
+.usage-cost-detail__separator {
+  @apply ml-1 text-gray-300 dark:text-gray-600;
+}
+
+@media (min-width: 30rem) {
+  .token-summary-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 1.25rem;
+  }
+
+  .token-summary-card > .usage-cache-rate {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    justify-self: end;
+    margin-top: 0;
+    text-align: right;
+  }
+}
+
+@container (min-width: 22rem) {
   .token-metric-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 48rem) {
+  .usage-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .usage-summary__item {
+    border-top: 0;
+    border-left: 1px solid rgb(243 244 246);
+  }
+
+  .usage-summary__item:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .usage-summary__item:nth-child(n + 3) {
+    border-top: 1px solid rgb(243 244 246);
+  }
+
+  :global(.dark) .usage-summary__item {
+    border-left-color: rgb(51 65 85);
+  }
+
+  :global(.dark) .usage-summary__item:nth-child(n + 3) {
+    border-top-color: rgb(51 65 85);
+  }
+}
+
+@media (min-width: 80rem) {
+  .usage-summary {
+    grid-template-columns:
+      minmax(0, 0.85fr)
+      minmax(26rem, 1.75fr)
+      minmax(0, 1.15fr)
+      minmax(0, 0.8fr);
+  }
+
+  .usage-summary__item,
+  .usage-summary__item:nth-child(odd),
+  .usage-summary__item:nth-child(n + 3) {
+    border-top: 0;
+    border-left: 1px solid rgb(243 244 246);
+  }
+
+  .usage-summary__item:first-child {
+    border-left: 0;
+  }
+
+  :global(.dark) .usage-summary__item,
+  :global(.dark) .usage-summary__item:nth-child(odd),
+  :global(.dark) .usage-summary__item:nth-child(n + 3) {
+    border-top: 0;
+    border-left-color: rgb(51 65 85);
   }
 }
 </style>
