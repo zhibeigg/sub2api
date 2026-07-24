@@ -265,10 +265,14 @@ func (m *OneBotConfigManager) Reload(ctx context.Context) error {
 		m.recordLoadError("onebot_config_decrypt_failed")
 		return err
 	}
+	previous := m.snapshot.Load()
 	now := time.Now().UTC()
 	m.expected.Store(storage.ConfigVersion)
 	m.snapshot.Store(&oneBotConfigSnapshot{storage: storage, active: active, loadedAt: now})
 	m.clearLoadError()
+	if previous != nil && sameOneBotActiveConfig(previous.active, active) {
+		return nil
+	}
 	m.stateMu.RLock()
 	callback := m.onReload
 	m.stateMu.RUnlock()
@@ -502,6 +506,16 @@ func (m *OneBotConfigManager) activeFromStorage(storage oneBotStorageConfig) (On
 		active.AccessToken = value
 	}
 	return active, nil
+}
+
+func sameOneBotActiveConfig(left, right OneBotActiveConfig) bool {
+	return left.Enabled == right.Enabled &&
+		left.SelfID == right.SelfID &&
+		sameSecret(left.AccessToken, right.AccessToken) &&
+		left.WorkerCount == right.WorkerCount &&
+		left.QueueCapacity == right.QueueCapacity &&
+		left.ActionTimeoutMS == right.ActionTimeoutMS &&
+		left.ConfigVersion == right.ConfigVersion
 }
 
 func (m *OneBotConfigManager) RuntimeState() (expected, active int64, loadedAt *time.Time, loadError string, errorAt *time.Time) {

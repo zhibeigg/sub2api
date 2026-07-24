@@ -31,6 +31,42 @@ func TestOneBotConfigManagerReloadMasksToken(t *testing.T) {
 	}
 }
 
+func TestOneBotConfigManagerReloadSkipsUnchangedRuntimeConfig(t *testing.T) {
+	storage := defaultOneBotStorageConfig()
+	storage.Enabled = true
+	storage.SelfID = "123456789"
+	storage.AccessTokenCiphertext = "enc:abcdefghijklmnopqrstuvwxyz012345"
+	storage.ConfigVersion = 7
+	raw, _ := json.Marshal(storage)
+	repo := &memorySettingRepo{values: map[string]string{SettingKeyOneBotRuntimeConfig: string(raw)}}
+	manager := NewOneBotConfigManager(nil, repo, nil, testEncryptor{})
+	callbackCount := 0
+	manager.SetOnReload(func(context.Context, OneBotActiveConfig) error {
+		callbackCount++
+		return nil
+	})
+
+	if err := manager.Reload(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Reload(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if callbackCount != 1 {
+		t.Fatalf("unchanged config reloaded runtime %d times", callbackCount)
+	}
+
+	storage.ConfigVersion = 8
+	raw, _ = json.Marshal(storage)
+	repo.values[SettingKeyOneBotRuntimeConfig] = string(raw)
+	if err := manager.Reload(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if callbackCount != 2 {
+		t.Fatalf("changed config reload count=%d", callbackCount)
+	}
+}
+
 func TestOneBotConfigManagerBootstrapsDisabledConfig(t *testing.T) {
 	repo := &memorySettingRepo{values: map[string]string{}}
 	manager := NewOneBotConfigManager(nil, repo, nil, testEncryptor{})

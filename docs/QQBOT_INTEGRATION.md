@@ -157,7 +157,8 @@ GET /webhooks/qq/onebot
 - 仅接受未经过外部代理、来源为 loopback/私有地址的直接 WebSocket Upgrade；任何 `Forwarded`、`X-Forwarded-*` 或 `X-Real-IP` 痕迹都会拒绝。
 - `Authorization: Bearer <token>` 以固定时间摘要比较校验；`X-Self-ID` 必须精确等于保存的 Self ID。
 - 每个配置代际只允许一个活动连接；新连接安全替换旧连接，旧连接上的 pending action 立即失败并可重试。
-- action 使用唯一 `echo` 并发关联，限制 pending 数量、单帧大小与调用超时；断线、取消和配置重载会清理 pending 请求。
+- 后台定时读取到与当前活动配置完全相同的值时只更新健康快照，不会重建 Hub、worker 或中断已建立的反向 WS；只有启停、Self ID、Token、worker、队列、Action 超时或配置版本变化才会热重载。
+- action 使用唯一 `echo` 并发关联，限制 pending 数量、单帧大小与调用超时；断线、取消和实际配置重载会清理 pending 请求。
 - 支持 `message/group`、`message/private`、`notice/group_increase`；忽略机器人自身事件、未知事件和缺少关键 ID 的 payload。OneBot 没有原生 event ID 时，使用事件类型、时间、Self ID、群、用户和消息 ID 生成稳定 SHA-256 指纹。
 - `send_group_msg`、`send_private_msg`、`get_login_info` 均通过同一反向 WS 执行，不暴露额外动作端口。
 
@@ -195,6 +196,8 @@ bind name@example.com
 /check
 check
 ```
+
+白名单 QQ 群可直接发送（可选 @ 机器人）`/bind name@example.com` 发起绑定；请求会按 `group:<QQ号>` 身份隔离，回复只显示脱敏邮箱，验证链接仍仅发送到该站点邮箱。邮箱命令原文会出现在群聊记录中，因此不应在群内使用不希望公开的邮箱；普通 QQ 私聊还可能受到好友关系限制，群内白名单绑定是 SnowLuma 场景的可靠入口。
 
 未知邮箱和存在邮箱返回同形结果，防止账户枚举。已绑定的官方身份只返回真实账户邮箱的脱敏值，不创建新挑战或重复发送邮件。
 

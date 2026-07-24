@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	defaultHelpMessage    = "欢迎使用 PokeAPI 账户助手。\n\n绑定账户：请私聊发送 /bind 你的邮箱\n查看渠道状态：发送 /check\n查看帮助：发送 /help\n\n验证链接只会发送到 Sub2API 账户邮箱。数字 QQ 仅作为展示信息，实际身份以机器人 OpenID 为准。"
-	defaultWelcomeMessage = "欢迎 {user} 加入 {site}！\n\n可用指令：\n绑定账户（请私聊机器人）：{bind_command}\n查看渠道状态：/check\n查看帮助：/help\n\n安全提示：请勿向任何人提供密码、验证码或 API 密钥；账户绑定链接只会发送到你的站点账户邮箱。"
+	defaultHelpMessage    = "欢迎使用 PokeAPI 账户助手。\n\n绑定账户（白名单群内可直接发送）：/bind 你的邮箱\n查看渠道状态：发送 /check\n查看帮助：发送 /help\n\n验证链接只会发送到 Sub2API 账户邮箱。群内发送邮箱会被群成员看到；普通 QQ 私聊可能受好友限制。数字 QQ 仅作为展示信息，实际身份以机器人 OpenID 为准。"
+	defaultWelcomeMessage = "欢迎 {user} 加入 {site}！\n\n可用指令：\n绑定账户（白名单群内可直接发送）：{bind_command}\n查看渠道状态：/check\n查看帮助：/help\n\n安全提示：请勿向任何人提供密码、验证码或 API 密钥；群内发送的邮箱对群成员可见，账户绑定链接只会发送到你的站点账户邮箱。"
 	qqBotSiteName         = "PokeAPI"
 )
 
