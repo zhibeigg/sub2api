@@ -1015,18 +1015,19 @@
         ref="dropdownRef"
         role="dialog"
         :aria-label="t('keys.editGroupBindings')"
-        class="animate-in fade-in slide-in-from-top-2 fixed z-[100000020] flex max-h-[calc(100vh-24px)] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl ring-1 ring-black/5 duration-200 dark:border-dark-600 dark:bg-dark-800 dark:ring-white/10"
+        class="animate-in fade-in slide-in-from-top-2 fixed z-[100000020] flex max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl ring-1 ring-black/5 duration-200 dark:border-dark-600 dark:bg-dark-800 dark:ring-white/10"
         style="pointer-events: auto !important;"
         :style="{
           top: dropdownPosition.top !== undefined ? dropdownPosition.top + 'px' : undefined,
           bottom: dropdownPosition.bottom !== undefined ? dropdownPosition.bottom + 'px' : undefined,
           left: dropdownPosition.left + 'px',
-          width: dropdownPosition.width + 'px'
+          width: dropdownPosition.width + 'px',
+          maxHeight: dropdownPosition.maxHeight + 'px'
         }"
         data-test="group-binding-popover"
         @click.stop
       >
-        <header class="flex items-start justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-dark-700">
+        <header class="flex flex-shrink-0 items-start justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-dark-700">
           <div class="min-w-0">
             <h3 class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ t('keys.editGroupBindings') }}</h3>
             <p class="truncate text-xs text-gray-500 dark:text-gray-400">{{ selectedKeyForGroup.name }}</p>
@@ -1048,7 +1049,7 @@
             :user-group-rates="userGroupRates"
           />
         </div>
-        <footer class="flex flex-col-reverse gap-2 border-t border-gray-100 px-4 py-3 sm:flex-row sm:justify-end dark:border-dark-700">
+        <footer class="flex flex-shrink-0 flex-col-reverse gap-2 border-t border-gray-100 px-4 py-3 sm:flex-row sm:justify-end dark:border-dark-700">
           <button type="button" class="btn btn-secondary" :disabled="savingGroupBindings" @click="closeGroupSelector()">
             {{ t('common.cancel') }}
           </button>
@@ -1260,7 +1261,7 @@ const publicSettings = ref<PublicSettings | null>(null)
 const dropdownRef = ref<HTMLElement | null>(null)
 const bindingPickerRef = ref<InstanceType<typeof SortableGroupBindingPicker> | null>(null)
 const columnDropdownRef = ref<HTMLElement | null>(null)
-const dropdownPosition = ref<{ top?: number; bottom?: number; left: number; width: number } | null>(null)
+const dropdownPosition = ref<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null)
 const groupButtonRefs = ref<Map<number, HTMLElement>>(new Map())
 const draftGroupBindings = ref<ApiKeyGroupBindingInput[]>([])
 const savingGroupBindings = ref(false)
@@ -1581,12 +1582,14 @@ const openGroupSelector = async (key: ApiKey) => {
     Math.max(viewportPadding, window.innerWidth - width - viewportPadding)
   )
   const estimatedHeight = Math.min(620, window.innerHeight - viewportPadding * 2)
-  const spaceBelow = window.innerHeight - rect.bottom
-  const openUpward = spaceBelow < estimatedHeight && rect.top > spaceBelow
+  const spaceAbove = Math.max(0, rect.top - viewportPadding - gap)
+  const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - viewportPadding - gap)
+  const openUpward = spaceBelow < estimatedHeight && spaceAbove > spaceBelow
+  const maxHeight = Math.max(1, openUpward ? spaceAbove : spaceBelow)
 
   dropdownPosition.value = openUpward
-    ? { bottom: window.innerHeight - rect.top + gap, left, width }
-    : { top: rect.bottom + gap, left, width }
+    ? { bottom: window.innerHeight - rect.top + gap, left, width, maxHeight }
+    : { top: rect.bottom + gap, left, width, maxHeight }
   draftGroupBindings.value = orderedBindingsForKey(key).map((binding, priority) => ({
     group_id: binding.group_id,
     priority

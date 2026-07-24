@@ -457,6 +457,24 @@ describe('user KeysView column settings', () => {
     )
   })
 
+  it('keeps the group-binding editor inside the viewport when it opens upward', async () => {
+    const group = { id: 1, name: 'Codex', platform: 'openai', rate_multiplier: 1 } as any
+    const key = { ...createApiKey(), group_id: 1, group, group_bindings: [{ group_id: 1, priority: 0, group }] }
+    listKeys.mockResolvedValueOnce({ items: [key], total: 1, page: 1, page_size: 20, pages: 1 })
+    getAvailableGroups.mockResolvedValue([group])
+    const wrapper = await mountView()
+    const button = wrapper.get('button[title="Edit ordered group bindings"]')
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
+    vi.spyOn(button.element, 'getBoundingClientRect').mockReturnValue({ top: 760, bottom: 788, left: 20, right: 220, width: 200, height: 28, x: 20, y: 760, toJSON: () => ({}) })
+
+    await button.trigger('click')
+    await nextTick()
+
+    const popover = wrapper.get('[data-test="group-binding-popover"]')
+    expect(popover.element.style.bottom).toBe('46px')
+    expect(popover.element.style.maxHeight).toBe('742px')
+  })
+
   it('shows ordered binding overflow and saves the full draft without group_id', async () => {
     const availableGroups = [
       { id: 1, name: 'Claude', platform: 'anthropic', rate_multiplier: 1 },
