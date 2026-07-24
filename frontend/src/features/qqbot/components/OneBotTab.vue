@@ -58,6 +58,27 @@
       </div>
     </section>
 
+    <section class="rounded-xl border border-gray-200 bg-white p-5 dark:border-dark-700 dark:bg-dark-800">
+      <h3 class="text-sm font-semibold text-gray-950 dark:text-white">{{ t('admin.qqbot.onebot.requestApprovalTitle') }}</h3>
+      <p class="mt-1 text-sm text-gray-500 dark:text-dark-300">{{ t('admin.qqbot.onebot.requestApprovalHint') }}</p>
+      <div class="mt-4 grid gap-4 sm:grid-cols-2">
+        <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-4 dark:border-dark-700">
+          <input type="checkbox" class="mt-0.5 h-4 w-4 accent-primary-600" :checked="draft.auto_approve_friend_requests" @change="update('auto_approve_friend_requests', checkedOf($event))" />
+          <span>
+            <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.qqbot.onebot.autoApproveFriends') }}</span>
+            <span class="mt-1 block text-xs text-gray-500 dark:text-dark-300">{{ t('admin.qqbot.onebot.autoApproveFriendsHint') }}</span>
+          </span>
+        </label>
+        <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 p-4 dark:border-dark-700">
+          <input type="checkbox" class="mt-0.5 h-4 w-4 accent-primary-600" :checked="draft.auto_approve_group_requests" @change="update('auto_approve_group_requests', checkedOf($event))" />
+          <span>
+            <span class="block text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.qqbot.onebot.autoApproveGroups') }}</span>
+            <span class="mt-1 block text-xs text-gray-500 dark:text-dark-300">{{ t('admin.qqbot.onebot.autoApproveGroupsHint') }}</span>
+          </span>
+        </label>
+      </div>
+    </section>
+
     <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <article v-for="item in statusItems" :key="item.label" class="rounded-xl border border-gray-200 bg-white p-4 dark:border-dark-700 dark:bg-dark-800">
         <p class="text-xs text-gray-500 dark:text-dark-400">{{ item.label }}</p>

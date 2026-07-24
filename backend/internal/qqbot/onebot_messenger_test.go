@@ -63,6 +63,23 @@ func TestOneBotMessengerWelcomeUsesAtAndPlainTextSegments(t *testing.T) {
 	}, params.Message)
 }
 
+func TestOneBotMessengerApprovesFriendAndGroupRequests(t *testing.T) {
+	caller := &oneBotCallerStub{}
+	messenger, err := NewOneBotMessenger(caller)
+	require.NoError(t, err)
+
+	require.NoError(t, messenger.ApproveFriendRequest(t.Context(), "friend-flag"))
+	require.Equal(t, "set_friend_add_request", caller.action)
+	require.Equal(t, oneBotFriendRequestParams{Flag: "friend-flag", Approve: true}, caller.params)
+
+	require.NoError(t, messenger.ApproveGroupRequest(t.Context(), "group-flag", "add"))
+	require.Equal(t, "set_group_add_request", caller.action)
+	require.Equal(t, oneBotGroupRequestParams{Flag: "group-flag", SubType: "add", Approve: true}, caller.params)
+
+	require.Error(t, messenger.ApproveFriendRequest(t.Context(), ""))
+	require.Error(t, messenger.ApproveGroupRequest(t.Context(), "group-flag", "invite"))
+}
+
 func TestOneBotMessengerImagesAndUnsupportedChannels(t *testing.T) {
 	caller := &oneBotCallerStub{}
 	messenger, err := NewOneBotMessenger(caller)

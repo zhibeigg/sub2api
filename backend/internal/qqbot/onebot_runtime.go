@@ -401,8 +401,21 @@ func (r *OneBotRuntime) processItems(generation *oneBotRuntimeGeneration, items 
 			continue
 		}
 		processCtx, cancel := context.WithTimeout(target.ctx, 20*time.Second)
-		err := r.processor.processWith(processCtx, r.activeProcessingConfig(target.config), target.messenger, r.queue.ReliableQueue, item.Event, r.markSent)
+		var err error
+		approvalAttempted := false
+		if item.Event.OneBotRequest != nil {
+			approvalAttempted, err = r.processRequestApproval(processCtx, target.messenger, item.Event)
+		} else {
+			err = r.processor.processWith(processCtx, r.activeProcessingConfig(target.config), target.messenger, r.queue.ReliableQueue, item.Event, r.markSent)
+		}
 		cancel()
+		if approvalAttempted {
+			auditCtx, auditCancel := context.WithTimeout(target.ctx, 5*time.Second)
+			if auditErr := r.manager.RecordRequestApproval(auditCtx, target.config.SelfID, item.Event, err); auditErr != nil {
+				slog.Warn("onebot request approval audit failed", "event_id", shortID(item.Event.EventID), "error_code", "request_approval_audit_failed")
+			}
+			auditCancel()
+		}
 		if err == nil {
 			if ackErr := r.queue.Ack(target.ctx, item.ID); ackErr != nil {
 				r.recordError("queue_ack_failed")
@@ -423,6 +436,32 @@ func (r *OneBotRuntime) processItems(generation *oneBotRuntimeGeneration, items 
 			r.recordError(code)
 		}
 		slog.Warn("onebot event processing failed", "event_id", shortID(item.Event.EventID), "scene", item.Event.Scene, "error_code", code)
+	}
+}
+
+func (r *OneBotRuntime) processRequestApproval(ctx context.Context, messenger *OneBotMessenger, incoming InboundEvent) (bool, error) {
+	if r == nil || r.manager == nil || messenger == nil || incoming.OneBotRequest == nil {
+		return false, ErrRuntimeUnavailable
+	}
+	request := incoming.OneBotRequest
+	policy := r.manager.RequestPolicy()
+	switch request.Kind {
+	case "friend":
+		if !policy.AutoApproveFriendRequests {
+			return false, nil
+		}
+		return true, messenger.ApproveFriendRequest(ctx, request.Flag)
+	case "group":
+		if !policy.AutoApproveGroupRequests || request.SubType != "add" || r.processor == nil || r.processor.manager == nil {
+			return false, nil
+		}
+		settings := r.processor.manager.BusinessSettings()
+		if !contains(settings.AllowedGroupIDs, incoming.SourceID) {
+			return false, nil
+		}
+		return true, messenger.ApproveGroupRequest(ctx, request.Flag, request.SubType)
+	default:
+		return false, nil
 	}
 }
 

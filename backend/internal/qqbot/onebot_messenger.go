@@ -17,6 +17,14 @@ type GroupWelcomeMessenger interface {
 	SendGroupWelcome(ctx context.Context, groupID, userID, content string) error
 }
 
+// OneBotRequestApprover is an optional OneBot-only capability used for incoming
+// friend and group join requests. It is intentionally separate from Messenger,
+// because Tencent BotGo does not expose equivalent request actions.
+type OneBotRequestApprover interface {
+	ApproveFriendRequest(ctx context.Context, flag string) error
+	ApproveGroupRequest(ctx context.Context, flag, subType string) error
+}
+
 type oneBotUnsupportedError struct{}
 
 func (oneBotUnsupportedError) Error() string    { return "onebot v11 does not support channel messages" }
@@ -46,6 +54,19 @@ type oneBotSendGroupParams struct {
 type oneBotSendPrivateParams struct {
 	UserID  string                 `json:"user_id"`
 	Message []OneBotMessageSegment `json:"message"`
+}
+
+type oneBotFriendRequestParams struct {
+	Flag    string `json:"flag"`
+	Approve bool   `json:"approve"`
+	Remark  string `json:"remark"`
+}
+
+type oneBotGroupRequestParams struct {
+	Flag    string `json:"flag"`
+	SubType string `json:"sub_type"`
+	Approve bool   `json:"approve"`
+	Reason  string `json:"reason"`
 }
 
 func NewOneBotMessenger(caller OneBotActionCaller) (*OneBotMessenger, error) {
@@ -81,6 +102,20 @@ func (m *OneBotMessenger) SendProactiveC2C(ctx context.Context, userID, content 
 
 func (m *OneBotMessenger) SendChannel(context.Context, string, string, string, string, uint32) error {
 	return ErrOneBotChannelUnsupported
+}
+
+func (m *OneBotMessenger) ApproveFriendRequest(ctx context.Context, flag string) error {
+	if !validOneBotRequestFlag(flag) {
+		return errors.New("onebot friend request flag is invalid")
+	}
+	return m.call(ctx, "set_friend_add_request", oneBotFriendRequestParams{Flag: strings.TrimSpace(flag), Approve: true}, nil)
+}
+
+func (m *OneBotMessenger) ApproveGroupRequest(ctx context.Context, flag, subType string) error {
+	if !validOneBotRequestFlag(flag) || strings.ToLower(strings.TrimSpace(subType)) != "add" {
+		return errors.New("onebot group request is invalid")
+	}
+	return m.call(ctx, "set_group_add_request", oneBotGroupRequestParams{Flag: strings.TrimSpace(flag), SubType: "add", Approve: true}, nil)
 }
 
 func (m *OneBotMessenger) SendGroupImage(ctx context.Context, groupID, _, _, imageURL string, _ uint32) error {
@@ -153,3 +188,4 @@ func validateOneBotImageURL(value string) error {
 
 var _ Messenger = (*OneBotMessenger)(nil)
 var _ GroupWelcomeMessenger = (*OneBotMessenger)(nil)
+var _ OneBotRequestApprover = (*OneBotMessenger)(nil)

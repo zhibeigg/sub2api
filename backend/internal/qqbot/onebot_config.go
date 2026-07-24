@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/redis/go-redis/v9"
 )
@@ -27,16 +28,18 @@ const (
 )
 
 type oneBotStorageConfig struct {
-	Enabled               bool      `json:"enabled"`
-	SelfID                string    `json:"self_id"`
-	AccessTokenCiphertext string    `json:"access_token_ciphertext,omitempty"`
-	WorkerCount           int       `json:"worker_count"`
-	QueueCapacity         int       `json:"queue_capacity"`
-	ActionTimeoutMS       int       `json:"action_timeout_ms"`
-	ConfigVersion         int64     `json:"config_version"`
-	UpdatedAt             time.Time `json:"updated_at"`
-	UpdatedBy             int64     `json:"updated_by"`
-	ChangeSummary         string    `json:"change_summary"`
+	Enabled                   bool      `json:"enabled"`
+	SelfID                    string    `json:"self_id"`
+	AccessTokenCiphertext     string    `json:"access_token_ciphertext,omitempty"`
+	WorkerCount               int       `json:"worker_count"`
+	QueueCapacity             int       `json:"queue_capacity"`
+	ActionTimeoutMS           int       `json:"action_timeout_ms"`
+	AutoApproveFriendRequests bool      `json:"auto_approve_friend_requests"`
+	AutoApproveGroupRequests  bool      `json:"auto_approve_group_requests"`
+	ConfigVersion             int64     `json:"config_version"`
+	UpdatedAt                 time.Time `json:"updated_at"`
+	UpdatedBy                 int64     `json:"updated_by"`
+	ChangeSummary             string    `json:"change_summary"`
 }
 
 type OneBotActiveConfig struct {
@@ -52,27 +55,36 @@ type OneBotActiveConfig struct {
 }
 
 type OneBotPublicConfig struct {
-	Enabled               bool      `json:"enabled"`
-	SelfID                string    `json:"self_id"`
-	AccessTokenConfigured bool      `json:"access_token_configured"`
-	WorkerCount           int       `json:"worker_count"`
-	QueueCapacity         int       `json:"queue_capacity"`
-	ActionTimeoutMS       int       `json:"action_timeout_ms"`
-	ReverseWSURL          string    `json:"reverse_ws_url"`
-	ConfigVersion         int64     `json:"config_version"`
-	UpdatedAt             time.Time `json:"updated_at"`
-	UpdatedBy             int64     `json:"updated_by"`
-	ChangeSummary         string    `json:"change_summary"`
+	Enabled                   bool      `json:"enabled"`
+	SelfID                    string    `json:"self_id"`
+	AccessTokenConfigured     bool      `json:"access_token_configured"`
+	WorkerCount               int       `json:"worker_count"`
+	QueueCapacity             int       `json:"queue_capacity"`
+	ActionTimeoutMS           int       `json:"action_timeout_ms"`
+	AutoApproveFriendRequests bool      `json:"auto_approve_friend_requests"`
+	AutoApproveGroupRequests  bool      `json:"auto_approve_group_requests"`
+	ReverseWSURL              string    `json:"reverse_ws_url"`
+	ConfigVersion             int64     `json:"config_version"`
+	UpdatedAt                 time.Time `json:"updated_at"`
+	UpdatedBy                 int64     `json:"updated_by"`
+	ChangeSummary             string    `json:"change_summary"`
+}
+
+type OneBotRequestPolicy struct {
+	AutoApproveFriendRequests bool
+	AutoApproveGroupRequests  bool
 }
 
 type OneBotUpdateConfigRequest struct {
-	ExpectedConfigVersion int64  `json:"expected_config_version" binding:"required"`
-	Enabled               bool   `json:"enabled"`
-	SelfID                string `json:"self_id"`
-	AccessToken           string `json:"access_token,omitempty"`
-	WorkerCount           int    `json:"worker_count"`
-	QueueCapacity         int    `json:"queue_capacity"`
-	ActionTimeoutMS       int    `json:"action_timeout_ms"`
+	ExpectedConfigVersion     int64  `json:"expected_config_version" binding:"required"`
+	Enabled                   bool   `json:"enabled"`
+	SelfID                    string `json:"self_id"`
+	AccessToken               string `json:"access_token,omitempty"`
+	WorkerCount               int    `json:"worker_count"`
+	QueueCapacity             int    `json:"queue_capacity"`
+	ActionTimeoutMS           int    `json:"action_timeout_ms"`
+	AutoApproveFriendRequests bool   `json:"auto_approve_friend_requests"`
+	AutoApproveGroupRequests  bool   `json:"auto_approve_group_requests"`
 }
 
 type OneBotProbeRequest struct {
@@ -296,6 +308,42 @@ func (m *OneBotConfigManager) Active() (OneBotActiveConfig, bool) {
 	return snapshot.active, true
 }
 
+func (m *OneBotConfigManager) RequestPolicy() OneBotRequestPolicy {
+	if m == nil || m.snapshot.Load() == nil {
+		return OneBotRequestPolicy{}
+	}
+	storage := m.snapshot.Load().storage
+	return OneBotRequestPolicy{
+		AutoApproveFriendRequests: storage.AutoApproveFriendRequests,
+		AutoApproveGroupRequests:  storage.AutoApproveGroupRequests,
+	}
+}
+
+func (m *OneBotConfigManager) RecordRequestApproval(ctx context.Context, selfID string, event InboundEvent, actionErr error) error {
+	if m == nil || m.db == nil || event.OneBotRequest == nil {
+		return nil
+	}
+	status := "success"
+	reason := ""
+	if actionErr != nil {
+		status = "failed"
+		reason = infraerrors.Reason(actionErr)
+		if reason == "" {
+			reason = "onebot_request_action_failed"
+		}
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"request_kind":      event.OneBotRequest.Kind,
+		"event_fingerprint": Fingerprint(event.EventID),
+		"group_allowlisted": event.OneBotRequest.Kind != "group" || strings.TrimSpace(event.SourceID) != "",
+	})
+	if err != nil {
+		return err
+	}
+	_, err = m.db.ExecContext(ctx, `INSERT INTO qqbot_binding_audit_logs (action,status,actor_type,actor_subject,bot_app_id,provider_subject_hash,reason,metadata) VALUES ('onebot_request_approval',$1,'system','onebot',$2,$3,$4,$5::jsonb)`, status, Fingerprint(selfID), Fingerprint(event.ProviderSubject), reason, string(metadata))
+	return err
+}
+
 func (m *OneBotConfigManager) Public() OneBotPublicConfig {
 	if m == nil || m.snapshot.Load() == nil {
 		return publicOneBotConfig(defaultOneBotStorageConfig())
@@ -305,17 +353,19 @@ func (m *OneBotConfigManager) Public() OneBotPublicConfig {
 
 func publicOneBotConfig(cfg oneBotStorageConfig) OneBotPublicConfig {
 	return OneBotPublicConfig{
-		Enabled:               cfg.Enabled,
-		SelfID:                cfg.SelfID,
-		AccessTokenConfigured: cfg.AccessTokenCiphertext != "",
-		WorkerCount:           cfg.WorkerCount,
-		QueueCapacity:         cfg.QueueCapacity,
-		ActionTimeoutMS:       cfg.ActionTimeoutMS,
-		ReverseWSURL:          "ws://127.0.0.1:8080/webhooks/qq/onebot",
-		ConfigVersion:         cfg.ConfigVersion,
-		UpdatedAt:             cfg.UpdatedAt,
-		UpdatedBy:             cfg.UpdatedBy,
-		ChangeSummary:         cfg.ChangeSummary,
+		Enabled:                   cfg.Enabled,
+		SelfID:                    cfg.SelfID,
+		AccessTokenConfigured:     cfg.AccessTokenCiphertext != "",
+		WorkerCount:               cfg.WorkerCount,
+		QueueCapacity:             cfg.QueueCapacity,
+		ActionTimeoutMS:           cfg.ActionTimeoutMS,
+		AutoApproveFriendRequests: cfg.AutoApproveFriendRequests,
+		AutoApproveGroupRequests:  cfg.AutoApproveGroupRequests,
+		ReverseWSURL:              "ws://127.0.0.1:8080/webhooks/qq/onebot",
+		ConfigVersion:             cfg.ConfigVersion,
+		UpdatedAt:                 cfg.UpdatedAt,
+		UpdatedBy:                 cfg.UpdatedBy,
+		ChangeSummary:             cfg.ChangeSummary,
 	}
 }
 
@@ -410,7 +460,10 @@ func (m *OneBotConfigManager) Save(ctx context.Context, req OneBotUpdateConfigRe
 	next.WorkerCount = req.WorkerCount
 	next.QueueCapacity = req.QueueCapacity
 	next.ActionTimeoutMS = req.ActionTimeoutMS
+	next.AutoApproveFriendRequests = req.AutoApproveFriendRequests
+	next.AutoApproveGroupRequests = req.AutoApproveGroupRequests
 	changedSecrets := false
+
 	if token := strings.TrimSpace(req.AccessToken); token != "" {
 		if len([]byte(token)) < 32 {
 			return OneBotPublicConfig{}, ErrInvalidConfig
@@ -457,13 +510,14 @@ func (m *OneBotConfigManager) Save(ctx context.Context, req OneBotUpdateConfigRe
 	if err != nil {
 		return OneBotPublicConfig{}, err
 	}
+	previous := m.snapshot.Load()
 	m.expected.Store(next.ConfigVersion)
 	m.snapshot.Store(&oneBotConfigSnapshot{storage: next, active: active, loadedAt: time.Now().UTC()})
 	m.clearLoadError()
 	m.stateMu.RLock()
 	callback := m.onReload
 	m.stateMu.RUnlock()
-	if callback != nil {
+	if callback != nil && (previous == nil || !sameOneBotActiveConfig(previous.active, active)) {
 		if err := callback(ctx, active); err != nil {
 			m.recordLoadError("onebot_runtime_reload_failed")
 		}
@@ -476,12 +530,14 @@ func (m *OneBotConfigManager) Save(ctx context.Context, req OneBotUpdateConfigRe
 
 func oneBotConfigChangeSummary(cfg oneBotStorageConfig, changedSecret bool) string {
 	payload := map[string]any{
-		"enabled":           cfg.Enabled,
-		"self_id_hash":      Fingerprint(cfg.SelfID),
-		"worker_count":      cfg.WorkerCount,
-		"queue_capacity":    cfg.QueueCapacity,
-		"action_timeout_ms": cfg.ActionTimeoutMS,
-		"token_changed":     changedSecret,
+		"enabled":                      cfg.Enabled,
+		"self_id_hash":                 Fingerprint(cfg.SelfID),
+		"worker_count":                 cfg.WorkerCount,
+		"queue_capacity":               cfg.QueueCapacity,
+		"action_timeout_ms":            cfg.ActionTimeoutMS,
+		"auto_approve_friend_requests": cfg.AutoApproveFriendRequests,
+		"auto_approve_group_requests":  cfg.AutoApproveGroupRequests,
+		"token_changed":                changedSecret,
 	}
 	raw, _ := json.Marshal(payload)
 	return string(raw)
@@ -514,8 +570,7 @@ func sameOneBotActiveConfig(left, right OneBotActiveConfig) bool {
 		sameSecret(left.AccessToken, right.AccessToken) &&
 		left.WorkerCount == right.WorkerCount &&
 		left.QueueCapacity == right.QueueCapacity &&
-		left.ActionTimeoutMS == right.ActionTimeoutMS &&
-		left.ConfigVersion == right.ConfigVersion
+		left.ActionTimeoutMS == right.ActionTimeoutMS
 }
 
 func (m *OneBotConfigManager) RuntimeState() (expected, active int64, loadedAt *time.Time, loadError string, errorAt *time.Time) {

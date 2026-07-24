@@ -95,6 +95,8 @@ export function buildOneBotUpdateRequest(draft: QQBotOneBotDraft): QQBotOneBotUp
     worker_count: Number(draft.worker_count),
     queue_capacity: Number(draft.queue_capacity),
     action_timeout_ms: Number(draft.action_timeout_ms),
+    auto_approve_friend_requests: draft.auto_approve_friend_requests,
+    auto_approve_group_requests: draft.auto_approve_group_requests,
   }
   if (draft.access_token.trim()) payload.access_token = draft.access_token.trim()
   return payload

@@ -49,7 +49,9 @@ type oneBotEventPayload struct {
 	PostType    string            `json:"post_type"`
 	MessageType string            `json:"message_type"`
 	NoticeType  string            `json:"notice_type"`
+	RequestType string            `json:"request_type"`
 	SubType     string            `json:"sub_type"`
+	Flag        json.RawMessage   `json:"flag"`
 	MessageID   oneBotID          `json:"message_id"`
 	UserID      oneBotID          `json:"user_id"`
 	GroupID     oneBotID          `json:"group_id"`
@@ -97,6 +99,8 @@ func AdaptOneBotEvent(raw []byte, expectedSelfID string) (InboundEvent, bool, er
 		return adaptOneBotMessage(payload, selfID)
 	case "notice":
 		return adaptOneBotNotice(payload, selfID)
+	case "request":
+		return adaptOneBotRequest(payload, selfID)
 	default:
 		return InboundEvent{}, false, nil
 	}
@@ -158,6 +162,71 @@ func adaptOneBotNotice(payload oneBotEventPayload, selfID string) (InboundEvent,
 		SourceID:        groupID,
 		MemberJoined:    true,
 	}, true, nil
+}
+
+func adaptOneBotRequest(payload oneBotEventPayload, selfID string) (InboundEvent, bool, error) {
+	userID := payload.UserID.String()
+	if !validOneBotID(userID) || userID == selfID {
+		return InboundEvent{}, false, nil
+	}
+	flag, ok := oneBotRequestFlag(payload.Flag)
+	if !ok {
+		return InboundEvent{}, false, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(payload.RequestType)) {
+	case "friend":
+		return InboundEvent{
+			EventID:         stableOneBotEventID("request", "friend", selfID, userID, flag, fmt.Sprintf("%d", payload.Time)),
+			Scene:           SceneC2C,
+			ProviderSubject: userID,
+			OneBotRequest:   &OneBotRequestApproval{Kind: "friend", Flag: flag},
+		}, true, nil
+	case "group":
+		if strings.ToLower(strings.TrimSpace(payload.SubType)) != "add" {
+			return InboundEvent{}, false, nil
+		}
+		groupID := payload.GroupID.String()
+		if !validOneBotID(groupID) {
+			return InboundEvent{}, false, nil
+		}
+		return InboundEvent{
+			EventID:         stableOneBotEventID("request", "group", "add", selfID, groupID, userID, flag, fmt.Sprintf("%d", payload.Time)),
+			Scene:           SceneGroup,
+			ProviderSubject: userID,
+			SourceID:        groupID,
+			OneBotRequest:   &OneBotRequestApproval{Kind: "group", Flag: flag, SubType: "add"},
+		}, true, nil
+	default:
+		return InboundEvent{}, false, nil
+	}
+}
+
+func oneBotRequestFlag(raw json.RawMessage) (string, bool) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+		return "", false
+	}
+	var value string
+	if raw[0] == '"' {
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return "", false
+		}
+	} else {
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.UseNumber()
+		var number json.Number
+		if err := decoder.Decode(&number); err != nil {
+			return "", false
+		}
+		value = number.String()
+	}
+	value = strings.TrimSpace(value)
+	return value, validOneBotRequestFlag(value)
+}
+
+func validOneBotRequestFlag(value string) bool {
+	value = strings.TrimSpace(value)
+	return value != "" && len(value) <= 512
 }
 
 func oneBotMessageText(message json.RawMessage, rawMessage string) (string, error) {

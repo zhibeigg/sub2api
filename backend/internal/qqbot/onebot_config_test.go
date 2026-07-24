@@ -15,6 +15,8 @@ func TestOneBotConfigManagerReloadMasksToken(t *testing.T) {
 	storage.SelfID = "123456789"
 	storage.AccessTokenCiphertext = "enc:abcdefghijklmnopqrstuvwxyz012345"
 	storage.ConfigVersion = 7
+	storage.AutoApproveFriendRequests = true
+	storage.AutoApproveGroupRequests = true
 	raw, _ := json.Marshal(storage)
 	repo := &memorySettingRepo{values: map[string]string{SettingKeyOneBotRuntimeConfig: string(raw)}}
 	manager := NewOneBotConfigManager(nil, repo, nil, testEncryptor{})
@@ -22,7 +24,7 @@ func TestOneBotConfigManagerReloadMasksToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	public := manager.Public()
-	if !public.AccessTokenConfigured || public.ConfigVersion != 7 || public.SelfID != storage.SelfID {
+	if !public.AccessTokenConfigured || public.ConfigVersion != 7 || public.SelfID != storage.SelfID || !public.AutoApproveFriendRequests || !public.AutoApproveGroupRequests {
 		t.Fatalf("public=%#v", public)
 	}
 	active, ok := manager.Active()
@@ -57,6 +59,7 @@ func TestOneBotConfigManagerReloadSkipsUnchangedRuntimeConfig(t *testing.T) {
 	}
 
 	storage.ConfigVersion = 8
+	storage.WorkerCount = 3
 	raw, _ = json.Marshal(storage)
 	repo.values[SettingKeyOneBotRuntimeConfig] = string(raw)
 	if err := manager.Reload(t.Context()); err != nil {
@@ -64,6 +67,39 @@ func TestOneBotConfigManagerReloadSkipsUnchangedRuntimeConfig(t *testing.T) {
 	}
 	if callbackCount != 2 {
 		t.Fatalf("changed config reload count=%d", callbackCount)
+	}
+}
+
+func TestOneBotConfigManagerPolicyRefreshDoesNotReloadRuntime(t *testing.T) {
+	storage := defaultOneBotStorageConfig()
+	storage.Enabled = true
+	storage.SelfID = "123456789"
+	storage.AccessTokenCiphertext = "enc:abcdefghijklmnopqrstuvwxyz012345"
+	raw, _ := json.Marshal(storage)
+	repo := &memorySettingRepo{values: map[string]string{SettingKeyOneBotRuntimeConfig: string(raw)}}
+	manager := NewOneBotConfigManager(nil, repo, nil, testEncryptor{})
+	callbackCount := 0
+	manager.SetOnReload(func(context.Context, OneBotActiveConfig) error {
+		callbackCount++
+		return nil
+	})
+	if err := manager.Reload(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	storage.ConfigVersion++
+	storage.AutoApproveFriendRequests = true
+	storage.AutoApproveGroupRequests = true
+	raw, _ = json.Marshal(storage)
+	repo.values[SettingKeyOneBotRuntimeConfig] = string(raw)
+	if err := manager.Reload(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if callbackCount != 1 {
+		t.Fatalf("policy refresh reloaded runtime %d times", callbackCount)
+	}
+	if policy := manager.RequestPolicy(); !policy.AutoApproveFriendRequests || !policy.AutoApproveGroupRequests {
+		t.Fatalf("policy=%#v", policy)
 	}
 }
 

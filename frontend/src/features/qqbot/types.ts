@@ -102,6 +102,8 @@ export interface QQBotOneBotConfig {
   worker_count: number
   queue_capacity: number
   action_timeout_ms: number
+  auto_approve_friend_requests: boolean
+  auto_approve_group_requests: boolean
   reverse_ws_url: string
   config_version: number
   updated_at?: string
@@ -121,6 +123,8 @@ export interface QQBotOneBotUpdateRequest {
   worker_count: number
   queue_capacity: number
   action_timeout_ms: number
+  auto_approve_friend_requests: boolean
+  auto_approve_group_requests: boolean
 }
 
 export interface QQBotOneBotProbeRequest {

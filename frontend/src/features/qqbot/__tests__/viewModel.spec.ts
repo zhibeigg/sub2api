@@ -48,6 +48,8 @@ const oneBotConfig = (): QQBotOneBotConfig => ({
   worker_count: 2,
   queue_capacity: 1024,
   action_timeout_ms: 10000,
+  auto_approve_friend_requests: false,
+  auto_approve_group_requests: false,
   reverse_ws_url: 'ws://127.0.0.1:8080/webhooks/qq/onebot',
   config_version: 3,
 })
@@ -147,6 +149,19 @@ describe('QQBot view model', () => {
     expect(oneBotCredentialsReady(draft)).toBe(true)
     expect(buildOneBotUpdateRequest(draft)).not.toHaveProperty('access_token')
     expect(buildOneBotProbeRequest(draft)).not.toHaveProperty('access_token')
+  })
+
+  it('round-trips OneBot auto-approval switches into update requests and dirty-state fingerprints', () => {
+    const draft = oneBotConfigToDraft(oneBotConfig())
+    const before = JSON.stringify(buildOneBotUpdateRequest(draft))
+    draft.auto_approve_friend_requests = true
+    draft.auto_approve_group_requests = true
+
+    expect(buildOneBotUpdateRequest(draft)).toMatchObject({
+      auto_approve_friend_requests: true,
+      auto_approve_group_requests: true,
+    })
+    expect(JSON.stringify(buildOneBotUpdateRequest(draft))).not.toBe(before)
   })
 
   it('validates OneBot credentials and fingerprints token rotations', () => {
