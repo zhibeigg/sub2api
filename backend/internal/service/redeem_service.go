@@ -31,12 +31,20 @@ const (
 )
 
 type ctxKeySkipRedeemAffiliate struct{}
+type ctxKeySkipRedeemRateLimit struct{}
 
 // ContextSkipRedeemAffiliate returns a context that suppresses the redeem-level
 // affiliate rebate. Used by payment fulfillment which handles rebate separately
 // via applyAffiliateRebateForOrder (with audit-log deduplication).
 func ContextSkipRedeemAffiliate(ctx context.Context) context.Context {
 	return context.WithValue(ctx, ctxKeySkipRedeemAffiliate{}, true)
+}
+
+// contextSkipRedeemRateLimit marks a trusted internal fulfillment flow that must
+// not be blocked by the failed-attempt limit for user-submitted redeem codes.
+// It deliberately does not alter the user's rate-limit state.
+func contextSkipRedeemRateLimit(ctx context.Context) context.Context {
+	return context.WithValue(ctx, ctxKeySkipRedeemRateLimit{}, true)
 }
 
 // RedeemCache defines cache operations for redeem service
@@ -327,6 +335,9 @@ func (s *RedeemService) BatchUpdate(ctx context.Context, input *RedeemCodeBatchU
 
 // checkRedeemRateLimit 检查用户兑换错误次数是否超限
 func (s *RedeemService) checkRedeemRateLimit(ctx context.Context, userID int64) error {
+	if ctx != nil && ctx.Value(ctxKeySkipRedeemRateLimit{}) != nil {
+		return nil
+	}
 	if s.cache == nil {
 		return nil
 	}

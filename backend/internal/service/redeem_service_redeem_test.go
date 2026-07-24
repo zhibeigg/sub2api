@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
@@ -12,6 +13,28 @@ import (
 type redeemRejectRepo struct {
 	code      RedeemCode
 	useCalled bool
+}
+
+type redeemRateLimitCacheStub struct {
+	attempts      int
+	getCountCalls int
+}
+
+func (c *redeemRateLimitCacheStub) GetRedeemAttemptCount(context.Context, int64) (int, error) {
+	c.getCountCalls++
+	return c.attempts, nil
+}
+
+func (c *redeemRateLimitCacheStub) IncrementRedeemAttemptCount(context.Context, int64) error {
+	return nil
+}
+
+func (c *redeemRateLimitCacheStub) AcquireRedeemLock(context.Context, string, time.Duration) (bool, error) {
+	return true, nil
+}
+
+func (c *redeemRateLimitCacheStub) ReleaseRedeemLock(context.Context, string) error {
+	return nil
 }
 
 func (r *redeemRejectRepo) Create(ctx context.Context, code *RedeemCode) error {
@@ -99,4 +122,19 @@ func TestRedeemRejectsInvitationCodeBeforeTransaction(t *testing.T) {
 	require.False(t, redeemRepo.useCalled)
 	require.Equal(t, StatusUnused, redeemRepo.code.Status)
 	require.Nil(t, redeemRepo.code.UsedBy)
+}
+
+func TestRedeemRateLimitSkipsTrustedPaymentFulfillmentContext(t *testing.T) {
+	ctx := context.Background()
+	cache := &redeemRateLimitCacheStub{attempts: redeemMaxErrorsPerHour}
+	redeemService := &RedeemService{cache: cache}
+
+	err := redeemService.checkRedeemRateLimit(ctx, 42)
+	require.Error(t, err)
+	require.Equal(t, "REDEEM_RATE_LIMITED", infraerrors.Reason(err))
+	require.Equal(t, 1, cache.getCountCalls)
+
+	err = redeemService.checkRedeemRateLimit(contextSkipRedeemRateLimit(ctx), 42)
+	require.NoError(t, err)
+	require.Equal(t, 1, cache.getCountCalls, "trusted payment fulfillment must not read or clear user rate-limit state")
 }
