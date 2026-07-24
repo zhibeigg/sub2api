@@ -23,15 +23,17 @@ import (
 )
 
 const (
-	channelStatusImageWidth     = 1200
-	channelStatusImageMargin    = 52
-	channelStatusImageGap       = 24
-	channelStatusCardHeight     = 246
-	channelStatusHeaderHeight   = 164
-	channelStatusFooterHeight   = 72
-	channelStatusMaxMonitors    = 12
-	channelStatusTimelinePoints = 30
-	channelStatusMaxPNGBytes    = 5 << 20
+	channelStatusImageWidth                 = 1200
+	channelStatusImageMargin                = 52
+	channelStatusImageGap                   = 24
+	channelStatusCardHeight                 = 272
+	channelStatusCardPadding                = 22
+	channelStatusAvailabilityTimelineMinGap = 16
+	channelStatusHeaderHeight               = 164
+	channelStatusFooterHeight               = 72
+	channelStatusMaxMonitors                = 12
+	channelStatusTimelinePoints             = 30
+	channelStatusMaxPNGBytes                = 5 << 20
 )
 
 var errChannelStatusFontUnavailable = errors.New("qqbot channel status font unavailable")
@@ -52,6 +54,34 @@ type channelStatusFaces struct {
 	small   font.Face
 	tiny    font.Face
 	closers []font.Face
+}
+
+type channelStatusCardLayout struct {
+	left                      int
+	top                       int
+	metricTop                 int
+	availabilityLabelBaseline int
+	availabilityValueBaseline int
+	timeline                  image.Rectangle
+}
+
+func newChannelStatusCardLayout(rect image.Rectangle) channelStatusCardLayout {
+	left := rect.Min.X + channelStatusCardPadding
+	top := rect.Min.Y + channelStatusCardPadding
+	metricTop := top + 102
+	return channelStatusCardLayout{
+		left:                      left,
+		top:                       top,
+		metricTop:                 metricTop,
+		availabilityLabelBaseline: metricTop + 86,
+		availabilityValueBaseline: metricTop + 88,
+		timeline: image.Rect(
+			left,
+			rect.Max.Y-36,
+			rect.Max.X-channelStatusCardPadding,
+			rect.Max.Y-18,
+		),
+	}
 }
 
 func NewChannelStatusRenderer() *ChannelStatusRenderer {
@@ -126,18 +156,18 @@ func (r *ChannelStatusRenderer) drawHeader(img *image.RGBA, faces channelStatusF
 	drawText(img, faces.body, hexColor("#627D98"), channelStatusImageMargin, 102, "渠道监控实时快照 · 7 天可用率")
 
 	status := "全部正常"
-	statusColor := hexColor("#067647")
-	statusFill := hexColor("#DFF7E8")
+	statusColor := hexColor("#0B6E4F")
+	statusFill := hexColor("#E4F5EB")
 	if len(items) == 0 {
 		status = "暂无数据"
-		statusColor = hexColor("#526D82")
-		statusFill = hexColor("#EAF0F5")
+		statusColor = hexColor("#4B6377")
+		statusFill = hexColor("#EEF3F6")
 	}
 	for _, item := range items {
 		if item == nil || strings.ToLower(strings.TrimSpace(item.PrimaryStatus)) != "operational" {
 			status = "部分异常"
-			statusColor = hexColor("#9A3412")
-			statusFill = hexColor("#FFEDD5")
+			statusColor = hexColor("#A65B16")
+			statusFill = hexColor("#FFF1E1")
 			break
 		}
 	}
@@ -183,12 +213,12 @@ func (r *ChannelStatusRenderer) drawCard(img *image.RGBA, faces channelStatusFac
 		return
 	}
 
-	padding := 22
-	left := rect.Min.X + padding
-	top := rect.Min.Y + padding
+	layout := newChannelStatusCardLayout(rect)
+	left := layout.left
+	top := layout.top
 	statusLabel, statusColor, statusFill := channelStatusStyle(item.PrimaryStatus)
 	pillWidth := textWidth(faces.small, statusLabel) + 30
-	pillRect := image.Rect(rect.Max.X-padding-pillWidth, top, rect.Max.X-padding, top+34)
+	pillRect := image.Rect(rect.Max.X-channelStatusCardPadding-pillWidth, top, rect.Max.X-channelStatusCardPadding, top+34)
 	fillRoundedRect(img, pillRect, 17, statusFill)
 	drawCenteredText(img, faces.small, statusColor, (pillRect.Min.X+pillRect.Max.X)/2, top+23, statusLabel)
 
@@ -210,7 +240,7 @@ func (r *ChannelStatusRenderer) drawCard(img *image.RGBA, faces channelStatusFac
 	drawCenteredText(img, faces.tiny, providerColor, (providerRect.Min.X+providerRect.Max.X)/2, top+61, provider)
 
 	modelX := providerRect.Max.X + 10
-	modelMaxWidth := rect.Max.X - padding - modelX
+	modelMaxWidth := rect.Max.X - channelStatusCardPadding - modelX
 	model := truncateText(faces.small, strings.TrimSpace(item.PrimaryModel), modelMaxWidth)
 	if model == "" {
 		model = "--"
@@ -218,22 +248,22 @@ func (r *ChannelStatusRenderer) drawCard(img *image.RGBA, faces channelStatusFac
 	drawText(img, faces.small, hexColor("#627D98"), modelX, top+62, model)
 
 	if group := strings.TrimSpace(item.GroupName); group != "" {
-		group = truncateText(faces.tiny, group, rect.Dx()-2*padding)
+		group = truncateText(faces.tiny, group, rect.Dx()-2*channelStatusCardPadding)
 		drawText(img, faces.tiny, hexColor("#829AB1"), left, top+87, "分组 · "+group)
 	}
 
-	metricTop := top + 102
 	metricGap := 12
-	metricWidth := (rect.Dx() - 2*padding - metricGap) / 2
-	drawMetric(img, faces, image.Rect(left, metricTop, left+metricWidth, metricTop+58), "API 延迟", formatChannelLatency(item.PrimaryLatencyMs), "ms")
-	drawMetric(img, faces, image.Rect(left+metricWidth+metricGap, metricTop, rect.Max.X-padding, metricTop+58), "PING", formatChannelLatency(item.PrimaryPingLatencyMs), "ms")
+	metricWidth := (rect.Dx() - 2*channelStatusCardPadding - metricGap) / 2
+	drawMetric(img, faces, image.Rect(left, layout.metricTop, left+metricWidth, layout.metricTop+58), "API 延迟", formatChannelLatency(item.PrimaryLatencyMs), "ms")
+	drawMetric(img, faces, image.Rect(left+metricWidth+metricGap, layout.metricTop, rect.Max.X-channelStatusCardPadding, layout.metricTop+58), "PING", formatChannelLatency(item.PrimaryPingLatencyMs), "ms")
 
 	availabilityLabel := fmt.Sprintf("%.2f%%", clampAvailability(item.Availability7d))
-	drawText(img, faces.tiny, hexColor("#829AB1"), left, metricTop+86, "7 天可用率")
+	drawText(img, faces.tiny, hexColor("#829AB1"), left, layout.availabilityLabelBaseline, "7 天可用率")
 	availabilityWidth := textWidth(faces.body, availabilityLabel)
-	drawText(img, faces.body, availabilityColor(item.Availability7d), rect.Max.X-padding-availabilityWidth, metricTop+88, availabilityLabel)
+	drawText(img, faces.body, availabilityColor(item.Availability7d), rect.Max.X-channelStatusCardPadding-availabilityWidth, layout.availabilityValueBaseline, availabilityLabel)
 
-	drawTimeline(img, item.Timeline, image.Rect(left, rect.Max.Y-36, rect.Max.X-padding, rect.Max.Y-18))
+	drawTimeline(img, item.Timeline, layout.timeline)
+
 }
 
 func (r *ChannelStatusRenderer) drawFooter(img *image.RGBA, faces channelStatusFaces, remaining int, generatedAt time.Time) {
@@ -406,41 +436,41 @@ func channelStatusSortKey(item *service.UserMonitorView) string {
 func channelStatusStyle(status string) (string, color.RGBA, color.RGBA) {
 	switch strings.ToLower(strings.TrimSpace(status)) {
 	case "operational":
-		return "正常", hexColor("#067647"), hexColor("#DFF7E8")
+		return "正常", hexColor("#0B6E4F"), hexColor("#E4F5EB")
 	case "degraded":
-		return "降级", hexColor("#9A3412"), hexColor("#FFEDD5")
+		return "降级", hexColor("#A65B16"), hexColor("#FFF1E1")
 	case "failed":
-		return "失败", hexColor("#B42318"), hexColor("#FEE4E2")
+		return "失败", hexColor("#B42318"), hexColor("#FCEAE8")
 	case "error":
-		return "错误", hexColor("#B42318"), hexColor("#FEE4E2")
+		return "错误", hexColor("#B42318"), hexColor("#FCEAE8")
 	default:
-		return "无历史", hexColor("#526D82"), hexColor("#EAF0F5")
+		return "无历史", hexColor("#4B6377"), hexColor("#EEF3F6")
 	}
 }
 
 func timelineStyle(status string) (color.RGBA, float64) {
 	switch status {
 	case "operational":
-		return hexColor("#12B76A"), 1
+		return hexColor("#14966C"), 1
 	case "degraded":
-		return hexColor("#F79009"), .65
+		return hexColor("#D78A1B"), .65
 	case "failed", "error":
-		return hexColor("#F04438"), .38
+		return hexColor("#D44B43"), .38
 	default:
-		return hexColor("#CBD5E1"), .2
+		return hexColor("#C7D2DA"), .2
 	}
 }
 
 func providerStatusColor(provider string) color.RGBA {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
 	case "openai":
-		return hexColor("#067647")
+		return hexColor("#0A6F50")
 	case "anthropic":
-		return hexColor("#B54708")
+		return hexColor("#A45D2A")
 	case "gemini":
-		return hexColor("#175CD3")
+		return hexColor("#2563AA")
 	case "grok":
-		return hexColor("#344054")
+		return hexColor("#6C3DC1")
 	default:
 		return hexColor("#526D82")
 	}
@@ -449,9 +479,9 @@ func providerStatusColor(provider string) color.RGBA {
 func availabilityColor(value float64) color.RGBA {
 	switch {
 	case value >= 99:
-		return hexColor("#067647")
+		return hexColor("#0B6E4F")
 	case value >= 95:
-		return hexColor("#B54708")
+		return hexColor("#A65B16")
 	default:
 		return hexColor("#B42318")
 	}

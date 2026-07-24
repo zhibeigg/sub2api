@@ -3,6 +3,7 @@ package qqbot
 import (
 	"bytes"
 	"context"
+	"image"
 	"image/png"
 	"testing"
 	"time"
@@ -51,6 +52,18 @@ func TestChannelStatusRendererProducesDecodableBoundedPNG(t *testing.T) {
 	}
 	if decoded.Width != channelStatusImageWidth || decoded.Height != channelStatusHeaderHeight+channelStatusCardHeight+channelStatusFooterHeight {
 		t.Fatalf("unexpected PNG dimensions: %dx%d", decoded.Width, decoded.Height)
+	}
+}
+
+func TestChannelStatusCardLayoutSeparatesAvailabilityFromTimeline(t *testing.T) {
+	rect := image.Rect(0, 0, 540, channelStatusCardHeight)
+	layout := newChannelStatusCardLayout(rect)
+
+	if gap := layout.timeline.Min.Y - layout.availabilityValueBaseline; gap < channelStatusAvailabilityTimelineMinGap {
+		t.Fatalf("availability/timeline gap=%d want >= %d", gap, channelStatusAvailabilityTimelineMinGap)
+	}
+	if layout.timeline.Min.X != channelStatusCardPadding || layout.timeline.Max.X != rect.Max.X-channelStatusCardPadding {
+		t.Fatalf("unexpected timeline bounds: %#v", layout.timeline)
 	}
 }
 
