@@ -36,6 +36,8 @@ describe('QQBot integration surface', () => {
     expect(view).toContain('TransportModeTab')
     expect(view).toContain("selectedTransportMode === 'botgo'")
     expect(view).toContain("selectedTransportMode === 'onebot'")
+    expect(view).toContain("activeTab === 'messages'")
+    expect(view).toContain('data-test="qqbot-draft-actions"')
     expect(view).toContain('updateTransportMode')
     expect(view).toContain('role="tablist"')
     expect(view).toContain(':aria-selected')

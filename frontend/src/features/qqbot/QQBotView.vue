@@ -37,7 +37,7 @@
       </template>
     </div>
 
-    <div v-if="draft && activeTab === 'config' && selectedTransportMode === 'botgo'" class="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] dark:border-dark-700 dark:bg-dark-900 lg:left-64">
+    <div v-if="draft && (activeTab === 'messages' || (activeTab === 'config' && selectedTransportMode === 'botgo'))" data-test="qqbot-draft-actions" class="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] dark:border-dark-700 dark:bg-dark-900 lg:left-64">
       <div class="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
         <div class="flex flex-wrap items-center gap-4">
           <label class="flex cursor-pointer items-center gap-2 text-sm text-gray-800 dark:text-dark-100">
