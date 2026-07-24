@@ -575,10 +575,10 @@ func (m *ConfigManager) clearLoadError() {
 }
 
 func qqBotBusinessSettingKeys() []string {
-	return []string{service.SettingKeyQQBotBindingEnabled, service.SettingKeyQQBotFirstBindBonus, service.SettingKeyQQBotLinkTTLMinutes, service.SettingKeyQQBotWelcomeEnabled, service.SettingKeyQQBotWelcomeMessage, service.SettingKeyQQBotFirstInteractionEnabled, service.SettingKeyQQBotChannelCheckEnabled, service.SettingKeyQQBotHelpMessage, service.SettingKeyQQBotAllowedGroupIDs, service.SettingKeyQQBotAllowedGuildIDs, service.SettingKeyQQBotGuildWelcomeChannels}
+	return []string{service.SettingKeyQQBotBindingEnabled, service.SettingKeyQQBotFirstBindBonus, service.SettingKeyQQBotLinkTTLMinutes, service.SettingKeyQQBotCommandCooldownSeconds, service.SettingKeyQQBotWelcomeEnabled, service.SettingKeyQQBotWelcomeMessage, service.SettingKeyQQBotFirstInteractionEnabled, service.SettingKeyQQBotChannelCheckEnabled, service.SettingKeyQQBotHelpMessage, service.SettingKeyQQBotAllowedGroupIDs, service.SettingKeyQQBotAllowedGuildIDs, service.SettingKeyQQBotGuildWelcomeChannels}
 }
 func defaultBusinessSettings() service.QQBotSettings {
-	return service.QQBotSettings{BindingEnabled: true, FirstBindBonus: 5, LinkTTLMinutes: 15, WelcomeEnabled: true, WelcomeMessage: defaultWelcomeMessage, FirstInteractionEnabled: true, ChannelCheckEnabled: false, HelpMessage: defaultHelpMessage, AllowedGroupIDs: []string{}, AllowedGuildIDs: []string{}, GuildWelcomeChannels: map[string]string{}}
+	return service.QQBotSettings{BindingEnabled: true, FirstBindBonus: 5, LinkTTLMinutes: 15, CommandCooldownSeconds: service.QQBotCommandCooldownDefaultSeconds, WelcomeEnabled: true, WelcomeMessage: defaultWelcomeMessage, FirstInteractionEnabled: false, ChannelCheckEnabled: false, HelpMessage: defaultHelpMessage, AllowedGroupIDs: []string{}, AllowedGuildIDs: []string{}, GuildWelcomeChannels: map[string]string{}}
 }
 func parseBusinessSettings(values map[string]string) service.QQBotSettings {
 	cfg := defaultBusinessSettings()
@@ -590,6 +590,9 @@ func parseBusinessSettings(values map[string]string) service.QQBotSettings {
 	}
 	if value, err := strconv.Atoi(values[service.SettingKeyQQBotLinkTTLMinutes]); err == nil && value >= 5 && value <= 1440 {
 		cfg.LinkTTLMinutes = value
+	}
+	if value, err := strconv.Atoi(values[service.SettingKeyQQBotCommandCooldownSeconds]); err == nil && value >= service.QQBotCommandCooldownMinSeconds && value <= service.QQBotCommandCooldownMaxSeconds {
+		cfg.CommandCooldownSeconds = value
 	}
 	if value, ok := values[service.SettingKeyQQBotWelcomeEnabled]; ok {
 		cfg.WelcomeEnabled, _ = strconv.ParseBool(value)
@@ -624,6 +627,9 @@ func applyBusinessUpdate(current service.QQBotSettings, update service.QQBotSett
 	if update.LinkTTLMinutes != nil {
 		current.LinkTTLMinutes = *update.LinkTTLMinutes
 	}
+	if update.CommandCooldownSeconds != nil {
+		current.CommandCooldownSeconds = *update.CommandCooldownSeconds
+	}
 	if update.WelcomeEnabled != nil {
 		current.WelcomeEnabled = *update.WelcomeEnabled
 	}
@@ -648,7 +654,7 @@ func applyBusinessUpdate(current service.QQBotSettings, update service.QQBotSett
 	if update.GuildWelcomeChannels != nil {
 		current.GuildWelcomeChannels = normalizeChannelMap(*update.GuildWelcomeChannels)
 	}
-	if current.FirstBindBonus < 0 || current.FirstBindBonus > 1_000_000 || current.LinkTTLMinutes < 5 || current.LinkTTLMinutes > 1440 || len([]rune(current.WelcomeMessage)) > 4000 || len([]rune(current.HelpMessage)) > 4000 || len(current.AllowedGroupIDs) > 500 || len(current.AllowedGuildIDs) > 500 || len(current.GuildWelcomeChannels) > 500 {
+	if current.FirstBindBonus < 0 || current.FirstBindBonus > 1_000_000 || current.LinkTTLMinutes < 5 || current.LinkTTLMinutes > 1440 || current.CommandCooldownSeconds < service.QQBotCommandCooldownMinSeconds || current.CommandCooldownSeconds > service.QQBotCommandCooldownMaxSeconds || len([]rune(current.WelcomeMessage)) > 4000 || len([]rune(current.HelpMessage)) > 4000 || len(current.AllowedGroupIDs) > 500 || len(current.AllowedGuildIDs) > 500 || len(current.GuildWelcomeChannels) > 500 {
 		return service.QQBotSettings{}, ErrInvalidConfig
 	}
 	return current, nil
@@ -661,6 +667,7 @@ func businessSettingsValues(cfg service.QQBotSettings) map[string]string {
 		service.SettingKeyQQBotBindingEnabled:          strconv.FormatBool(cfg.BindingEnabled),
 		service.SettingKeyQQBotFirstBindBonus:          strconv.FormatFloat(cfg.FirstBindBonus, 'f', -1, 64),
 		service.SettingKeyQQBotLinkTTLMinutes:          strconv.Itoa(cfg.LinkTTLMinutes),
+		service.SettingKeyQQBotCommandCooldownSeconds:  strconv.Itoa(cfg.CommandCooldownSeconds),
 		service.SettingKeyQQBotWelcomeEnabled:          strconv.FormatBool(cfg.WelcomeEnabled),
 		service.SettingKeyQQBotWelcomeMessage:          cfg.WelcomeMessage,
 		service.SettingKeyQQBotFirstInteractionEnabled: strconv.FormatBool(cfg.FirstInteractionEnabled),

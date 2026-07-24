@@ -105,6 +105,7 @@ type PublicConfig struct {
 	BindingEnabled          bool              `json:"binding_enabled"`
 	FirstBindBonus          float64           `json:"first_bind_bonus"`
 	LinkTTLMinutes          int               `json:"link_ttl_minutes"`
+	CommandCooldownSeconds  int               `json:"command_cooldown_seconds"`
 	WelcomeEnabled          bool              `json:"welcome_enabled"`
 	WelcomeMessage          string            `json:"welcome_message"`
 	FirstInteractionEnabled bool              `json:"first_interaction_enabled"`
@@ -133,6 +134,7 @@ type UpdateConfigRequest struct {
 	BindingEnabled          bool              `json:"binding_enabled"`
 	FirstBindBonus          float64           `json:"first_bind_bonus"`
 	LinkTTLMinutes          int               `json:"link_ttl_minutes"`
+	CommandCooldownSeconds  int               `json:"command_cooldown_seconds"`
 	WelcomeEnabled          bool              `json:"welcome_enabled"`
 	WelcomeMessage          string            `json:"welcome_message"`
 	FirstInteractionEnabled bool              `json:"first_interaction_enabled"`
@@ -144,7 +146,7 @@ type UpdateConfigRequest struct {
 }
 
 func (r UpdateConfigRequest) businessUpdate() service.QQBotSettingsUpdate {
-	return service.QQBotSettingsUpdate{
+	update := service.QQBotSettingsUpdate{
 		BindingEnabled:          &r.BindingEnabled,
 		FirstBindBonus:          &r.FirstBindBonus,
 		LinkTTLMinutes:          &r.LinkTTLMinutes,
@@ -157,6 +159,10 @@ func (r UpdateConfigRequest) businessUpdate() service.QQBotSettingsUpdate {
 		AllowedGuildIDs:         &r.AllowedGuildIDs,
 		GuildWelcomeChannels:    &r.GuildWelcomeChannels,
 	}
+	if r.CommandCooldownSeconds != 0 {
+		update.CommandCooldownSeconds = &r.CommandCooldownSeconds
+	}
+	return update
 }
 
 type RuntimeStatus string
@@ -293,6 +299,7 @@ func publicFromStorage(cfg storageConfig, settings service.QQBotSettings) Public
 		BindingEnabled:          settings.BindingEnabled,
 		FirstBindBonus:          settings.FirstBindBonus,
 		LinkTTLMinutes:          settings.LinkTTLMinutes,
+		CommandCooldownSeconds:  settings.CommandCooldownSeconds,
 		WelcomeEnabled:          settings.WelcomeEnabled,
 		WelcomeMessage:          settings.WelcomeMessage,
 		FirstInteractionEnabled: settings.FirstInteractionEnabled,

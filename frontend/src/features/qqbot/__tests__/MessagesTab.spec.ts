@@ -24,6 +24,7 @@ const config = (): QQBotConfig => ({
   binding_enabled: true,
   first_bind_bonus: 5,
   link_ttl_minutes: 15,
+  command_cooldown_seconds: 60,
   welcome_enabled: true,
   welcome_message: 'welcome {user}',
   first_interaction_enabled: true,

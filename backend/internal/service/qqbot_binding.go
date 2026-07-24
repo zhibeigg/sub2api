@@ -41,6 +41,7 @@ const (
 	SettingKeyQQBotBindingEnabled          = "qqbot_binding_enabled"
 	SettingKeyQQBotFirstBindBonus          = "qqbot_first_bind_bonus"
 	SettingKeyQQBotLinkTTLMinutes          = "qqbot_link_ttl_minutes"
+	SettingKeyQQBotCommandCooldownSeconds  = "qqbot_command_cooldown_seconds"
 	SettingKeyQQBotWelcomeEnabled          = "qqbot_welcome_enabled"
 	SettingKeyQQBotWelcomeMessage          = "qqbot_welcome_message"
 	SettingKeyQQBotFirstInteractionEnabled = "qqbot_first_interaction_enabled"
@@ -60,6 +61,7 @@ type QQBotSettings struct {
 	BindingEnabled          bool              `json:"binding_enabled"`
 	FirstBindBonus          float64           `json:"first_bind_bonus"`
 	LinkTTLMinutes          int               `json:"link_ttl_minutes"`
+	CommandCooldownSeconds  int               `json:"command_cooldown_seconds"`
 	WelcomeEnabled          bool              `json:"welcome_enabled"`
 	WelcomeMessage          string            `json:"welcome_message"`
 	FirstInteractionEnabled bool              `json:"first_interaction_enabled"`
@@ -75,6 +77,7 @@ type QQBotSettingsUpdate struct {
 	BindingEnabled          *bool              `json:"binding_enabled,omitempty"`
 	FirstBindBonus          *float64           `json:"first_bind_bonus,omitempty"`
 	LinkTTLMinutes          *int               `json:"link_ttl_minutes,omitempty"`
+	CommandCooldownSeconds  *int               `json:"command_cooldown_seconds,omitempty"`
 	WelcomeEnabled          *bool              `json:"welcome_enabled,omitempty"`
 	WelcomeMessage          *string            `json:"welcome_message,omitempty"`
 	FirstInteractionEnabled *bool              `json:"first_interaction_enabled,omitempty"`

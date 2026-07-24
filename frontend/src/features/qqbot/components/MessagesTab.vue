@@ -21,6 +21,11 @@
         <label class="input-label" for="qqbot-link-ttl">{{ t('admin.qqbot.messages.linkTtl') }}</label>
         <input id="qqbot-link-ttl" type="number" min="5" max="1440" class="input" :value="draft.link_ttl_minutes" @input="update('link_ttl_minutes', Number(valueOf($event)))" />
       </div>
+      <div>
+        <label class="input-label" for="qqbot-command-cooldown">{{ t('admin.qqbot.messages.commandCooldown') }}</label>
+        <input id="qqbot-command-cooldown" type="number" min="10" max="3600" class="input" :value="draft.command_cooldown_seconds" @input="update('command_cooldown_seconds', Number(valueOf($event)))" />
+        <p class="input-hint">{{ t('admin.qqbot.messages.commandCooldownHint') }}</p>
+      </div>
       <div class="sm:col-span-2">
         <label class="input-label" for="qqbot-welcome-message">{{ t('admin.qqbot.messages.welcomeMessage') }}</label>
         <textarea id="qqbot-welcome-message" rows="7" maxlength="4000" class="input resize-y font-mono text-xs" :value="draft.welcome_message" @input="update('welcome_message', valueOf($event))"></textarea>

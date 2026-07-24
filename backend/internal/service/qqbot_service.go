@@ -21,11 +21,14 @@ import (
 )
 
 const (
-	defaultQQBotFirstBindBonus = 5.0
-	defaultQQBotLinkTTLMinutes = 15
-	qqBotDeliveryCallbackTTL   = 10 * time.Second
-	qqBotDefaultHelpMessage    = "欢迎使用 PokeAPI 账户助手。\n\n绑定账户：请私聊发送 /bind 你的邮箱\n查看渠道状态：发送 /check\n查看帮助：发送 /help\n\n验证链接只会发送到 Sub2API 账户邮箱。数字 QQ 仅作为展示信息，实际身份以机器人 OpenID 为准。"
-	qqBotDefaultWelcomeMessage = "欢迎 {user} 加入 {site}！\n\n可用指令：\n绑定账户（请私聊机器人）：{bind_command}\n查看渠道状态：/check\n查看帮助：/help\n\n安全提示：请勿向任何人提供密码、验证码或 API 密钥；账户绑定链接只会发送到你的站点账户邮箱。"
+	defaultQQBotFirstBindBonus         = 5.0
+	defaultQQBotLinkTTLMinutes         = 15
+	QQBotCommandCooldownDefaultSeconds = 60
+	QQBotCommandCooldownMinSeconds     = 10
+	QQBotCommandCooldownMaxSeconds     = 3600
+	qqBotDeliveryCallbackTTL           = 10 * time.Second
+	qqBotDefaultHelpMessage            = "欢迎使用 PokeAPI 账户助手。\n\n绑定账户：请私聊发送 /bind 你的邮箱\n查看渠道状态：发送 /check\n查看帮助：发送 /help\n\n验证链接只会发送到 Sub2API 账户邮箱。数字 QQ 仅作为展示信息，实际身份以机器人 OpenID 为准。"
+	qqBotDefaultWelcomeMessage         = "欢迎 {user} 加入 {site}！\n\n可用指令：\n绑定账户（请私聊机器人）：{bind_command}\n查看渠道状态：/check\n查看帮助：/help\n\n安全提示：请勿向任何人提供密码、验证码或 API 密钥；账户绑定链接只会发送到你的站点账户邮箱。"
 )
 
 func ProvideQQBotUserLookup(repo UserRepository) QQBotUserLookup {
@@ -405,6 +408,7 @@ func (s *QQBotService) GetSettings(ctx context.Context) (QQBotSettings, error) {
 		SettingKeyQQBotBindingEnabled,
 		SettingKeyQQBotFirstBindBonus,
 		SettingKeyQQBotLinkTTLMinutes,
+		SettingKeyQQBotCommandCooldownSeconds,
 		SettingKeyQQBotWelcomeEnabled,
 		SettingKeyQQBotWelcomeMessage,
 		SettingKeyQQBotFirstInteractionEnabled,
@@ -422,6 +426,7 @@ func (s *QQBotService) GetSettings(ctx context.Context) (QQBotSettings, error) {
 	settings.BindingEnabled = parseQQBotBool(values[SettingKeyQQBotBindingEnabled], defaults.BindingEnabled)
 	settings.FirstBindBonus = parseQQBotFloat(values[SettingKeyQQBotFirstBindBonus], defaults.FirstBindBonus)
 	settings.LinkTTLMinutes = parseQQBotInt(values[SettingKeyQQBotLinkTTLMinutes], defaults.LinkTTLMinutes)
+	settings.CommandCooldownSeconds = parseQQBotInt(values[SettingKeyQQBotCommandCooldownSeconds], defaults.CommandCooldownSeconds)
 	settings.WelcomeEnabled = parseQQBotBool(values[SettingKeyQQBotWelcomeEnabled], defaults.WelcomeEnabled)
 	if value, ok := values[SettingKeyQQBotWelcomeMessage]; ok {
 		settings.WelcomeMessage = value
@@ -442,6 +447,9 @@ func (s *QQBotService) GetSettings(ctx context.Context) (QQBotSettings, error) {
 	}
 	if settings.LinkTTLMinutes < 5 || settings.LinkTTLMinutes > 1440 {
 		settings.LinkTTLMinutes = defaults.LinkTTLMinutes
+	}
+	if settings.CommandCooldownSeconds < QQBotCommandCooldownMinSeconds || settings.CommandCooldownSeconds > QQBotCommandCooldownMaxSeconds {
+		settings.CommandCooldownSeconds = defaults.CommandCooldownSeconds
 	}
 	return settings, nil
 }
@@ -465,6 +473,12 @@ func (s *QQBotService) UpdateSettings(ctx context.Context, update QQBotSettingsU
 			return QQBotSettings{}, ErrQQBotInvalidInput
 		}
 		current.LinkTTLMinutes = *update.LinkTTLMinutes
+	}
+	if update.CommandCooldownSeconds != nil {
+		if *update.CommandCooldownSeconds < QQBotCommandCooldownMinSeconds || *update.CommandCooldownSeconds > QQBotCommandCooldownMaxSeconds {
+			return QQBotSettings{}, ErrQQBotInvalidInput
+		}
+		current.CommandCooldownSeconds = *update.CommandCooldownSeconds
 	}
 	if update.WelcomeEnabled != nil {
 		current.WelcomeEnabled = *update.WelcomeEnabled
@@ -512,6 +526,7 @@ func (s *QQBotService) UpdateSettings(ctx context.Context, update QQBotSettingsU
 		SettingKeyQQBotBindingEnabled:          strconv.FormatBool(current.BindingEnabled),
 		SettingKeyQQBotFirstBindBonus:          strconv.FormatFloat(current.FirstBindBonus, 'f', -1, 64),
 		SettingKeyQQBotLinkTTLMinutes:          strconv.Itoa(current.LinkTTLMinutes),
+		SettingKeyQQBotCommandCooldownSeconds:  strconv.Itoa(current.CommandCooldownSeconds),
 		SettingKeyQQBotWelcomeEnabled:          strconv.FormatBool(current.WelcomeEnabled),
 		SettingKeyQQBotWelcomeMessage:          current.WelcomeMessage,
 		SettingKeyQQBotFirstInteractionEnabled: strconv.FormatBool(current.FirstInteractionEnabled),
@@ -531,6 +546,7 @@ func (s *QQBotService) UpdateSettings(ctx context.Context, update QQBotSettingsU
 			"binding_enabled":           current.BindingEnabled,
 			"first_bind_bonus":          current.FirstBindBonus,
 			"link_ttl_minutes":          current.LinkTTLMinutes,
+			"command_cooldown_seconds":  current.CommandCooldownSeconds,
 			"welcome_enabled":           current.WelcomeEnabled,
 			"first_interaction_enabled": current.FirstInteractionEnabled,
 			"channel_check_enabled":     current.ChannelCheckEnabled,
@@ -646,9 +662,10 @@ func defaultQQBotSettings() QQBotSettings {
 		BindingEnabled:          true,
 		FirstBindBonus:          defaultQQBotFirstBindBonus,
 		LinkTTLMinutes:          defaultQQBotLinkTTLMinutes,
+		CommandCooldownSeconds:  QQBotCommandCooldownDefaultSeconds,
 		WelcomeEnabled:          true,
 		WelcomeMessage:          qqBotDefaultWelcomeMessage,
-		FirstInteractionEnabled: true,
+		FirstInteractionEnabled: false,
 		ChannelCheckEnabled:     false,
 		HelpMessage:             qqBotDefaultHelpMessage,
 		AllowedGroupIDs:         []string{},

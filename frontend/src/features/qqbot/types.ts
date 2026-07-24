@@ -13,6 +13,7 @@ export interface QQBotConfig {
   binding_enabled: boolean
   first_bind_bonus: number
   link_ttl_minutes: number
+  command_cooldown_seconds: number
   welcome_enabled: boolean
   welcome_message: string
   first_interaction_enabled: boolean
@@ -49,6 +50,7 @@ export interface QQBotUpdateRequest {
   binding_enabled: boolean
   first_bind_bonus: number
   link_ttl_minutes: number
+  command_cooldown_seconds: number
   welcome_enabled: boolean
   welcome_message: string
   first_interaction_enabled: boolean

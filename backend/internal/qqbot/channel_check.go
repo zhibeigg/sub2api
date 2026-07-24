@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	channelCheckRateLimitWindow = 30 * time.Second
 	channelCheckRenderCacheTTL  = 15 * time.Second
 	channelCheckRenderWorkers   = 2
 	channelCheckMaxImageFetches = 4
@@ -27,14 +26,6 @@ var (
 	ErrChannelCheckUnavailable     = errors.New("qqbot channel check unavailable")
 	ErrChannelCheckFetchLimit      = errors.New("qqbot channel check image fetch limit exceeded")
 )
-
-type ChannelCheckRateLimitError struct {
-	RetryAfter time.Duration
-}
-
-func (e *ChannelCheckRateLimitError) Error() string {
-	return "qqbot channel check rate limited"
-}
 
 type channelCheckMonitorReader interface {
 	ListUserView(ctx context.Context) ([]*service.UserMonitorView, error)
@@ -50,7 +41,6 @@ type channelCheckBindingReader interface {
 
 type channelCheckLimiter interface {
 	Allow(ctx context.Context, scope string, limit int64, window time.Duration) (bool, time.Duration, error)
-	AllowOnce(ctx context.Context, scope, token string, limit int64, window time.Duration) (bool, time.Duration, error)
 }
 
 type ChannelCheckService struct {
@@ -117,15 +107,6 @@ func (s *ChannelCheckService) PrepareImageURL(ctx context.Context, cfg ActiveCon
 	if identity == "" || strings.TrimSpace(cfg.AppID) == "" {
 		return "", ErrChannelCheckUnavailable
 	}
-	limitScope := strings.Join([]string{"check", cfg.AppID, string(incoming.Scene), identity}, ":")
-	allowedRequest, retryAfter, err := s.limiter.AllowOnce(ctx, limitScope, incoming.EventID, 1, channelCheckRateLimitWindow)
-	if err != nil {
-		return "", fmt.Errorf("limit qqbot channel check: %w", err)
-	}
-	if !allowedRequest {
-		return "", &ChannelCheckRateLimitError{RetryAfter: retryAfter}
-	}
-
 	if incoming.Scene == SceneC2C {
 		if s.binding == nil {
 			return "", ErrChannelCheckUnavailable

@@ -475,34 +475,45 @@ func (r *Runtime) processWith(ctx context.Context, cfg ActiveConfig, messenger M
 		}
 		return nil
 	}
-	if parsed.Kind == CommandHelp {
-		return send(renderHelp(settings.HelpMessage))
+	if parsed.Kind == CommandBind {
+		if !settings.BindingEnabled {
+			return send("账户绑定暂未开放。请稍后再试，或联系站点管理员。")
+		}
+		if !ValidEmail(parsed.Email) {
+			return send("邮箱格式不正确。请使用：/bind name@example.com")
+		}
 	}
-	if parsed.Kind == CommandCheck {
-		return r.handleChannelCheckWith(ctx, cfg, messenger, incoming, markSent, diagnostics)
-	}
-	if parsed.Kind != CommandBind {
+	if parsed.Kind != CommandHelp && parsed.Kind != CommandCheck && parsed.Kind != CommandBind {
 		return nil
 	}
-	if !settings.BindingEnabled {
-		return send("账户绑定暂未开放。请稍后再试，或联系站点管理员。")
+	transport := "botgo"
+	if diagnostics != nil {
+		transport = "onebot"
 	}
-	if !ValidEmail(parsed.Email) {
-		return send("邮箱格式不正确。请使用：/bind name@example.com")
-	}
-	if queue == nil {
-		return ErrRuntimeUnavailable
-	}
-	allowedRequest, retryAfter, err := queue.Allow(ctx, "bind:"+cfg.AppID+":"+string(incoming.Scene)+":"+incoming.ProviderSubject, 3, 5*time.Minute)
-	if err != nil {
-		return err
-	}
-	if !allowedRequest {
-		minutes := int(retryAfter.Round(time.Minute) / time.Minute)
-		if minutes < 1 {
-			minutes = 1
+	if queue != nil {
+		scope := fmt.Sprintf("command:%s:%s:%s:%s:%s", transport, cfg.AppID, incoming.Scene, incoming.ProviderSubject, parsed.Kind)
+		allowedRequest, retryAfter, err := queue.AllowOnce(ctx, scope, incoming.EventID, 1, time.Duration(settings.CommandCooldownSeconds)*time.Second)
+		if err != nil {
+			return err
 		}
-		return send(fmt.Sprintf("绑定请求过于频繁。请在约 %d 分钟后重试。", minutes))
+		if !allowedRequest {
+			return send(commandCooldownMessage(parsed.Kind, retryAfter))
+		}
+	}
+	switch parsed.Kind {
+	case CommandHelp:
+		return send(renderHelp(settings.HelpMessage))
+	case CommandCheck:
+		return r.handleChannelCheckWith(ctx, cfg, messenger, incoming, markSent, diagnostics)
+	}
+	if queue != nil {
+		allowedRequest, retryAfter, err := queue.AllowOnce(ctx, "bind:"+transport+":"+cfg.AppID+":"+string(incoming.Scene)+":"+incoming.ProviderSubject, incoming.EventID, 3, 5*time.Minute)
+		if err != nil {
+			return err
+		}
+		if !allowedRequest {
+			return send(commandCooldownMessage(CommandBind, retryAfter))
+		}
 	}
 	if r.binding == nil {
 		return ErrRuntimeUnavailable
@@ -519,6 +530,22 @@ func (r *Runtime) processWith(ctx context.Context, cfg ActiveConfig, messenger M
 		return send("账户已经绑定邮箱 " + masked + "。")
 	}
 	return send("若该账户存在，验证邮件已发送至 " + masked + "。链接仅在短时间内有效。")
+}
+
+func commandCooldownMessage(kind CommandKind, retryAfter time.Duration) string {
+	seconds := int((retryAfter + time.Second - 1) / time.Second)
+	if seconds < 1 {
+		seconds = 1
+	}
+	command := "/" + string(kind)
+	if seconds < 60 {
+		return fmt.Sprintf("%s 请求过于频繁，请在 %d 秒后重试。", command, seconds)
+	}
+	minutes, remainingSeconds := seconds/60, seconds%60
+	if remainingSeconds == 0 {
+		return fmt.Sprintf("%s 请求过于频繁，请在 %d 分钟后重试。", command, minutes)
+	}
+	return fmt.Sprintf("%s 请求过于频繁，请在 %d 分钟 %d 秒后重试。", command, minutes, remainingSeconds)
 }
 
 func (r *Runtime) handleChannelCheck(ctx context.Context, generation *runtimeGeneration, incoming InboundEvent) error {
@@ -599,14 +626,6 @@ func channelCheckErrorMessage(err error) string {
 		return "渠道状态图暂未开放。"
 	case errors.Is(err, ErrChannelCheckBindingRequired):
 		return "私聊查看渠道状态前，请先发送 /bind 你的邮箱完成账户绑定。"
-	}
-	var rateLimitErr *ChannelCheckRateLimitError
-	if errors.As(err, &rateLimitErr) {
-		seconds := int((rateLimitErr.RetryAfter + time.Second - 1) / time.Second)
-		if seconds < 1 {
-			seconds = 1
-		}
-		return fmt.Sprintf("请求过于频繁，请在约 %d 秒后重试。", seconds)
 	}
 	return ""
 }

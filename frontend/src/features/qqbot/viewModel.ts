@@ -56,6 +56,7 @@ export function buildUpdateRequest(draft: QQBotDraft): QQBotUpdateRequest {
     binding_enabled: draft.binding_enabled,
     first_bind_bonus: Number(draft.first_bind_bonus),
     link_ttl_minutes: Number(draft.link_ttl_minutes),
+    command_cooldown_seconds: Number(draft.command_cooldown_seconds),
     welcome_enabled: draft.welcome_enabled,
     welcome_message: draft.welcome_message.trim(),
     first_interaction_enabled: draft.first_interaction_enabled,
@@ -181,6 +182,7 @@ export function validateDraft(draft: QQBotDraft): string[] {
   if (!Number.isInteger(Number(draft.api_timeout_ms)) || Number(draft.api_timeout_ms) < 500 || Number(draft.api_timeout_ms) > 30_000) errors.push('timeout')
   if (!Number.isFinite(Number(draft.first_bind_bonus)) || Number(draft.first_bind_bonus) < 0) errors.push('bonus')
   if (!Number.isInteger(Number(draft.link_ttl_minutes)) || Number(draft.link_ttl_minutes) < 5 || Number(draft.link_ttl_minutes) > 1440) errors.push('ttl')
+  if (!Number.isInteger(Number(draft.command_cooldown_seconds)) || Number(draft.command_cooldown_seconds) < 10 || Number(draft.command_cooldown_seconds) > 3600) errors.push('cooldown')
   if (draft.welcome_message.length > 4000) errors.push('welcome')
   if (draft.help_message.length > 4000) errors.push('help')
   if (parseChannelMapping(draft.guild_welcome_channels_text) === null) errors.push('mapping')

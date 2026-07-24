@@ -96,7 +96,7 @@ func TestChannelCheckPrepareImageURLPermissions(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if imageURL == "" || binding.calls != 0 || limiter.token != "event-group" {
+		if imageURL == "" || binding.calls != 0 {
 			t.Fatalf("url=%q binding_calls=%d limiter=%#v", imageURL, binding.calls, limiter)
 		}
 	})
@@ -114,19 +114,6 @@ func TestChannelCheckPrepareImageURLPermissions(t *testing.T) {
 		}
 	})
 
-	t.Run("rate limit is reported before binding lookup", func(t *testing.T) {
-		limiter := &channelCheckLimiterStub{allowed: false, retryAfter: 12 * time.Second}
-		binding := &channelCheckBindingStub{found: true}
-		svc := &ChannelCheckService{settings: settings, binding: binding, limiter: limiter, manager: manager, signer: signer}
-		_, err := svc.PrepareImageURL(t.Context(), ActiveConfig{AppID: "app", AppSecret: "app-secret", PublicBaseURL: "https://status.example.com"}, InboundEvent{EventID: "event-rate", Scene: SceneC2C, ProviderSubject: "openid"})
-		var rateErr *ChannelCheckRateLimitError
-		if !errors.As(err, &rateErr) || rateErr.RetryAfter != 12*time.Second {
-			t.Fatalf("unexpected rate limit error: %v", err)
-		}
-		if binding.calls != 0 {
-			t.Fatalf("binding lookup ran after rate limit: %d", binding.calls)
-		}
-	})
 }
 
 func TestChannelCheckPrepareImageURLHonorsBothSwitches(t *testing.T) {

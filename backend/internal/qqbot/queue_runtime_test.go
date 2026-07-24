@@ -581,6 +581,7 @@ func TestRenderWelcomeDefaultAdvertisesOnlyEnabledCommands(t *testing.T) {
 func TestRuntimeWelcomeIsMarkedOnlyAfterSuccessfulSend(t *testing.T) {
 	queue, _ := newRedisQueue(t)
 	settings := defaultBusinessSettings()
+	settings.FirstInteractionEnabled = true
 	settings.AllowedGroupIDs = []string{"group"}
 	manager := &ConfigManager{}
 	manager.snapshot.Store(&configSnapshot{storage: defaultStorageConfig("https://example.com"), active: ActiveConfig{Enabled: true, AppID: "app"}, settings: settings})

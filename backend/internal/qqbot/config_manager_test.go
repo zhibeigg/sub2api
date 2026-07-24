@@ -35,6 +35,12 @@ func TestConfigManagerReloadMasksSecrets(t *testing.T) {
 	}
 }
 
+func TestDefaultBusinessSettingsDisablesFirstInteractionWelcome(t *testing.T) {
+	if defaultBusinessSettings().FirstInteractionEnabled {
+		t.Fatal("first interaction welcome must be disabled by default")
+	}
+}
+
 func TestConfigManagerReloadRejectsInvalidChannelCheckActivation(t *testing.T) {
 	storage := defaultStorageConfig("http://qq.example.com")
 	storage.Enabled = true
