@@ -269,6 +269,8 @@ V2 请求结构示例（仅占位符，不是可用密钥）：
 
 运行时规则：标准分组存在有效 `standard_quota` 订阅时优先消耗套餐额度且不扣余额；套餐额度耗尽会直接拒绝请求，不会静默改扣余额。正整数 `concurrency_limit` 按 `user_subscriptions.id` 订阅实例计数，同一实例的多个标准分组共享并发池，并与用户全局并发、上游账号并发同时生效；`null` 表示不增加套餐层限制。支付下单、管理员分配和用户订阅响应都会携带并发快照，套餐后续编辑不追溯已有实例；订阅列表/详情必须读取实例的 `concurrency_limit`，不能用当前套餐值替代。旧订单或旧订阅缺失字段时按 `null` 兼容。套餐过期后，公开标准分组恢复余额计费。旧版多订阅分组套餐会标记为 `legacy_shared_subscription` 并下架，已有订阅和已创建订单继续按快照履约。
 
+GPT/OpenAI 原生订阅迁移使用已确认的 `GPT 稳定分组 无限制`：受影响套餐的 `plan_type` 变为 `standard_quota`，并同步套餐、有效用户订阅、API Key、专属分组授权、受限分组访问及待支付订单快照。用户的额度快照、已用额度、窗口与有效期均保留；遗留用户倍率覆盖会被清除，因而计费使用目标稳定分组的当前倍率。该迁移不是新的 API 参数；目标分组缺失/不唯一或用户存在目标订阅冲突时会 fail-closed。
+
 ### 管理员订单报表 API
 
 以下接口使用相同的筛选参数：
@@ -674,6 +676,8 @@ Native subscription-group example:
 ```
 
 Runtime behavior: while an active `standard_quota` subscription covers a standard group, plan quota takes priority and the user's balance is not charged. Exhausted plan quota rejects the request instead of silently falling back to balance. A positive `concurrency_limit` is counted by `user_subscriptions.id`; all standard groups in the same instance share the pool, and user-global plus upstream-account concurrency limits still apply independently. `null` adds no plan-level restriction. Payment creation, admin assignment, and user-subscription responses carry the concurrency snapshot. Later plan edits are not retroactive, so subscription lists/details must read the instance `concurrency_limit` instead of the current plan value. Missing fields in old orders or subscriptions are treated as `null`. After expiration, public standard groups return to balance billing. Legacy multi-subscription-group plans are marked `legacy_shared_subscription` and taken off sale, while existing subscriptions and already-created orders continue from their snapshots.
+
+The GPT/OpenAI native-subscription migration uses the confirmed `GPT 稳定分组 无限制` standard group: it converts affected plans to `standard_quota` and synchronizes plans, non-deleted user subscriptions, API-key bindings, exclusive- and restricted-group authorization, and pending-order snapshots. Each user's quota snapshot, consumed usage, window anchors, and validity are retained. Legacy per-user group-rate overrides are removed, so billing uses the target stable group's current multiplier. This is not a new API parameter; the migration fails closed if the target is missing/ambiguous or a user has a conflicting target subscription.
 
 ### Admin order reporting APIs
 

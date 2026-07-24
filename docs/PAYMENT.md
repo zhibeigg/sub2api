@@ -4,6 +4,8 @@ Sub2API has a built-in payment system that enables user self-service top-up with
 
 Subscription plans have two modes. A `subscription` plan binds exactly one subscription group and uses that group's native limits. A `standard_quota` plan binds one or more standard balance groups and defines shared daily, weekly, or monthly USD plan limits plus an optional subscription-instance `concurrency_limit`. Plan type, group access, quota limits, concurrency limit, and validity are snapshotted when purchased or assigned, so later plan edits do not retroactively change existing subscriptions. Administrators can also hide balance recharge and subscription purchase independently; the backend rejects new orders of the disabled type.
 
+GPT/OpenAI native subscription plans are migrated to the active OpenAI standard group named `GPT 稳定分组 无限制`. The migration snapshots each legacy source group's current quota into the plan and active user subscription, preserves usage windows, consumed quota, and validity, moves affected API-key bindings plus exclusive- and restricted-group authorization, and clears user-specific multiplier overrides so usage follows the target group's current default, model, and peak multipliers. It fails before writing if the named target is missing/ambiguous or a user already has a conflicting target-group subscription.
+
 ### Subscription plan types
 
 | `plan_type` | Eligible groups | Count | Limit source | After expiration |
