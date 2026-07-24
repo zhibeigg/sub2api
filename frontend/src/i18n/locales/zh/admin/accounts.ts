@@ -1093,6 +1093,7 @@ export default {
       mixedSchedulingHint: '启用后可加入账号能力支持的其他平台分组',
       mixedSchedulingTooltip:
         '启用后，此账号可参与兼容端点的跨平台分组调度。不同上游的会话上下文和模型能力可能不完全兼容，建议通过分组隔离账号，并仅启用已同步且验证可用的模型。',
+      partialModelRoutingHint: '账号可绑定兼容分组；仅模型映射中支持的模型会路由到此账号，其他模型将自动跳过并使用同组其他可用账号。',
       aiCreditsBalance: 'AI Credits',
       allowOverages: '允许超量请求 (AI Credits)',
       allowOveragesTooltip:

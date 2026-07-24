@@ -3301,6 +3301,9 @@
           :mixed-scheduling="mixedScheduling"
           data-tour="account-form-groups"
         />
+        <p v-if="!authStore.isSimpleMode" class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+          {{ t('admin.accounts.partialModelRoutingHint') }}
+        </p>
       </div>
 
     </form>

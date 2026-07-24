@@ -227,6 +227,41 @@ func TestBuildCompatibleAccountGroupBindings_CursorSupportsEndpointCompatibleGro
 	}
 }
 
+func TestBuildCompatibleAccountGroupBindings_AllowsPartialModelMappingForTextGroup(t *testing.T) {
+	account := &Account{
+		ID:       1538,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeAPIKey,
+		Status:   StatusActive,
+		Credentials: map[string]any{
+			"model_mapping": map[string]any{
+				"glm-5.2": "glm-5.2",
+			},
+		},
+	}
+	group := &Group{
+		ID:                33,
+		Name:              "MIMO low-cost",
+		Platform:          PlatformOpenCode,
+		EndpointProtocols: []string{string(EndpointProtocolOpenAIChatCompletions), string(EndpointProtocolOpenAIResponses)},
+		ModelsListConfig: GroupModelsListConfig{
+			Enabled: true,
+			Models:  []string{"mimo-v2.5", "mimo-v2.5-pro"},
+		},
+	}
+
+	bindings, err := BuildCompatibleAccountGroupBindings(
+		context.Background(),
+		&groupRepoStubForAdmin{getByID: group},
+		account,
+		[]int64{group.ID},
+	)
+
+	require.NoError(t, err)
+	require.Len(t, bindings, 1)
+	require.True(t, bindings[0].EndpointCompatibilityEnabled)
+}
+
 func TestBuildCompatibleAccountGroupBindings_CursorRejectsUnsupportedMediaEndpoint(t *testing.T) {
 	account := &Account{
 		ID:       25,

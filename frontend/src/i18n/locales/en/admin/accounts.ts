@@ -991,6 +991,7 @@ export default {
       mixedSchedulingHint: 'Allow this account to join compatible groups from other platforms',
       mixedSchedulingTooltip:
         'When enabled, this account can participate in cross-platform group scheduling for compatible endpoints. Session context and model capabilities may differ across upstream providers, so isolate accounts with groups and enable only models that were synchronized and verified.',
+      partialModelRoutingHint: 'This account can join compatible groups. Only models supported by its model mappings route here; unsupported models skip it and use another available account in the same group.',
       aiCreditsBalance: 'AI Credits',
       allowOverages: 'Allow Overages (AI Credits)',
       allowOveragesTooltip:

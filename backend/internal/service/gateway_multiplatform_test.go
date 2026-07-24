@@ -409,6 +409,69 @@ func TestGatewayService_ListSchedulableAccountsProtocolFallbackMatchesBindingPol
 	require.Equal(t, []int64{3011, 3012}, []int64{accounts[0].ID, accounts[1].ID})
 }
 
+func TestFilterAccountsCompatibleForScheduler_CrossProviderPartialMappingFallsBackPerModel(t *testing.T) {
+	groupID := int64(302)
+	group := &Group{
+		ID:                groupID,
+		Platform:          PlatformOpenCode,
+		EndpointProtocols: []string{string(EndpointProtocolOpenAIChatCompletions), string(EndpointProtocolOpenAIResponses)},
+	}
+	accounts := []Account{
+		{
+			ID:          3021,
+			Platform:    PlatformOpenAI,
+			Type:        AccountTypeAPIKey,
+			Status:      StatusActive,
+			Schedulable: true,
+			Credentials: map[string]any{"model_mapping": map[string]any{"glm-5.2": "glm-5.2"}},
+			AccountGroups: []AccountGroup{{
+				AccountID:                    3021,
+				GroupID:                      groupID,
+				EndpointCompatibilityEnabled: true,
+			}},
+		},
+		{
+			ID:          3022,
+			Platform:    PlatformOpenAI,
+			Type:        AccountTypeAPIKey,
+			Status:      StatusActive,
+			Schedulable: true,
+			Credentials: map[string]any{"model_mapping": map[string]any{"mimo-v2.5": "mimo-v2.5"}},
+			AccountGroups: []AccountGroup{{
+				AccountID:                    3022,
+				GroupID:                      groupID,
+				EndpointCompatibilityEnabled: true,
+			}},
+		},
+	}
+
+	mimoCandidates := filterAccountsCompatibleForScheduler(
+		context.Background(),
+		accounts,
+		group,
+		groupID,
+		group.Platform,
+		RequestDescriptor{Protocol: EndpointProtocolOpenAIChatCompletions, Model: "mimo-v2.5"},
+		true,
+		false,
+	)
+	require.Len(t, mimoCandidates, 1)
+	require.Equal(t, int64(3022), mimoCandidates[0].ID)
+
+	glmCandidates := filterAccountsCompatibleForScheduler(
+		context.Background(),
+		accounts,
+		group,
+		groupID,
+		group.Platform,
+		RequestDescriptor{Protocol: EndpointProtocolOpenAIResponses, Model: "glm-5.2"},
+		true,
+		false,
+	)
+	require.Len(t, glmCandidates, 1)
+	require.Equal(t, int64(3021), glmCandidates[0].ID)
+}
+
 func TestGatewayService_SelectAccountForModelWithPlatform_Anthropic(t *testing.T) {
 	ctx := context.Background()
 

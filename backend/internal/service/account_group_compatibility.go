@@ -77,6 +77,16 @@ func BuildCompatibleAccountGroupBindings(
 	return bindings, nil
 }
 
+// accountSupportsAnyGroupEndpoint verifies transport-level compatibility for a
+// prospective binding. Model mappings deliberately do not participate here:
+// they are an account-level routing allowlist, and runtime selection already
+// excludes an account for every model it does not support. This lets a partially
+// mapped account join a text group safely while unsupported models fall through
+// to another compatible account in that group.
+//
+// Media protocols remain model-sensitive because an empty model cannot prove an
+// account can generate an image or video; IsAccountCompatibleForRequest keeps
+// those bindings fail-closed.
 func accountSupportsAnyGroupEndpoint(ctx context.Context, account *Account, group *Group, hasBinding, compatibilityEnabled bool) bool {
 	protocols := GroupEndpointProtocols(group)
 	if len(protocols) == 0 && group != nil && NormalizePlatform(group.Platform) == PlatformComposite {
@@ -86,34 +96,26 @@ func accountSupportsAnyGroupEndpoint(ctx context.Context, account *Account, grou
 		return false
 	}
 
-	models := []string{""}
-	if group.ModelsListConfig.Enabled && len(group.ModelsListConfig.Models) > 0 {
-		models = group.ModelsListConfig.Models
-	}
-
 	for _, rawProtocol := range protocols {
 		protocol := NormalizeEndpointProtocol(EndpointProtocol(rawProtocol))
 		if !IsValidEndpointProtocol(protocol) {
 			continue
 		}
-		for _, model := range models {
-			if IsAccountCompatibleForRequest(account, RequestDescriptor{
-				Protocol: protocol,
-				Model:    strings.TrimSpace(model),
-			}, AccountGroupCompatibilityOptions{
-				Context:                      ctx,
-				Group:                        group,
-				HasAccountGroupBinding:       hasBinding,
-				EndpointCompatibilityEnabled: compatibilityEnabled,
-				AllowMixedScheduling:         account.IsMixedSchedulingEnabled(),
-				RequireOAuthOnly:             group.RequireOAuthOnly,
-				// Privacy setup for newly created OAuth accounts is asynchronous.
-				// Runtime selection still enforces require_privacy_set.
-				RequirePrivacySet:        false,
-				SkipSchedulabilityChecks: true,
-			}) {
-				return true
-			}
+		if IsAccountCompatibleForRequest(account, RequestDescriptor{
+			Protocol: protocol,
+		}, AccountGroupCompatibilityOptions{
+			Context:                      ctx,
+			Group:                        group,
+			HasAccountGroupBinding:       hasBinding,
+			EndpointCompatibilityEnabled: compatibilityEnabled,
+			AllowMixedScheduling:         account.IsMixedSchedulingEnabled(),
+			RequireOAuthOnly:             group.RequireOAuthOnly,
+			// Privacy setup for newly created OAuth accounts is asynchronous.
+			// Runtime selection still enforces require_privacy_set.
+			RequirePrivacySet:        false,
+			SkipSchedulabilityChecks: true,
+		}) {
+			return true
 		}
 	}
 	return false
