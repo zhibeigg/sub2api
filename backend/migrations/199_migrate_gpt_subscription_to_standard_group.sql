@@ -74,24 +74,21 @@ SELECT DISTINCT
     source.target_group_id,
     COALESCE(us.daily_limit_usd, source.daily_limit_usd) AS daily_limit_usd,
     COALESCE(us.weekly_limit_usd, source.weekly_limit_usd) AS weekly_limit_usd,
-    COALESCE(us.monthly_limit_usd, source.monthly_limit_usd) AS monthly_limit_usd
+    COALESCE(us.monthly_limit_usd, source.monthly_limit_usd) AS monthly_limit_usd,
+    us.daily_usage_usd,
+    us.weekly_usage_usd,
+    us.monthly_usage_usd,
+    us.expires_at,
+    us.concurrency_limit
 FROM user_subscriptions AS us
 JOIN gpt_subscription_migration_sources AS source ON source.old_group_id = us.group_id
 WHERE us.deleted_at IS NULL;
 
--- 一个用户同时持有多个待迁移 GPT 订阅，或已持有另一条目标分组订阅时不能安全合并额度。
--- 直接失败可避免覆盖有效期、已用额度或窗口锚点。
+-- 同一用户的多条旧 GPT 订阅合并为一条目标分组订阅：各周期保留剩余额度之和、
+-- 清零合并后的已用量并重置窗口，同时取最晚有效期。任一来源周期不限额时合并后该周期不限额。
+-- 这避免目标标准分组的单用户单订阅约束导致重复计费或丢失已购权益。
 DO $$
 BEGIN
-    IF EXISTS (
-        SELECT 1
-        FROM gpt_subscription_migration_users
-        GROUP BY user_id
-        HAVING COUNT(*) > 1
-    ) THEN
-        RAISE EXCEPTION 'cannot migrate GPT subscriptions: a user has multiple active migration candidates';
-    END IF;
-
     IF EXISTS (
         SELECT 1
         FROM gpt_subscription_migration_users AS source
@@ -104,6 +101,44 @@ BEGIN
         RAISE EXCEPTION 'cannot migrate GPT subscriptions: a user already has a target GPT stable-group subscription';
     END IF;
 END $$;
+
+CREATE TEMP TABLE gpt_subscription_migration_user_merges ON COMMIT DROP AS
+WITH ranked AS (
+    SELECT
+        source.*,
+        ROW_NUMBER() OVER (
+            PARTITION BY source.user_id
+            ORDER BY source.expires_at DESC, source.subscription_id DESC
+        ) AS merge_rank
+    FROM gpt_subscription_migration_users AS source
+)
+SELECT
+    user_id,
+    MAX(target_group_id) AS target_group_id,
+    MAX(subscription_id) FILTER (WHERE merge_rank = 1) AS primary_subscription_id,
+    COUNT(*) AS source_subscription_count,
+    MAX(expires_at) AS expires_at,
+    CASE
+        WHEN COUNT(*) = 1 THEN MAX(daily_limit_usd)
+        WHEN BOOL_OR(daily_limit_usd IS NULL) THEN NULL
+        ELSE SUM(GREATEST(daily_limit_usd - daily_usage_usd, 0))
+    END AS daily_limit_usd,
+    CASE
+        WHEN COUNT(*) = 1 THEN MAX(weekly_limit_usd)
+        WHEN BOOL_OR(weekly_limit_usd IS NULL) THEN NULL
+        ELSE SUM(GREATEST(weekly_limit_usd - weekly_usage_usd, 0))
+    END AS weekly_limit_usd,
+    CASE
+        WHEN COUNT(*) = 1 THEN MAX(monthly_limit_usd)
+        WHEN BOOL_OR(monthly_limit_usd IS NULL) THEN NULL
+        ELSE SUM(GREATEST(monthly_limit_usd - monthly_usage_usd, 0))
+    END AS monthly_limit_usd,
+    CASE
+        WHEN BOOL_OR(concurrency_limit IS NULL) THEN NULL
+        ELSE MAX(concurrency_limit)
+    END AS concurrency_limit
+FROM ranked
+GROUP BY user_id;
 
 -- 先将套餐额度从旧原生订阅分组快照到套餐，再替换套餐白名单分组。
 UPDATE subscription_plans AS sp
@@ -126,30 +161,52 @@ FROM gpt_subscription_migration_sources
 ON CONFLICT (plan_id, group_id) DO UPDATE
 SET priority = EXCLUDED.priority;
 
--- 将有效用户订阅变成额度快照订阅，同时完整保留原有效期、已用额度和滚动窗口。
+-- 将有效用户订阅变成额度快照订阅。多条旧 GPT 订阅会合并到有效期最晚的一条：
+-- 各周期的剩余额度相加、已用量清零、窗口从迁移时重新开始，其他来源订阅仅软删除以保留审计记录。
+DELETE FROM user_subscription_groups AS binding
+USING gpt_subscription_migration_users AS source
+JOIN gpt_subscription_migration_user_merges AS merged ON merged.user_id = source.user_id
+WHERE binding.subscription_id = source.subscription_id
+  AND source.subscription_id <> merged.primary_subscription_id;
+
 UPDATE user_subscriptions AS us
-SET group_id = source.target_group_id,
-    quota_snapshotted = TRUE,
-    daily_limit_usd = source.daily_limit_usd,
-    weekly_limit_usd = source.weekly_limit_usd,
-    monthly_limit_usd = source.monthly_limit_usd,
+SET deleted_at = NOW(),
     updated_at = NOW()
 FROM gpt_subscription_migration_users AS source
-WHERE us.id = source.subscription_id;
+JOIN gpt_subscription_migration_user_merges AS merged ON merged.user_id = source.user_id
+WHERE us.id = source.subscription_id
+  AND source.subscription_id <> merged.primary_subscription_id;
+
+UPDATE user_subscriptions AS us
+SET group_id = merged.target_group_id,
+    quota_snapshotted = TRUE,
+    daily_limit_usd = merged.daily_limit_usd,
+    weekly_limit_usd = merged.weekly_limit_usd,
+    monthly_limit_usd = merged.monthly_limit_usd,
+    daily_usage_usd = CASE WHEN merged.source_subscription_count > 1 THEN 0 ELSE us.daily_usage_usd END,
+    weekly_usage_usd = CASE WHEN merged.source_subscription_count > 1 THEN 0 ELSE us.weekly_usage_usd END,
+    monthly_usage_usd = CASE WHEN merged.source_subscription_count > 1 THEN 0 ELSE us.monthly_usage_usd END,
+    daily_window_start = CASE WHEN merged.source_subscription_count > 1 THEN NOW() ELSE us.daily_window_start END,
+    weekly_window_start = CASE WHEN merged.source_subscription_count > 1 THEN NOW() ELSE us.weekly_window_start END,
+    monthly_window_start = CASE WHEN merged.source_subscription_count > 1 THEN NOW() ELSE us.monthly_window_start END,
+    expires_at = merged.expires_at,
+    concurrency_limit = merged.concurrency_limit,
+    updated_at = NOW()
+FROM gpt_subscription_migration_user_merges AS merged
+WHERE us.id = merged.primary_subscription_id;
 
 INSERT INTO user_subscription_groups (subscription_id, user_id, group_id, enabled, created_at, updated_at)
-SELECT subscription_id, user_id, target_group_id, TRUE, NOW(), NOW()
-FROM gpt_subscription_migration_users
+SELECT primary_subscription_id, user_id, target_group_id, TRUE, NOW(), NOW()
+FROM gpt_subscription_migration_user_merges
 ON CONFLICT (subscription_id, group_id) DO UPDATE
 SET user_id = EXCLUDED.user_id,
     enabled = TRUE,
     updated_at = NOW();
 
 DELETE FROM user_subscription_groups AS binding
-USING gpt_subscription_migration_users AS source
-WHERE binding.subscription_id = source.subscription_id
-  AND binding.group_id = source.old_group_id
-  AND binding.group_id <> source.target_group_id;
+USING gpt_subscription_migration_user_merges AS merged
+WHERE binding.subscription_id = merged.primary_subscription_id
+  AND binding.group_id <> merged.target_group_id;
 
 -- 目标分组若为专属分组，必须保留用户的传统专属分组授权。
 -- 不删除旧分组授权，避免误撤销该用户由订阅迁移以外来源获得的访问权限。
@@ -179,6 +236,29 @@ WHERE binding.api_key_id = key.id
   AND binding.group_id = source.old_group_id
   AND target_binding.api_key_id = binding.api_key_id
   AND target_binding.group_id = source.target_group_id;
+
+-- 同一 Key 绑定多个待迁移旧 GPT 分组时，只保留优先级最高的一条用于替换，避免目标主键冲突。
+DELETE FROM api_key_groups AS binding
+USING (
+    SELECT api_key_id, group_id
+    FROM (
+        SELECT
+            binding.api_key_id,
+            binding.group_id,
+            ROW_NUMBER() OVER (
+                PARTITION BY binding.api_key_id
+                ORDER BY binding.priority, binding.group_id
+            ) AS merge_rank
+        FROM api_key_groups AS binding
+        JOIN api_keys AS key ON key.id = binding.api_key_id
+        JOIN gpt_subscription_migration_users AS source ON source.user_id = key.user_id
+        WHERE key.deleted_at IS NULL
+          AND binding.group_id = source.old_group_id
+    ) AS ranked_old_bindings
+    WHERE merge_rank > 1
+) AS duplicate_binding
+WHERE binding.api_key_id = duplicate_binding.api_key_id
+  AND binding.group_id = duplicate_binding.group_id;
 
 UPDATE api_key_groups AS binding
 SET group_id = source.target_group_id

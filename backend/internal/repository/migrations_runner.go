@@ -83,6 +83,9 @@ var migrationChecksumCompatibilityRules = map[string]migrationChecksumCompatibil
 	"123_fix_legacy_auth_source_grant_on_signup_defaults.sql": newMigrationChecksumCompatibilityRule("2ce43c2cd89e9f9e1febd34a407ed9e84d177386c5544b6f02c1f58a21129f57", "6cd33422f215dcd1f486ab6f35c0ea5805d9ca69bb25906d94bc649156657145"),
 	"159_batch_image_foundation.sql":                          newMigrationChecksumCompatibilityRule("d902b70982025ec519749faf058aab7631e82c3f48167b9a4ae4db718eb72cce", "82da85b5d98e67a0507647b873a40373e84538e4adafdeed6767c0ac8b6570b2"),
 	"161_batch_image_pricing_snapshot.sql":                    newMigrationChecksumCompatibilityRule("4012af3e43636cb6af22e0176d59d1fcc70615c0f310194329461ae462c4fbd6", "96d915c9b7a6941ae99039e0ff3f1a61481eb9bddd933d11c6fadb2274554e87"),
+	// 199 在 v0.88.101 发布后发现真实库存在同用户多条 GPT 订阅，改为合并剩余额度；
+	// 已执行旧版本且无冲突的实例可继续启动，未执行实例则应用修正版。
+	"199_migrate_gpt_subscription_to_standard_group.sql":      newMigrationChecksumCompatibilityRule("a6630fb8073838cf533d22414c8881b9459bdf201a8bd3e6a7d31977c81dc409", "a2f2a829a56c603a0c51d67c6416fd448cbfe9eb97980ba0ea868d482cb9f935"),
 }
 
 // ApplyMigrations 将嵌入的 SQL 迁移文件应用到指定的数据库。
