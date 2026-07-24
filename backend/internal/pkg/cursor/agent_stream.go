@@ -496,16 +496,20 @@ func parseAgentKVServerMessage(payload []byte) *AgentEvent {
 
 func parseAgentTurnEndedUsage(payload []byte) *Usage {
 	// Newer Agent models wrap usage in field 1, while Grok still returns the
-	// usage counters directly on TurnEnded. Accept both layouts without treating
-	// a wrapper that only contains the finish-reason field as zero usage.
+	// usage counters directly on TurnEnded. An empty or all-zero payload is not
+	// a usage report: callers must retain their estimation fallback in that case.
+	var usage Usage
 	if usagePayload := firstProtoBytes(payload, 1); len(usagePayload) > 0 {
-		usage := parseAgentTurnUsage(usagePayload)
-		return &usage
+		usage = parseAgentTurnUsage(usagePayload)
+	} else {
+		if _, ok := firstProtoVarintPresent(payload, 1); !ok {
+			return nil
+		}
+		usage = parseAgentTurnUsage(payload)
 	}
-	if _, ok := firstProtoVarintPresent(payload, 1); !ok {
+	if !usage.HasTokens() {
 		return nil
 	}
-	usage := parseAgentTurnUsage(payload)
 	return &usage
 }
 

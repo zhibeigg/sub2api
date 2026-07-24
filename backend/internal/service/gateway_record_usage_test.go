@@ -194,6 +194,39 @@ func TestGatewayServiceRecordUsage_PreservesRequestedAndUpstreamModels(t *testin
 	require.Equal(t, mappedModel, *usageRepo.lastLog.UpstreamModel)
 }
 
+func TestGatewayServiceRecordUsage_CursorGrokEstimatedUsageIsBilled(t *testing.T) {
+	groupID := int64(907)
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	svc := newGatewayRecordUsageServiceForTest(usageRepo, userRepo, &openAIRecordUsageSubRepoStub{})
+	svc.resolver = newOpenAITokenImageChannelPricingResolverForTest(t, groupID, "grok-4.5")
+
+	err := svc.RecordUsage(context.Background(), &RecordUsageInput{
+		Result: &ForwardResult{
+			RequestID:     "cursor_grok_estimated_usage",
+			Model:         "grok-4.5",
+			UpstreamModel: "cursor-grok-4.5-high",
+			Usage:         ClaudeUsage{InputTokens: 2, OutputTokens: 3},
+			Duration:      time.Second,
+		},
+		APIKey: &APIKey{
+			ID:      907,
+			GroupID: i64p(groupID),
+			Group:   &Group{ID: groupID, RateMultiplier: 1},
+		},
+		User:    &User{ID: 607},
+		Account: &Account{ID: 707, Platform: PlatformCursor},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, usageRepo.lastLog)
+	require.Equal(t, 2, usageRepo.lastLog.InputTokens)
+	require.Equal(t, 3, usageRepo.lastLog.OutputTokens)
+	require.Equal(t, 5, usageRepo.lastLog.TotalTokens())
+	require.Greater(t, usageRepo.lastLog.TotalCost, 0.0)
+	require.Greater(t, usageRepo.lastLog.ActualCost, 0.0)
+}
+
 func TestGatewayServiceRecordUsage_EmptyImageSizeDefaultsBeforeBillingAndPersistence(t *testing.T) {
 	imagePrice2K := 0.19
 	groupID := int64(901)

@@ -433,6 +433,28 @@ func TestAgentTurnEndedWithoutUsageDoesNotEmitZeroUsage(t *testing.T) {
 	}
 }
 
+func TestAgentGrokTurnEndedZeroUsageDoesNotSuppressFallback(t *testing.T) {
+	// Grok can emit the direct TurnEnded layout with all counters present but
+	// zero. It is not a usable usage report and must not suppress estimation in
+	// the gateway.
+	turnEnded := appendVarint(nil, 1, 0)
+	turnEnded = appendVarint(turnEnded, 2, 0)
+	turnEnded = appendVarint(turnEnded, 3, 0)
+	turnEnded = appendVarint(turnEnded, 4, 0)
+	interaction := appendBytes(nil, 14, turnEnded)
+
+	events := (&AgentStream{}).parseInteractionUpdate(interaction)
+	if len(events) != 2 {
+		t.Fatalf("event count = %d: %#v", len(events), events)
+	}
+	if events[0].Type != AgentEventTurnEnded || events[0].Usage != nil {
+		t.Fatalf("turn ended event = %#v", events[0])
+	}
+	if events[1].Type != AgentEventFinish || events[1].Usage != nil {
+		t.Fatalf("finish event = %#v", events[1])
+	}
+}
+
 func TestParseAgentTurnUsageNormalizesCachedInput(t *testing.T) {
 	tests := []struct {
 		name       string

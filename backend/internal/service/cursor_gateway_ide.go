@@ -1366,7 +1366,10 @@ func (s *CursorGatewayService) forwardIDE(ctx context.Context, c *gin.Context, a
 				committed = true
 			}
 		case cursorpkg.IDEEventUsage:
-			if event.Usage != nil {
+			// Cursor may emit an empty TurnEnded usage object for Grok. Treat it as
+			// absent so the established token-estimation fallback can run instead
+			// of persisting a successful request with zero token usage.
+			if event.Usage != nil && event.Usage.HasTokens() {
 				collected.Usage = *event.Usage
 				usageReported = true
 			}

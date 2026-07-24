@@ -38,6 +38,18 @@ type Usage struct {
 	TotalTokens      int `json:"totalTokens,omitempty"`
 }
 
+// HasTokens reports whether Cursor supplied at least one usable usage counter.
+// Empty TurnEnded payloads are not valid usage reports and must allow callers
+// to apply their normal estimation fallback.
+func (u Usage) HasTokens() bool {
+	return u.InputTokens != 0 ||
+		u.OutputTokens != 0 ||
+		u.CacheWriteTokens != 0 ||
+		u.CacheReadTokens != 0 ||
+		u.ReasoningTokens != 0 ||
+		u.TotalTokens != 0
+}
+
 type Protocol string
 
 const (

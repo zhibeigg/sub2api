@@ -452,6 +452,28 @@ func TestCursorGatewayIDEAnthropicGrokDirectUsageRestoresStreamAndBillingCache(t
 	require.Contains(t, streamBody, `event: message_stop`)
 }
 
+func TestOpenAIGatewayCursorGrokZeroTurnEndedUsageFallsBackToEstimatedTokens(t *testing.T) {
+	upstream := &cursorIDEUpstreamStub{chatBody: cursorIDEFrames(
+		cursorIDETextPayload("fallback grok usage"), cursorIDEGrokUsagePayload(0, 0, 0, 0),
+	)}
+	cursorGateway := ideTestGateway(upstream)
+	openAIGateway := &OpenAIGatewayService{}
+	openAIGateway.SetCursorGatewayService(cursorGateway)
+	body := `{"model":"grok-4.5","stream":true,"messages":[{"role":"user","content":"hi"}]}`
+	c, recorder := newCursorGatewayTestContext(t, "/v1/messages", body, 3)
+
+	result, err := openAIGateway.ForwardAsAnthropic(context.Background(), c, ideTestAccount(), []byte(body), "", "")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Stream)
+	require.Positive(t, result.Usage.InputTokens)
+	require.Positive(t, result.Usage.OutputTokens)
+	// Anthropic streaming starts with a provisional zero-usage message_start;
+	// the final message_delta must carry the estimated token counts.
+	require.Contains(t, recorder.Body.String(), `"input_tokens":5,"output_tokens":5`)
+}
+
 func TestCursorGatewayIDEEstimatesUsageWhenTurnEndedOmitsUsage(t *testing.T) {
 	upstream := &cursorIDEUpstreamStub{chatBody: cursorIDEFrames(
 		cursorIDETextPayload("fallback usage"), cursorIDETurnEndedPayload(nil),
