@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatUsageServiceTier, getUsageServiceTierLabel, normalizeUsageServiceTier } from '@/utils/usageServiceTier'
+import { formatUsageServiceTier, getUsageServiceTierLabel, isPriorityUsageServiceTier, normalizeUsageServiceTier } from '@/utils/usageServiceTier'
 
 describe('usageServiceTier utils', () => {
   it('normalizes fast/default aliases', () => {
@@ -12,6 +12,14 @@ describe('usageServiceTier utils', () => {
   it('preserves supported tiers', () => {
     expect(normalizeUsageServiceTier('priority')).toBe('priority')
     expect(normalizeUsageServiceTier('flex')).toBe('flex')
+  })
+
+  it('recognizes only priority aliases as Fast billing', () => {
+    expect(isPriorityUsageServiceTier('priority')).toBe(true)
+    expect(isPriorityUsageServiceTier(' FAST ')).toBe(true)
+    expect(isPriorityUsageServiceTier('flex')).toBe(false)
+    expect(isPriorityUsageServiceTier()).toBe(false)
+    expect(isPriorityUsageServiceTier('custom-tier')).toBe(false)
   })
 
   it('formats empty values as standard', () => {

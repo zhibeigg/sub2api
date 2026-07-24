@@ -28,6 +28,10 @@ const messages: Record<string, string> = {
   'usage.serviceTierPriority': 'Fast',
   'usage.serviceTierFlex': 'Flex',
   'usage.serviceTierStandard': 'Standard',
+  'usage.fastBillingBadge': 'Fast billing',
+  'usage.fastBillingIncluded': 'Fast price included',
+  'usage.fastBillingTitle': 'Fast (priority) billing',
+  'usage.fastBillingDescription': 'The Fast price is already included.',
   'usage.rate': 'Rate',
   'usage.accountMultiplier': 'Account rate',
   'usage.original': 'Original',
@@ -186,11 +190,16 @@ describe('admin UsageTable tooltip', () => {
       },
     })
 
+    expect(wrapper.get('[data-testid="fast-billing-badge"]').text()).toBe('Fast billing')
+    expect(wrapper.get('[data-testid="fast-billing-included"]').text()).toBe('Fast price included')
+
     const tooltipTriggers = wrapper.findAll('.group.relative')
     await tooltipTriggers[tooltipTriggers.length - 1].trigger('mouseenter')
     await nextTick()
 
     const text = wrapper.text()
+    expect(text).toContain('Fast (priority) billing')
+    expect(text).toContain('The Fast price is already included.')
     expect(text).toContain('Service tier')
     expect(text).toContain('Fast')
     expect(text).toContain('Rate')
@@ -202,6 +211,22 @@ describe('admin UsageTable tooltip', () => {
     expect(text).toContain('$5.0000 / 1M tokens')
     expect(text).toContain('$30.0000 / 1M tokens')
     expect(text).toContain('$0.069568')
+  })
+
+  it('does not label flex usage as Fast billing', () => {
+    const wrapper = mount(UsageTable, {
+      props: {
+        data: [{ ...baseImageRow, request_id: 'req-flex-tier', service_tier: 'flex' }],
+        loading: false,
+        columns: [],
+      },
+      global: {
+        stubs: { DataTable: DataTableStub, EmptyState: true, Icon: true, Teleport: true },
+      },
+    })
+
+    expect(wrapper.find('[data-testid="fast-billing-badge"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="fast-billing-included"]').exists()).toBe(false)
   })
 
   it('shows cache write and cache read tokens in usage records', async () => {

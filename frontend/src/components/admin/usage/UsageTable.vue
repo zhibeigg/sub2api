@@ -53,23 +53,34 @@
         </template>
 
         <template #cell-model="{ row }">
-          <div v-if="row.model_mapping_chain && row.model_mapping_chain.includes('→')" class="space-y-0.5 text-xs">
-            <div v-for="(step, i) in row.model_mapping_chain.split('→')" :key="i"
-                 class="break-all"
-                 :class="i === 0 ? 'font-medium text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'"
-                 :style="i > 0 ? `padding-left: ${i * 0.75}rem` : ''">
-              <span v-if="i > 0" class="mr-0.5">↳</span>{{ step }}
+          <div class="flex items-start gap-1.5">
+            <div class="min-w-0 flex-1">
+              <div v-if="row.model_mapping_chain && row.model_mapping_chain.includes('→')" class="space-y-0.5 text-xs">
+                <div v-for="(step, i) in row.model_mapping_chain.split('→')" :key="i"
+                     class="break-all"
+                     :class="i === 0 ? 'font-medium text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'"
+                     :style="i > 0 ? `padding-left: ${i * 0.75}rem` : ''">
+                  <span v-if="i > 0" class="mr-0.5">↳</span>{{ step }}
+                </div>
+              </div>
+              <div v-else-if="row.upstream_model && row.upstream_model !== row.model" class="space-y-0.5 text-xs">
+                <div class="break-all font-medium text-gray-900 dark:text-white">
+                  {{ row.model }}
+                </div>
+                <div class="break-all text-gray-500 dark:text-gray-400">
+                  <span class="mr-0.5">↳</span>{{ row.upstream_model }}
+                </div>
+              </div>
+              <span v-else class="font-medium text-gray-900 dark:text-white">{{ row.model }}</span>
             </div>
+            <span
+              v-if="isPriorityUsageServiceTier(row.service_tier)"
+              data-testid="fast-billing-badge"
+              class="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/30"
+            >
+              {{ t('usage.fastBillingBadge') }}
+            </span>
           </div>
-          <div v-else-if="row.upstream_model && row.upstream_model !== row.model" class="space-y-0.5 text-xs">
-            <div class="break-all font-medium text-gray-900 dark:text-white">
-              {{ row.model }}
-            </div>
-            <div class="break-all text-gray-500 dark:text-gray-400">
-              <span class="mr-0.5">↳</span>{{ row.upstream_model }}
-            </div>
-          </div>
-          <span v-else class="font-medium text-gray-900 dark:text-white">{{ row.model }}</span>
         </template>
 
         <template #cell-reasoning_effort="{ row }">
@@ -192,6 +203,13 @@
             </div>
             <div v-if="showAccountBilling && row.account_rate_multiplier != null" class="mt-0.5 text-[11px] text-orange-500 dark:text-orange-400">
               A ${{ accountBilled(row).toFixed(6) }}
+            </div>
+            <div
+              v-if="isPriorityUsageServiceTier(row.service_tier)"
+              data-testid="fast-billing-included"
+              class="mt-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300"
+            >
+              {{ t('usage.fastBillingIncluded') }}
             </div>
           </div>
         </template>
@@ -419,6 +437,14 @@
               <span class="font-medium text-white">${{ tooltipData.cache_read_cost.toFixed(6) }}</span>
             </div>
           </div>
+          <div
+            v-if="isPriorityUsageServiceTier(tooltipData?.service_tier)"
+            data-testid="fast-billing-explanation"
+            class="mb-2 rounded-md border border-amber-400/50 bg-amber-500/10 px-3 py-2 text-left"
+          >
+            <p class="text-xs font-semibold text-amber-200">{{ t('usage.fastBillingTitle') }}</p>
+            <p class="mt-0.5 text-[11px] leading-4 text-amber-100/90">{{ t('usage.fastBillingDescription') }}</p>
+          </div>
           <!-- Rate and Summary -->
           <div class="flex items-center justify-between gap-6">
             <span class="text-gray-400">{{ t('usage.serviceTier') }}</span>
@@ -466,7 +492,7 @@ import { useI18n } from 'vue-i18n'
 import { formatDateTime, formatReasoningEffort } from '@/utils/format'
 import { formatCacheTokens, formatMultiplier } from '@/utils/formatters'
 import { formatTokenPricePerMillion } from '@/utils/usagePricing'
-import { getUsageServiceTierLabel } from '@/utils/usageServiceTier'
+import { getUsageServiceTierLabel, isPriorityUsageServiceTier } from '@/utils/usageServiceTier'
 import { resolveUsageRequestType } from '@/utils/usageRequestType'
 import {
   LATENCY_BAR_CLASSES,

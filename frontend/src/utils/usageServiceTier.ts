@@ -7,6 +7,10 @@ export function normalizeUsageServiceTier(serviceTier?: string | null): string |
   return value
 }
 
+export function isPriorityUsageServiceTier(serviceTier?: string | null): boolean {
+  return normalizeUsageServiceTier(serviceTier) === 'priority'
+}
+
 export function formatUsageServiceTier(serviceTier?: string | null): string {
   const normalized = normalizeUsageServiceTier(serviceTier)
   if (!normalized) return 'standard'
