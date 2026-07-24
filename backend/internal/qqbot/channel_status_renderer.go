@@ -548,15 +548,20 @@ func fillRoundedRect(img *image.RGBA, rect image.Rectangle, radius int, fill col
 	if rect.Empty() {
 		return
 	}
+	_, _, _, alpha := fill.RGBA()
+	op := imagedraw.Src
+	if alpha < 0xffff {
+		op = imagedraw.Over
+	}
 	radius = minInt(radius, minInt(rect.Dx(), rect.Dy())/2)
 	if radius <= 0 {
-		imagedraw.Draw(img, rect, image.NewUniform(fill), image.Point{}, imagedraw.Over)
+		imagedraw.Draw(img, rect, image.NewUniform(fill), image.Point{}, op)
 		return
 	}
 	for y := rect.Min.Y; y < rect.Max.Y; y++ {
 		offset := roundedRectOffset(y, rect, radius)
 		span := image.Rect(rect.Min.X+offset, y, rect.Max.X-offset, y+1)
-		imagedraw.Draw(img, span, image.NewUniform(fill), image.Point{}, imagedraw.Src)
+		imagedraw.Draw(img, span, image.NewUniform(fill), image.Point{}, op)
 	}
 }
 
@@ -616,9 +621,8 @@ func hexColor(value string) color.RGBA {
 	return color.RGBA{R: red, G: green, B: blue, A: 255}
 }
 
-func withAlpha(value color.RGBA, alpha uint8) color.RGBA {
-	value.A = alpha
-	return value
+func withAlpha(value color.RGBA, alpha uint8) color.NRGBA {
+	return color.NRGBA{R: value.R, G: value.G, B: value.B, A: alpha}
 }
 
 func minInt(left, right int) int {

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"image"
+	"image/color"
+	imagedraw "image/draw"
 	"image/png"
 	"testing"
 	"time"
@@ -64,6 +66,20 @@ func TestChannelStatusCardLayoutSeparatesAvailabilityFromTimeline(t *testing.T) 
 	}
 	if layout.timeline.Min.X != channelStatusCardPadding || layout.timeline.Max.X != rect.Max.X-channelStatusCardPadding {
 		t.Fatalf("unexpected timeline bounds: %#v", layout.timeline)
+	}
+}
+
+func TestFillRoundedRectCompositesTranslucentProviderFill(t *testing.T) {
+	canvas := image.NewRGBA(image.Rect(0, 0, 24, 24))
+	imagedraw.Draw(canvas, canvas.Bounds(), image.NewUniform(color.White), image.Point{}, imagedraw.Src)
+
+	fillRoundedRect(canvas, image.Rect(4, 4, 20, 20), 4, withAlpha(hexColor("#0A6F50"), 28))
+	red, green, blue, alpha := canvas.At(12, 12).RGBA()
+	if alpha != 0xffff {
+		t.Fatalf("provider label alpha=%#x want %#x", alpha, uint32(0xffff))
+	}
+	if red < 0xe000 || green < 0xe800 || blue < 0xe000 {
+		t.Fatalf("provider label was not composited onto white: r=%#x g=%#x b=%#x", red, green, blue)
 	}
 }
 
