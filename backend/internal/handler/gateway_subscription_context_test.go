@@ -15,11 +15,13 @@ import (
 )
 
 type activeSubscriptionResolverStub struct {
-	subscription *service.UserSubscription
-	err          error
-	calls        int
-	userID       int64
-	groupID      int64
+	subscription    *service.UserSubscription
+	err             error
+	validateErr     error
+	calls           int
+	validationCalls int
+	userID          int64
+	groupID         int64
 }
 
 func (s *activeSubscriptionResolverStub) GetActiveSubscription(_ context.Context, userID, groupID int64) (*service.UserSubscription, error) {
@@ -27,6 +29,11 @@ func (s *activeSubscriptionResolverStub) GetActiveSubscription(_ context.Context
 	s.userID = userID
 	s.groupID = groupID
 	return s.subscription, s.err
+}
+
+func (s *activeSubscriptionResolverStub) ValidateAndCheckLimits(_ *service.UserSubscription, _ *service.Group) (bool, error) {
+	s.validationCalls++
+	return false, s.validateErr
 }
 
 func newResolvedGroupTestContext() *gin.Context {
@@ -74,6 +81,22 @@ func TestApplyResolvedAPIKeyContext(t *testing.T) {
 
 		err := applyResolvedAPIKeyContext(c, original, selected, resolver, nil)
 		require.NoError(t, err)
+		contextSubscription, ok := middleware2.GetSubscriptionFromContext(c)
+		require.False(t, ok)
+		require.Nil(t, contextSubscription)
+	})
+
+	t.Run("exhausted standard group subscription clears context for balance billing", func(t *testing.T) {
+		resolver := &activeSubscriptionResolverStub{
+			subscription: &service.UserSubscription{ID: 100, UserID: user.ID, GroupID: standardGroup.ID},
+			validateErr:  service.ErrDailyLimitExceeded,
+		}
+		c := newResolvedGroupTestContext()
+		c.Set(string(middleware2.ContextKeySubscription), &service.UserSubscription{ID: 88, GroupID: originalGroup.ID})
+
+		err := applyResolvedAPIKeyContext(c, original, selected, resolver, nil)
+		require.NoError(t, err)
+		require.Equal(t, 1, resolver.validationCalls)
 		contextSubscription, ok := middleware2.GetSubscriptionFromContext(c)
 		require.False(t, ok)
 		require.Nil(t, contextSubscription)

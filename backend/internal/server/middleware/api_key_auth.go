@@ -263,19 +263,25 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 					_, validateErr = subscriptionService.ValidateAndCheckLimits(subscription, apiKey.Group)
 				}
 				if validateErr != nil {
-					code := "SUBSCRIPTION_INVALID"
-					status := 403
-					if errors.Is(validateErr, service.ErrDailyLimitExceeded) ||
-						errors.Is(validateErr, service.ErrWeeklyLimitExceeded) ||
-						errors.Is(validateErr, service.ErrMonthlyLimitExceeded) {
-						code = "USAGE_LIMIT_EXCEEDED"
-						status = 429
+					if apiKey.Group != nil &&
+						apiKey.Group.SubscriptionType == service.SubscriptionTypeStandard &&
+						service.IsSubscriptionUsageLimitExceeded(validateErr) {
+						// 标准分组套餐额度耗尽后继续使用余额，且后续账单不得再扣套餐。
+						subscription = nil
+					} else {
+						code := "SUBSCRIPTION_INVALID"
+						status := 403
+						if service.IsSubscriptionUsageLimitExceeded(validateErr) {
+							code = "USAGE_LIMIT_EXCEEDED"
+							status = 429
+						}
+						AbortWithError(c, status, code, validateErr.Error())
+						return
 					}
-					AbortWithError(c, status, code, validateErr.Error())
-					return
 				}
-			} else {
-				// 非订阅模式 或 订阅模式但 subscriptionService 未注入：回退到余额检查
+			}
+			if subscription == nil {
+				// 非订阅模式，或标准分组套餐额度耗尽后，回退到余额检查。
 				if apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
 					AbortWithError(c, 403, "INSUFFICIENT_BALANCE", "Insufficient account balance")
 					return

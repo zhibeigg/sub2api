@@ -1583,6 +1583,10 @@ type activeSubscriptionResolver interface {
 	GetActiveSubscription(ctx context.Context, userID, groupID int64) (*service.UserSubscription, error)
 }
 
+type activeSubscriptionLimitChecker interface {
+	ValidateAndCheckLimits(sub *service.UserSubscription, group *service.Group) (needsMaintenance bool, err error)
+}
+
 // applyResolvedAPIKeyContext keeps API key, group and subscription context in
 // lockstep after a multi-group request chooses its final service group.
 func applyResolvedAPIKeyContext(
@@ -1623,6 +1627,17 @@ func applyResolvedAPIKeyContext(
 			return nil
 		}
 		return fmt.Errorf("resolve active subscription for effective group: %w", err)
+	}
+	if selected.Group.SubscriptionType == service.SubscriptionTypeStandard {
+		if checker, ok := subscriptionService.(activeSubscriptionLimitChecker); ok {
+			// Validate a copy: resolving the final group must not mutate the cached
+			// subscription snapshot or trigger window-maintenance I/O.
+			candidate := *subscription
+			_, validateErr := checker.ValidateAndCheckLimits(&candidate, selected.Group)
+			if service.IsSubscriptionUsageLimitExceeded(validateErr) {
+				return nil
+			}
+		}
 	}
 	c.Set(string(middleware2.ContextKeySubscription), subscription)
 	return nil

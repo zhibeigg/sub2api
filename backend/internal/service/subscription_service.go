@@ -49,6 +49,15 @@ var (
 	ErrAdjustWouldExpire           = infraerrors.BadRequest("ADJUST_WOULD_EXPIRE", "adjustment would result in expired subscription (remaining days must be > 0)")
 )
 
+// IsSubscriptionUsageLimitExceeded reports whether err is a daily, weekly, or
+// monthly subscription usage-limit rejection. Callers use it to distinguish a
+// standard-group balance fallback from invalid subscription states.
+func IsSubscriptionUsageLimitExceeded(err error) bool {
+	return errors.Is(err, ErrDailyLimitExceeded) ||
+		errors.Is(err, ErrWeeklyLimitExceeded) ||
+		errors.Is(err, ErrMonthlyLimitExceeded)
+}
+
 // SubscriptionService 订阅服务
 type SubscriptionService struct {
 	groupRepo           GroupRepository

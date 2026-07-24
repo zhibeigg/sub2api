@@ -198,20 +198,27 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 				_, err = subscriptionService.ValidateAndCheckLimits(subscription, apiKey.Group)
 			}
 			if err != nil {
-				status := 403
-				if errors.Is(err, service.ErrDailyLimitExceeded) ||
-					errors.Is(err, service.ErrWeeklyLimitExceeded) ||
-					errors.Is(err, service.ErrMonthlyLimitExceeded) {
-					status = 429
+				if apiKey.Group != nil &&
+					apiKey.Group.SubscriptionType == service.SubscriptionTypeStandard &&
+					service.IsSubscriptionUsageLimitExceeded(err) {
+					// 标准分组套餐额度耗尽后继续使用余额，且后续账单不得再扣套餐。
+					subscription = nil
+				} else {
+					status := 403
+					if service.IsSubscriptionUsageLimitExceeded(err) {
+						status = 429
+					}
+					abortWithGoogleError(c, status, err.Error())
+					return
 				}
-				abortWithGoogleError(c, status, err.Error())
-				return
 			}
-
-			c.Set(string(ContextKeySubscription), subscription)
-		} else if apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
+		}
+		if subscription == nil && apiKeyBalanceBelowAuthThreshold(apiKey.User.Balance, cfg) {
 			abortWithGoogleError(c, 403, "Insufficient account balance")
 			return
+		}
+		if subscription != nil {
+			c.Set(string(ContextKeySubscription), subscription)
 		}
 
 		c.Set(string(ContextKeyAPIKey), apiKey)

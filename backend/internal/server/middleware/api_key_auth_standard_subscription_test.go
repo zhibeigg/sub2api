@@ -54,11 +54,32 @@ func TestAPIKeyAuth_StandardGroupSubscriptionAndFallback(t *testing.T) {
 			wantBody:   "SUBSCRIPTION_NOT_FOUND",
 		},
 		{
-			name:      "standard quota plan exhaustion returns 429",
+			name:      "standard quota plan exhaustion falls back to balance",
 			groupType: service.SubscriptionTypeStandard,
 			balance:   10,
 			subscription: &service.UserSubscription{
 				ID: 102, Status: service.SubscriptionStatusActive, ExpiresAt: now.Add(time.Hour),
+				QuotaSnapshotted: true, DailyLimitUSD: &limit, DailyUsageUSD: 2, DailyWindowStart: &now,
+			},
+			wantStatus: http.StatusOK, wantSubscription: false,
+		},
+		{
+			name:      "standard quota plan exhaustion with zero balance is rejected by balance check",
+			groupType: service.SubscriptionTypeStandard,
+			balance:   0,
+			subscription: &service.UserSubscription{
+				ID: 103, Status: service.SubscriptionStatusActive, ExpiresAt: now.Add(time.Hour),
+				QuotaSnapshotted: true, DailyLimitUSD: &limit, DailyUsageUSD: 2, DailyWindowStart: &now,
+			},
+			wantStatus: http.StatusForbidden,
+			wantBody:   "INSUFFICIENT_BALANCE",
+		},
+		{
+			name:      "subscription group quota plan exhaustion remains rejected",
+			groupType: service.SubscriptionTypeSubscription,
+			balance:   10,
+			subscription: &service.UserSubscription{
+				ID: 104, Status: service.SubscriptionStatusActive, ExpiresAt: now.Add(time.Hour),
 				QuotaSnapshotted: true, DailyLimitUSD: &limit, DailyUsageUSD: 2, DailyWindowStart: &now,
 			},
 			wantStatus: http.StatusTooManyRequests,
@@ -148,11 +169,32 @@ func TestAPIKeyAuthGoogle_StandardGroupSubscriptionAndFallback(t *testing.T) {
 			wantMessage: "No active subscription is available for this group",
 		},
 		{
-			name:      "standard quota plan exhaustion returns 429",
+			name:      "standard quota plan exhaustion falls back to balance",
 			groupType: service.SubscriptionTypeStandard,
 			balance:   10,
 			subscription: &service.UserSubscription{
 				ID: 202, Status: service.SubscriptionStatusActive, ExpiresAt: now.Add(time.Hour),
+				QuotaSnapshotted: true, DailyLimitUSD: &limit, DailyUsageUSD: 2, DailyWindowStart: &now,
+			},
+			wantStatus: http.StatusOK, wantSubscription: false,
+		},
+		{
+			name:      "standard quota plan exhaustion with zero balance is rejected by balance check",
+			groupType: service.SubscriptionTypeStandard,
+			balance:   0,
+			subscription: &service.UserSubscription{
+				ID: 203, Status: service.SubscriptionStatusActive, ExpiresAt: now.Add(time.Hour),
+				QuotaSnapshotted: true, DailyLimitUSD: &limit, DailyUsageUSD: 2, DailyWindowStart: &now,
+			},
+			wantStatus:  http.StatusForbidden,
+			wantMessage: "account balance is insufficient",
+		},
+		{
+			name:      "subscription group quota plan exhaustion remains rejected",
+			groupType: service.SubscriptionTypeSubscription,
+			balance:   10,
+			subscription: &service.UserSubscription{
+				ID: 204, Status: service.SubscriptionStatusActive, ExpiresAt: now.Add(time.Hour),
 				QuotaSnapshotted: true, DailyLimitUSD: &limit, DailyUsageUSD: 2, DailyWindowStart: &now,
 			},
 			wantStatus:  http.StatusTooManyRequests,
