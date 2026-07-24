@@ -9,10 +9,9 @@ const messages: Record<string, string> = {
   'usage.totalTokens': 'Total Tokens',
   'usage.in': 'In',
   'usage.out': 'Out',
-  'usage.cacheTotal': 'Cache',
-  'usage.cacheBreakdown': 'Cache Token Breakdown',
-  'usage.cacheCreationTokensLabel': 'Cache Creation',
-  'usage.cacheReadTokensLabel': 'Cache Read',
+  'usage.cacheHit': 'Cache Hit',
+  'usage.cacheCreate': 'Cache Create',
+  'usage.cacheHitRate': 'Cache Hit Rate',
   'usage.totalCost': 'Total Cost',
   'usage.accountCost': 'Cost',
   'usage.standardCost': 'Standard',
@@ -44,7 +43,7 @@ const stats = {
 }
 
 describe('UsageStatsCards', () => {
-  it('shows cache token breakdown values', () => {
+  it('renders token categories and cache hit rate directly in the card', () => {
     const wrapper = mount(UsageStatsCards, {
       props: {
         stats,
@@ -56,12 +55,40 @@ describe('UsageStatsCards', () => {
       },
     })
 
-    const text = wrapper.text()
-    expect(text).toContain('Cache: 34')
-    expect(text).toContain('Cache Token Breakdown')
-    expect(text).toContain('Cache Creation')
-    expect(text).toContain('12')
-    expect(text).toContain('Cache Read')
-    expect(text).toContain('22')
+    const breakdown = wrapper.get('[data-testid="token-breakdown"]')
+    expect(breakdown.text()).toContain('In')
+    expect(breakdown.text()).toContain('100')
+    expect(breakdown.text()).toContain('Out')
+    expect(breakdown.text()).toContain('50')
+    expect(breakdown.text()).toContain('Cache Hit')
+    expect(breakdown.text()).toContain('22')
+    expect(breakdown.text()).toContain('Cache Create')
+    expect(breakdown.text()).toContain('12')
+
+    const hitRate = wrapper.get('[data-testid="cache-hit-rate"]')
+    expect(hitRate.text()).toContain('Cache Hit Rate')
+    expect(hitRate.text()).toContain('22 / 134')
+    expect(hitRate.text()).toContain('16.4%')
+  })
+
+  it('hides cache hit rate when no prompt tokens are available', () => {
+    const wrapper = mount(UsageStatsCards, {
+      props: {
+        stats: {
+          ...stats,
+          total_input_tokens: 0,
+          total_cache_tokens: 0,
+          total_cache_creation_tokens: 0,
+          total_cache_read_tokens: 0,
+        },
+      },
+      global: {
+        stubs: {
+          Icon: true,
+        },
+      },
+    })
+
+    expect(wrapper.find('[data-testid="cache-hit-rate"]').exists()).toBe(false)
   })
 })
