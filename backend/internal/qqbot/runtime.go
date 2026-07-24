@@ -400,11 +400,23 @@ func (r *Runtime) processItems(generation *runtimeGeneration, items []QueuedEven
 	}
 }
 
-func (r *Runtime) process(ctx context.Context, generation *runtimeGeneration, incoming InboundEvent) error {
-	return r.processWith(ctx, generation.config, generation.messenger, r.queue, incoming, r.markSent)
+type channelCheckLifecycleRecorder interface {
+	recordChannelCheckLifecycle(stage, eventID string, scene Scene, errorCode string)
 }
 
-func (r *Runtime) processWith(ctx context.Context, cfg ActiveConfig, messenger Messenger, queue *ReliableQueue, incoming InboundEvent, markSent func()) error {
+const (
+	channelCheckStageRecognized      = "recognized"
+	channelCheckStageURLIssued       = "url_issued"
+	channelCheckStageImageActionSent = "image_action_sent"
+	channelCheckStagePrepareFailed   = "prepare_failed"
+	channelCheckStageImageFailed     = "image_action_failed"
+)
+
+func (r *Runtime) process(ctx context.Context, generation *runtimeGeneration, incoming InboundEvent) error {
+	return r.processWith(ctx, generation.config, generation.messenger, r.queue, incoming, r.markSent, nil)
+}
+
+func (r *Runtime) processWith(ctx context.Context, cfg ActiveConfig, messenger Messenger, queue *ReliableQueue, incoming InboundEvent, markSent func(), diagnostics channelCheckLifecycleRecorder) error {
 	if r == nil || r.manager == nil || messenger == nil {
 		return ErrRuntimeUnavailable
 	}
@@ -467,7 +479,7 @@ func (r *Runtime) processWith(ctx context.Context, cfg ActiveConfig, messenger M
 		return send(renderHelp(settings.HelpMessage))
 	}
 	if parsed.Kind == CommandCheck {
-		return r.handleChannelCheckWith(ctx, cfg, messenger, incoming, markSent)
+		return r.handleChannelCheckWith(ctx, cfg, messenger, incoming, markSent, diagnostics)
 	}
 	if parsed.Kind != CommandBind {
 		return nil
@@ -510,24 +522,41 @@ func (r *Runtime) processWith(ctx context.Context, cfg ActiveConfig, messenger M
 }
 
 func (r *Runtime) handleChannelCheck(ctx context.Context, generation *runtimeGeneration, incoming InboundEvent) error {
-	return r.handleChannelCheckWith(ctx, generation.config, generation.messenger, incoming, r.markSent)
+	return r.handleChannelCheckWith(ctx, generation.config, generation.messenger, incoming, r.markSent, nil)
 }
 
-func (r *Runtime) handleChannelCheckWith(ctx context.Context, cfg ActiveConfig, messenger Messenger, incoming InboundEvent, markSent func()) error {
+func (r *Runtime) handleChannelCheckWith(ctx context.Context, cfg ActiveConfig, messenger Messenger, incoming InboundEvent, markSent func(), diagnostics channelCheckLifecycleRecorder) error {
+	if diagnostics != nil {
+		diagnostics.recordChannelCheckLifecycle(channelCheckStageRecognized, incoming.EventID, incoming.Scene, "")
+	}
 	if r.channelCheck == nil {
+		if diagnostics != nil {
+			diagnostics.recordChannelCheckLifecycle(channelCheckStagePrepareFailed, incoming.EventID, incoming.Scene, "channel_check_unavailable")
+		}
 		return sendQQBotMessage(ctx, messenger, incoming, "渠道状态图暂时不可用，请稍后再试。", 1, markSent)
 	}
 	imageURL, err := r.channelCheck.PrepareImageURL(ctx, cfg, incoming)
 	if err != nil {
+		code := channelCheckDiagnosticErrorCode(err)
+		if diagnostics != nil {
+			diagnostics.recordChannelCheckLifecycle(channelCheckStagePrepareFailed, incoming.EventID, incoming.Scene, code)
+		}
 		message := channelCheckErrorMessage(err)
 		if message == "" {
-			slog.Warn("qqbot channel check preparation failed", "event_id", shortID(incoming.EventID), "scene", incoming.Scene, "error_code", infraerrors.Reason(err))
+			slog.Warn("qqbot channel check preparation failed", "event_id", shortID(incoming.EventID), "scene", incoming.Scene, "error_code", code)
 			message = "渠道状态图暂时不可用，请稍后再试。"
 		}
 		return sendQQBotMessage(ctx, messenger, incoming, message, 1, markSent)
 	}
+	if diagnostics != nil {
+		diagnostics.recordChannelCheckLifecycle(channelCheckStageURLIssued, incoming.EventID, incoming.Scene, "")
+	}
 	if err := sendQQBotImage(ctx, messenger, incoming, imageURL, markSent); err != nil {
-		slog.Warn("qqbot channel check image reply failed", "event_id", shortID(incoming.EventID), "scene", incoming.Scene, "error_code", infraerrors.Reason(err))
+		code := channelCheckDiagnosticErrorCode(err)
+		if diagnostics != nil {
+			diagnostics.recordChannelCheckLifecycle(channelCheckStageImageFailed, incoming.EventID, incoming.Scene, code)
+		}
+		slog.Warn("qqbot channel check image reply failed", "event_id", shortID(incoming.EventID), "scene", incoming.Scene, "error_code", code)
 		var definitive interface{ Definitive() bool }
 		if !errors.As(err, &definitive) || !definitive.Definitive() {
 			return err
@@ -536,8 +565,32 @@ func (r *Runtime) handleChannelCheckWith(ctx context.Context, cfg ActiveConfig, 
 		if fallbackErr != nil {
 			return errors.Join(err, fallbackErr)
 		}
+		return nil
+	}
+	if diagnostics != nil {
+		diagnostics.recordChannelCheckLifecycle(channelCheckStageImageActionSent, incoming.EventID, incoming.Scene, "")
 	}
 	return nil
+}
+
+func channelCheckDiagnosticErrorCode(err error) string {
+	if code := infraerrors.Reason(err); code != "" {
+		return code
+	}
+	switch {
+	case errors.Is(err, ErrChannelCheckDisabled):
+		return "channel_check_disabled"
+	case errors.Is(err, ErrChannelMonitorDisabled):
+		return "channel_monitor_disabled"
+	case errors.Is(err, ErrChannelCheckBindingRequired):
+		return "channel_check_binding_required"
+	case errors.Is(err, ErrChannelCheckUnavailable):
+		return "channel_check_unavailable"
+	case errors.Is(err, ErrOneBotDisconnected):
+		return "reverse_ws_disconnected"
+	default:
+		return "channel_check_action_failed"
+	}
 }
 
 func channelCheckErrorMessage(err error) string {

@@ -28,15 +28,25 @@ type oneBotRuntimeGeneration struct {
 	accepting atomic.Bool
 }
 
+type OneBotChannelCheckDiagnostics struct {
+	LastRecognizedAt      *time.Time `json:"last_recognized_at,omitempty"`
+	LastURLIssuedAt       *time.Time `json:"last_url_issued_at,omitempty"`
+	LastImageActionSentAt *time.Time `json:"last_image_action_sent_at,omitempty"`
+	LastFailureStage      string     `json:"last_failure_stage,omitempty"`
+	LastFailureErrorCode  string     `json:"last_failure_error_code,omitempty"`
+	LastFailureAt         *time.Time `json:"last_failure_at,omitempty"`
+}
+
 type OneBotRuntimeState struct {
 	RuntimeState
-	Connected         bool       `json:"connected"`
-	ConnectionID      uint64     `json:"connection_id,omitempty"`
-	SelfIDFingerprint string     `json:"self_id_fingerprint,omitempty"`
-	PendingActions    int        `json:"pending_actions"`
-	ConnectedAt       *time.Time `json:"connected_at,omitempty"`
-	LastActionAt      *time.Time `json:"last_action_at,omitempty"`
-	LastDisconnectAt  *time.Time `json:"last_disconnect_at,omitempty"`
+	Connected               bool                          `json:"connected"`
+	ConnectionID            uint64                        `json:"connection_id,omitempty"`
+	SelfIDFingerprint       string                        `json:"self_id_fingerprint,omitempty"`
+	PendingActions          int                           `json:"pending_actions"`
+	ConnectedAt             *time.Time                    `json:"connected_at,omitempty"`
+	LastActionAt            *time.Time                    `json:"last_action_at,omitempty"`
+	LastDisconnectAt        *time.Time                    `json:"last_disconnect_at,omitempty"`
+	ChannelCheckDiagnostics OneBotChannelCheckDiagnostics `json:"channel_check_diagnostics"`
 }
 
 type OneBotRuntime struct {
@@ -55,8 +65,9 @@ type OneBotRuntime struct {
 	root        context.Context
 	cancel      context.CancelFunc
 
-	stateMu sync.RWMutex
-	state   RuntimeState
+	stateMu                 sync.RWMutex
+	state                   RuntimeState
+	channelCheckDiagnostics OneBotChannelCheckDiagnostics
 }
 
 func NewOneBotRuntime(manager *OneBotConfigManager, queue *OneBotQueue, processor *Runtime) *OneBotRuntime {
@@ -406,7 +417,7 @@ func (r *OneBotRuntime) processItems(generation *oneBotRuntimeGeneration, items 
 		if item.Event.OneBotRequest != nil {
 			approvalAttempted, err = r.processRequestApproval(processCtx, target.messenger, item.Event)
 		} else {
-			err = r.processor.processWith(processCtx, r.activeProcessingConfig(target.config), target.messenger, r.queue.ReliableQueue, item.Event, r.markSent)
+			err = r.processor.processWith(processCtx, r.activeProcessingConfig(target.config), target.messenger, r.queue.ReliableQueue, item.Event, r.markSent, r)
 		}
 		cancel()
 		if approvalAttempted {
@@ -545,6 +556,7 @@ func (r *OneBotRuntime) State(ctx context.Context) OneBotRuntimeState {
 	}
 	r.stateMu.RLock()
 	result.RuntimeState = r.state
+	result.ChannelCheckDiagnostics = copyOneBotChannelCheckDiagnostics(r.channelCheckDiagnostics)
 	r.stateMu.RUnlock()
 	if r.queue != nil {
 		result.StreamBacklog, result.StreamPending, result.DeadLetterTotal = r.queue.Stats(ctx)
@@ -574,6 +586,55 @@ func (r *OneBotRuntime) State(ctx context.Context) OneBotRuntimeState {
 		result.LastErrorMessage = hubState.LastErrorCode
 	}
 	return result
+}
+
+func (r *OneBotRuntime) recordChannelCheckLifecycle(stage, eventID string, scene Scene, errorCode string) {
+	if r == nil {
+		return
+	}
+	now := time.Now().UTC()
+	r.stateMu.Lock()
+	switch stage {
+	case channelCheckStageRecognized:
+		r.channelCheckDiagnostics.LastRecognizedAt = &now
+		r.channelCheckDiagnostics.LastFailureStage = ""
+		r.channelCheckDiagnostics.LastFailureErrorCode = ""
+		r.channelCheckDiagnostics.LastFailureAt = nil
+	case channelCheckStageURLIssued:
+		r.channelCheckDiagnostics.LastURLIssuedAt = &now
+	case channelCheckStageImageActionSent:
+		r.channelCheckDiagnostics.LastImageActionSentAt = &now
+	case channelCheckStagePrepareFailed, channelCheckStageImageFailed:
+		r.channelCheckDiagnostics.LastFailureStage = stage
+		r.channelCheckDiagnostics.LastFailureErrorCode = strings.TrimSpace(errorCode)
+		r.channelCheckDiagnostics.LastFailureAt = &now
+	}
+	r.stateMu.Unlock()
+
+	attributes := []any{"event_id", shortID(eventID), "scene", scene, "stage", stage}
+	if errorCode != "" {
+		attributes = append(attributes, "error_code", errorCode)
+		slog.Warn("onebot channel check lifecycle", attributes...)
+		return
+	}
+	slog.Info("onebot channel check lifecycle", attributes...)
+}
+
+func copyOneBotChannelCheckDiagnostics(value OneBotChannelCheckDiagnostics) OneBotChannelCheckDiagnostics {
+	result := value
+	result.LastRecognizedAt = timePointerValue(value.LastRecognizedAt)
+	result.LastURLIssuedAt = timePointerValue(value.LastURLIssuedAt)
+	result.LastImageActionSentAt = timePointerValue(value.LastImageActionSentAt)
+	result.LastFailureAt = timePointerValue(value.LastFailureAt)
+	return result
+}
+
+func timePointerValue(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	copyValue := *value
+	return &copyValue
 }
 
 func timePointer(value time.Time) *time.Time {

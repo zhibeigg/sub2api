@@ -1,6 +1,6 @@
 # QQBot BotGo + SnowLuma OneBot v11 双链路集成指南
 
-Sub2API `0.84.94` 保留腾讯官方 BotGo Webhook、消息 Runtime、绑定页面和运营管理，并新增 SnowLuma OneBot v11 并行接入。BotGo 继续处理官方群、C2C 与 QQ 频道能力；SnowLuma 通过本机反向 WebSocket 提供普通 QQ 群消息和 `group_increase` 真实进群事件。两条链路互不替换，管理员统一从 Sub2API 后台的 **QQBot** 页面配置、启停和诊断。
+Sub2API `0.84.95` 保留腾讯官方 BotGo Webhook、消息 Runtime、绑定页面和运营管理，并新增 SnowLuma OneBot v11 并行接入。BotGo 继续处理官方群、C2C 与 QQ 频道能力；SnowLuma 通过本机反向 WebSocket 提供普通 QQ 群消息和 `group_increase` 真实进群事件。两条链路互不替换，管理员统一从 Sub2API 后台的 **QQBot** 页面配置、启停和诊断。
 
 已有 QQBot 绑定数据、身份、首次赠送、余额流水和审计继续保存在 Sub2API PostgreSQL 中。OneBot 使用独立机器人标识和 Redis 事件流，不会与 BotGo OpenID、队列或活动配置混淆。
 
@@ -299,6 +299,8 @@ POST /api/v1/public/bindings/complete
 该字段只控制 QQBot `/check` 入口；站点级 `channel_monitor_enabled` 仍由系统设置管理 API 管理。运行时按双开关取有效值，必须同时为 `true`。管理前端调用 `POST /api/v1/admin/qqbot/probe` 时也会提交草稿中的 `channel_check_enabled`，使服务端按本次候选配置校验 HTTPS 与稳定签名密钥；旧客户端省略该字段时沿用当前已保存值。读取配置时不会因开关开启而附带渠道监控明细，更新配置时也不得接受客户端提交 HMAC 密钥、字体路径或签名 URL。
 
 OneBot 配置响应只包含 `access_token_configured`，更新请求中 `access_token` 留空表示保留现值；同时读写 `auto_approve_friend_requests` 与 `auto_approve_group_requests` 两个默认关闭的布尔开关。仅修改这两个审批策略不会重建 Hub、worker 或反向 WS；worker 在处理申请时读取当前策略。`enabled=true` 时后端强制检查当前配置对应的短期 probe 凭证；前端流程不能替代服务端门禁。
+
+`GET /api/v1/admin/qqbot/onebot/runtime` 还返回仅管理员可见的 `channel_check_diagnostics`。该对象仅包含最近 `/check` 命令的生命周期时间点（`last_recognized_at`、`last_url_issued_at`、`last_image_action_sent_at`）以及最后失败阶段/规范化错误码（`last_failure_stage`、`last_failure_error_code`、`last_failure_at`），用于区分命令识别、签名 URL 签发和 OneBot 图片 Action 的处理结果。它不包含群 ID、QQ ID、消息正文、签名 URL、Token 或原始 OneBot payload；字段只保存在运行进程内，重启后会清空。
 
 管理员主体从认证上下文读取，客户端不能提交或伪造 `admin_subject`。
 
