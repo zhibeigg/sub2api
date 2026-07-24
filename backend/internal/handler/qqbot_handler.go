@@ -297,6 +297,30 @@ func (h *QQBotHandler) GetConfig(c *gin.Context) {
 	response.Success(c, h.config.Public())
 }
 
+func (h *QQBotHandler) UpdateTransportMode(c *gin.Context) {
+	if h.config == nil {
+		response.ErrorFrom(c, qqbot.ErrRuntimeUnavailable)
+		return
+	}
+	var input qqbot.TransportModeUpdateRequest
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.ErrorFrom(c, qqbot.ErrInvalidConfig)
+		return
+	}
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok || subject.UserID <= 0 {
+		response.Error(c, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	result, err := h.config.SaveTransportMode(c.Request.Context(), input, subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	middleware2.SetAuditExtra(c, map[string]any{"transport_mode": result.TransportMode, "config_version": result.ConfigVersion})
+	response.Success(c, result)
+}
+
 func (h *QQBotHandler) UpdateConfig(c *gin.Context) {
 	var input qqbot.UpdateConfigRequest
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -320,6 +344,10 @@ func (h *QQBotHandler) UpdateConfig(c *gin.Context) {
 func (h *QQBotHandler) Probe(c *gin.Context) {
 	if h.runtime == nil || h.config == nil {
 		response.ErrorFrom(c, qqbot.ErrRuntimeUnavailable)
+		return
+	}
+	if h.config.Public().TransportMode != qqbot.TransportModeBotGo {
+		response.ErrorFrom(c, qqbot.ErrTransportNotSelected)
 		return
 	}
 	var input qqbot.ProbeRequest
@@ -374,6 +402,10 @@ func (h *QQBotHandler) UpdateOneBotConfig(c *gin.Context) {
 		response.ErrorFrom(c, qqbot.ErrInvalidConfig)
 		return
 	}
+	if input.Enabled && (h.config == nil || h.config.Public().TransportMode != qqbot.TransportModeOneBot) {
+		response.ErrorFrom(c, qqbot.ErrTransportNotSelected)
+		return
+	}
 	subject, ok := middleware2.GetAuthSubjectFromContext(c)
 	if !ok || subject.UserID <= 0 {
 		response.Error(c, http.StatusUnauthorized, "unauthorized")
@@ -389,8 +421,12 @@ func (h *QQBotHandler) UpdateOneBotConfig(c *gin.Context) {
 }
 
 func (h *QQBotHandler) ProbeOneBot(c *gin.Context) {
-	if h.oneBotRuntime == nil || h.oneBotConfig == nil {
+	if h.oneBotRuntime == nil || h.oneBotConfig == nil || h.config == nil {
 		response.ErrorFrom(c, qqbot.ErrRuntimeUnavailable)
+		return
+	}
+	if h.config.Public().TransportMode != qqbot.TransportModeOneBot {
+		response.ErrorFrom(c, qqbot.ErrTransportNotSelected)
 		return
 	}
 	var input qqbot.OneBotProbeRequest

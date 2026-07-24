@@ -1,6 +1,9 @@
 export type QQBotRuntimeStatus = 'disabled' | 'starting' | 'running' | 'reloading' | 'degraded' | string
+export type QQBotTransportMode = 'botgo' | 'onebot'
 
 export interface QQBotConfig {
+  transport_mode: QQBotTransportMode
+  transport_mode_inherited: boolean
   enabled: boolean
   app_id: string
   app_secret_configured: boolean
@@ -34,6 +37,11 @@ export interface QQBotDraft extends Omit<QQBotConfig, 'allowed_group_ids' | 'all
   allowed_group_ids_text: string
   allowed_guild_ids_text: string
   guild_welcome_channels_text: string
+}
+
+export interface QQBotTransportUpdateRequest {
+  mode: QQBotTransportMode
+  expected_config_version: number
 }
 
 export interface QQBotUpdateRequest {

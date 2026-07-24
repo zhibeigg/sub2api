@@ -13,6 +13,7 @@ import type {
   QQBotProbeResult,
   QQBotRuntime,
   QQBotStats,
+  QQBotTransportUpdateRequest,
   QQBotUpdateRequest,
 } from './types'
 import { bindingQueryParams } from './viewModel'
@@ -26,6 +27,11 @@ export async function getConfig(): Promise<QQBotConfig> {
 
 export async function updateConfig(payload: QQBotUpdateRequest): Promise<QQBotConfig> {
   const { data } = await apiClient.put<QQBotConfig>(`${adminBasePath}/config`, payload)
+  return data
+}
+
+export async function updateTransportMode(payload: QQBotTransportUpdateRequest): Promise<QQBotConfig> {
+  const { data } = await apiClient.put<QQBotConfig>(`${adminBasePath}/transport`, payload)
   return data
 }
 
@@ -99,6 +105,7 @@ export async function completeBinding(token: string, qqNumber: string): Promise<
 export const qqbotAPI = {
   getConfig,
   updateConfig,
+  updateTransportMode,
   probe,
   getRuntime,
   getOneBotConfig,

@@ -148,6 +148,7 @@ func registerQQBotAdminRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	qqBot := admin.Group("/qqbot")
 	{
 		qqBot.GET("/config", h.QQBot.GetConfig)
+		qqBot.PUT("/transport", h.QQBot.UpdateTransportMode)
 		qqBot.PUT("/config", h.QQBot.UpdateConfig)
 		qqBot.POST("/probe", h.QQBot.Probe)
 		qqBot.GET("/runtime", h.QQBot.GetRuntime)

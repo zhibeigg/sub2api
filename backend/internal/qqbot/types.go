@@ -24,12 +24,31 @@ const (
 )
 
 var (
-	ErrConfigConflict     = infraerrors.Conflict("QQBOT_CONFIG_CONFLICT", "QQBot 配置已被其他管理员更新")
-	ErrInvalidConfig      = infraerrors.BadRequest("QQBOT_INVALID_CONFIG", "QQBot 配置无效")
-	ErrProbeRequired      = infraerrors.Conflict("QQBOT_PROBE_REQUIRED", "请先使用当前凭据完成 QQBot 连接探测")
-	ErrRuntimeDisabled    = infraerrors.ServiceUnavailable("QQBOT_RUNTIME_DISABLED", "QQBot runtime is disabled")
-	ErrRuntimeUnavailable = infraerrors.ServiceUnavailable("QQBOT_RUNTIME_UNAVAILABLE", "QQBot runtime is unavailable")
+	ErrConfigConflict       = infraerrors.Conflict("QQBOT_CONFIG_CONFLICT", "QQBot 配置已被其他管理员更新")
+	ErrInvalidConfig        = infraerrors.BadRequest("QQBOT_INVALID_CONFIG", "QQBot 配置无效")
+	ErrProbeRequired        = infraerrors.Conflict("QQBOT_PROBE_REQUIRED", "请先使用当前凭据完成 QQBot 连接探测")
+	ErrTransportNotSelected = infraerrors.Conflict("QQBOT_TRANSPORT_NOT_SELECTED", "当前接入方式未选择此 QQBot 传输链路")
+	ErrRuntimeDisabled      = infraerrors.ServiceUnavailable("QQBOT_RUNTIME_DISABLED", "QQBot runtime is disabled")
+	ErrRuntimeUnavailable   = infraerrors.ServiceUnavailable("QQBOT_RUNTIME_UNAVAILABLE", "QQBot runtime is unavailable")
 )
+
+type TransportMode string
+
+const (
+	TransportModeBotGo  TransportMode = "botgo"
+	TransportModeOneBot TransportMode = "onebot"
+)
+
+func (m TransportMode) Valid() bool {
+	return m == TransportModeBotGo || m == TransportModeOneBot
+}
+
+func normalizeTransportMode(mode TransportMode) TransportMode {
+	if mode == TransportModeOneBot {
+		return TransportModeOneBot
+	}
+	return TransportModeBotGo
+}
 
 type Scene string
 
@@ -62,22 +81,24 @@ type InboundEvent struct {
 }
 
 type storageConfig struct {
-	Enabled                 bool      `json:"enabled"`
-	AppID                   string    `json:"app_id"`
-	AppSecretCiphertext     string    `json:"app_secret_ciphertext,omitempty"`
-	WebhookSecretCiphertext string    `json:"webhook_secret_ciphertext,omitempty"`
-	Sandbox                 bool      `json:"sandbox"`
-	PublicBaseURL           string    `json:"public_base_url"`
-	WorkerCount             int       `json:"worker_count"`
-	QueueCapacity           int       `json:"queue_capacity"`
-	APITimeoutMS            int       `json:"api_timeout_ms"`
-	ConfigVersion           int64     `json:"config_version"`
-	UpdatedAt               time.Time `json:"updated_at"`
-	UpdatedBy               int64     `json:"updated_by"`
-	ChangeSummary           string    `json:"change_summary"`
+	TransportMode           TransportMode `json:"transport_mode,omitempty"`
+	Enabled                 bool          `json:"enabled"`
+	AppID                   string        `json:"app_id"`
+	AppSecretCiphertext     string        `json:"app_secret_ciphertext,omitempty"`
+	WebhookSecretCiphertext string        `json:"webhook_secret_ciphertext,omitempty"`
+	Sandbox                 bool          `json:"sandbox"`
+	PublicBaseURL           string        `json:"public_base_url"`
+	WorkerCount             int           `json:"worker_count"`
+	QueueCapacity           int           `json:"queue_capacity"`
+	APITimeoutMS            int           `json:"api_timeout_ms"`
+	ConfigVersion           int64         `json:"config_version"`
+	UpdatedAt               time.Time     `json:"updated_at"`
+	UpdatedBy               int64         `json:"updated_by"`
+	ChangeSummary           string        `json:"change_summary"`
 }
 
 type ActiveConfig struct {
+	TransportMode TransportMode
 	Enabled       bool
 	AppID         string
 	AppSecret     string
@@ -93,6 +114,8 @@ type ActiveConfig struct {
 }
 
 type PublicConfig struct {
+	TransportMode           TransportMode     `json:"transport_mode"`
+	TransportModeInherited  bool              `json:"transport_mode_inherited"`
 	Enabled                 bool              `json:"enabled"`
 	AppID                   string            `json:"app_id"`
 	AppSecretConfigured     bool              `json:"app_secret_configured"`
@@ -118,6 +141,11 @@ type PublicConfig struct {
 	UpdatedAt               time.Time         `json:"updated_at"`
 	UpdatedBy               int64             `json:"updated_by"`
 	ChangeSummary           string            `json:"change_summary"`
+}
+
+type TransportModeUpdateRequest struct {
+	ExpectedConfigVersion int64         `json:"expected_config_version" binding:"required"`
+	Mode                  TransportMode `json:"mode" binding:"required"`
 }
 
 type UpdateConfigRequest struct {
@@ -213,7 +241,7 @@ type ProbeResult struct {
 }
 
 func defaultStorageConfig(publicBaseURL string) storageConfig {
-	return storageConfig{PublicBaseURL: strings.TrimRight(strings.TrimSpace(publicBaseURL), "/"), WorkerCount: DefaultWorkerCount, QueueCapacity: DefaultQueueCapacity, APITimeoutMS: DefaultAPITimeoutMS, ConfigVersion: 1}
+	return storageConfig{TransportMode: TransportModeBotGo, PublicBaseURL: strings.TrimRight(strings.TrimSpace(publicBaseURL), "/"), WorkerCount: DefaultWorkerCount, QueueCapacity: DefaultQueueCapacity, APITimeoutMS: DefaultAPITimeoutMS, ConfigVersion: 1}
 }
 
 func parseStorageConfig(raw, publicBaseURL string) (storageConfig, error) {
@@ -265,6 +293,9 @@ func validAppID(value string) bool {
 }
 
 func validateStorageConfig(cfg storageConfig, requireEnabledSecrets bool) error {
+	if !cfg.TransportMode.Valid() {
+		return ErrInvalidConfig
+	}
 	if cfg.WorkerCount < 1 || cfg.WorkerCount > 64 || cfg.QueueCapacity < 16 || cfg.QueueCapacity > 100000 || cfg.APITimeoutMS < 100 || cfg.APITimeoutMS > 30000 {
 		return ErrInvalidConfig
 	}
@@ -285,8 +316,10 @@ func validateStorageConfig(cfg storageConfig, requireEnabledSecrets bool) error 
 	return nil
 }
 
-func publicFromStorage(cfg storageConfig, settings service.QQBotSettings) PublicConfig {
+func publicFromStorage(cfg storageConfig, settings service.QQBotSettings, transportModeInherited bool) PublicConfig {
 	return PublicConfig{
+		TransportMode:           cfg.TransportMode,
+		TransportModeInherited:  transportModeInherited,
 		Enabled:                 cfg.Enabled,
 		AppID:                   cfg.AppID,
 		AppSecretConfigured:     cfg.AppSecretCiphertext != "",
@@ -328,7 +361,7 @@ func configChangeSummary(cfg storageConfig, settings service.QQBotSettings, chan
 	sort.Strings(ids)
 	digest := sha256.Sum256([]byte(strings.Join(ids, "\n")))
 	appDigest := sha256.Sum256([]byte(cfg.AppID))
-	payload := map[string]any{"enabled": cfg.Enabled, "sandbox": cfg.Sandbox, "worker_count": cfg.WorkerCount, "queue_capacity": cfg.QueueCapacity, "api_timeout_ms": cfg.APITimeoutMS, "channel_check_enabled": settings.ChannelCheckEnabled, "app_id_hash": hex.EncodeToString(appDigest[:8]), "allowlist_count": len(ids), "allowlist_hash": hex.EncodeToString(digest[:8]), "changed_secrets": changedSecrets}
+	payload := map[string]any{"transport_mode": cfg.TransportMode, "enabled": cfg.Enabled, "sandbox": cfg.Sandbox, "worker_count": cfg.WorkerCount, "queue_capacity": cfg.QueueCapacity, "api_timeout_ms": cfg.APITimeoutMS, "channel_check_enabled": settings.ChannelCheckEnabled, "app_id_hash": hex.EncodeToString(appDigest[:8]), "allowlist_count": len(ids), "allowlist_hash": hex.EncodeToString(digest[:8]), "changed_secrets": changedSecrets}
 	raw, _ := json.Marshal(payload)
 	return string(raw)
 }

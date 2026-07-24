@@ -19,6 +19,15 @@ func TestAdaptOneBotGroupAndPrivateMessages(t *testing.T) {
 	require.Equal(t, "Group Card", group.DisplayName)
 	require.NotEmpty(t, group.EventID)
 
+	bindRaw := []byte(`{"time":1720000000,"self_id":3944007489,"post_type":"message","message_type":"group","message_id":102,"user_id":3252237236,"group_id":1054130674,"message":[{"type":"at","data":{"qq":"3944007489"}},{"type":"text","data":{"text":" /bind 3252237236@qq.com"}}],"sender":{"nickname":"mtk- rocky"}}`)
+	bindEvent, accepted, err := AdaptOneBotEvent(bindRaw, "3944007489")
+	require.NoError(t, err)
+	require.True(t, accepted)
+	require.Equal(t, SceneGroup, bindEvent.Scene)
+	require.Equal(t, "1054130674", bindEvent.SourceID)
+	require.Equal(t, " /bind 3252237236@qq.com", bindEvent.Content)
+	require.Equal(t, Command{Kind: CommandBind, Email: "3252237236@qq.com"}, ParseCommand(bindEvent.Content))
+
 	privateRaw := []byte(`{"time":1720000001,"self_id":"3944007489","post_type":"message","message_type":"private","message_id":"102","user_id":"20002","raw_message":"[CQ:reply,id=1]/bind user@example.com","sender":{"nickname":"Private User"}}`)
 	private, accepted, err := AdaptOneBotEvent(privateRaw, "3944007489")
 	require.NoError(t, err)

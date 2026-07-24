@@ -37,6 +37,9 @@ type Runtime struct {
 	binding      *service.QQBotService
 	channelCheck *ChannelCheckService
 
+	oneBotMu sync.RWMutex
+	oneBot   *OneBotRuntime
+
 	generation  atomic.Pointer[runtimeGeneration]
 	stopping    atomic.Bool
 	reloadMu    sync.Mutex
@@ -60,6 +63,28 @@ func NewRuntime(manager *ConfigManager, queue *ReliableQueue, binding *service.Q
 		binding.SetProactiveC2CTransport(runtime)
 	}
 	return runtime
+}
+
+func (r *Runtime) SetOneBotRuntime(oneBot *OneBotRuntime) {
+	if r == nil {
+		return
+	}
+	r.oneBotMu.Lock()
+	r.oneBot = oneBot
+	r.oneBotMu.Unlock()
+}
+
+func (r *Runtime) syncOneBotTransport(ctx context.Context, mode TransportMode) error {
+	if r == nil {
+		return nil
+	}
+	r.oneBotMu.RLock()
+	oneBot := r.oneBot
+	r.oneBotMu.RUnlock()
+	if oneBot == nil {
+		return nil
+	}
+	return oneBot.SyncTransportMode(ctx, mode)
 }
 
 func (r *Runtime) ActiveAppID() (string, bool) {
@@ -197,7 +222,8 @@ func (r *Runtime) applyConfig(ctx context.Context, cfg ActiveConfig) error {
 		r.state.ProcessStatus = RuntimeReloading
 	}
 	r.stateMu.Unlock()
-	if !cfg.Enabled {
+	mode := normalizeTransportMode(cfg.TransportMode)
+	if !cfg.Enabled || mode != TransportModeBotGo {
 		if r.binding != nil {
 			r.binding.SetPublicBaseURL(cfg.PublicBaseURL)
 		}
@@ -215,7 +241,10 @@ func (r *Runtime) applyConfig(ctx context.Context, cfg ActiveConfig) error {
 		r.state.LastErrorMessage = ""
 		r.state.LastErrorAt = nil
 		r.stateMu.Unlock()
-		return nil
+		return r.syncOneBotTransport(ctx, mode)
+	}
+	if err := r.syncOneBotTransport(ctx, mode); err != nil {
+		return err
 	}
 	if strings.TrimSpace(cfg.AppID) == "" || strings.TrimSpace(cfg.AppSecret) == "" || strings.TrimSpace(cfg.WebhookSecret) == "" {
 		r.recordError("runtime_credentials_missing")

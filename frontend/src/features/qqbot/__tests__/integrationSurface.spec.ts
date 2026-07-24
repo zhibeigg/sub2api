@@ -25,14 +25,18 @@ describe('QQBot integration surface', () => {
     expect(router).toContain("'/bind']")
   })
 
-  it('adds a standalone sidebar item and exposes all six accessible tabs', () => {
+  it('adds a standalone sidebar item and exposes the single-transport configuration workflow', () => {
     const sidebar = read('../../../components/layout/AppSidebar.vue')
     expect(sidebar).toContain("path: '/admin/qqbot'")
     expect(sidebar).toContain("label: t('nav.qqbot')")
     const view = read('../QQBotView.vue')
-    for (const tab of ['overview', 'config', 'onebot', 'messages', 'bindings', 'diagnostics']) {
+    for (const tab of ['overview', 'transport', 'config', 'messages', 'bindings', 'diagnostics']) {
       expect(view).toContain(`id: '${tab}' as const`)
     }
+    expect(view).toContain('TransportModeTab')
+    expect(view).toContain("selectedTransportMode === 'botgo'")
+    expect(view).toContain("selectedTransportMode === 'onebot'")
+    expect(view).toContain('updateTransportMode')
     expect(view).toContain('role="tablist"')
     expect(view).toContain(':aria-selected')
   })

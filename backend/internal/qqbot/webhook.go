@@ -40,7 +40,7 @@ func (r *Runtime) ServeWebhook(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	cfg, ok := r.manager.Active()
-	if !ok || cfg.AppID == "" || cfg.WebhookSecret == "" {
+	if !ok || normalizeTransportMode(cfg.TransportMode) != TransportModeBotGo || cfg.AppID == "" || cfg.WebhookSecret == "" {
 		http.Error(writer, `{"error":"qqbot credentials are not configured"}`, http.StatusServiceUnavailable)
 		return
 	}

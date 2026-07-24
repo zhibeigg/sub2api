@@ -54,6 +54,9 @@ type OneBotRuntime struct {
 	queue     *OneBotQueue
 	processor *Runtime
 
+	transportMu   sync.RWMutex
+	transportMode TransportMode
+
 	generation atomic.Pointer[oneBotRuntimeGeneration]
 	stopping   atomic.Bool
 	reloadMu   sync.Mutex
@@ -72,16 +75,53 @@ type OneBotRuntime struct {
 
 func NewOneBotRuntime(manager *OneBotConfigManager, queue *OneBotQueue, processor *Runtime) *OneBotRuntime {
 	runtime := &OneBotRuntime{
-		manager:     manager,
-		queue:       queue,
-		processor:   processor,
-		generations: make(map[int64]*oneBotRuntimeGeneration),
-		state:       RuntimeState{ProcessStatus: RuntimeDisabled},
+		manager:       manager,
+		queue:         queue,
+		processor:     processor,
+		transportMode: TransportModeBotGo,
+		generations:   make(map[int64]*oneBotRuntimeGeneration),
+		state:         RuntimeState{ProcessStatus: RuntimeDisabled},
 	}
 	if manager != nil {
 		manager.SetOnReload(runtime.applyConfig)
 	}
+	if processor != nil {
+		processor.SetOneBotRuntime(runtime)
+	}
 	return runtime
+}
+
+func (r *OneBotRuntime) SyncTransportMode(ctx context.Context, mode TransportMode) error {
+	if r == nil {
+		return ErrInvalidConfig
+	}
+	if r.manager == nil {
+		return ErrRuntimeUnavailable
+	}
+	r.transportMu.Lock()
+	r.transportMode = normalizeTransportMode(mode)
+	r.transportMu.Unlock()
+	cfg, ok := r.manager.Active()
+	if !ok {
+		return nil
+	}
+	r.lifecycleMu.Lock()
+	started := r.root != nil
+	r.lifecycleMu.Unlock()
+	if !started {
+		return nil
+	}
+	return r.applyConfig(ctx, cfg)
+}
+
+func (r *OneBotRuntime) transportSelected() bool {
+	if r == nil {
+		return false
+	}
+	r.transportMu.RLock()
+	selected := r.transportMode == TransportModeOneBot
+	r.transportMu.RUnlock()
+	return selected
 }
 
 func (r *OneBotRuntime) Start(ctx context.Context) error {
@@ -152,7 +192,8 @@ func (r *OneBotRuntime) applyConfig(ctx context.Context, cfg OneBotActiveConfig)
 	}
 	r.stateMu.Unlock()
 
-	if strings.TrimSpace(cfg.SelfID) == "" || strings.TrimSpace(cfg.AccessToken) == "" {
+	selected := r.transportSelected()
+	if !selected || strings.TrimSpace(cfg.SelfID) == "" || strings.TrimSpace(cfg.AccessToken) == "" {
 		old := r.generation.Swap(nil)
 		if old != nil && old.hub != nil {
 			old.hub.StopAccepting()
@@ -168,7 +209,7 @@ func (r *OneBotRuntime) applyConfig(ctx context.Context, cfg OneBotActiveConfig)
 		r.state.ActiveConfigVersion = cfg.ConfigVersion
 		r.state.WorkerTotal = 0
 		r.state.WorkerActive = 0
-		if cfg.Enabled {
+		if cfg.Enabled && selected {
 			r.state.ProcessStatus = RuntimeDegraded
 			r.state.LastErrorCode = "runtime_credentials_missing"
 			r.state.LastErrorMessage = "runtime_credentials_missing"
@@ -181,7 +222,7 @@ func (r *OneBotRuntime) applyConfig(ctx context.Context, cfg OneBotActiveConfig)
 			r.state.LastErrorAt = nil
 		}
 		r.stateMu.Unlock()
-		if cfg.Enabled {
+		if cfg.Enabled && selected {
 			return ErrInvalidConfig
 		}
 		return nil

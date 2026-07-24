@@ -26,17 +26,18 @@
         </div>
 
         <main class="card p-4 sm:p-6 lg:p-8">
-          <OverviewTab v-show="activeTab === 'overview'" :config="serverConfig" :runtime="runtime" :stats="stats" :loading="loading.runtime || loading.stats" :error="loadErrors.runtime || loadErrors.stats" @refresh="refreshOverview" />
-          <BotConfigTab v-if="draft" v-show="activeTab === 'config'" :draft="draft" :probing="loading.probing" @update:draft="replaceDraft" @probe="runProbe" />
-          <OneBotTab v-if="oneBotDraft" v-show="activeTab === 'onebot'" :draft="oneBotDraft" :runtime="oneBotRuntime" :probe-result="oneBotProbeResult" :dirty="oneBotDirty" :saving="loading.oneBotSaving" :probing="loading.oneBotProbing" :error="loadErrors.oneBotConfig || loadErrors.oneBotRuntime" @update:draft="replaceOneBotDraft" @set-enabled="setOneBotEnabled" @save="saveOneBotConfig" @reset="resetOneBotDraft" @probe="runOneBotProbe" />
+          <OverviewTab v-show="activeTab === 'overview'" :config="serverConfig" :runtime="activeRuntime" :stats="stats" :loading="activeRuntimeLoading || loading.stats" :error="activeRuntimeError || loadErrors.stats" @refresh="refreshOverview" />
+          <TransportModeTab v-if="serverConfig" v-show="activeTab === 'transport'" :mode="selectedTransportMode" :inherited="serverConfig.transport_mode_inherited" :loading="loading.transport" :error="loadErrors.transport" @select="selectTransportMode" />
+          <BotConfigTab v-if="draft && selectedTransportMode === 'botgo'" v-show="activeTab === 'config'" :draft="draft" :probing="loading.probing" @update:draft="replaceDraft" @probe="runProbe" />
+          <OneBotTab v-if="oneBotDraft && selectedTransportMode === 'onebot'" v-show="activeTab === 'config'" :draft="oneBotDraft" :runtime="oneBotRuntime" :probe-result="oneBotProbeResult" :dirty="oneBotDirty" :saving="loading.oneBotSaving" :probing="loading.oneBotProbing" :error="loadErrors.oneBotConfig || loadErrors.oneBotRuntime" @update:draft="replaceOneBotDraft" @set-enabled="setOneBotEnabled" @save="saveOneBotConfig" @reset="resetOneBotDraft" @probe="runOneBotProbe" />
           <MessagesTab v-if="draft" v-show="activeTab === 'messages'" :draft="draft" @update:draft="replaceDraft" />
           <BindingsTab ref="bindingsTabRef" v-show="activeTab === 'bindings'" :page="bindings" :filters="bindingFilters" :loading="loading.bindings" :error="loadErrors.bindings" :unbinding="loading.unbinding" @update:filters="bindingFilters = $event" @search="searchBindings" @reset="resetBindings" @refresh="loadBindings" @page="changeBindingPage" @unbind="unbindRecord" />
-          <DiagnosticsTab v-if="serverConfig" v-show="activeTab === 'diagnostics'" :config="serverConfig" :runtime="runtime" :probe-result="probeResult" :probing="loading.probing" @probe="runProbe" />
+          <DiagnosticsTab v-if="serverConfig" v-show="activeTab === 'diagnostics'" :config="serverConfig" :mode="selectedTransportMode" :runtime="activeRuntime" :probe-result="activeProbeResult" :probing="activeProbeLoading" @probe="runActiveProbe" />
         </main>
       </template>
     </div>
 
-    <div v-if="draft && (activeTab === 'config' || activeTab === 'messages')" class="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] dark:border-dark-700 dark:bg-dark-900 lg:left-64">
+    <div v-if="draft && activeTab === 'config' && selectedTransportMode === 'botgo'" class="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] dark:border-dark-700 dark:bg-dark-900 lg:left-64">
       <div class="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3">
         <div class="flex flex-wrap items-center gap-4">
           <label class="flex cursor-pointer items-center gap-2 text-sm text-gray-800 dark:text-dark-100">
@@ -68,6 +69,7 @@ import DiagnosticsTab from './components/DiagnosticsTab.vue'
 import MessagesTab from './components/MessagesTab.vue'
 import OneBotTab from './components/OneBotTab.vue'
 import OverviewTab from './components/OverviewTab.vue'
+import TransportModeTab from './components/TransportModeTab.vue'
 import type {
   QQBotBindingFilters,
   QQBotBindingPage,
@@ -79,6 +81,7 @@ import type {
   QQBotProbeResult,
   QQBotRuntime,
   QQBotStats,
+  QQBotTransportMode,
 } from './types'
 import {
   buildOneBotProbeRequest,
@@ -98,7 +101,7 @@ import {
   validateOneBotDraft,
 } from './viewModel'
 
-type QQBotTab = 'overview' | 'config' | 'onebot' | 'messages' | 'bindings' | 'diagnostics'
+type QQBotTab = 'overview' | 'transport' | 'config' | 'messages' | 'bindings' | 'diagnostics'
 type BindingsTabExpose = { closeUnbind: () => void }
 
 const { t, locale } = useI18n()
@@ -120,17 +123,23 @@ const oneBotProbeFingerprint = ref('')
 const bindings = reactive<QQBotBindingPage>({ items: [], total: 0, page: 1, page_size: 20, pages: 1 })
 const bindingFilters = ref<QQBotBindingFilters>({ status: '', scene: '', search: '', from: '', to: '' })
 const bindingsTabRef = ref<BindingsTabExpose | null>(null)
-const loading = reactive({ config: false, runtime: false, oneBotConfig: false, oneBotRuntime: false, stats: false, bindings: false, saving: false, probing: false, oneBotSaving: false, oneBotProbing: false, unbinding: false })
-const loadErrors = reactive({ config: '', runtime: '', oneBotConfig: '', oneBotRuntime: '', stats: '', bindings: '' })
+const loading = reactive({ config: false, runtime: false, oneBotConfig: false, oneBotRuntime: false, stats: false, bindings: false, saving: false, probing: false, oneBotSaving: false, oneBotProbing: false, transport: false, unbinding: false })
+const loadErrors = reactive({ config: '', runtime: '', oneBotConfig: '', oneBotRuntime: '', stats: '', bindings: '', transport: '' })
 
 const tabs = computed(() => [
   { id: 'overview' as const, label: t('admin.qqbot.tabs.overview') },
+  { id: 'transport' as const, label: t('admin.qqbot.tabs.transport') },
   { id: 'config' as const, label: t('admin.qqbot.tabs.config') },
-  { id: 'onebot' as const, label: t('admin.qqbot.tabs.onebot') },
   { id: 'messages' as const, label: t('admin.qqbot.tabs.messages') },
   { id: 'bindings' as const, label: t('admin.qqbot.tabs.bindings') },
   { id: 'diagnostics' as const, label: t('admin.qqbot.tabs.diagnostics') },
 ])
+const selectedTransportMode = computed<QQBotTransportMode>(() => serverConfig.value?.transport_mode ?? 'botgo')
+const activeRuntime = computed<QQBotRuntime | QQBotOneBotRuntime | null>(() => selectedTransportMode.value === 'botgo' ? runtime.value : oneBotRuntime.value)
+const activeRuntimeLoading = computed(() => selectedTransportMode.value === 'botgo' ? loading.runtime : loading.oneBotRuntime)
+const activeRuntimeError = computed(() => selectedTransportMode.value === 'botgo' ? loadErrors.runtime : loadErrors.oneBotRuntime)
+const activeProbeResult = computed(() => selectedTransportMode.value === 'botgo' ? probeResult.value : oneBotProbeResult.value)
+const activeProbeLoading = computed(() => selectedTransportMode.value === 'botgo' ? loading.probing : loading.oneBotProbing)
 const dirty = computed(() => draftFingerprint(draft.value) !== draftFingerprint(serverDraft.value))
 const oneBotDirty = computed(() => oneBotDraftFingerprint(oneBotDraft.value) !== oneBotDraftFingerprint(oneBotServerDraft.value))
 
@@ -148,6 +157,14 @@ function replaceDraft(value: QQBotDraft) { draft.value = cloneData(value) }
 function resetDraft() { if (serverDraft.value) draft.value = cloneData(serverDraft.value) }
 function replaceOneBotDraft(value: QQBotOneBotDraft) { oneBotDraft.value = cloneData(value) }
 function resetOneBotDraft() { if (oneBotServerDraft.value) oneBotDraft.value = cloneData(oneBotServerDraft.value) }
+function resetTransportDrafts() {
+  resetDraft()
+  resetOneBotDraft()
+  probeResult.value = null
+  probeFingerprint.value = ''
+  oneBotProbeResult.value = null
+  oneBotProbeFingerprint.value = ''
+}
 
 async function loadConfig() {
   loading.config = true
@@ -201,6 +218,23 @@ async function refreshOverview() { await Promise.allSettled([loadRuntime(), load
 function searchBindings() { bindings.page = 1; void loadBindings() }
 function resetBindings() { bindingFilters.value = { status: '', scene: '', search: '', from: '', to: '' }; bindings.page = 1; void loadBindings() }
 function changeBindingPage(page: number) { bindings.page = page; void loadBindings() }
+
+async function selectTransportMode(mode: QQBotTransportMode) {
+  if (!serverConfig.value || loading.transport || (mode === selectedTransportMode.value && !serverConfig.value.transport_mode_inherited)) return
+  loading.transport = true
+  loadErrors.transport = ''
+  try {
+    const saved = await qqbotAPI.updateTransportMode({ mode, expected_config_version: serverConfig.value.config_version })
+    serverConfig.value = saved
+    serverDraft.value = configToDraft(saved)
+    resetTransportDrafts()
+    await Promise.allSettled([loadConfig(), loadOneBotConfig(), loadRuntime(), loadOneBotRuntime(), loadStats()])
+    activeTab.value = 'config'
+    appStore.showSuccess(t('admin.qqbot.notices.transportUpdated'))
+  } catch (error) {
+    loadErrors.transport = errorMessage(error, 'admin.qqbot.errors.updateTransport')
+  } finally { loading.transport = false }
+}
 
 function requiresFreshProbe(value: QQBotDraft): boolean {
   if (!serverDraft.value) return true
@@ -263,6 +297,14 @@ async function runOneBotProbe() {
     oneBotProbeFingerprint.value = ''
     appStore.showError(errorMessage(error, 'admin.qqbot.errors.oneBotProbe'))
   } finally { loading.oneBotProbing = false }
+}
+
+function runActiveProbe() {
+  if (selectedTransportMode.value === 'botgo') {
+    void runProbe()
+    return
+  }
+  void runOneBotProbe()
 }
 
 async function saveConfig() {

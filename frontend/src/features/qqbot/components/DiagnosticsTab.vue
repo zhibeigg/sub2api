@@ -8,7 +8,7 @@
       <button type="button" class="btn btn-secondary" :disabled="probing" @click="$emit('probe')">{{ probing ? t('admin.qqbot.actions.probing') : t('admin.qqbot.actions.probe') }}</button>
     </div>
 
-    <section class="rounded-xl border border-gray-200 bg-white p-5 dark:border-dark-700 dark:bg-dark-800">
+    <section v-if="endpoints.length" class="rounded-xl border border-gray-200 bg-white p-5 dark:border-dark-700 dark:bg-dark-800">
       <dl class="grid gap-5 md:grid-cols-2">
         <div v-for="item in endpoints" :key="item.label" class="min-w-0">
           <dt class="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-dark-400">{{ item.label }}</dt>
@@ -48,20 +48,23 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { formatDateTime } from '@/utils/format'
-import type { QQBotConfig, QQBotProbeResult, QQBotRuntime } from '../types'
+import type { QQBotConfig, QQBotProbeResult, QQBotRuntime, QQBotTransportMode } from '../types'
 import { validationURL, webhookURL } from '../viewModel'
 
-const props = defineProps<{ config: QQBotConfig; runtime: QQBotRuntime | null; probeResult: QQBotProbeResult | null; probing: boolean }>()
+const props = defineProps<{ config: QQBotConfig; mode: QQBotTransportMode; runtime: QQBotRuntime | null; probeResult: QQBotProbeResult | null; probing: boolean }>()
 defineEmits<{ probe: [] }>()
 const { t, locale } = useI18n()
 const copied = ref('')
 const successClass = 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200'
 const failureClass = 'border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200'
 
-const endpoints = computed(() => [
-  { label: t('admin.qqbot.diagnostics.webhookUrl'), value: webhookURL(props.config) },
-  { label: t('admin.qqbot.diagnostics.validationUrl'), value: validationURL(props.config) },
-])
+const endpoints = computed(() => {
+  if (props.mode !== 'botgo') return []
+  return [
+    { label: t('admin.qqbot.diagnostics.webhookUrl'), value: webhookURL(props.config) },
+    { label: t('admin.qqbot.diagnostics.validationUrl'), value: validationURL(props.config) },
+  ]
+})
 const versions = computed(() => [
   { label: t('admin.qqbot.diagnostics.configVersion'), value: props.config.config_version },
   { label: t('admin.qqbot.diagnostics.desiredVersion'), value: props.runtime?.desired_config_version ?? 0 },

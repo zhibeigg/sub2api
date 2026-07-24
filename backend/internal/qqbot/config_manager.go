@@ -25,10 +25,11 @@ const (
 )
 
 type configSnapshot struct {
-	storage  storageConfig
-	active   ActiveConfig
-	settings service.QQBotSettings
-	loadedAt time.Time
+	storage                storageConfig
+	active                 ActiveConfig
+	settings               service.QQBotSettings
+	transportModeInherited bool
+	loadedAt               time.Time
 }
 
 type ConfigManager struct {
@@ -112,7 +113,7 @@ func (m *ConfigManager) Reload(ctx context.Context) error {
 	if m == nil || m.settings == nil {
 		return errors.New("qqbot setting repository unavailable")
 	}
-	keys := append([]string{SettingKeyRuntimeConfig}, qqBotBusinessSettingKeys()...)
+	keys := append([]string{SettingKeyRuntimeConfig, SettingKeyOneBotRuntimeConfig}, qqBotBusinessSettingKeys()...)
 	values, err := m.settings.GetMultiple(ctx, keys)
 	if err != nil {
 		m.recordLoadError("config_load_failed")
@@ -150,19 +151,21 @@ func (m *ConfigManager) Reload(ctx context.Context) error {
 			return err
 		}
 	}
+	transportMode, transportModeInherited := resolveTransportMode(storage, values[SettingKeyRuntimeConfig], values[SettingKeyOneBotRuntimeConfig])
+	storage.TransportMode = transportMode
 	active, err := m.activeFromStorage(storage)
 	if err != nil {
 		m.recordLoadError("config_decrypt_failed")
 		return err
 	}
 	business := parseBusinessSettings(values)
-	if err := m.validateChannelCheckActivation(active.Enabled, business.ChannelCheckEnabled, active.PublicBaseURL); err != nil {
+	if err := m.validateChannelCheckActivation(active.Enabled && active.TransportMode == TransportModeBotGo, business.ChannelCheckEnabled, active.PublicBaseURL); err != nil {
 		m.recordLoadError("channel_check_config_invalid")
 		return err
 	}
 	now := time.Now().UTC()
 	m.expected.Store(storage.ConfigVersion)
-	m.snapshot.Store(&configSnapshot{storage: storage, active: active, settings: business, loadedAt: now})
+	m.snapshot.Store(&configSnapshot{storage: storage, active: active, settings: business, transportModeInherited: transportModeInherited, loadedAt: now})
 	m.clearLoadError()
 	m.stateMu.RLock()
 	callback := m.onReload
@@ -189,13 +192,13 @@ func (m *ConfigManager) Active() (ActiveConfig, bool) {
 
 func (m *ConfigManager) Public() PublicConfig {
 	if m == nil {
-		return publicFromStorage(defaultStorageConfig(""), defaultBusinessSettings())
+		return publicFromStorage(defaultStorageConfig(""), defaultBusinessSettings(), false)
 	}
 	snapshot := m.snapshot.Load()
 	if snapshot == nil {
-		return publicFromStorage(defaultStorageConfig(m.bootstrapPublicURL), defaultBusinessSettings())
+		return publicFromStorage(defaultStorageConfig(m.bootstrapPublicURL), defaultBusinessSettings(), false)
 	}
-	return publicFromStorage(snapshot.storage, cloneBusinessSettings(snapshot.settings))
+	return publicFromStorage(snapshot.storage, cloneBusinessSettings(snapshot.settings), snapshot.transportModeInherited)
 }
 
 func (m *ConfigManager) BusinessSettings() service.QQBotSettings {
@@ -241,6 +244,7 @@ func (m *ConfigManager) ResolveProbeConfig(req ProbeRequest) (ActiveConfig, erro
 		candidate.WebhookSecret = candidate.AppSecret
 	}
 	validation := storageConfig{
+		TransportMode:       TransportModeBotGo,
 		Enabled:             true,
 		AppID:               candidate.AppID,
 		PublicBaseURL:       candidate.PublicBaseURL,
@@ -338,7 +342,6 @@ func (m *ConfigManager) Save(ctx context.Context, req UpdateConfigRequest, actor
 	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, qqBotConfigLockKey); err != nil {
 		return PublicConfig{}, err
 	}
-
 	values := make(map[string]string)
 	for _, key := range append([]string{SettingKeyRuntimeConfig}, qqBotBusinessSettingKeys()...) {
 		var value string
@@ -355,12 +358,16 @@ func (m *ConfigManager) Save(ctx context.Context, req UpdateConfigRequest, actor
 	if err != nil {
 		return PublicConfig{}, err
 	}
+	current.TransportMode = normalizeTransportMode(current.TransportMode)
 	if current.ConfigVersion != req.ExpectedConfigVersion {
 		return PublicConfig{}, ErrConfigConflict
 	}
 	business, err := applyBusinessUpdate(parseBusinessSettings(values), req.businessUpdate())
 	if err != nil {
 		return PublicConfig{}, err
+	}
+	if req.Enabled && current.TransportMode != TransportModeBotGo {
+		return PublicConfig{}, ErrTransportNotSelected
 	}
 	next := current
 	next.Enabled = req.Enabled
@@ -389,7 +396,7 @@ func (m *ConfigManager) Save(ctx context.Context, req UpdateConfigRequest, actor
 	if err := validateStorageConfig(next, next.Enabled); err != nil {
 		return PublicConfig{}, err
 	}
-	if err := m.validateChannelCheckActivation(next.Enabled, business.ChannelCheckEnabled, next.PublicBaseURL); err != nil {
+	if err := m.validateChannelCheckActivation(next.Enabled && next.TransportMode == TransportModeBotGo, business.ChannelCheckEnabled, next.PublicBaseURL); err != nil {
 		return PublicConfig{}, err
 	}
 	credentialsChanged := (!current.Enabled && next.Enabled) || current.AppID != next.AppID || current.Sandbox != next.Sandbox || strings.TrimSpace(req.AppSecret) != "" || strings.TrimSpace(req.WebhookSecret) != ""
@@ -429,7 +436,7 @@ func (m *ConfigManager) Save(ctx context.Context, req UpdateConfigRequest, actor
 		return PublicConfig{}, err
 	}
 	m.expected.Store(next.ConfigVersion)
-	m.snapshot.Store(&configSnapshot{storage: next, active: active, settings: cloneBusinessSettings(business), loadedAt: time.Now().UTC()})
+	m.snapshot.Store(&configSnapshot{storage: next, active: active, settings: cloneBusinessSettings(business), transportModeInherited: false, loadedAt: time.Now().UTC()})
 	m.clearLoadError()
 	m.stateMu.RLock()
 	callback := m.onReload
@@ -442,11 +449,113 @@ func (m *ConfigManager) Save(ctx context.Context, req UpdateConfigRequest, actor
 	if m.redis != nil {
 		_ = m.redis.Publish(ctx, ConfigInvalidationChannel, strconv.FormatInt(next.ConfigVersion, 10)).Err()
 	}
-	return publicFromStorage(next, business), nil
+	return publicFromStorage(next, business, false), nil
+}
+
+func (m *ConfigManager) SaveTransportMode(ctx context.Context, req TransportModeUpdateRequest, actorID int64) (PublicConfig, error) {
+	if m == nil || m.db == nil || req.ExpectedConfigVersion < 1 || actorID <= 0 || !req.Mode.Valid() {
+		return PublicConfig{}, ErrInvalidConfig
+	}
+	tx, err := m.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return PublicConfig{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, qqBotConfigLockKey); err != nil {
+		return PublicConfig{}, err
+	}
+	values := make(map[string]string)
+	for _, key := range append([]string{SettingKeyRuntimeConfig, SettingKeyOneBotRuntimeConfig}, qqBotBusinessSettingKeys()...) {
+		var value string
+		err := tx.QueryRowContext(ctx, `SELECT value FROM settings WHERE key=$1 FOR UPDATE`, key).Scan(&value)
+		if err == nil {
+			values[key] = value
+			continue
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return PublicConfig{}, err
+		}
+	}
+	current, err := parseStorageConfig(values[SettingKeyRuntimeConfig], m.bootstrapPublicURL)
+	if err != nil {
+		return PublicConfig{}, err
+	}
+	current.TransportMode, _ = resolveTransportMode(current, values[SettingKeyRuntimeConfig], values[SettingKeyOneBotRuntimeConfig])
+	if current.ConfigVersion != req.ExpectedConfigVersion {
+		return PublicConfig{}, ErrConfigConflict
+	}
+	business := parseBusinessSettings(values)
+	next := current
+	next.TransportMode = req.Mode
+	next.ConfigVersion = current.ConfigVersion + 1
+	next.UpdatedAt = time.Now().UTC()
+	next.UpdatedBy = actorID
+	next.ChangeSummary = transportModeChangeSummary(next.TransportMode)
+	encoded, err := json.Marshal(next)
+	if err != nil {
+		return PublicConfig{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO settings (key,value,updated_at) VALUES ($1,$2,NOW()) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=EXCLUDED.updated_at`, SettingKeyRuntimeConfig, string(encoded)); err != nil {
+		return PublicConfig{}, err
+	}
+	metadata, _ := json.Marshal(map[string]any{"config_version": next.ConfigVersion, "summary": json.RawMessage(next.ChangeSummary)})
+	if _, err := tx.ExecContext(ctx, `INSERT INTO qqbot_binding_audit_logs (action,status,actor_type,actor_subject,reason,metadata) VALUES ('transport_settings','success','admin',$1,'', $2::jsonb)`, Fingerprint(strconv.FormatInt(actorID, 10)), string(metadata)); err != nil {
+		return PublicConfig{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return PublicConfig{}, err
+	}
+	active, err := m.activeFromStorage(next)
+	if err != nil {
+		return PublicConfig{}, err
+	}
+	m.expected.Store(next.ConfigVersion)
+	m.snapshot.Store(&configSnapshot{storage: next, active: active, settings: cloneBusinessSettings(business), transportModeInherited: false, loadedAt: time.Now().UTC()})
+	m.clearLoadError()
+	m.stateMu.RLock()
+	callback := m.onReload
+	m.stateMu.RUnlock()
+	if callback != nil {
+		if err := callback(ctx, active); err != nil {
+			m.recordLoadError("runtime_reload_failed")
+		}
+	}
+	if m.redis != nil {
+		_ = m.redis.Publish(ctx, ConfigInvalidationChannel, strconv.FormatInt(next.ConfigVersion, 10)).Err()
+	}
+	return publicFromStorage(next, business, false), nil
+}
+
+func transportModeChangeSummary(mode TransportMode) string {
+	raw, _ := json.Marshal(map[string]any{"transport_mode": mode})
+	return string(raw)
+}
+
+func resolveTransportMode(cfg storageConfig, rawConfig, rawOneBotConfig string) (TransportMode, bool) {
+	if hasExplicitTransportMode(rawConfig) && cfg.TransportMode.Valid() {
+		return cfg.TransportMode, false
+	}
+	oneBot, err := parseOneBotStorageConfig(rawOneBotConfig)
+	if err == nil && oneBot.Enabled && !cfg.Enabled {
+		return TransportModeOneBot, true
+	}
+	return TransportModeBotGo, true
+}
+
+func hasExplicitTransportMode(raw string) bool {
+	if strings.TrimSpace(raw) == "" {
+		return false
+	}
+	var values map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &values); err != nil {
+		return false
+	}
+	value, exists := values["transport_mode"]
+	return exists && len(value) > 0 && string(value) != "null" && string(value) != `""`
 }
 
 func (m *ConfigManager) activeFromStorage(storage storageConfig) (ActiveConfig, error) {
-	active := ActiveConfig{Enabled: storage.Enabled, AppID: storage.AppID, Sandbox: storage.Sandbox, PublicBaseURL: storage.PublicBaseURL, WorkerCount: storage.WorkerCount, QueueCapacity: storage.QueueCapacity, APITimeoutMS: storage.APITimeoutMS, ConfigVersion: storage.ConfigVersion, UpdatedAt: storage.UpdatedAt, UpdatedBy: storage.UpdatedBy}
+	active := ActiveConfig{TransportMode: storage.TransportMode, Enabled: storage.Enabled, AppID: storage.AppID, Sandbox: storage.Sandbox, PublicBaseURL: storage.PublicBaseURL, WorkerCount: storage.WorkerCount, QueueCapacity: storage.QueueCapacity, APITimeoutMS: storage.APITimeoutMS, ConfigVersion: storage.ConfigVersion, UpdatedAt: storage.UpdatedAt, UpdatedBy: storage.UpdatedBy}
 	var err error
 	if storage.AppSecretCiphertext != "" {
 		active.AppSecret, err = m.encryptor.Decrypt(storage.AppSecretCiphertext)

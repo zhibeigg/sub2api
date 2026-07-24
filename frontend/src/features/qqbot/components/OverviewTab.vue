@@ -82,9 +82,9 @@ function date(value?: string): string {
 
 const statusCards = computed(() => [
   {
-    label: t('admin.qqbot.overview.desiredState'),
-    value: props.config?.enabled ? t('admin.qqbot.status.enabled') : t('admin.qqbot.status.disabled'),
-    hint: t('admin.qqbot.overview.configVersion', { version: props.config?.config_version ?? 0 }),
+    label: t('admin.qqbot.overview.transportMode'),
+    value: t(`admin.qqbot.transport.modes.${props.config?.transport_mode ?? 'botgo'}`),
+    hint: props.config?.transport_mode_inherited ? t('admin.qqbot.transport.inherited') : t('admin.qqbot.overview.configVersion', { version: props.config?.config_version ?? 0 }),
   },
   {
     label: t('admin.qqbot.overview.runtimeState'),

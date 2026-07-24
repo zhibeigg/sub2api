@@ -95,6 +95,30 @@ func TestParseStorageConfigKeepsBootstrapPublicURL(t *testing.T) {
 	}
 }
 
+func TestResolveTransportModePreservesLegacyOneBotSelection(t *testing.T) {
+	legacyRaw := `{"enabled":false,"public_base_url":"https://qq.example.com","config_version":7}`
+	storage, err := parseStorageConfig(legacyRaw, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	oneBotRaw := `{"enabled":true,"self_id":"123456789","access_token_ciphertext":"configured","config_version":3}`
+	mode, inherited := resolveTransportMode(storage, legacyRaw, oneBotRaw)
+	if mode != TransportModeOneBot || !inherited {
+		t.Fatalf("legacy mode=%q inherited=%v", mode, inherited)
+	}
+
+	explicit := defaultStorageConfig("https://qq.example.com")
+	explicit.TransportMode = TransportModeBotGo
+	explicitRaw, err := json.Marshal(explicit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mode, inherited = resolveTransportMode(explicit, string(explicitRaw), oneBotRaw)
+	if mode != TransportModeBotGo || inherited {
+		t.Fatalf("explicit mode=%q inherited=%v", mode, inherited)
+	}
+}
+
 func TestBootstrapEnvironmentImportRunsOnlyForPristineMigrationConfig(t *testing.T) {
 	t.Setenv("QQBOT_APP_ID", "123456")
 	storage := defaultStorageConfig("https://qq.example.com")
@@ -111,7 +135,7 @@ func TestBootstrapEnvironmentImportRunsOnlyForPristineMigrationConfig(t *testing
 func TestPublicConfigJSONUsesFlatBusinessFields(t *testing.T) {
 	storage := defaultStorageConfig("https://qq.example.com")
 	settings := defaultBusinessSettings()
-	raw, err := json.Marshal(publicFromStorage(storage, settings))
+	raw, err := json.Marshal(publicFromStorage(storage, settings, false))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +146,7 @@ func TestPublicConfigJSONUsesFlatBusinessFields(t *testing.T) {
 	if _, nested := payload["settings"]; nested {
 		t.Fatalf("unexpected nested settings: %s", raw)
 	}
-	if payload["binding_enabled"] != true || payload["link_ttl_minutes"] != float64(15) || payload["channel_check_enabled"] != false || payload["welcome_message"] != defaultWelcomeMessage {
+	if payload["transport_mode"] != string(TransportModeBotGo) || payload["transport_mode_inherited"] != false || payload["binding_enabled"] != true || payload["link_ttl_minutes"] != float64(15) || payload["channel_check_enabled"] != false || payload["welcome_message"] != defaultWelcomeMessage {
 		t.Fatalf("missing flat business fields: %s", raw)
 	}
 }
