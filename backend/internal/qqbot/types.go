@@ -75,8 +75,9 @@ type InboundEvent struct {
 	GuildID              string                 `json:"guild_id,omitempty"`
 	DisplayName          string                 `json:"display_name,omitempty"`
 	MemberJoined         bool                   `json:"member_joined,omitempty"`
+	FriendConversation   bool                   `json:"friend_conversation,omitempty"`
+	FriendAdded          bool                   `json:"friend_added,omitempty"`
 	OneBotRequest        *OneBotRequestApproval `json:"onebot_request,omitempty"`
-	EnterAIO             bool                   `json:"enter_aio,omitempty"`
 	RuntimeConfigVersion int64                  `json:"runtime_config_version,omitempty"`
 }
 

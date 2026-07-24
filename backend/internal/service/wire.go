@@ -955,7 +955,6 @@ var ProviderSet = wire.NewSet(
 	ProvideEmailQueueService,
 	ProvideQQBotUserLookup,
 	NewQQBotService,
-	wire.Bind(new(PoolCapacityQQNotifier), new(*QQBotService)),
 	ProvidePoolCapacityAlertService,
 	ProvidePoolCapacityAlertGatewayBinding,
 	NewTurnstileService,

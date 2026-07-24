@@ -250,9 +250,6 @@ func (m *recordingMessenger) SendGroup(_ context.Context, groupID, _, _, content
 func (m *recordingMessenger) SendC2C(_ context.Context, _, _, _, content string, _ uint32) error {
 	return m.record(content)
 }
-func (m *recordingMessenger) SendProactiveC2C(_ context.Context, _, content string) error {
-	return m.record(content)
-}
 func (m *recordingMessenger) SendChannel(_ context.Context, channelID, _, _, content string, _ uint32) error {
 	m.mu.Lock()
 	m.channelIDs = append(m.channelIDs, channelID)
@@ -285,152 +282,6 @@ func (m *retryImageMessenger) SendC2CImage(_ context.Context, _, _, _ string, _ 
 	return nil
 }
 
-type retryProactiveMessenger struct {
-	recordingMessenger
-	attempts int
-	openID   string
-	content  string
-}
-
-func (m *retryProactiveMessenger) SendProactiveC2C(_ context.Context, openID, content string) error {
-	m.attempts++
-	m.openID = openID
-	m.content = content
-	if m.attempts < 3 {
-		return errors.New("temporary send failure")
-	}
-	return nil
-}
-
-type captureProactiveMessenger struct {
-	recordingMessenger
-	openID  string
-	content string
-}
-
-func (m *captureProactiveMessenger) SendProactiveC2C(_ context.Context, openID, content string) error {
-	m.openID = openID
-	m.content = content
-	return nil
-}
-
-type runtimeRecipientRepo struct {
-	recipient service.QQBotAdminRecipient
-	appID     string
-	channelID int64
-}
-
-func (r *runtimeRecipientRepo) FindBoundEmail(context.Context, string, string) (string, bool, error) {
-	return "", false, nil
-}
-func (r *runtimeRecipientRepo) HasActiveBoundIdentity(context.Context, string, string) (bool, error) {
-	return false, nil
-}
-func (r *runtimeRecipientRepo) ListActiveAdminC2CRecipients(context.Context, string) ([]service.QQBotAdminRecipient, error) {
-	return nil, nil
-}
-func (r *runtimeRecipientRepo) GetActiveAdminC2CRecipient(_ context.Context, appID string, channelID int64) (service.QQBotAdminRecipient, bool, error) {
-	r.appID = appID
-	r.channelID = channelID
-	return r.recipient, true, nil
-}
-func (r *runtimeRecipientRepo) CreateChallenge(context.Context, service.QQBotChallengeCreateInput) (service.QQBotBindingRecord, bool, error) {
-	return service.QQBotBindingRecord{}, false, nil
-}
-func (r *runtimeRecipientRepo) GetChallengeByToken(context.Context, string) (service.QQBotBindingRecord, string, error) {
-	return service.QQBotBindingRecord{}, "", nil
-}
-func (r *runtimeRecipientRepo) UpdateEmailStatus(context.Context, int64, string, string) error {
-	return nil
-}
-func (r *runtimeRecipientRepo) UpdateNotificationStatus(context.Context, int64, string, string) error {
-	return nil
-}
-func (r *runtimeRecipientRepo) CompleteBinding(context.Context, service.QQBotCompleteRepositoryInput) (service.QQBotCompleteRepositoryResult, error) {
-	return service.QQBotCompleteRepositoryResult{}, nil
-}
-func (r *runtimeRecipientRepo) ListBindings(context.Context, service.QQBotBindingListFilter) (service.QQBotBindingPage, error) {
-	return service.QQBotBindingPage{}, nil
-}
-func (r *runtimeRecipientRepo) Stats(context.Context, time.Time) (service.QQBotStats, error) {
-	return service.QQBotStats{}, nil
-}
-func (r *runtimeRecipientRepo) Unbind(context.Context, int64, string, string, time.Time) error {
-	return nil
-}
-func (r *runtimeRecipientRepo) RecordSettingsAudit(context.Context, string, map[string]any) error {
-	return nil
-}
-
-func TestNewRuntimeInjectsProactiveTransportIntoQQBotService(t *testing.T) {
-	repo := &runtimeRecipientRepo{recipient: service.QQBotAdminRecipient{
-		IdentityID:        11,
-		IdentityChannelID: 21,
-		ChannelSubject:    "c2c:sensitive-openid",
-	}}
-	binding := service.NewQQBotService(repo, nil, nil, nil, nil, nil, nil)
-	messenger := &captureProactiveMessenger{}
-	runtime := NewRuntime(nil, nil, binding, nil)
-	runtime.generation.Store(&runtimeGeneration{
-		config:    ActiveConfig{Enabled: true, AppID: "app-1", APITimeoutMS: 1000},
-		messenger: messenger,
-	})
-
-	if err := binding.SendProactiveC2CToIdentityChannel(t.Context(), 21, "admin alert"); err != nil {
-		t.Fatal(err)
-	}
-	if repo.appID != "app-1" || repo.channelID != 21 {
-		t.Fatalf("revalidation app=%q channel=%d", repo.appID, repo.channelID)
-	}
-	if messenger.openID != "sensitive-openid" || messenger.content != "admin alert" {
-		t.Fatalf("openid=%q content=%q", messenger.openID, messenger.content)
-	}
-}
-
-func TestRuntimeProactiveC2CUsesActiveGenerationRetryAndStatus(t *testing.T) {
-	generationCtx, generationCancel := context.WithCancel(t.Context())
-	defer generationCancel()
-	messenger := &retryProactiveMessenger{}
-	runtime := &Runtime{state: RuntimeState{ProcessStatus: RuntimeRunning}}
-	runtime.generation.Store(&runtimeGeneration{
-		config:    ActiveConfig{Enabled: true, AppID: "app-1", APITimeoutMS: 1000},
-		messenger: messenger,
-		ctx:       generationCtx,
-		cancel:    generationCancel,
-	})
-
-	appID, active := runtime.ActiveAppID()
-	if !active || appID != "app-1" {
-		t.Fatalf("active app id=%q active=%v", appID, active)
-	}
-	if err := runtime.SendProactiveC2C(t.Context(), "app-1", "sensitive-openid", "admin alert"); err != nil {
-		t.Fatal(err)
-	}
-	if messenger.attempts != 3 || messenger.openID != "sensitive-openid" || messenger.content != "admin alert" {
-		t.Fatalf("attempts=%d openid=%q content=%q", messenger.attempts, messenger.openID, messenger.content)
-	}
-	state := runtime.State(t.Context())
-	if state.LastSendAt == nil || state.ProcessStatus != RuntimeRunning {
-		t.Fatalf("state=%#v", state)
-	}
-}
-
-func TestRuntimeProactiveC2CRejectsAppIDMismatch(t *testing.T) {
-	messenger := &retryProactiveMessenger{}
-	runtime := &Runtime{state: RuntimeState{ProcessStatus: RuntimeRunning}}
-	runtime.generation.Store(&runtimeGeneration{
-		config:    ActiveConfig{Enabled: true, AppID: "app-2", APITimeoutMS: 1000},
-		messenger: messenger,
-	})
-
-	if err := runtime.SendProactiveC2C(t.Context(), "app-1", "sensitive-openid", "admin alert"); !errors.Is(err, ErrRuntimeUnavailable) {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if messenger.attempts != 0 {
-		t.Fatalf("attempts=%d", messenger.attempts)
-	}
-}
-
 func TestRuntimeImageRetriesReuseMessageSequence(t *testing.T) {
 	runtime := &Runtime{state: RuntimeState{ProcessStatus: RuntimeRunning}}
 	messenger := &retryImageMessenger{}
@@ -460,7 +311,7 @@ func TestRuntimeChannelCheckUsesImageReplyForActiveC2CBinding(t *testing.T) {
 	runtime := &Runtime{manager: manager, channelCheck: channelCheck, state: RuntimeState{ProcessStatus: RuntimeRunning}}
 	messenger := &recordingMessenger{}
 	generation := &runtimeGeneration{config: ActiveConfig{Enabled: true, AppID: "app", AppSecret: "app-secret", PublicBaseURL: "https://status.example.com"}, messenger: messenger}
-	event := InboundEvent{EventID: "event-check", MessageID: "message", Scene: SceneC2C, ProviderSubject: "openid", Content: "/check"}
+	event := InboundEvent{EventID: "event-check", MessageID: "message", Scene: SceneC2C, ProviderSubject: "openid", FriendConversation: true, Content: "/check"}
 	if err := runtime.process(t.Context(), generation, event); err != nil {
 		t.Fatal(err)
 	}
@@ -578,17 +429,34 @@ func TestRenderWelcomeDefaultAdvertisesOnlyEnabledCommands(t *testing.T) {
 	}
 }
 
-func TestRuntimeWelcomeIsMarkedOnlyAfterSuccessfulSend(t *testing.T) {
+func TestRuntimeLeavesOrdinaryGroupMessagesSilent(t *testing.T) {
+	settings := defaultBusinessSettings()
+	settings.AllowedGroupIDs = []string{"group"}
+	manager := &ConfigManager{}
+	manager.snapshot.Store(&configSnapshot{storage: defaultStorageConfig("https://example.com"), active: ActiveConfig{Enabled: true, AppID: "app"}, settings: settings})
+	runtime := &Runtime{manager: manager, state: RuntimeState{ProcessStatus: RuntimeRunning}}
+	messenger := &recordingMessenger{}
+	generation := &runtimeGeneration{config: ActiveConfig{Enabled: true, AppID: "app"}, messenger: messenger}
+	if err := runtime.process(t.Context(), generation, InboundEvent{EventID: "event", Scene: SceneGroup, SourceID: "group", ProviderSubject: "20001", Content: "hello"}); err != nil {
+		t.Fatal(err)
+	}
+	messenger.mu.Lock()
+	defer messenger.mu.Unlock()
+	if len(messenger.contents) != 0 || len(messenger.groupIDs) != 0 {
+		t.Fatalf("ordinary group message produced output: groups=%v contents=%v", messenger.groupIDs, messenger.contents)
+	}
+}
+
+func TestRuntimeFriendOpeningIsMarkedOnlyAfterSuccessfulSend(t *testing.T) {
 	queue, _ := newRedisQueue(t)
 	settings := defaultBusinessSettings()
-	settings.FirstInteractionEnabled = true
-	settings.AllowedGroupIDs = []string{"group"}
+	settings.FirstInteractionEnabled = false
 	manager := &ConfigManager{}
 	manager.snapshot.Store(&configSnapshot{storage: defaultStorageConfig("https://example.com"), active: ActiveConfig{Enabled: true, AppID: "app"}, settings: settings})
 	runtime := &Runtime{manager: manager, queue: queue, state: RuntimeState{ProcessStatus: RuntimeRunning}}
 	messenger := &recordingMessenger{}
 	generation := &runtimeGeneration{config: ActiveConfig{Enabled: true, AppID: "app"}, messenger: messenger}
-	event := InboundEvent{EventID: "event-1", Scene: SceneGroup, SourceID: "group", ProviderSubject: "openid", Content: "hello"}
+	event := InboundEvent{EventID: "event-1", Scene: SceneC2C, ProviderSubject: "20001", FriendConversation: true, FriendAdded: true}
 	if err := runtime.process(t.Context(), generation, event); err != nil {
 		t.Fatal(err)
 	}
@@ -600,7 +468,7 @@ func TestRuntimeWelcomeIsMarkedOnlyAfterSuccessfulSend(t *testing.T) {
 	count := len(messenger.contents)
 	messenger.mu.Unlock()
 	if count != 1 {
-		t.Fatalf("welcome send count=%d", count)
+		t.Fatalf("friend opening send count=%d", count)
 	}
 }
 

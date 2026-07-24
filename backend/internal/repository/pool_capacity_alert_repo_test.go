@@ -104,8 +104,6 @@ func TestPoolCapacityAlertEventDeduplicatesAdministratorEmails(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(9))
 	mock.ExpectExec(`(?s)INSERT INTO pool_capacity_alert_deliveries.*SELECT \$1::bigint,'email'.*SELECT DISTINCT ON \(LOWER\(BTRIM\(candidate\.email\)\)\)`).
 		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(`(?s)INSERT INTO pool_capacity_alert_deliveries.*SELECT DISTINCT \$1::bigint,'qqbot'.*ai\.provider_subject=aic\.channel_subject`).
-		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 	mock.ExpectClose()
 
@@ -122,7 +120,6 @@ func TestPoolCapacityAlertEventDeduplicatesAdministratorEmails(t *testing.T) {
 		AverageAccountCost:  1,
 		AverageActualCost:   1,
 		SampleCount:         service.PoolCapacityAlertSampleSize,
-		QQBotAppID:          "app-1",
 		ThresholdRequests:   &thresholdRequests,
 		ReminderCooldown:    time.Hour,
 		DeliveryMaxAttempts: 3,
@@ -130,6 +127,40 @@ func TestPoolCapacityAlertEventDeduplicatesAdministratorEmails(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, event)
 	require.Equal(t, int64(9), event.ID)
+}
+
+func TestPoolCapacityAlertClaimCancelsLegacyQQBotDeliveries(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	now := time.Date(2026, time.July, 24, 12, 0, 0, 0, time.UTC)
+	repo := &poolCapacityAlertRepository{db: db}
+	mock.ExpectBegin()
+	mock.ExpectExec(`(?s)UPDATE pool_capacity_alert_deliveries.*channel='qqbot'.*status IN \('pending','retry','sending'\)`).
+		WithArgs(now).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`(?s)UPDATE pool_capacity_alert_deliveries d SET.*group alert disabled or generation changed`).
+		WithArgs(now, service.StatusActive).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`(?s)UPDATE pool_capacity_alert_deliveries d SET.*administrator recipient inactive`).
+		WithArgs(now, service.RoleAdmin, service.StatusActive).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(`(?s)UPDATE pool_capacity_alert_deliveries SET status='dead'.*delivery lease expired after final attempt`).
+		WithArgs(now).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(`(?s)WITH candidates AS`).
+		WithArgs(now, 10, "worker-1", now.Add(time.Minute)).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectCommit()
+	mock.ExpectClose()
+
+	deliveries, err := repo.ClaimDeliveries(context.Background(), "worker-1", now, time.Minute, 10)
+	require.NoError(t, err)
+	require.Empty(t, deliveries)
 }
 
 func TestPoolCapacityAlertDeliveryRevalidationChecksGenerationAndPrimaryEmail(t *testing.T) {

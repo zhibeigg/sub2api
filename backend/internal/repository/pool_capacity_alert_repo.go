@@ -171,7 +171,6 @@ func (r *poolCapacityAlertRepository) EvaluateAndMaybeCreateEvent(ctx context.Co
 		WalletRemaining:     evaluation.WalletRemaining,
 		SampleCount:         evaluation.SampleCount,
 		Bottleneck:          evaluation.Bottleneck,
-		QQBotAppID:          evaluation.QQBotAppID,
 		CreatedAt:           now,
 	}
 	if err := tx.QueryRowContext(ctx, `
@@ -191,7 +190,7 @@ func (r *poolCapacityAlertRepository) EvaluateAndMaybeCreateEvent(ctx context.Co
 		return nil, err
 	}
 
-	if err := enqueuePoolCapacityAlertDeliveriesTx(ctx, tx, event.ID, evaluation.QQBotAppID, evaluation.DeliveryMaxAttempts, now); err != nil {
+	if err := enqueuePoolCapacityAlertDeliveriesTx(ctx, tx, event.ID, evaluation.DeliveryMaxAttempts, now); err != nil {
 		return nil, err
 	}
 
@@ -211,6 +210,12 @@ func (r *poolCapacityAlertRepository) ClaimDeliveries(ctx context.Context, owner
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE pool_capacity_alert_deliveries
+		SET status='cancelled',last_error_class='cancelled',last_error='qqbot proactive delivery removed',lease_owner=NULL,lease_expires_at=NULL,updated_at=$1
+		WHERE channel='qqbot' AND status IN ('pending','retry','sending')`, now); err != nil {
+		return nil, err
+	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE pool_capacity_alert_deliveries d SET status='cancelled',last_error_class='cancelled',last_error='group alert disabled or generation changed',lease_owner=NULL,lease_expires_at=NULL,updated_at=$1
 		FROM pool_capacity_alert_events e

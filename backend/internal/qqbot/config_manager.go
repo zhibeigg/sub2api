@@ -687,7 +687,7 @@ func qqBotBusinessSettingKeys() []string {
 	return []string{service.SettingKeyQQBotBindingEnabled, service.SettingKeyQQBotFirstBindBonus, service.SettingKeyQQBotLinkTTLMinutes, service.SettingKeyQQBotCommandCooldownSeconds, service.SettingKeyQQBotWelcomeEnabled, service.SettingKeyQQBotWelcomeMessage, service.SettingKeyQQBotFirstInteractionEnabled, service.SettingKeyQQBotChannelCheckEnabled, service.SettingKeyQQBotHelpMessage, service.SettingKeyQQBotAllowedGroupIDs, service.SettingKeyQQBotAllowedGuildIDs, service.SettingKeyQQBotGuildWelcomeChannels}
 }
 func defaultBusinessSettings() service.QQBotSettings {
-	return service.QQBotSettings{BindingEnabled: true, FirstBindBonus: 5, LinkTTLMinutes: 15, CommandCooldownSeconds: service.QQBotCommandCooldownDefaultSeconds, WelcomeEnabled: true, WelcomeMessage: defaultWelcomeMessage, FirstInteractionEnabled: false, ChannelCheckEnabled: false, HelpMessage: defaultHelpMessage, AllowedGroupIDs: []string{}, AllowedGuildIDs: []string{}, GuildWelcomeChannels: map[string]string{}}
+	return service.QQBotSettings{BindingEnabled: true, FirstBindBonus: 5, LinkTTLMinutes: 15, CommandCooldownSeconds: service.QQBotCommandCooldownDefaultSeconds, WelcomeEnabled: true, WelcomeMessage: defaultWelcomeMessage, FirstInteractionEnabled: true, ChannelCheckEnabled: false, HelpMessage: defaultHelpMessage, AllowedGroupIDs: []string{}, AllowedGuildIDs: []string{}, GuildWelcomeChannels: map[string]string{}}
 }
 func parseBusinessSettings(values map[string]string) service.QQBotSettings {
 	cfg := defaultBusinessSettings()
@@ -709,9 +709,9 @@ func parseBusinessSettings(values map[string]string) service.QQBotSettings {
 	if value := strings.TrimSpace(values[service.SettingKeyQQBotWelcomeMessage]); value != "" {
 		cfg.WelcomeMessage = value
 	}
-	if value, ok := values[service.SettingKeyQQBotFirstInteractionEnabled]; ok {
-		cfg.FirstInteractionEnabled, _ = strconv.ParseBool(value)
-	}
+	// Kept for storage compatibility. Friend-added opening messages are mandatory and
+	// no legacy false value may suppress them.
+	cfg.FirstInteractionEnabled = true
 	if value, ok := values[service.SettingKeyQQBotChannelCheckEnabled]; ok {
 		cfg.ChannelCheckEnabled, _ = strconv.ParseBool(value)
 	}
@@ -745,9 +745,9 @@ func applyBusinessUpdate(current service.QQBotSettings, update service.QQBotSett
 	if update.WelcomeMessage != nil {
 		current.WelcomeMessage = strings.TrimSpace(*update.WelcomeMessage)
 	}
-	if update.FirstInteractionEnabled != nil {
-		current.FirstInteractionEnabled = *update.FirstInteractionEnabled
-	}
+	// The legacy field remains accepted for API compatibility, but friend-added
+	// opening messages are intentionally not configurable.
+	current.FirstInteractionEnabled = true
 	if update.ChannelCheckEnabled != nil {
 		current.ChannelCheckEnabled = *update.ChannelCheckEnabled
 	}
@@ -779,7 +779,7 @@ func businessSettingsValues(cfg service.QQBotSettings) map[string]string {
 		service.SettingKeyQQBotCommandCooldownSeconds:  strconv.Itoa(cfg.CommandCooldownSeconds),
 		service.SettingKeyQQBotWelcomeEnabled:          strconv.FormatBool(cfg.WelcomeEnabled),
 		service.SettingKeyQQBotWelcomeMessage:          cfg.WelcomeMessage,
-		service.SettingKeyQQBotFirstInteractionEnabled: strconv.FormatBool(cfg.FirstInteractionEnabled),
+		service.SettingKeyQQBotFirstInteractionEnabled: "true",
 		service.SettingKeyQQBotChannelCheckEnabled:     strconv.FormatBool(cfg.ChannelCheckEnabled),
 		service.SettingKeyQQBotHelpMessage:             cfg.HelpMessage,
 		service.SettingKeyQQBotAllowedGroupIDs:         string(groups),

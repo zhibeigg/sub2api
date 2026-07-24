@@ -35,9 +35,9 @@ func TestConfigManagerReloadMasksSecrets(t *testing.T) {
 	}
 }
 
-func TestDefaultBusinessSettingsDisablesFirstInteractionWelcome(t *testing.T) {
-	if defaultBusinessSettings().FirstInteractionEnabled {
-		t.Fatal("first interaction welcome must be disabled by default")
+func TestDefaultBusinessSettingsRequiresFriendOpening(t *testing.T) {
+	if !defaultBusinessSettings().FirstInteractionEnabled {
+		t.Fatal("friend opening must be enabled")
 	}
 }
 

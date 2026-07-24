@@ -28,14 +28,36 @@ func TestAdaptOneBotGroupAndPrivateMessages(t *testing.T) {
 	require.Equal(t, " /bind 3252237236@qq.com", bindEvent.Content)
 	require.Equal(t, Command{Kind: CommandBind, Email: "3252237236@qq.com"}, ParseCommand(bindEvent.Content))
 
-	privateRaw := []byte(`{"time":1720000001,"self_id":"3944007489","post_type":"message","message_type":"private","message_id":"102","user_id":"20002","raw_message":"[CQ:reply,id=1]/bind user@example.com","sender":{"nickname":"Private User"}}`)
+	privateRaw := []byte(`{"time":1720000001,"self_id":"3944007489","post_type":"message","message_type":"private","sub_type":"friend","message_id":"102","user_id":"20002","raw_message":"[CQ:reply,id=1]/bind user@example.com","sender":{"nickname":"Private User"}}`)
 	private, accepted, err := AdaptOneBotEvent(privateRaw, "3944007489")
 	require.NoError(t, err)
 	require.True(t, accepted)
 	require.Equal(t, SceneC2C, private.Scene)
 	require.Equal(t, "20002", private.ProviderSubject)
+	require.True(t, private.FriendConversation)
 	require.Equal(t, "/bind user@example.com", private.Content)
 	require.Equal(t, "Private User", private.DisplayName)
+}
+
+func TestAdaptOneBotFriendAddAndRejectsTemporaryPrivateMessages(t *testing.T) {
+	friendAddRaw := []byte(`{"time":1720000002,"self_id":3944007489,"post_type":"notice","notice_type":"friend_add","user_id":20003}`)
+	friendAdded, accepted, err := AdaptOneBotEvent(friendAddRaw, "3944007489")
+	require.NoError(t, err)
+	require.True(t, accepted)
+	require.Equal(t, SceneC2C, friendAdded.Scene)
+	require.Equal(t, "20003", friendAdded.ProviderSubject)
+	require.True(t, friendAdded.FriendConversation)
+	require.True(t, friendAdded.FriendAdded)
+
+	for _, raw := range [][]byte{
+		[]byte(`{"self_id":3944007489,"post_type":"message","message_type":"private","sub_type":"group","message_id":103,"user_id":20004,"raw_message":"/help"}`),
+		[]byte(`{"self_id":3944007489,"post_type":"message","message_type":"private","sub_type":"other","message_id":104,"user_id":20005,"raw_message":"/help"}`),
+		[]byte(`{"self_id":3944007489,"post_type":"message","message_type":"private","message_id":105,"user_id":20006,"raw_message":"/help"}`),
+	} {
+		_, accepted, err := AdaptOneBotEvent(raw, "3944007489")
+		require.NoError(t, err)
+		require.False(t, accepted)
+	}
 }
 
 func TestAdaptOneBotGroupIncrease(t *testing.T) {

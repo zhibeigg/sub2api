@@ -168,7 +168,6 @@ func (r *poolCapacityAlertRepository) EvaluateGroupBalanceAndMaybeCreateEvent(ct
 		ThresholdUSD:                 &threshold,
 		SampleCount:                  evaluation.PoolAccountCount + evaluation.NormalAccountCount,
 		Bottleneck:                   "group_predicted_balance",
-		QQBotAppID:                   evaluation.QQBotAppID,
 		CreatedAt:                    now,
 	}
 	if err := tx.QueryRowContext(ctx, `
@@ -191,7 +190,7 @@ func (r *poolCapacityAlertRepository) EvaluateGroupBalanceAndMaybeCreateEvent(ct
 		return nil, err
 	}
 
-	if err := enqueuePoolCapacityAlertDeliveriesTx(ctx, tx, event.ID, evaluation.QQBotAppID, evaluation.DeliveryMaxAttempts, now); err != nil {
+	if err := enqueuePoolCapacityAlertDeliveriesTx(ctx, tx, event.ID, evaluation.DeliveryMaxAttempts, now); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -200,7 +199,7 @@ func (r *poolCapacityAlertRepository) EvaluateGroupBalanceAndMaybeCreateEvent(ct
 	return event, nil
 }
 
-func enqueuePoolCapacityAlertDeliveriesTx(ctx context.Context, tx *sql.Tx, eventID int64, qqbotAppID string, maxAttempts int, now time.Time) error {
+func enqueuePoolCapacityAlertDeliveriesTx(ctx context.Context, tx *sql.Tx, eventID int64, maxAttempts int, now time.Time) error {
 	// INSERT ... SELECT does not always infer lib/pq parameters from the target
 	// columns. Cast scalar parameters explicitly so event_id cannot default to text.
 	if _, err := tx.ExecContext(ctx, `
@@ -227,29 +226,5 @@ func enqueuePoolCapacityAlertDeliveriesTx(ctx context.Context, tx *sql.Tx, event
 		return err
 	}
 
-	qqbotAppID = strings.TrimSpace(qqbotAppID)
-	if qqbotAppID == "" {
-		return nil
-	}
-	providerKey := "qqbot:" + qqbotAppID
-	_, err := tx.ExecContext(ctx, `
-		INSERT INTO pool_capacity_alert_deliveries (
-			event_id,channel,recipient_user_id,identity_channel_id,recipient_email,recipient_name,locale,
-			status,attempt_count,max_attempts,next_attempt_at,created_at,updated_at
-		)
-		SELECT DISTINCT $1::bigint,'qqbot',u.id,aic.id,'',
-		       COALESCE(NULLIF(BTRIM(u.username),''),split_part(BTRIM(u.email),'@',1)),'zh',
-		       'pending',0,$2::integer,$3::timestamptz,$3::timestamptz,$3::timestamptz
-		FROM users u
-		JOIN auth_identities ai ON ai.user_id=u.id
-		JOIN auth_identity_channels aic ON aic.identity_id=ai.id
-		WHERE u.role=$4 AND u.status=$5 AND u.deleted_at IS NULL
-		  AND ai.provider_type='qqbot' AND ai.provider_key=$6 AND ai.verified_at IS NOT NULL
-		  AND ai.provider_subject=aic.channel_subject
-		  AND aic.provider_type='qqbot' AND aic.provider_key=$6
-		  AND aic.channel='c2c' AND aic.channel_app_id=$7
-		ON CONFLICT (event_id,channel,recipient_user_id,identity_channel_id) DO NOTHING`,
-		eventID, maxAttempts, now, service.RoleAdmin, service.StatusActive, providerKey, qqbotAppID,
-	)
-	return err
+	return nil
 }

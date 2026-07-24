@@ -83,11 +83,7 @@ func dispatchWebhookPayload(payload webhookPayload) error {
 	case "GROUP_AT_MESSAGE_CREATE":
 		return dispatchEvent(InboundEvent{EventID: eventID, MessageID: data.ID, Scene: SceneGroup, Content: data.Content, ProviderSubject: firstNonEmpty(data.Author.MemberOpenID, data.Author.UserOpenID, data.Author.ID, data.MemberOpenID, data.UserOpenID), SourceID: firstNonEmpty(data.GroupOpenID, data.GroupID), DisplayName: data.Author.Username})
 	case "C2C_MESSAGE_CREATE":
-		subject := firstNonEmpty(data.Author.UserOpenID, data.UserOpenID)
-		if subject == "" {
-			return nil
-		}
-		return dispatchEvent(InboundEvent{EventID: eventID, MessageID: data.ID, Scene: SceneC2C, Content: data.Content, ProviderSubject: subject, DisplayName: data.Author.Username})
+		return nil
 	case "AT_MESSAGE_CREATE":
 		return dispatchEvent(InboundEvent{EventID: eventID, MessageID: data.ID, Scene: SceneGuild, Content: data.Content, ProviderSubject: firstNonEmpty(data.Author.UnionOpenID, data.Author.ID), SourceID: data.GuildID, GuildID: data.GuildID, ChannelID: data.ChannelID, DisplayName: data.Author.Username})
 	case "GUILD_MEMBER_ADD":
@@ -96,11 +92,7 @@ func dispatchWebhookPayload(payload webhookPayload) error {
 		}
 		return dispatchEvent(InboundEvent{EventID: eventID, Scene: SceneGuild, ProviderSubject: data.User.ID, SourceID: data.GuildID, GuildID: data.GuildID, DisplayName: firstNonEmpty(data.Nick, data.User.Username), MemberJoined: true})
 	case "ENTER_AIO":
-		subject := firstNonEmpty(data.UserOpenID, data.Author.UserOpenID)
-		if subject == "" {
-			return nil
-		}
-		return dispatchEvent(InboundEvent{EventID: eventID, Scene: SceneC2C, ProviderSubject: subject, EnterAIO: true})
+		return nil
 	default:
 		return nil
 	}

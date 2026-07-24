@@ -27,8 +27,8 @@ const (
 	QQBotCommandCooldownMinSeconds     = 10
 	QQBotCommandCooldownMaxSeconds     = 3600
 	qqBotDeliveryCallbackTTL           = 10 * time.Second
-	qqBotDefaultHelpMessage            = "欢迎使用 PokeAPI 账户助手。\n\n绑定账户：请私聊发送 /bind 你的邮箱\n查看渠道状态：发送 /check\n查看帮助：发送 /help\n\n验证链接只会发送到 Sub2API 账户邮箱。数字 QQ 仅作为展示信息，实际身份以机器人 OpenID 为准。"
-	qqBotDefaultWelcomeMessage         = "欢迎 {user} 加入 {site}！\n\n可用指令：\n绑定账户（请私聊机器人）：{bind_command}\n查看渠道状态：/check\n查看帮助：/help\n\n安全提示：请勿向任何人提供密码、验证码或 API 密钥；账户绑定链接只会发送到你的站点账户邮箱。"
+	qqBotDefaultHelpMessage            = "欢迎使用 PokeAPI 账户助手。\n\n白名单群内可直接发送：/bind 你的邮箱\n已添加好友后可在私聊发送：/bind 你的邮箱\n查看渠道状态：发送 /check\n查看帮助：发送 /help\n\n群内指令只会在原群回复，不会私聊群成员。验证链接只会发送到 Sub2API 账户邮箱；群内发送邮箱会被群成员看到。数字 QQ 仅作为展示信息，实际身份以机器人 OpenID 为准。"
+	qqBotDefaultWelcomeMessage         = "欢迎 {user} 加入 {site}！\n\n可用指令：\n绑定账户（白名单群内可直接发送）：{bind_command}\n查看渠道状态：/check\n查看帮助：/help\n\n安全提示：请勿向任何人提供密码、验证码或 API 密钥；群内发送的邮箱对群成员可见，账户绑定链接只会发送到你的站点账户邮箱。"
 )
 
 func ProvideQQBotUserLookup(repo UserRepository) QQBotUserLookup {
@@ -43,8 +43,6 @@ type QQBotService struct {
 	billingCache    BillingCache
 	publicBaseURLMu sync.RWMutex
 	publicBaseURL   string
-	transportMu     sync.RWMutex
-	transport       QQBotProactiveC2CTransport
 	now             func() time.Time
 }
 
@@ -88,107 +86,6 @@ func (s *QQBotService) getPublicBaseURL() string {
 	s.publicBaseURLMu.RLock()
 	defer s.publicBaseURLMu.RUnlock()
 	return s.publicBaseURL
-}
-
-func (s *QQBotService) SetProactiveC2CTransport(transport QQBotProactiveC2CTransport) {
-	if s == nil {
-		return
-	}
-	s.transportMu.Lock()
-	s.transport = transport
-	s.transportMu.Unlock()
-}
-
-func (s *QQBotService) proactiveC2CTransport() QQBotProactiveC2CTransport {
-	if s == nil {
-		return nil
-	}
-	s.transportMu.RLock()
-	defer s.transportMu.RUnlock()
-	return s.transport
-}
-
-func (s *QQBotService) ActiveQQBotAppID() (string, bool) {
-	transport := s.proactiveC2CTransport()
-	if transport == nil {
-		return "", false
-	}
-	appID, active := transport.ActiveAppID()
-	appID = strings.TrimSpace(appID)
-	return appID, active && appID != ""
-}
-
-func (s *QQBotService) SendAdminProactiveAlert(ctx context.Context, identityChannelID int64, content string) error {
-	return s.SendProactiveC2CToIdentityChannel(ctx, identityChannelID, content)
-}
-
-func (s *QQBotService) ListProactiveAdminRecipients(ctx context.Context) ([]QQBotAdminRecipient, error) {
-	if s == nil || s.repo == nil {
-		return nil, ErrQQBotNotConfigured
-	}
-	transport := s.proactiveC2CTransport()
-	if transport == nil {
-		return nil, ErrQQBotNotConfigured
-	}
-	botAppID, active := transport.ActiveAppID()
-	botAppID = strings.TrimSpace(botAppID)
-	if !active || botAppID == "" {
-		return nil, ErrQQBotNotConfigured
-	}
-	recipients, err := s.repo.ListActiveAdminC2CRecipients(ctx, botAppID)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]QQBotAdminRecipient, 0, len(recipients))
-	for _, recipient := range recipients {
-		if recipient.IdentityID <= 0 || recipient.IdentityChannelID <= 0 {
-			continue
-		}
-		if _, ok := qqBotC2COpenID(recipient.ChannelSubject); !ok {
-			continue
-		}
-		recipient.ChannelSubject = ""
-		result = append(result, recipient)
-	}
-	return result, nil
-}
-
-func (s *QQBotService) SendProactiveC2CToIdentityChannel(ctx context.Context, identityChannelID int64, content string) error {
-	content = strings.TrimSpace(content)
-	if s == nil || s.repo == nil || identityChannelID <= 0 || content == "" {
-		return ErrQQBotInvalidInput
-	}
-	transport := s.proactiveC2CTransport()
-	if transport == nil {
-		return ErrQQBotNotConfigured
-	}
-	botAppID, active := transport.ActiveAppID()
-	botAppID = strings.TrimSpace(botAppID)
-	if !active || botAppID == "" {
-		return ErrQQBotNotConfigured
-	}
-	recipient, found, err := s.repo.GetActiveAdminC2CRecipient(ctx, botAppID, identityChannelID)
-	if err != nil {
-		return err
-	}
-	if !found || recipient.IdentityID <= 0 || recipient.IdentityChannelID != identityChannelID {
-		return ErrQQBotRecipientUnavailable
-	}
-	openID, ok := qqBotC2COpenID(recipient.ChannelSubject)
-	if !ok {
-		return ErrQQBotRecipientUnavailable
-	}
-	return transport.SendProactiveC2C(ctx, botAppID, openID, content)
-}
-
-func qqBotC2COpenID(channelSubject string) (string, bool) {
-	const prefix = "c2c:"
-	channelSubject = strings.TrimSpace(channelSubject)
-	if !strings.HasPrefix(channelSubject, prefix) {
-		return "", false
-	}
-	openID := strings.TrimSpace(strings.TrimPrefix(channelSubject, prefix))
-	return openID, openID != ""
 }
 
 func (s *QQBotService) HasActiveBoundIdentity(ctx context.Context, botAppID, providerSubject string) (bool, error) {
@@ -431,7 +328,8 @@ func (s *QQBotService) GetSettings(ctx context.Context) (QQBotSettings, error) {
 	if value, ok := values[SettingKeyQQBotWelcomeMessage]; ok {
 		settings.WelcomeMessage = value
 	}
-	settings.FirstInteractionEnabled = parseQQBotBool(values[SettingKeyQQBotFirstInteractionEnabled], defaults.FirstInteractionEnabled)
+	// Kept for storage compatibility. A real OneBot friend_add always receives one opening message.
+	settings.FirstInteractionEnabled = true
 	settings.ChannelCheckEnabled = parseQQBotBool(values[SettingKeyQQBotChannelCheckEnabled], defaults.ChannelCheckEnabled)
 	if value, ok := values[SettingKeyQQBotHelpMessage]; ok {
 		settings.HelpMessage = value
@@ -489,9 +387,8 @@ func (s *QQBotService) UpdateSettings(ctx context.Context, update QQBotSettingsU
 		}
 		current.WelcomeMessage = strings.TrimSpace(*update.WelcomeMessage)
 	}
-	if update.FirstInteractionEnabled != nil {
-		current.FirstInteractionEnabled = *update.FirstInteractionEnabled
-	}
+	// The legacy API field is accepted but cannot disable friend-added openings.
+	current.FirstInteractionEnabled = true
 	if update.ChannelCheckEnabled != nil {
 		current.ChannelCheckEnabled = *update.ChannelCheckEnabled
 	}
@@ -529,7 +426,7 @@ func (s *QQBotService) UpdateSettings(ctx context.Context, update QQBotSettingsU
 		SettingKeyQQBotCommandCooldownSeconds:  strconv.Itoa(current.CommandCooldownSeconds),
 		SettingKeyQQBotWelcomeEnabled:          strconv.FormatBool(current.WelcomeEnabled),
 		SettingKeyQQBotWelcomeMessage:          current.WelcomeMessage,
-		SettingKeyQQBotFirstInteractionEnabled: strconv.FormatBool(current.FirstInteractionEnabled),
+		SettingKeyQQBotFirstInteractionEnabled: "true",
 		SettingKeyQQBotChannelCheckEnabled:     strconv.FormatBool(current.ChannelCheckEnabled),
 		SettingKeyQQBotHelpMessage:             current.HelpMessage,
 		SettingKeyQQBotAllowedGroupIDs:         string(groupJSON),
@@ -665,7 +562,7 @@ func defaultQQBotSettings() QQBotSettings {
 		CommandCooldownSeconds:  QQBotCommandCooldownDefaultSeconds,
 		WelcomeEnabled:          true,
 		WelcomeMessage:          qqBotDefaultWelcomeMessage,
-		FirstInteractionEnabled: false,
+		FirstInteractionEnabled: true,
 		ChannelCheckEnabled:     false,
 		HelpMessage:             qqBotDefaultHelpMessage,
 		AllowedGroupIDs:         []string{},

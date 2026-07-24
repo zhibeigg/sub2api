@@ -74,64 +74,6 @@ func TestQQBotBindingRepositoryHasActiveBoundIdentityRejectsEmptyIdentity(t *tes
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestQQBotBindingRepositoryListsActiveAdminC2CRecipientsForApp(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery(regexp.QuoteMeta(qqBotListActiveAdminC2CRecipientsSQL)).
-		WithArgs("qqbot:app-1", "app-1").
-		WillReturnRows(sqlmock.NewRows([]string{"identity_id", "channel_id", "channel_subject"}).
-			AddRow(int64(11), int64(21), "c2c:openid-1").
-			AddRow(int64(12), int64(22), "c2c:openid-2"))
-
-	repo := &qqBotBindingRepository{db: db}
-	recipients, err := repo.ListActiveAdminC2CRecipients(t.Context(), " app-1 ")
-	require.NoError(t, err)
-	require.Len(t, recipients, 2)
-	require.Equal(t, int64(11), recipients[0].IdentityID)
-	require.Equal(t, int64(21), recipients[0].IdentityChannelID)
-	require.Equal(t, "c2c:openid-1", recipients[0].ChannelSubject)
-	require.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestQQBotBindingRepositoryRevalidatesAdminC2CRecipientByChannelID(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery(regexp.QuoteMeta(qqBotGetActiveAdminC2CRecipientSQL)).
-		WithArgs(int64(21), "qqbot:app-1", "app-1").
-		WillReturnRows(sqlmock.NewRows([]string{"identity_id", "channel_id", "channel_subject"}).
-			AddRow(int64(11), int64(21), "c2c:openid-1"))
-
-	repo := &qqBotBindingRepository{db: db}
-	recipient, found, err := repo.GetActiveAdminC2CRecipient(t.Context(), " app-1 ", 21)
-	require.NoError(t, err)
-	require.True(t, found)
-	require.Equal(t, int64(11), recipient.IdentityID)
-	require.Equal(t, int64(21), recipient.IdentityChannelID)
-	require.Equal(t, "c2c:openid-1", recipient.ChannelSubject)
-	require.NoError(t, mock.ExpectationsWereMet())
-}
-
-func TestQQBotBindingRepositoryRejectsStaleAdminC2CRecipient(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer func() { _ = db.Close() }()
-
-	mock.ExpectQuery(regexp.QuoteMeta(qqBotGetActiveAdminC2CRecipientSQL)).
-		WithArgs(int64(21), "qqbot:app-1", "app-1").
-		WillReturnError(sql.ErrNoRows)
-
-	repo := &qqBotBindingRepository{db: db}
-	recipient, found, err := repo.GetActiveAdminC2CRecipient(t.Context(), "app-1", 21)
-	require.NoError(t, err)
-	require.False(t, found)
-	require.Zero(t, recipient)
-	require.NoError(t, mock.ExpectationsWereMet())
-}
-
 func TestQQBotBindingRepositoryUpdateEmailStatusUsesTypedParameters(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)

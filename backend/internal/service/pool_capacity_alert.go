@@ -79,7 +79,6 @@ type PoolCapacityEvaluation struct {
 	WalletRemaining     *float64
 	SampleCount         int
 	Bottleneck          string
-	QQBotAppID          string
 	ReminderCooldown    time.Duration
 	DeliveryMaxAttempts int
 }
@@ -102,7 +101,6 @@ type PoolCapacityGroupBalanceEvaluation struct {
 	StaleAccountCount            int
 	IncompatibleUnitAccountCount int
 	ThresholdUSD                 float64
-	QQBotAppID                   string
 	ReminderCooldown             time.Duration
 	DeliveryMaxAttempts          int
 }
@@ -174,13 +172,6 @@ type PoolCapacityAlertRepository interface {
 	MarkDeliveryCancelled(ctx context.Context, deliveryID int64, owner, reason string) error
 }
 
-// PoolCapacityQQNotifier is implemented by QQBotService without introducing a
-// service -> qqbot package cycle.
-type PoolCapacityQQNotifier interface {
-	ActiveQQBotAppID() (string, bool)
-	SendAdminProactiveAlert(ctx context.Context, identityChannelID int64, content string) error
-}
-
 type poolCapacityAlertTask struct {
 	RequestID          string
 	GroupID            int64
@@ -205,7 +196,7 @@ type poolCapacityAlertTask struct {
 }
 
 // PoolCapacityAlertService evaluates predictions asynchronously and dispatches
-// durable email / QQ deliveries outside request and usage-record workers.
+// durable email deliveries outside request and usage-record workers.
 type PoolCapacityAlertService struct {
 	repo               PoolCapacityAlertRepository
 	usageReader        PoolCapacityUsageReader
@@ -214,7 +205,6 @@ type PoolCapacityAlertService struct {
 	capacityReader     PoolBalanceReader
 	groupBalanceReader GroupPredictedBalanceReader
 	notifications      *NotificationEmailService
-	qqNotifier         PoolCapacityQQNotifier
 	cfg                *config.Config
 
 	owner string
@@ -235,7 +225,6 @@ func NewPoolCapacityAlertService(
 	accountRepo AccountRepository,
 	capacityReader PoolBalanceReader,
 	notifications *NotificationEmailService,
-	qqNotifier PoolCapacityQQNotifier,
 	cfg *config.Config,
 ) *PoolCapacityAlertService {
 	var usageReader PoolCapacityUsageReader
@@ -254,7 +243,6 @@ func NewPoolCapacityAlertService(
 		accountRepo:    accountRepo,
 		capacityReader: capacityReader,
 		notifications:  notifications,
-		qqNotifier:     qqNotifier,
 		cfg:            cfg,
 		owner:          fmt.Sprintf("%s:%d:%d", host, os.Getpid(), time.Now().UnixNano()),
 		queue:          make(chan poolCapacityAlertTask, queueSize),
@@ -270,10 +258,9 @@ func ProvidePoolCapacityAlertService(
 	capacityService *AccountCapacityService,
 	groupBalanceService *GroupPredictedBalanceService,
 	notifications *NotificationEmailService,
-	qqNotifier PoolCapacityQQNotifier,
 	cfg *config.Config,
 ) *PoolCapacityAlertService {
-	svc := NewPoolCapacityAlertService(repo, usageLogRepo, groupRepo, accountRepo, capacityService, notifications, qqNotifier, cfg)
+	svc := NewPoolCapacityAlertService(repo, usageLogRepo, groupRepo, accountRepo, capacityService, notifications, cfg)
 	svc.groupBalanceReader = groupBalanceService
 	svc.Start()
 	return svc
@@ -563,7 +550,6 @@ func (s *PoolCapacityAlertService) evaluateGroupBalance(ctx context.Context, tas
 		StaleAccountCount:            summary.StaleAccountCount,
 		IncompatibleUnitAccountCount: summary.IncompatibleUnitAccountCount,
 		ThresholdUSD:                 *policy.ThresholdUSD,
-		QQBotAppID:                   s.activeQQBotAppID(),
 		ReminderCooldown:             s.reminderCooldown(),
 		DeliveryMaxAttempts:          s.deliveryMaxAttempts(),
 	}
@@ -650,23 +636,11 @@ func (s *PoolCapacityAlertService) evaluate(ctx context.Context, task poolCapaci
 		WalletRemaining:     walletRemaining,
 		SampleCount:         PoolCapacityAlertSampleSize,
 		Bottleneck:          bottleneck,
-		QQBotAppID:          s.activeQQBotAppID(),
 		ReminderCooldown:    s.reminderCooldown(),
 		DeliveryMaxAttempts: s.deliveryMaxAttempts(),
 	}
 	_, err = s.repo.EvaluateAndMaybeCreateEvent(ctx, evaluation, time.Now().UTC())
 	return err
-}
-
-func (s *PoolCapacityAlertService) activeQQBotAppID() string {
-	if s.qqNotifier == nil {
-		return ""
-	}
-	appID, ok := s.qqNotifier.ActiveQQBotAppID()
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(appID)
 }
 
 func averagePoolCapacityCosts(history *PoolCapacityCostSummary, currentAccountCost, currentActualCost float64) (decimal.Decimal, decimal.Decimal, bool) {
@@ -957,6 +931,13 @@ func (s *PoolCapacityAlertService) dispatchDue(ctx context.Context) error {
 }
 
 func (s *PoolCapacityAlertService) sendDelivery(parent context.Context, delivery PoolCapacityAlertDelivery) {
+	if delivery.Channel == PoolCapacityAlertChannelQQBot {
+		if markErr := s.repo.MarkDeliveryCancelled(parent, delivery.ID, s.owner, "qqbot proactive delivery removed"); markErr != nil {
+			slog.Error("mark legacy QQBot pool capacity alert delivery cancelled failed", "delivery_id", delivery.ID, "error", markErr)
+		}
+		return
+	}
+
 	timeout := 20 * time.Second
 	if s.cfg != nil && s.cfg.PoolCapacityAlert.SendTimeoutSeconds > 0 {
 		timeout = time.Duration(s.cfg.PoolCapacityAlert.SendTimeoutSeconds) * time.Second
@@ -980,20 +961,8 @@ func (s *PoolCapacityAlertService) sendDelivery(parent context.Context, delivery
 	switch delivery.Channel {
 	case PoolCapacityAlertChannelEmail:
 		sendErr = s.sendEmailDelivery(ctx, delivery)
-	case PoolCapacityAlertChannelQQBot:
-		if s.qqNotifier == nil {
-			sendErr = errors.New("qqbot notifier unavailable")
-		} else {
-			sendErr = s.qqNotifier.SendAdminProactiveAlert(ctx, delivery.IdentityChannelID, renderPoolCapacityQQMessage(delivery.Event))
-		}
 	default:
 		_ = s.repo.MarkDeliveryCancelled(parent, delivery.ID, s.owner, "unsupported channel")
-		return
-	}
-	if delivery.Channel == PoolCapacityAlertChannelQQBot && errors.Is(sendErr, ErrQQBotRecipientUnavailable) {
-		if markErr := s.repo.MarkDeliveryCancelled(parent, delivery.ID, s.owner, "qqbot recipient is no longer active or bound"); markErr != nil {
-			slog.Error("mark unavailable QQBot pool capacity alert delivery cancelled failed", "delivery_id", delivery.ID, "error", markErr)
-		}
 		return
 	}
 	if sendErr == nil {
@@ -1178,28 +1147,6 @@ func poolCapacityAlertEmailVariables(event PoolCapacityAlertEvent) map[string]st
 		"prediction_disclaimer":           disclaimer,
 		"prediction_disclaimer_zh":        disclaimerZH,
 	}
-}
-
-func renderPoolCapacityQQMessage(event PoolCapacityAlertEvent) string {
-	if event.AlertMetric == PoolCapacityAlertMetricRemainingBalanceUSD {
-		return fmt.Sprintf("【分组预测余额提醒】\n分组：%s (#%d)\n分组预测剩余余额：$%s（阈值 $%s）\n池模式权威余额小计：$%s\n普通账号估算余额小计：$%s\n账号统计：参与 %d（池 %d / 普通 %d），跳过 %d，未知 %d\n未知明细：过期快照 %d，单位不兼容 %d\n时间：%s\n总额=池模式权威 USD 余额小计+普通账号估算 USD 余额小计。未知、过期或单位不兼容的数据不会按 0 处理；聚合不完整时不会改变告警状态。",
-			event.GroupName, event.GroupID,
-			formatOptionalMetricAmount(event.RemainingBalanceUSD), formatOptionalMetricAmount(event.ThresholdUSD),
-			formatOptionalMetricAmount(event.PoolAuthoritativeBalanceUSD), formatOptionalMetricAmount(event.NormalEstimatedBalanceUSD),
-			event.PoolAccountCount+event.NormalAccountCount, event.PoolAccountCount, event.NormalAccountCount,
-			event.SkippedAccountCount, event.UnknownAccountCount, event.StaleAccountCount, event.IncompatibleUnitAccountCount,
-			event.CreatedAt.UTC().Format(time.RFC3339),
-		)
-	}
-	return fmt.Sprintf("【池账户容量提醒】\n分组：%s (#%d)\n账户：%s (#%d)\nAPI Key：%s (#%d)\n预计剩余：%s 次（阈值 %s）\n账户/Key/用户容量：%s / %s / %s\n最近 %d 次均值：账户 $%.6f，用户 $%.6f\n瓶颈：%s\n时间：%s\n该结果基于最近 50 次成功计费请求的历史均值估算，实际容量可能变化。",
-		event.GroupName, event.GroupID,
-		event.AccountName, event.AccountID,
-		event.APIKeyName, event.APIKeyID,
-		formatOptionalMetricCapacity(event.PredictedRequests), formatOptionalMetricCapacity(event.ThresholdRequests),
-		formatOptionalCapacity(event.AccountRequests), formatOptionalCapacity(event.APIKeyRequests), formatOptionalCapacity(event.WalletRequests),
-		event.SampleCount, event.AverageAccountCost, event.AverageActualCost,
-		event.Bottleneck, event.CreatedAt.UTC().Format(time.RFC3339),
-	)
 }
 
 func formatOptionalCapacity(value *int64) string {

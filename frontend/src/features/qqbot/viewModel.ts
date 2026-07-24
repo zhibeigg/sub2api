@@ -31,6 +31,7 @@ export function parseChannelMapping(value: string): Record<string, string> | nul
 export function configToDraft(config: QQBotConfig): QQBotDraft {
   return {
     ...cloneData(config),
+    first_interaction_enabled: true,
     app_secret: '',
     webhook_secret: '',
     allowed_group_ids_text: (config.allowed_group_ids ?? []).join('\n'),
@@ -59,7 +60,7 @@ export function buildUpdateRequest(draft: QQBotDraft): QQBotUpdateRequest {
     command_cooldown_seconds: Number(draft.command_cooldown_seconds),
     welcome_enabled: draft.welcome_enabled,
     welcome_message: draft.welcome_message.trim(),
-    first_interaction_enabled: draft.first_interaction_enabled,
+    first_interaction_enabled: true,
     channel_check_enabled: draft.channel_check_enabled,
     help_message: draft.help_message.trim(),
     allowed_group_ids: parseIDLines(draft.allowed_group_ids_text),

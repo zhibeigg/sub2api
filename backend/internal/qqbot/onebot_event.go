@@ -133,8 +133,12 @@ func adaptOneBotMessage(payload oneBotEventPayload, selfID string) (InboundEvent
 		event.SourceID = groupID
 		event.EventID = stableOneBotEventID("message", "group", selfID, groupID, userID, messageID)
 	case "private":
+		if strings.ToLower(strings.TrimSpace(payload.SubType)) != "friend" {
+			return InboundEvent{}, false, nil
+		}
 		event.Scene = SceneC2C
-		event.EventID = stableOneBotEventID("message", "private", selfID, userID, messageID)
+		event.FriendConversation = true
+		event.EventID = stableOneBotEventID("message", "private", "friend", selfID, userID, messageID)
 	default:
 		return InboundEvent{}, false, nil
 	}
@@ -142,26 +146,40 @@ func adaptOneBotMessage(payload oneBotEventPayload, selfID string) (InboundEvent
 }
 
 func adaptOneBotNotice(payload oneBotEventPayload, selfID string) (InboundEvent, bool, error) {
-	if strings.ToLower(strings.TrimSpace(payload.NoticeType)) != "group_increase" {
-		return InboundEvent{}, false, nil
-	}
-	subType := strings.ToLower(strings.TrimSpace(payload.SubType))
-	if subType != "approve" && subType != "invite" {
-		return InboundEvent{}, false, nil
-	}
-	groupID := payload.GroupID.String()
+	noticeType := strings.ToLower(strings.TrimSpace(payload.NoticeType))
 	userID := payload.UserID.String()
-	operatorID := payload.OperatorID.String()
-	if !validOneBotID(groupID) || !validOneBotID(userID) || userID == selfID || (operatorID != "" && !validOneBotID(operatorID)) {
+	switch noticeType {
+	case "friend_add":
+		if !validOneBotID(userID) || userID == selfID {
+			return InboundEvent{}, false, nil
+		}
+		return InboundEvent{
+			EventID:            stableOneBotEventID("notice", "friend_add", selfID, userID, fmt.Sprintf("%d", payload.Time)),
+			Scene:              SceneC2C,
+			ProviderSubject:    userID,
+			FriendConversation: true,
+			FriendAdded:        true,
+		}, true, nil
+	case "group_increase":
+		subType := strings.ToLower(strings.TrimSpace(payload.SubType))
+		if subType != "approve" && subType != "invite" {
+			return InboundEvent{}, false, nil
+		}
+		groupID := payload.GroupID.String()
+		operatorID := payload.OperatorID.String()
+		if !validOneBotID(groupID) || !validOneBotID(userID) || userID == selfID || (operatorID != "" && !validOneBotID(operatorID)) {
+			return InboundEvent{}, false, nil
+		}
+		return InboundEvent{
+			EventID:         stableOneBotEventID("notice", "group_increase", subType, selfID, groupID, userID, operatorID, fmt.Sprintf("%d", payload.Time)),
+			Scene:           SceneGroup,
+			ProviderSubject: userID,
+			SourceID:        groupID,
+			MemberJoined:    true,
+		}, true, nil
+	default:
 		return InboundEvent{}, false, nil
 	}
-	return InboundEvent{
-		EventID:         stableOneBotEventID("notice", "group_increase", subType, selfID, groupID, userID, operatorID, fmt.Sprintf("%d", payload.Time)),
-		Scene:           SceneGroup,
-		ProviderSubject: userID,
-		SourceID:        groupID,
-		MemberJoined:    true,
-	}, true, nil
 }
 
 func adaptOneBotRequest(payload oneBotEventPayload, selfID string) (InboundEvent, bool, error) {

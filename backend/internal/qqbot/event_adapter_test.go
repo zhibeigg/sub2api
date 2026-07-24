@@ -14,25 +14,20 @@ func (s *captureEventSink) enqueueEvent(event InboundEvent) error {
 	return nil
 }
 
-func TestC2CEventUsesOnlyOfficialUserOpenIDFields(t *testing.T) {
+func TestC2CEventIsIgnoredWithoutVerifiedFriendContext(t *testing.T) {
 	sink := &captureEventSink{}
 	setActiveEventSink(sink)
 	defer clearActiveEventSink(sink)
 
-	data, err := json.Marshal(eventData{
-		ID:         "message-1",
-		Content:    "/check",
-		UserOpenID: "top-level-openid",
-		Author:     eventUser{ID: "generic-author-id"},
-	})
+	data, err := json.Marshal(eventData{ID: "message-1", Content: "/check", UserOpenID: "top-level-openid"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := dispatchWebhookPayload(webhookPayload{EventID: "event-1", Type: "C2C_MESSAGE_CREATE", Data: data}); err != nil {
 		t.Fatal(err)
 	}
-	if len(sink.events) != 1 || sink.events[0].ProviderSubject != "top-level-openid" {
-		t.Fatalf("events=%#v", sink.events)
+	if len(sink.events) != 0 {
+		t.Fatalf("c2c event was dispatched: %#v", sink.events)
 	}
 }
 

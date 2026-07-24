@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	defaultHelpMessage    = "欢迎使用 PokeAPI 账户助手。\n\n绑定账户（白名单群内可直接发送）：/bind 你的邮箱\n查看渠道状态：发送 /check\n查看帮助：发送 /help\n\n验证链接只会发送到 Sub2API 账户邮箱。群内发送邮箱会被群成员看到；普通 QQ 私聊可能受好友限制。数字 QQ 仅作为展示信息，实际身份以机器人 OpenID 为准。"
+	defaultHelpMessage    = "欢迎使用 PokeAPI 账户助手。\n\n白名单群内可直接发送：/bind 你的邮箱\n已添加好友后可在私聊发送：/bind 你的邮箱\n查看渠道状态：发送 /check\n查看帮助：发送 /help\n\n群内指令只会在原群回复，不会私聊群成员。验证链接只会发送到 Sub2API 账户邮箱；群内发送邮箱会被群成员看到。数字 QQ 仅作为展示信息，实际身份以机器人 OpenID 为准。"
 	defaultWelcomeMessage = "欢迎 {user} 加入 {site}！\n\n可用指令：\n绑定账户（白名单群内可直接发送）：{bind_command}\n查看渠道状态：/check\n查看帮助：/help\n\n安全提示：请勿向任何人提供密码、验证码或 API 密钥；群内发送的邮箱对群成员可见，账户绑定链接只会发送到你的站点账户邮箱。"
 	qqBotSiteName         = "PokeAPI"
 )
@@ -51,16 +51,11 @@ type Runtime struct {
 	state   RuntimeState
 }
 
-var _ service.QQBotProactiveC2CTransport = (*Runtime)(nil)
-
 func NewRuntime(manager *ConfigManager, queue *ReliableQueue, binding *service.QQBotService, channelCheck *ChannelCheckService) *Runtime {
 	runtime := &Runtime{manager: manager, queue: queue, binding: binding, channelCheck: channelCheck, state: RuntimeState{ProcessStatus: RuntimeDisabled}}
 	registerGlobalHandlers()
 	if manager != nil {
 		manager.SetOnReload(runtime.applyConfig)
-	}
-	if binding != nil {
-		binding.SetProactiveC2CTransport(runtime)
 	}
 	return runtime
 }
@@ -85,85 +80,6 @@ func (r *Runtime) syncOneBotTransport(ctx context.Context, mode TransportMode) e
 		return nil
 	}
 	return oneBot.SyncTransportMode(ctx, mode)
-}
-
-func (r *Runtime) ActiveAppID() (string, bool) {
-	if r == nil {
-		return "", false
-	}
-	generation := r.generation.Load()
-	if generation == nil || !generation.config.Enabled {
-		return "", false
-	}
-	appID := strings.TrimSpace(generation.config.AppID)
-	return appID, appID != ""
-}
-
-func (r *Runtime) SendProactiveC2C(ctx context.Context, botAppID, openID, content string) error {
-	if r == nil {
-		return ErrRuntimeUnavailable
-	}
-	botAppID = strings.TrimSpace(botAppID)
-	openID = strings.TrimSpace(openID)
-	content = strings.TrimSpace(content)
-	if botAppID == "" || openID == "" || content == "" {
-		return ErrInvalidConfig
-	}
-	generation := r.generation.Load()
-	if generation == nil || !generation.config.Enabled {
-		return ErrRuntimeDisabled
-	}
-	if strings.TrimSpace(generation.config.AppID) != botAppID || generation.messenger == nil {
-		return ErrRuntimeUnavailable
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	sendCtx, cancel := context.WithCancel(ctx)
-	stopGenerationCancel := func() bool { return false }
-	if generation.ctx != nil {
-		stopGenerationCancel = context.AfterFunc(generation.ctx, cancel)
-	}
-	defer func() {
-		stopGenerationCancel()
-		cancel()
-	}()
-	timeout := time.Duration(generation.config.APITimeoutMS) * time.Millisecond
-	if timeout <= 0 {
-		timeout = time.Duration(DefaultAPITimeoutMS) * time.Millisecond
-	}
-	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
-		if r.generation.Load() != generation || strings.TrimSpace(generation.config.AppID) != botAppID {
-			return ErrRuntimeUnavailable
-		}
-		attemptCtx, attemptCancel := context.WithTimeout(sendCtx, timeout)
-		lastErr = generation.messenger.SendProactiveC2C(attemptCtx, openID, content)
-		attemptCancel()
-		if lastErr == nil {
-			r.markSent()
-			return nil
-		}
-		var definitive interface{ Definitive() bool }
-		if errors.As(lastErr, &definitive) && definitive.Definitive() {
-			r.recordError("proactive_send_failed")
-			return lastErr
-		}
-		if sendCtx.Err() != nil {
-			return sendCtx.Err()
-		}
-		if attempt < 2 {
-			timer := time.NewTimer(time.Duration(attempt+1) * 250 * time.Millisecond)
-			select {
-			case <-sendCtx.Done():
-				timer.Stop()
-				return sendCtx.Err()
-			case <-timer.C:
-			}
-		}
-	}
-	r.recordError("proactive_send_failed")
-	return lastErr
 }
 
 func (r *Runtime) Start(ctx context.Context) error {
@@ -484,24 +400,27 @@ func (r *Runtime) processWith(ctx context.Context, cfg ActiveConfig, messenger M
 			return nil
 		}
 	}
+	if incoming.FriendAdded {
+		if incoming.Scene != SceneC2C || !incoming.FriendConversation {
+			return nil
+		}
+		if queue == nil {
+			return ErrRuntimeUnavailable
+		}
+		key := fmt.Sprintf("%s:friend:%s", cfg.AppID, incoming.ProviderSubject)
+		first, err := queue.BeginWelcome(ctx, key)
+		if err != nil || !first {
+			return err
+		}
+		sendErr := send(renderHelp(settings.HelpMessage))
+		finishErr := queue.FinishWelcome(ctx, key, sendErr == nil)
+		if sendErr != nil {
+			return sendErr
+		}
+		return finishErr
+	}
 	parsed := ParseCommand(incoming.Content)
 	if parsed.Kind == CommandNone {
-		if (incoming.Scene == SceneGroup || incoming.Scene == SceneC2C) && settings.FirstInteractionEnabled {
-			if queue == nil {
-				return ErrRuntimeUnavailable
-			}
-			key := fmt.Sprintf("%s:%s:%s:%s", cfg.AppID, incoming.Scene, incoming.SourceID, incoming.ProviderSubject)
-			first, err := queue.BeginWelcome(ctx, key)
-			if err != nil || !first {
-				return err
-			}
-			sendErr := send(renderHelp(settings.HelpMessage))
-			finishErr := queue.FinishWelcome(ctx, key, sendErr == nil)
-			if sendErr != nil {
-				return sendErr
-			}
-			return finishErr
-		}
 		return nil
 	}
 	if parsed.Kind == CommandBind {
@@ -831,7 +750,7 @@ func stopGeneration(ctx context.Context, generation *runtimeGeneration) error {
 func allowed(settings service.QQBotSettings, incoming InboundEvent) bool {
 	switch incoming.Scene {
 	case SceneC2C:
-		return true
+		return incoming.FriendConversation
 	case SceneGroup:
 		return contains(settings.AllowedGroupIDs, incoming.SourceID)
 	case SceneGuild:

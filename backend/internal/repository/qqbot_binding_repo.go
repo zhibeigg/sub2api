@@ -52,43 +52,6 @@ SELECT EXISTS (
       AND u.deleted_at IS NULL
 )`
 
-	qqBotListActiveAdminC2CRecipientsSQL = `
-SELECT i.id, c.id, c.channel_subject
-FROM auth_identity_channels c
-JOIN auth_identities i ON i.id = c.identity_id
-JOIN users u ON u.id = i.user_id
-WHERE i.provider_type = 'qqbot'
-  AND i.provider_key = $1
-  AND i.provider_subject = c.channel_subject
-  AND i.verified_at IS NOT NULL
-  AND c.provider_type = 'qqbot'
-  AND c.provider_key = $1
-  AND c.channel = 'c2c'
-  AND c.channel_app_id = $2
-  AND u.role = 'admin'
-  AND u.status = 'active'
-  AND u.deleted_at IS NULL
-ORDER BY c.id`
-
-	qqBotGetActiveAdminC2CRecipientSQL = `
-SELECT i.id, c.id, c.channel_subject
-FROM auth_identity_channels c
-JOIN auth_identities i ON i.id = c.identity_id
-JOIN users u ON u.id = i.user_id
-WHERE c.id = $1
-  AND i.provider_type = 'qqbot'
-  AND i.provider_key = $2
-  AND i.provider_subject = c.channel_subject
-  AND i.verified_at IS NOT NULL
-  AND c.provider_type = 'qqbot'
-  AND c.provider_key = $2
-  AND c.channel = 'c2c'
-  AND c.channel_app_id = $3
-  AND u.role = 'admin'
-  AND u.status = 'active'
-  AND u.deleted_at IS NULL
-LIMIT 1`
-
 	qqBotUpdateEmailDeliveryStatusSQL = `
 UPDATE qqbot_binding_challenges
 SET email_status = $1::varchar,
@@ -132,52 +95,6 @@ func (r *qqBotBindingRepository) HasActiveBoundIdentity(ctx context.Context, bot
 		return false, err
 	}
 	return found, nil
-}
-
-func (r *qqBotBindingRepository) ListActiveAdminC2CRecipients(ctx context.Context, botAppID string) (recipients []service.QQBotAdminRecipient, err error) {
-	botAppID = strings.TrimSpace(botAppID)
-	if botAppID == "" {
-		return []service.QQBotAdminRecipient{}, nil
-	}
-	rows, err := r.db.QueryContext(ctx, qqBotListActiveAdminC2CRecipientsSQL, "qqbot:"+botAppID, botAppID)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if closeErr := rows.Close(); closeErr != nil {
-			err = errors.Join(err, closeErr)
-		}
-	}()
-	recipients = make([]service.QQBotAdminRecipient, 0)
-	for rows.Next() {
-		var recipient service.QQBotAdminRecipient
-		if scanErr := rows.Scan(&recipient.IdentityID, &recipient.IdentityChannelID, &recipient.ChannelSubject); scanErr != nil {
-			return nil, scanErr
-		}
-		recipient.ChannelSubject = strings.TrimSpace(recipient.ChannelSubject)
-		recipients = append(recipients, recipient)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return recipients, nil
-}
-
-func (r *qqBotBindingRepository) GetActiveAdminC2CRecipient(ctx context.Context, botAppID string, identityChannelID int64) (service.QQBotAdminRecipient, bool, error) {
-	botAppID = strings.TrimSpace(botAppID)
-	if botAppID == "" || identityChannelID <= 0 {
-		return service.QQBotAdminRecipient{}, false, nil
-	}
-	var recipient service.QQBotAdminRecipient
-	if err := r.db.QueryRowContext(ctx, qqBotGetActiveAdminC2CRecipientSQL, identityChannelID, "qqbot:"+botAppID, botAppID).
-		Scan(&recipient.IdentityID, &recipient.IdentityChannelID, &recipient.ChannelSubject); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return service.QQBotAdminRecipient{}, false, nil
-		}
-		return service.QQBotAdminRecipient{}, false, err
-	}
-	recipient.ChannelSubject = strings.TrimSpace(recipient.ChannelSubject)
-	return recipient, true, nil
 }
 
 func (r *qqBotBindingRepository) CreateChallenge(ctx context.Context, input service.QQBotChallengeCreateInput) (service.QQBotBindingRecord, bool, error) {

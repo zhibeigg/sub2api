@@ -620,12 +620,6 @@ func TestPoolCapacityAlertAmountNotificationsKeepLegacyRequestFieldsAsNA(t *test
 	require.Equal(t, "N/A", variables["avg_account_cost"])
 	require.Equal(t, "N/A", variables["account_requests"])
 
-	message := renderPoolCapacityQQMessage(event)
-	require.Contains(t, message, "分组预测剩余余额：$9.250000（阈值 $10.000000）")
-	require.Contains(t, message, "池模式权威余额小计：$5.250000")
-	require.Contains(t, message, "普通账号估算余额小计：$4.000000")
-	require.Contains(t, message, "参与 5（池 2 / 普通 3），跳过 1，未知 0")
-	require.NotContains(t, message, "最近 50 次均值")
 }
 
 func TestPoolCapacityAlertDispatchClaimsOnlyImmediatelySendableWave(t *testing.T) {
@@ -633,16 +627,14 @@ func TestPoolCapacityAlertDispatchClaimsOnlyImmediatelySendableWave(t *testing.T
 	for id := int64(1); id <= 5; id++ {
 		repo.pending = append(repo.pending, PoolCapacityAlertDelivery{
 			ID:           id,
-			Channel:      PoolCapacityAlertChannelQQBot,
+			Channel:      PoolCapacityAlertChannelEmail,
 			AttemptCount: 1,
 			MaxAttempts:  3,
 		})
 	}
-	notifier := &poolCapacityQQNotifierStub{}
 	svc := &PoolCapacityAlertService{
-		repo:       repo,
-		qqNotifier: notifier,
-		owner:      "worker-1",
+		repo:  repo,
+		owner: "worker-1",
 		cfg: &config.Config{PoolCapacityAlert: config.PoolCapacityAlertConfig{
 			DeliveryWorkerCount: 2,
 			DeliveryBatchSize:   5,
@@ -653,40 +645,24 @@ func TestPoolCapacityAlertDispatchClaimsOnlyImmediatelySendableWave(t *testing.T
 
 	require.NoError(t, svc.dispatchDue(context.Background()))
 	require.Equal(t, []int{2, 2, 1}, repo.claimLimits)
-	require.ElementsMatch(t, []int64{1, 2, 3, 4, 5}, repo.sent)
-	require.Len(t, notifier.sent, 5)
+	require.Empty(t, repo.sent)
+	require.ElementsMatch(t, []int64{1, 2, 3, 4, 5}, repo.failed)
 }
 
-func TestPoolCapacityAlertSendCancelsDeliveryThatIsNoLongerCurrent(t *testing.T) {
-	repo := &poolCapacityDispatchRepo{currentOverride: map[int64]bool{7: false}}
-	notifier := &poolCapacityQQNotifierStub{}
-	svc := &PoolCapacityAlertService{repo: repo, qqNotifier: notifier, owner: "worker-1"}
+func TestPoolCapacityAlertSendCancelsLegacyQQBotDeliveryWithoutCheckingRecipient(t *testing.T) {
+	repo := &poolCapacityDispatchRepo{currentOverride: map[int64]bool{7: true}}
+	svc := &PoolCapacityAlertService{repo: repo, owner: "worker-1"}
 
 	svc.sendDelivery(context.Background(), PoolCapacityAlertDelivery{
-		ID:           7,
-		Channel:      PoolCapacityAlertChannelQQBot,
-		AttemptCount: 1,
-		MaxAttempts:  3,
-	})
-
-	require.Empty(t, notifier.sent)
-	require.Equal(t, []int64{7}, repo.cancelled)
-}
-
-func TestPoolCapacityAlertSendCancelsUnavailableQQBotRecipientWithoutRetry(t *testing.T) {
-	repo := &poolCapacityDispatchRepo{}
-	notifier := &poolCapacityQQNotifierStub{err: ErrQQBotRecipientUnavailable}
-	svc := &PoolCapacityAlertService{repo: repo, qqNotifier: notifier, owner: "worker-1"}
-
-	svc.sendDelivery(context.Background(), PoolCapacityAlertDelivery{
-		ID:                8,
+		ID:                7,
 		Channel:           PoolCapacityAlertChannelQQBot,
 		IdentityChannelID: 21,
 		AttemptCount:      1,
 		MaxAttempts:       3,
 	})
 
-	require.Equal(t, []int64{8}, repo.cancelled)
+	require.Equal(t, []int64{7}, repo.cancelled)
+	require.Empty(t, repo.sent)
 	require.Empty(t, repo.failed)
 }
 
@@ -801,21 +777,4 @@ func (r *poolCapacityDispatchRepo) MarkDeliveryCancelled(_ context.Context, deli
 	defer r.mu.Unlock()
 	r.cancelled = append(r.cancelled, deliveryID)
 	return nil
-}
-
-type poolCapacityQQNotifierStub struct {
-	mu   sync.Mutex
-	err  error
-	sent []int64
-}
-
-func (n *poolCapacityQQNotifierStub) ActiveQQBotAppID() (string, bool) {
-	return "app-1", true
-}
-
-func (n *poolCapacityQQNotifierStub) SendAdminProactiveAlert(_ context.Context, identityChannelID int64, _ string) error {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.sent = append(n.sent, identityChannelID)
-	return n.err
 }

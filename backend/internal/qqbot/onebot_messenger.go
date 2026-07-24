@@ -96,10 +96,6 @@ func (m *OneBotMessenger) SendC2C(ctx context.Context, userID, _, _, content str
 	return m.sendPrivateSegments(ctx, userID, []OneBotMessageSegment{oneBotTextSegment(content)})
 }
 
-func (m *OneBotMessenger) SendProactiveC2C(ctx context.Context, userID, content string) error {
-	return m.sendPrivateSegments(ctx, userID, []OneBotMessageSegment{oneBotTextSegment(content)})
-}
-
 func (m *OneBotMessenger) SendChannel(context.Context, string, string, string, string, uint32) error {
 	return ErrOneBotChannelUnsupported
 }

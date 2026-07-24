@@ -360,7 +360,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	batchImageWorkerRuntime := service.ProvideBatchImageWorkerRuntime(batchImageRepository, accountRepository, batchImageQueue, usageBillingRepository, usageLogRepository, batchImageModelPricingResolver, apiKeyAuthCacheInvalidator, configConfig)
 	announcementEmailDispatchRuntime := service.ProvideAnnouncementEmailDispatchRuntime(announcementEmailRepository, emailService, notificationEmailService, configConfig)
 	poolCapacityAlertRepository := repository.NewPoolCapacityAlertRepository(db)
-	poolCapacityAlertService := service.ProvidePoolCapacityAlertService(poolCapacityAlertRepository, usageLogRepository, groupRepository, accountRepository, accountCapacityService, groupPredictedBalanceService, notificationEmailService, qqBotService, configConfig)
+	poolCapacityAlertService := service.ProvidePoolCapacityAlertService(poolCapacityAlertRepository, usageLogRepository, groupRepository, accountRepository, accountCapacityService, groupPredictedBalanceService, notificationEmailService, configConfig)
 	poolCapacityAlertGatewayBinding := service.ProvidePoolCapacityAlertGatewayBinding(gatewayService, openAIGatewayService, poolCapacityAlertService)
 	scheduledTestRunnerService := service.ProvideScheduledTestRunnerService(scheduledTestPlanRepository, scheduledTestService, accountTestService, rateLimitService, configConfig)
 	paymentOrderExpiryService := service.ProvidePaymentOrderExpiryService(paymentService, leaderLockCache, db)

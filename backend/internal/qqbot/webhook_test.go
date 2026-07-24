@@ -84,7 +84,7 @@ func TestWebhookDispatchFailsClosedWhenQueueUnavailable(t *testing.T) {
 	runtime.generation.Store(&runtimeGeneration{config: cfg, ctx: t.Context()})
 	setActiveEventSink(runtime)
 	defer clearActiveEventSink(runtime)
-	body := []byte(`{"op":0,"id":"event-1","t":"C2C_MESSAGE_CREATE","d":{"id":"message-1","content":"/help","author":{"user_openid":"openid-secret"}}}`)
+	body := []byte(`{"op":0,"id":"event-1","t":"GROUP_AT_MESSAGE_CREATE","d":{"id":"message-1","content":"/help","group_openid":"group-secret","author":{"member_openid":"openid-secret"}}}`)
 	request := httptest.NewRequest(http.MethodPost, "/webhooks/qq", bytes.NewReader(body))
 	request.Header.Set(headerTimestamp, "1720000002")
 	signature, _ := generateSignature(cfg.WebhookSecret, "1720000002", body)

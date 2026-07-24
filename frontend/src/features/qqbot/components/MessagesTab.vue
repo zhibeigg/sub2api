@@ -8,7 +8,10 @@
     <section class="grid gap-4 rounded-xl border border-gray-200 bg-white p-5 md:grid-cols-2 xl:grid-cols-4 dark:border-dark-700 dark:bg-dark-800">
       <ToggleField :checked="draft.binding_enabled" :label="t('admin.qqbot.messages.bindingEnabled')" :hint="t('admin.qqbot.messages.bindingEnabledHint')" @change="update('binding_enabled', $event)" />
       <ToggleField :checked="draft.welcome_enabled" :label="t('admin.qqbot.messages.welcomeEnabled')" :hint="t('admin.qqbot.messages.welcomeEnabledHint')" @change="update('welcome_enabled', $event)" />
-      <ToggleField :checked="draft.first_interaction_enabled" :label="t('admin.qqbot.messages.firstInteraction')" :hint="t('admin.qqbot.messages.firstInteractionHint')" @change="update('first_interaction_enabled', $event)" />
+      <div class="rounded-xl border border-gray-200 p-4 dark:border-dark-700">
+        <p class="text-sm font-medium text-gray-900 dark:text-white">{{ t('admin.qqbot.messages.friendOpening') }}</p>
+        <p class="mt-1 text-xs text-gray-500 dark:text-dark-400">{{ t('admin.qqbot.messages.friendOpeningHint') }}</p>
+      </div>
       <ToggleField :checked="draft.channel_check_enabled" :label="t('admin.qqbot.messages.channelCheckEnabled')" :hint="t('admin.qqbot.messages.channelCheckEnabledHint')" @change="update('channel_check_enabled', $event)" />
     </section>
 

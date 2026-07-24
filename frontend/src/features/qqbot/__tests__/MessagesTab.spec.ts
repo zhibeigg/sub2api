@@ -70,10 +70,12 @@ describe('QQBot MessagesTab', () => {
     expect(updates?.at(-1)?.[0]).toMatchObject({ welcome_message: 'hello {site} {user}' })
   })
 
-  it('keeps Chinese and English QQBot keys symmetric and describes allowlists as fail-closed', () => {
+  it('describes mandatory friend openings and keeps locale keys symmetric', () => {
     expect(localeKeys(zh).sort()).toEqual(localeKeys(en).sort())
     expect(zh.qqbot.messages.channelCheckEnabled).toBe('允许 /check 渠道状态图')
     expect(en.qqbot.messages.channelCheckEnabled).toBe('Allow /check Channel Status Image')
+    expect(zh.qqbot.messages.friendOpeningHint).toContain('不会触发私聊')
+    expect(en.qqbot.messages.friendOpeningHint).toContain('never trigger a private message')
     expect(zh.qqbot.messages.welcomeMessageHint).toContain('bind_command')
     expect(en.qqbot.messages.welcomeMessageHint).toContain('bind_command')
     expect(() => baseCompile(zh.qqbot.messages.welcomeMessageHint)).not.toThrow()
